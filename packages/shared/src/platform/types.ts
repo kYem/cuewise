@@ -128,6 +128,14 @@ export interface KeyValueStore {
    * that instance.
    */
   onChanged?(handler: StorageChangeHandler): () => void;
+  /**
+   * Runs `fn` with exclusive hold of `name`, so a read-modify-write of one stored value cannot be
+   * interleaved by another writer. Optional because only a backend with a *cross-realm* primitive
+   * can honour it across the extension's page and service worker — the two writers that actually
+   * race. Keep the section short and free of unrelated awaits: holding one across a network call
+   * stalls every other writer of that name for the duration.
+   */
+  withLock?<T>(name: string, fn: () => Promise<T>): Promise<T>;
 }
 
 export type StorageChangeHandler = (keys: string[], area: StorageArea) => void;
@@ -140,6 +148,15 @@ export interface ObservableKeyValueStore extends KeyValueStore {
 /** Presence, not reachability: subscribing can still throw, which is what `safeSubscribe` is for. */
 export function canObserveWrites(store: KeyValueStore): store is ObservableKeyValueStore {
   return store.onChanged !== undefined;
+}
+
+/** A store that can serialise a read-modify-write; see `KeyValueStore.withLock`. */
+export interface LockingKeyValueStore extends KeyValueStore {
+  withLock<T>(name: string, fn: () => Promise<T>): Promise<T>;
+}
+
+export function canLock(store: KeyValueStore): store is LockingKeyValueStore {
+  return store.withLock !== undefined;
 }
 
 /**

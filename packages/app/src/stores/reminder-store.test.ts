@@ -1,4 +1,10 @@
-import { configurePlatform, logger, resetPlatform, type SyncMutationSink } from '@cuewise/shared';
+import {
+  configurePlatform,
+  logger,
+  type Reminder,
+  resetPlatform,
+  type SyncMutationSink,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +15,13 @@ import { useReminderStore } from './reminder-store';
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
+  // Faithful, not a stub: reading inside the write is the property under test, so a mock that
+  // took the caller's list would let a read hoisted back out of the lock pass.
+  updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
+    const reminders = mutate((await storage.getReminders()) ?? []);
+    return { result: await storage.setReminders(reminders), reminders };
+  }),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
 }));
 
 // Mock toast store with module-level fns so each level is inspectable across getState() calls.
@@ -36,9 +49,24 @@ const fakeScheduler = {
   cancel: vi.fn(() => Promise.resolve()),
 };
 
+/**
+ * Seeds the store and storage with deliberately different lists — a pull that landed after the
+ * store last read. Every writer must persist against `stored`, not the state it can see.
+ */
+function storageAheadOfStore(inStore: Reminder[], stored: Reminder[]): void {
+  useReminderStore.setState({ reminders: inStore });
+  getRemindersMock.mockResolvedValue(stored);
+}
+
+function persistedIds(): string[] {
+  return (setRemindersMock.mock.calls[0][0] as Reminder[]).map((r) => r.id);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  getRemindersMock.mockResolvedValue([]);
+  // The store is a cache of storage, equal to it after every action — which is what lets a test
+  // seed with setState or an earlier action and still exercise the read-inside-the-write.
+  getRemindersMock.mockImplementation(async () => useReminderStore.getState().reminders);
   setRemindersMock.mockResolvedValue({ success: true });
   configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({
@@ -570,6 +598,33 @@ describe('sync sink wiring', () => {
     expect(markMutated).toHaveBeenCalledWith('reminders', created.id);
   });
 
+  // Marking a gone id dirty makes the next push seal a tombstone this device never authored.
+  // One writer per test: snoozeReminder commits the empty fresh list, so a second action in the
+  // same test bails on its own pre-check and never reaches the guard under examination.
+  const deletedBeforeTheWrite = (): void => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    useReminderStore.setState({
+      reminders: [recurringReminderFactory.build({ id: 'gone', recurring, paused: false })],
+    });
+    getRemindersMock.mockResolvedValue([]);
+  };
+
+  it('snoozeReminder does not mark a reminder the pull deleted dirty', async () => {
+    deletedBeforeTheWrite();
+
+    await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('setReminderPaused does not mark a reminder the pull deleted dirty', async () => {
+    deletedBeforeTheWrite();
+
+    await useReminderStore.getState().setReminderPaused('gone', true);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
   it('notifies markDeleted with the reminder id after deleteReminder persists', async () => {
     const reminder = reminderFactory.build();
     useReminderStore.setState({ reminders: [reminder] });
@@ -708,5 +763,251 @@ describe('converging on reminders written elsewhere', () => {
     await loaded;
 
     expect(useReminderStore.getState().reminders).toHaveLength(2);
+  });
+});
+
+// Storage holds a reminder the store has not seen — a pull that landed while this action was
+// waiting on the lock. Each writer must merge into it, and derive from it, not from `get()`.
+describe('writers read storage, not their own snapshot', () => {
+  const pulled = () => reminderFactory.build({ id: 'pulled', text: 'from another device' });
+
+  it('addReminder keeps it', async () => {
+    const incoming = pulled();
+    storageAheadOfStore([], [incoming]);
+
+    await useReminderStore.getState().addReminder('Stretch', new Date(Date.now() + 60_000));
+
+    expect(persistedIds()).toContain(incoming.id);
+  });
+
+  it('deleteReminder keeps it', async () => {
+    const mine = reminderFactory.build({ id: 'mine' });
+    const incoming = pulled();
+    storageAheadOfStore([mine], [mine, incoming]);
+
+    await useReminderStore.getState().deleteReminder('mine');
+
+    expect(persistedIds()).toEqual([incoming.id]);
+  });
+
+  it('markAsNotified keeps it', async () => {
+    const mine = reminderFactory.build({ id: 'mine' });
+    const incoming = pulled();
+    storageAheadOfStore([mine], [mine, incoming]);
+
+    await useReminderStore.getState().markAsNotified('mine');
+
+    expect(persistedIds()).toContain(incoming.id);
+  });
+
+  it('fireDueReminders keeps it', async () => {
+    const due = reminderFactory.build({
+      id: 'due',
+      notified: false,
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const incoming = pulled();
+    storageAheadOfStore([due], [due, incoming]);
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(persistedIds()).toContain(incoming.id);
+  });
+
+  // Only a snooze or an advance clears `notified`, so stamping it on a reminder a pull just
+  // snoozed silences that occurrence for good.
+  it('fireDueReminders leaves a reminder the pull already snoozed alone', async () => {
+    const stale = reminderFactory.build({
+      id: 'snoozed',
+      notified: false,
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const snoozed = { ...stale, dueDate: new Date(Date.now() + 60 * 60_000).toISOString() };
+    storageAheadOfStore([stale], [snoozed]);
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(setRemindersMock).not.toHaveBeenCalled();
+  });
+
+  // initialize's auto-advance had no coverage at all: disabling the whole branch kept the suite
+  // green, so the happy path is pinned here alongside the race.
+  it('initialize advances an overdue recurring reminder and arms its next occurrence', async () => {
+    const overdue = recurringReminderFactory.build({
+      id: 'overdue',
+      dueDate: new Date(Date.now() - 60 * 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: false,
+      completed: false,
+    });
+    getRemindersMock.mockResolvedValue([overdue]);
+    const before = Date.now();
+
+    await useReminderStore.getState().initialize();
+
+    // The persisted list, not the final state: initialize ends with a reconcile that re-reads,
+    // and the mocked setReminders does not feed getReminders.
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(new Date(written[0].dueDate).getTime()).toBeGreaterThan(before);
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-overdue', expect.any(Date));
+  });
+
+  it('initialize advances the pulled version, not the one it first read', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({
+      id: 'overdue',
+      text: 'Move',
+      dueDate: new Date(Date.now() - 60 * 60_000).toISOString(),
+      recurring,
+      paused: false,
+      completed: false,
+    });
+    getRemindersMock.mockResolvedValueOnce([stale]);
+    getRemindersMock.mockResolvedValue([{ ...stale, text: 'Move around' }]);
+
+    await useReminderStore.getState().initialize();
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].text).toBe('Move around');
+  });
+
+  // Branching from the snapshot would complete a series a pull had just made recurring.
+  it('toggleReminder advances a reminder the pull turned recurring', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const oneOff = reminderFactory.build({ id: 'r', completed: false });
+    storageAheadOfStore([oneOff], [{ ...oneOff, recurring }]);
+
+    await useReminderStore.getState().toggleReminder('r');
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].completed).toBe(false);
+    expect(toastSuccess).toHaveBeenCalledWith('Recurring reminder advanced to next occurrence');
+  });
+
+  // The mirror case: the snapshot says recurring, the fresh entity is a one-off. Completing it
+  // is right; silently writing nothing while still cancelling its alarm is not.
+  it('toggleReminder completes a reminder the pull turned into a one-off', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', recurring, completed: false });
+    const { recurring: _dropped, ...oneOff } = stale;
+    storageAheadOfStore([stale], [oneOff as Reminder]);
+
+    await useReminderStore.getState().toggleReminder('r');
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].completed).toBe(true);
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('toggleReminder touches no alarm when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone', completed: false });
+    storageAheadOfStore([mine], []);
+
+    await useReminderStore.getState().toggleReminder('gone');
+
+    expect(fakeScheduler.cancel).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
+  });
+
+  // Committing here would also announce the write to the sync engine, which never happened.
+  it('toggleReminder commits nothing when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone', completed: false });
+    storageAheadOfStore([mine], []);
+
+    await useReminderStore.getState().toggleReminder('gone');
+
+    expect(useReminderStore.getState().reminders).toEqual([mine]);
+  });
+
+  // Cancelling the alarm of a reminder the pull turned into a one-off leaves storage saying
+  // active while nothing will ever fire it.
+  it('setReminderPaused touches no alarm when the pull dropped recurrence', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', recurring, paused: false });
+    const { recurring: _dropped, ...oneOff } = stale;
+    storageAheadOfStore([stale], [oneOff as Reminder]);
+
+    await useReminderStore.getState().setReminderPaused('r', true);
+
+    expect(fakeScheduler.cancel).not.toHaveBeenCalled();
+  });
+
+  it('snoozeReminder arms no alarm when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone' });
+    storageAheadOfStore([mine], []);
+
+    await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  // EditReminderForm closes on `true`, so reporting success here loses the edit silently.
+  it('updateReminder reports failure when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone', text: 'Stretch' });
+    storageAheadOfStore([mine], []);
+
+    const ok = await useReminderStore.getState().updateReminder('gone', { text: 'Stretch legs' });
+
+    expect(ok).toBe(false);
+    expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
+  });
+
+  // Editing only the due date must not wake a reminder the user paused.
+  it('updateReminder arms no alarm for a paused reminder', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const paused = recurringReminderFactory.build({ id: 'r', recurring, paused: true });
+    useReminderStore.setState({ reminders: [paused] });
+
+    await useReminderStore
+      .getState()
+      .updateReminder('r', { dueDate: new Date(Date.now() + 60_000).toISOString() });
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  it('snoozeReminder says so when the pull deleted it', async () => {
+    storageAheadOfStore([reminderFactory.build({ id: 'gone' })], []);
+
+    await useReminderStore.getState().snoozeReminder('gone', 5);
+
+    expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
+  });
+
+  // Arming here resurrects a wake on a reminder the user explicitly paused.
+  it('snoozeReminder arms no alarm when the pull paused it', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const active = recurringReminderFactory.build({ id: 'r', recurring, paused: false });
+    storageAheadOfStore([active], [{ ...active, paused: true }]);
+
+    await useReminderStore.getState().snoozeReminder('r', 5);
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  // Pausing must not touch dueDate; the snapshot's copy predates the pull's advance.
+  it('setReminderPaused does not revert a dueDate the pull advanced', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', recurring, paused: false });
+    const advanced = { ...stale, dueDate: new Date(Date.now() + 30 * 60_000).toISOString() };
+    storageAheadOfStore([stale], [advanced]);
+
+    await useReminderStore.getState().setReminderPaused('r', true);
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].dueDate).toBe(advanced.dueDate);
+    expect(written[0].paused).toBe(true);
+  });
+
+  // The advanced entity is spread from the fresh read, so a rename the pull brought survives.
+  it('toggleReminder advances the pulled version of a recurring reminder', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const stale = recurringReminderFactory.build({ id: 'r', text: 'Stretch', recurring });
+    const renamed = { ...stale, text: 'Stretch legs' };
+    storageAheadOfStore([stale], [renamed]);
+
+    await useReminderStore.getState().toggleReminder('r');
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(written[0].text).toBe('Stretch legs');
   });
 });

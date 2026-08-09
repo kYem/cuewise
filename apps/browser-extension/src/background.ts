@@ -12,7 +12,7 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
-import { ensureSettingsMigrated, getReminders, setReminders } from '@cuewise/storage';
+import { ensureSettingsMigrated, getReminders, updateReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import { configureChromePlatform } from './platform';
@@ -23,9 +23,8 @@ import { QUARANTINE_KEY, STATUS_KEY } from './sync/sync-storage-keys';
 
 const { scheduler, notifier } = configureChromePlatform();
 
-// Fire a reminder's notification when its scheduled time arrives. The lookup +
-// deliver + recurring re-arm logic is shared with the macOS app so both platforms
-// behave identically.
+// The lookup + deliver + recurring re-arm logic is shared with the macOS app, so both
+// platforms behave identically.
 scheduler.onFire(handleReminderFire);
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
@@ -188,16 +187,29 @@ notifier.onAction(async (notificationId, buttonIndex) => {
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
     if (action.type === 'complete') {
-      const updated = reminders.map((r) => (r.id === reminderId ? { ...r, completed: true } : r));
-      await setReminders(updated);
-    } else if (action.type === 'snooze') {
-      const updated = reminders.map((r) =>
-        r.id === reminderId
-          ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
-          : r
+      const { result } = await updateReminders((current) =>
+        current.map((r) => (r.id === reminderId ? { ...r, completed: true } : r))
       );
-      await setReminders(updated);
-      await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+      // Nothing is armed off this one, so there is no wake to withhold — but a Done click that
+      // silently failed to persist would otherwise leave no trace at all.
+      if (result?.success === false) {
+        logger.error('Could not persist the completed reminder', result.error);
+      }
+    } else if (action.type === 'snooze') {
+      const { result } = await updateReminders((current) =>
+        current.map((r) =>
+          r.id === reminderId
+            ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
+            : r
+        )
+      );
+      // Arming a wake for a dueDate that never persisted fires the reminder at the snoozed time
+      // against its still-overdue stored copy, which notifies all over again.
+      if (result?.success === false) {
+        logger.error('Could not persist the snoozed reminder', result.error);
+      } else {
+        await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+      }
     }
 
     await notifier.clear(notificationId);

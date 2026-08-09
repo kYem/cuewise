@@ -17,6 +17,8 @@ export { LocalStorageKeyValueStore } from './local-storage-key-value-store';
 export type { PlaylistResumeInfo, SettingsRead, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers
 export {
+  COLLECTION_LOCKS,
+  type CollectionLock,
   clearCustomBackground,
   clearSettings,
   ensureSettingsMigrated,
@@ -74,5 +76,8 @@ export {
   setSettingsPatchRaw,
   settingsStorageKey,
   setWeatherState,
+  updateGoals,
+  updateReminders,
   updateVideoProgress,
+  withCollectionLock,
 } from './storage-helpers';

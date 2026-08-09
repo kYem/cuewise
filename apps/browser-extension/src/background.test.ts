@@ -8,6 +8,12 @@ const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
 vi.mock('@cuewise/storage', () => ({
   getReminders: getRemindersMock,
   setReminders: setRemindersMock,
+  // Faithful, not a stub: the read has to happen inside the write, so a mock taking the caller's
+  // list would let a read hoisted back out of the lock pass.
+  updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
+    const reminders = mutate((await getRemindersMock()) ?? []);
+    return { result: await setRemindersMock(reminders), reminders };
+  }),
   // Runs at module load now, sync or no sync — must resolve, background.ts chains off it.
   ensureSettingsMigrated: vi.fn(() => Promise.resolve()),
 }));
@@ -140,6 +146,57 @@ describe('background: notification action buttons', () => {
       const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
       const updated = saved.find((r) => r.id === 'r2');
       expect(updated?.completed).toBe(true);
+    });
+  });
+
+  it('does not arm the snooze wake when the write did not persist', async () => {
+    const reminder = reminderFactory.build({
+      id: 'r6',
+      completed: false,
+      dueDate: new Date(Date.now() - 1000).toISOString(),
+    });
+    getRemindersMock.mockResolvedValue([reminder]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    fireButton('reminder-r6', 1);
+
+    await vi.waitFor(() => expect(setRemindersMock).toHaveBeenCalled());
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  // The lookup read and the locked read are separate; a pull can land between them.
+  it('keeps a reminder that arrived between the lookup and the Done write', async () => {
+    const reminder = reminderFactory.build({ id: 'r2', completed: false });
+    const pulled = reminderFactory.build({ id: 'pulled' });
+    getRemindersMock.mockResolvedValueOnce([reminder]);
+    getRemindersMock.mockResolvedValue([reminder, pulled]);
+
+    fireButton('reminder-r2', 0);
+
+    await vi.waitFor(() => {
+      const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+      expect(saved.map((r) => r.id)).toEqual(['r2', 'pulled']);
+    });
+  });
+
+  it('keeps a reminder that arrived between the lookup and the Snooze write', async () => {
+    const reminder = reminderFactory.build({
+      id: 'r3',
+      completed: false,
+      dueDate: new Date(Date.now() - 1000).toISOString(),
+    });
+    const pulled = reminderFactory.build({ id: 'pulled' });
+    getRemindersMock.mockResolvedValueOnce([reminder]);
+    getRemindersMock.mockResolvedValue([reminder, pulled]);
+
+    fireButton('reminder-r3', 1);
+
+    await vi.waitFor(() => {
+      const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+      expect(saved.map((r) => r.id)).toEqual(['r3', 'pulled']);
     });
   });
 

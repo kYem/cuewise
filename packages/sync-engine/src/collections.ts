@@ -1,5 +1,6 @@
 import { DEVICE_LOCAL_SETTINGS_KEYS, logger, type Settings, storageFailure } from '@cuewise/shared';
 import {
+  type CollectionLock,
   getCollectionsRaw,
   getGoalsRaw,
   getQuotesRaw,
@@ -12,6 +13,7 @@ import {
   setQuotesRaw,
   setRemindersRaw,
   setSettingsPatchRaw,
+  withCollectionLock,
 } from '@cuewise/storage';
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
@@ -42,7 +44,7 @@ interface HasId {
  * fails the write rather than rewriting the list from items it never saw.
  */
 function arrayBinding<T extends HasId>(
-  name: string,
+  name: CollectionLock,
   getAll: () => Promise<T[]>,
   setAll: (items: T[]) => Promise<StorageResult>
 ): CollectionBinding {
@@ -53,21 +55,26 @@ function arrayBinding<T extends HasId>(
       return Object.fromEntries(items.map((item) => [item.id, item]));
     },
     async writeOne(entityId, entity) {
-      let items: T[];
-      try {
-        items = await getAll();
-      } catch (error) {
-        logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
-        return storageFailure(`Could not read the ${name} collection`);
-      }
-      if (entity === null) {
-        return setAll(items.filter((item) => item.id !== entityId));
-      }
-      const exists = items.some((item) => item.id === entityId);
-      const next = exists
-        ? items.map((item) => (item.id === entityId ? (entity as T) : item))
-        : [...items, entity as T];
-      return setAll(next);
+      // Reads inside the lock: this runs in the service worker while the page writes the same array
+      // from its own read, and whoever lands second carries the whole array with them. Goals and
+      // reminders have locked page-side writers; quotes and collections still race.
+      return withCollectionLock(name, async (): Promise<StorageResult> => {
+        let items: T[];
+        try {
+          items = await getAll();
+        } catch (error) {
+          logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
+          return storageFailure(`Could not read the ${name} collection`);
+        }
+        if (entity === null) {
+          return setAll(items.filter((item) => item.id !== entityId));
+        }
+        const exists = items.some((item) => item.id === entityId);
+        const next = exists
+          ? items.map((item) => (item.id === entityId ? (entity as T) : item))
+          : [...items, entity as T];
+        return setAll(next);
+      });
     },
   };
 }

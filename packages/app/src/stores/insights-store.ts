@@ -38,6 +38,7 @@ import {
   setGoalsRaw,
   setPomodoroSessionsRaw,
   setQuotesRaw,
+  withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { readFileAsText } from '../utils/file-utils';
@@ -361,15 +362,17 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import goals
       if (options.importGoals === true && data.goals.length > 0) {
-        const existingGoals = await getGoalsRaw();
-        const { merged, importedCount, skippedCount } = mergeImport(
-          existingGoals,
-          data.goals,
-          options.skipDuplicates === true
-        );
-        if (importedCount > 0) {
-          assertPersisted(await setGoalsRaw(merged));
-        }
+        const { importedCount, skippedCount } = await withCollectionLock('goals', async () => {
+          const counts = mergeImport(
+            await getGoalsRaw(),
+            data.goals,
+            options.skipDuplicates === true
+          );
+          if (counts.importedCount > 0) {
+            assertPersisted(await setGoalsRaw(counts.merged));
+          }
+          return counts;
+        });
         result.imported.goals = importedCount;
         result.skipped.goals = skippedCount;
       }

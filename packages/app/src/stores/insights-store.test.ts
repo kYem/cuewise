@@ -22,6 +22,10 @@ import { useInsightsStore } from './insights-store';
 // Mocks
 // ============================================================================
 
+// Which collection locks are held right now. A stub passthrough would make a read hoisted back
+// out of the lock — the bug this path already shipped once — invisible to every assertion.
+const { heldLocks } = vi.hoisted(() => ({ heldLocks: new Set<string>() }));
+
 vi.mock('@cuewise/storage', () => ({
   getGoals: vi.fn(),
   setGoals: vi.fn(),
@@ -39,6 +43,10 @@ vi.mock('@cuewise/storage', () => ({
   setGoalsRaw: vi.fn(),
   setQuotesRaw: vi.fn(),
   setPomodoroSessionsRaw: vi.fn(),
+  withCollectionLock: vi.fn(<T>(lock: string, apply: () => Promise<T>) => {
+    heldLocks.add(lock);
+    return apply().finally(() => heldLocks.delete(lock));
+  }),
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),
@@ -172,6 +180,25 @@ describe('Insights Store - Import Methods', () => {
       expect(savedQuotes.map((quote) => quote.id)).toContain(QUARANTINED_QUOTE.id);
       const savedSessions = vi.mocked(storage.setPomodoroSessionsRaw).mock.calls[0][0];
       expect(savedSessions.map((session) => session.id)).toContain(QUARANTINED_SESSION.id);
+    });
+
+    // A pull applies from the service worker while the merge runs; reading before the lock lets
+    // the import write a list that never saw it.
+    it('reads the goals it merges into from inside the lock', async () => {
+      const heldWhenRead: boolean[] = [];
+      vi.mocked(storage.getGoalsRaw).mockImplementation(async () => {
+        heldWhenRead.push(heldLocks.has('goals'));
+        return [];
+      });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({
+          goals: [goalFactory.build({ id: 'new-1' })],
+        }),
+      });
+
+      await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      expect(heldWhenRead).toEqual([true]);
     });
 
     // The backup's whole contract is faithfulness, and it was only ever mocked, never run.

@@ -13,7 +13,7 @@ import {
   toStoredValues,
   UNREADABLE_VALUE,
 } from '@cuewise/shared';
-import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
+import { goalFactory, quoteFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFromStorage, getManyFromStorage, setInStorage } from './chrome-storage';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
@@ -23,6 +23,7 @@ import {
   ensureSettingsMigrated,
   getCustomBackground,
   getGoals,
+  getReminders,
   getSettings,
   getSettingsForSync,
   getStorageUsage,
@@ -34,9 +35,13 @@ import {
   resetSettingsMigration,
   SETTINGS_KEYS,
   setCustomBackground,
+  setGoals,
+  setReminders,
   setSettingsPatch,
   setSettingsPatchRaw,
   settingsStorageKey,
+  updateGoals,
+  updateReminders,
 } from './storage-helpers';
 
 // The migration memo lives at module scope, so an earlier test's run would satisfy a later one.
@@ -190,6 +195,52 @@ describe('custom background', () => {
     const result = await clearCustomBackground();
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('updateGoals', () => {
+  // The page and the service worker both read the goal array, mutate it, and write it back, so
+  // without the lock whoever lands second erases the other's entry.
+  it('lets two concurrent writers both land', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const [first, second] = goalFactory.buildList(2);
+    await setGoals([]);
+
+    await Promise.all([
+      updateGoals((goals) => [...goals, first]),
+      updateGoals((goals) => [...goals, second]),
+    ]);
+
+    const stored = await getGoals();
+    expect(stored.map((goal) => goal.id).sort()).toEqual([first.id, second.id].sort());
+  });
+
+  it('mutates the stored list, never one the caller supplied', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const existing = goalFactory.build();
+    await setGoals([existing]);
+
+    const { goals } = await updateGoals((current) => current);
+
+    expect(goals.map((goal) => goal.id)).toEqual([existing.id]);
+  });
+});
+
+describe('updateReminders', () => {
+  // The service worker writes this array from a notification handler while the page writes it
+  // from the panel, so without the lock whoever lands second erases the other's entry.
+  it('lets two concurrent writers both land', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const [first, second] = reminderFactory.buildList(2);
+    await setReminders([]);
+
+    await Promise.all([
+      updateReminders((reminders) => [...reminders, first]),
+      updateReminders((reminders) => [...reminders, second]),
+    ]);
+
+    const stored = await getReminders();
+    expect(stored.map((reminder) => reminder.id).sort()).toEqual([first.id, second.id].sort());
   });
 });
 

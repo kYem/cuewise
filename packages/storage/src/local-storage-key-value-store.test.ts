@@ -470,4 +470,79 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
     );
     errorSpy.mockRestore();
   });
+
+  describe('withLock', () => {
+    it('serialises read-modify-write, so a second writer sees the first', async () => {
+      const store = new LocalStorageKeyValueStore();
+      await store.set('list', [1], 'local');
+
+      // Both read-modify-write the same key with an await between read and write — the shape
+      // that loses an entry when it interleaves.
+      const append = (value: number) =>
+        store.withLock('list', async () => {
+          const current = (await store.get<number[]>('list', 'local')) ?? [];
+          await Promise.resolve();
+          await store.set('list', [...current, value], 'local');
+        });
+
+      await Promise.all([append(2), append(3)]);
+
+      expect(await store.get<number[]>('list', 'local')).toEqual([1, 2, 3]);
+    });
+
+    it('keeps the chain usable after a section throws', async () => {
+      const store = new LocalStorageKeyValueStore();
+      const failed = store.withLock('list', async () => {
+        throw new Error('boom');
+      });
+
+      await expect(failed).rejects.toThrow('boom');
+      await expect(store.withLock('list', async () => 'after')).resolves.toBe('after');
+    });
+
+    // The chain head keeps a handled copy, so a caller that ignores the returned promise does not
+    // leave the rejection unhandled — which in a service worker surfaces as an extension error.
+    it('does not leave an unhandled rejection when a fire-and-forget section throws', async () => {
+      const store = new LocalStorageKeyValueStore();
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+
+      void store.withLock('list', async () => {
+        throw new Error('boom');
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      process.off('unhandledRejection', onUnhandled);
+
+      expect(unhandled).toEqual([]);
+    });
+
+    it('does not serialise unrelated names', async () => {
+      const store = new LocalStorageKeyValueStore();
+      const order: string[] = [];
+      let releaseFirst: () => void = () => {};
+      const held = new Promise<void>((ready) => {
+        void store.withLock(
+          'a',
+          () =>
+            new Promise<void>((resolve) => {
+              releaseFirst = () => {
+                order.push('a');
+                resolve();
+              };
+              ready();
+            })
+        );
+      });
+      await held;
+
+      await store.withLock('b', async () => {
+        order.push('b');
+      });
+      releaseFirst();
+
+      // 'b' completed while 'a' was still held: one global lock would have deadlocked here.
+      expect(order).toEqual(['b', 'a']);
+    });
+  });
 });

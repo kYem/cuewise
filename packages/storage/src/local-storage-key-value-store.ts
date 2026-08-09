@@ -199,6 +199,25 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     return failure ?? { success: true };
   }
 
+  /**
+   * A promise chain, not navigator.locks: the hosts on this backend run one realm, so serialising
+   * within it is the whole requirement.
+   */
+  private chains = new Map<string, Promise<unknown>>();
+
+  withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.chains.get(name) ?? Promise.resolve();
+    // fn is both handlers, so a section that threw still lets the next one run.
+    const next = previous.then(fn, fn);
+    // Storing a handled copy, not `next`: it gives the rejection a handler even when the caller
+    // ignores the returned promise, which is otherwise an unhandled rejection.
+    this.chains.set(
+      name,
+      next.catch(() => undefined)
+    );
+    return next;
+  }
+
   async removeMany(keys: string[], area: StorageArea): Promise<boolean> {
     const changed: string[] = [];
     let noFailures = true;

@@ -9,6 +9,7 @@ import {
   type ConceptCard,
   calendarEventSchema,
   calendarStateEnvelopeSchema,
+  canLock,
   conceptCardSchema,
   DAY_IN_MS,
   type DailyBackground,
@@ -308,6 +309,39 @@ export async function setGoals(goals: Goal[]): Promise<StorageResult> {
   return setValidatedListInStorage(STORAGE_KEYS.GOALS, goals, goalSchema, area);
 }
 
+/**
+ * Every writer of one whole-array collection, page or service worker, names its lock from here —
+ * a rename is then a type error rather than two literals silently drifting apart.
+ */
+export const COLLECTION_LOCKS = ['goals', 'quotes', 'collections', 'reminders'] as const;
+
+export type CollectionLock = (typeof COLLECTION_LOCKS)[number];
+
+/**
+ * Serialises a read-modify-write against every other writer of the same collection. The unlocked
+ * branch is not a safe single-realm case — the one backend that reaches it is Chrome without
+ * `navigator.locks`, which is exactly the two-realm one — it is just better than refusing to write.
+ */
+export function withCollectionLock<T>(lock: CollectionLock, apply: () => Promise<T>): Promise<T> {
+  const store = getStorage();
+  return canLock(store) ? store.withLock(lock, apply) : apply();
+}
+
+/**
+ * Changes the goal list. Reads inside the lock rather than trusting a caller's snapshot: the pull
+ * applies its writes from the service worker while the page writes from a `get()` taken before its
+ * own await, and whichever lands last carries the whole array with it — reverting an edit, or
+ * dropping one already pulled from another device.
+ */
+export async function updateGoals(
+  mutate: (goals: Goal[]) => Goal[]
+): Promise<{ result: StorageResult; goals: Goal[] }> {
+  return withCollectionLock('goals', async () => {
+    const goals = mutate(await getGoals());
+    return { result: await setGoals(goals), goals };
+  });
+}
+
 /** Raw-then-validate for the same reason as getGoals. */
 export async function getReminders(): Promise<Reminder[]> {
   const area = await getStorageArea();
@@ -318,6 +352,16 @@ export async function getReminders(): Promise<Reminder[]> {
 export async function setReminders(reminders: Reminder[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setValidatedListInStorage(STORAGE_KEYS.REMINDERS, reminders, reminderSchema, area);
+}
+
+/** Changes the reminder list, reading inside the lock. See `updateGoals` for why. */
+export async function updateReminders(
+  mutate: (reminders: Reminder[]) => Reminder[]
+): Promise<{ result: StorageResult; reminders: Reminder[] }> {
+  return withCollectionLock('reminders', async () => {
+    const reminders = mutate(await getReminders());
+    return { result: await setReminders(reminders), reminders };
+  });
 }
 
 /** Raw-then-validate for the same reason as getGoals. */

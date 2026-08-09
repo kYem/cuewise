@@ -1,4 +1,4 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, logger, type Reminder } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,12 @@ import { handleReminderFire } from './reminder-notifications';
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
+  // Faithful, not a stub: reading inside the write is the property under test, so a mock that
+  // took the caller's list would let a read hoisted back out of the lock pass.
+  updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
+    const reminders = mutate((await storage.getReminders()) ?? []);
+    return { result: await storage.setReminders(reminders), reminders };
+  }),
 }));
 
 const getRemindersMock = vi.mocked(storage.getReminders);
@@ -50,6 +56,44 @@ describe('handleReminderFire', () => {
     expect(saved.find((r) => r.id === 'r1')?.notified).toBe(true);
   });
 
+  // The notify is an OS round trip, so a pull has time to land inside it. Writing the list read
+  // before it would drop whatever the pull brought.
+  it('keeps a reminder that arrived while the notification was up', async () => {
+    const firing = reminderFactory.build({ id: 'r1', text: 'Stretch', completed: false });
+    const pulled = reminderFactory.build({ id: 'pulled' });
+    getRemindersMock.mockResolvedValueOnce([firing]);
+    notify.mockImplementationOnce(async () => {
+      getRemindersMock.mockResolvedValue([firing, pulled]);
+    });
+
+    await handleReminderFire('reminder-r1');
+
+    const saved = setRemindersMock.mock.calls[0][0];
+    expect(saved.map((r) => r.id)).toEqual(['r1', 'pulled']);
+    expect(saved.find((r) => r.id === 'r1')?.notified).toBe(true);
+  });
+
+  // The recurrence decision is re-made against the fresh read: advancing a reminder the pull
+  // paused would undo the pause and arm a wake that must never fire.
+  it('does not advance a recurring reminder the pull paused during the notification', async () => {
+    const active = recurringReminderFactory.build({
+      id: 'r4',
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+      paused: false,
+    });
+    getRemindersMock.mockResolvedValueOnce([active]);
+    notify.mockImplementationOnce(async () => {
+      getRemindersMock.mockResolvedValue([{ ...active, paused: true }]);
+    });
+
+    await handleReminderFire('reminder-r4');
+
+    const saved = setRemindersMock.mock.calls[0][0];
+    expect(saved[0].dueDate).toBe(active.dueDate);
+    expect(saved[0].notified).toBe(true);
+    expect(scheduleAt).not.toHaveBeenCalled();
+  });
+
   it('re-arms the next occurrence of a recurring reminder', async () => {
     getRemindersMock.mockResolvedValue([
       recurringReminderFactory.build({
@@ -62,6 +106,29 @@ describe('handleReminderFire', () => {
 
     expect(notify).toHaveBeenCalled();
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r2', expect.any(Date));
+  });
+
+  // setReminders resolves {success:false} on quota instead of throwing, so nothing else catches it.
+  it('does not arm the next occurrence when the write did not persist', async () => {
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({
+        id: 'r5',
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      }),
+    ]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await handleReminderFire('reminder-r5');
+
+    expect(scheduleAt).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Could not persist the fired reminder',
+      expect.anything()
+    );
   });
 
   it('does not notify a completed reminder', async () => {

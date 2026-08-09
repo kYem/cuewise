@@ -11,11 +11,10 @@ import {
   getScheduler,
   logger,
   nextReminderDueDate,
-  type Reminder,
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
-import { getReminders, setReminders } from '@cuewise/storage';
+import { getReminders, updateReminders } from '@cuewise/storage';
 
 /**
  * Deliver a reminder's notification when its scheduled wake fires. Looks the
@@ -55,30 +54,34 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       requireInteraction: true,
     });
 
-    const updatedReminders = reminders.map((r) =>
-      r.id === reminderId ? { ...r, notified: true } : r
+    // One locked section reading fresh, not the list from before the notify: that round trip is
+    // long enough for a pull to land, and every decision below has to be made against what it left.
+    let nextDueDate: Date | null = null;
+    const { result } = await updateReminders((current) =>
+      current.map((r) => {
+        if (r.id !== reminderId) {
+          return r;
+        }
+        // Re-checked here, not from the pre-notify copy: a pull may have paused, completed or
+        // re-cadenced this reminder, and advancing it then would undo that and arm a dead wake.
+        if (r.recurring && !r.paused && !r.completed) {
+          nextDueDate = nextReminderDueDate(r, new Date());
+          return { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false };
+        }
+        return { ...r, notified: true };
+      })
     );
-    await setReminders(updatedReminders);
+    // setReminders resolves {success:false} on quota rather than throwing, so the catch below
+    // never sees it. Arming the next occurrence off an unpersisted advance would double-fire it.
+    if (result?.success === false) {
+      logger.error('Could not persist the fired reminder', result.error);
+      return;
+    }
 
-    if (reminder.recurring) {
-      await scheduleNextOccurrence(reminder);
+    if (nextDueDate !== null) {
+      await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);
     }
   } catch (error) {
     logger.error('Error handling reminder fire', error);
   }
-}
-
-/** Advance a recurring reminder to its next occurrence and re-arm its wake. */
-async function scheduleNextOccurrence(reminder: Reminder): Promise<void> {
-  const nextDueDate = nextReminderDueDate(reminder, new Date());
-
-  const reminders = await getReminders();
-  const updatedReminders = reminders.map((r) =>
-    r.id === reminder.id
-      ? { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false }
-      : r
-  );
-  await setReminders(updatedReminders);
-
-  await getScheduler().scheduleAt(reminderAlarmId(reminder.id), nextDueDate);
 }

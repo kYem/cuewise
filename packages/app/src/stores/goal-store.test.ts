@@ -1,6 +1,7 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  type Goal,
   getTodayDateString,
   logger,
   resetPlatform,
@@ -25,6 +26,13 @@ vi.mock('@cuewise/storage', () => ({
   getGoals: vi.fn(),
   setGoals: vi.fn(),
   readSettings: vi.fn(),
+  // A faithful stand-in, not a stub: updateGoals' whole point is that it reads inside the write,
+  // so a mock that skipped the read would let a stale-snapshot regression pass.
+  updateGoals: vi.fn(async (mutate: (goals: Goal[]) => Goal[]) => {
+    const goals = mutate((await storage.getGoals()) ?? []);
+    return { result: await storage.setGoals(goals), goals };
+  }),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
 }));
 
 const settingsRead = (settings: Settings): SettingsRead => ({ ok: true, settings });
@@ -72,6 +80,11 @@ describe('Goal Store', () => {
 
     // Clear all mocks
     vi.clearAllMocks();
+
+    // The store is a cache of storage, equal to it after every action — which is what lets a test
+    // seed with setState and still exercise the read-inside-the-write.
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
   });
 
   describe('initialize', () => {
@@ -927,11 +940,35 @@ describe('sync sink wiring', () => {
     markDeleted.mockClear();
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
     configurePlatform({ syncSink: fakeSink });
   });
 
   afterEach(() => {
     configurePlatform({ syncSink: null });
+  });
+
+  // Marking a gone id dirty makes the next push seal a tombstone this device never authored.
+  it('does not mark a goal dirty when the pull deleted it before the write', async () => {
+    const mine = objectiveFactory.build({ id: 'gone' });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
+
+    await useGoalStore.getState().updateGoal('gone', { text: 'renamed' });
+    await useGoalStore.getState().updateTask('gone', 'renamed');
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  // GoalForm closes on true, so success here would discard the edit without saying anything.
+  it('updateGoal reports failure when the pull deleted it', async () => {
+    const mine = objectiveFactory.build({ id: 'gone' });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
+
+    await expect(useGoalStore.getState().updateGoal('gone', { text: 'renamed' })).resolves.toBe(
+      false
+    );
   });
 
   it('notifies markMutatedBulk with the rolled ids after an auto-roll persists', async () => {
@@ -1138,6 +1175,7 @@ describe('rollDueTasks', () => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
     vi.mocked(storage.readSettings).mockClear().mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear();
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
   });
 
   it('moves due and overdue incomplete tasks into today and persists once', async () => {
@@ -1279,6 +1317,7 @@ describe('handleDayRollover', () => {
     useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
     vi.mocked(storage.setGoals).mockClear();
+    vi.mocked(storage.getGoals).mockImplementation(async () => useGoalStore.getState().goals);
   });
 
   it('recomputes today tasks for the new day and rolls newly due tasks', async () => {
@@ -1523,5 +1562,110 @@ describe('resolved write failures are honored across writers', () => {
     expect(result).toBe(false);
     verify();
     expect(toastError).toHaveBeenCalledOnce();
+  });
+});
+
+describe('writers read storage, not their own snapshot', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useGoalStore.setState({ goals: [], todayTasks: [], isLoading: false, error: null });
+    vi.mocked(storage.setGoals).mockResolvedValue({ success: true });
+    // clearAllMocks keeps implementations, so an earlier block's getGoals would leak in here.
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
+  });
+
+  // Storage deliberately holds a goal the store's in-memory list does not: a pull that landed
+  // between the action starting and its write. A snapshot-based writer drops it.
+  const pulledConcurrently = () => {
+    const seeded = goalFactory.build();
+    const pulled = goalFactory.build();
+    useGoalStore.setState({ goals: [seeded], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([seeded, pulled]);
+    return { seeded, pulled };
+  };
+
+  it('addTask keeps a goal that only storage knows about', async () => {
+    const { seeded, pulled } = pulledConcurrently();
+
+    await useGoalStore.getState().addTask('write the migration');
+
+    const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+    expect(written.map((goal) => goal.id)).toEqual([seeded.id, pulled.id, expect.any(String)]);
+  });
+
+  it('rollDueTasks keeps a goal that only storage knows about', async () => {
+    const overdue = goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' });
+    const pulled = goalFactory.build();
+    useGoalStore.setState({ goals: [overdue], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([overdue, pulled]);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
+
+    await useGoalStore.getState().rollDueTasks();
+
+    const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+    expect(written.map((goal) => goal.id).sort()).toEqual([overdue.id, pulled.id].sort());
+  });
+
+  // Same trap as reorderTasks: addGoal writes an objective, but updatedGoals is storage now, so
+  // it carries a task the pull added — and the observer's guard will not recompute the list.
+  it('addGoal shows a task pulled into today by someone else', async () => {
+    const today = getTodayDateString();
+    const existing = goalFactory.build({ date: today });
+    const pulled = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: [existing], todayTasks: [existing] });
+    vi.mocked(storage.getGoals).mockResolvedValue([existing, pulled]);
+
+    await useGoalStore.getState().addGoal('Ship the lock', today);
+
+    const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
+    expect(shown).toContain(pulled.id);
+  });
+
+  it('updateGoal shows a task pulled into today by someone else', async () => {
+    const today = getTodayDateString();
+    const objective = objectiveFactory.build({ id: 'obj' });
+    const pulled = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: [objective], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([objective, pulled]);
+
+    await useGoalStore.getState().updateGoal('obj', { text: 'Ship it' });
+
+    expect(useGoalStore.getState().todayTasks.map((task) => task.id)).toEqual([pulled.id]);
+  });
+
+  // The observer cannot repair this one: after the write, goals already equals storage, so its
+  // equality guard returns early and never recomputes the today list.
+  it('reorderTasks shows a task pulled into today mid-drag', async () => {
+    const today = getTodayDateString();
+    const dragged = goalFactory.buildList(2, { date: today });
+    const pulled = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: dragged, todayTasks: dragged });
+    vi.mocked(storage.getGoals).mockResolvedValue([...dragged, pulled]);
+
+    await useGoalStore.getState().reorderTasks(0, 1);
+
+    // The drag put dragged[1] first; the pulled task keeps its own sortOrder, so it ties at 0 and
+    // a stable sort leaves it where the stored array had it.
+    const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
+    expect(shown).toEqual([dragged[1].id, pulled.id, dragged[0].id]);
+  });
+
+  // The snapshot says something is due and storage says nothing is: a snapshot reader rolls and
+  // writes, a storage reader skips. Cleanly — a crash inside the lock also writes nothing.
+  it('rollDueTasks decides from storage, and skips without erroring', async () => {
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    useGoalStore.setState({
+      goals: [goalFactory.build({ date: '2025-01-01', dueDate: '2025-01-02' })],
+      todayTasks: [],
+    });
+    vi.mocked(storage.getGoals).mockResolvedValue([
+      goalFactory.build({ date: getTodayDateString() }),
+    ]);
+    vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
+
+    await useGoalStore.getState().rollDueTasks();
+
+    expect(storage.setGoals).not.toHaveBeenCalled();
+    expect(errorLog).not.toHaveBeenCalled();
   });
 });
