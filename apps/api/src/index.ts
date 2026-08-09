@@ -18,6 +18,7 @@ import {
   registerGoogleRoutes,
 } from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
+import { registerPairingsRoutes } from './routes/pairings';
 import { registerSessionsRoutes } from './routes/sessions';
 import { registerWeatherRoutes, type UpstreamFetch } from './routes/weather';
 import type { SyncStore } from './store';
@@ -68,6 +69,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/changes/*', auth);
   app.use('/v1/keys/*', auth);
   app.use('/v1/sessions/*', auth);
+  app.use('/v1/pairings/*', auth);
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
@@ -79,6 +81,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/changes/*', perTokenRateLimit);
   app.use('/v1/keys/*', perTokenRateLimit);
   app.use('/v1/sessions/*', perTokenRateLimit);
+  app.use('/v1/pairings/*', perTokenRateLimit);
   app.use('/v1/export', perTokenRateLimit);
   app.use('/v1/account', perTokenRateLimit);
 
@@ -102,6 +105,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerChangesRoutes(app, resolved);
   registerKeysRoutes(app, resolved);
   registerSessionsRoutes(app, resolved);
+  registerPairingsRoutes(app, resolved);
   registerAccountRoutes(app, resolved);
   registerWeatherRoutes(app, resolved);
 

@@ -12,6 +12,8 @@ const PROBLEM_DEFS = {
   key_envelope_exists: { status: 409, title: 'Key envelope already exists' },
   resync_required: { status: 409, title: 'Resync required' },
   not_found: { status: 404, title: 'Not found' },
+  pairing_not_found: { status: 404, title: 'No such pairing request.' },
+  pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },
   internal: { status: 500, title: 'Internal error' },
   // Distinct from `internal` so a client can tell "provider is down, retry later" from
   // "we're broken".
