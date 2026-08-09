@@ -1,9 +1,15 @@
 import {
+  b64urlDecode,
+  b64urlEncode,
   type DataKey,
   deriveMasterKey,
+  derivePairingSas,
+  generatePairingKeypair,
   generateRecoveryCode,
   RecoveryCodeError,
+  unwrapDataKeyFromPeer,
   wrapDataKey,
+  type X25519KeyPair,
 } from '@cuewise/crypto';
 import {
   describeThrown,
@@ -29,6 +35,7 @@ import {
   initOrEnrollKey,
   type KeyLifecycleDeps,
   loadPersistedDataKey,
+  persistDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SYNC_DATA_KEY,
@@ -126,7 +133,32 @@ export type EngineApiClient = Pick<
   | 'revokeSession'
   | 'renameSession'
   | 'revokeOtherSessions'
+  | 'createPairing'
+  | 'listPairings'
+  | 'getPairing'
+  | 'commitPairing'
+  | 'putPairingEnvelope'
+  | 'deletePairing'
 >;
+
+/**
+ * What one poll of a pairing request found (ENG-50). `confirm` carries the digits both screens
+ * show; only a matching pair may be approved. Every `failed` is terminal — the caller stops
+ * polling and starts a new request.
+ */
+export type PairingPollResult =
+  | { kind: 'waiting' }
+  | { kind: 'confirm'; sas: string }
+  | { kind: 'complete' }
+  | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' };
+
+/** The request this device is polling: its keypair, and what the approver has answered so far. */
+interface PairingRequest {
+  id: string;
+  keypair: X25519KeyPair;
+  sas: string | null;
+  approverPub: Uint8Array | null;
+}
 
 export interface SyncEngineDeps {
   apiClient: EngineApiClient;
@@ -197,6 +229,9 @@ export class SyncEngine {
   // "only way back" breadcrumb fires, and the value belongs to the host's one-shot slot.
   private enrollMintedCode = false;
   private hydration: Promise<void> | null = null;
+  // Held only between beginPairing and the poll that ends it; cleared by anything that ends the
+  // session or the account it belongs to.
+  private pairing: PairingRequest | null = null;
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
@@ -276,6 +311,135 @@ export class SyncEngine {
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
     }
+  }
+
+  /**
+   * Starts a device-pairing request (ENG-50): this device publishes a one-shot public key for
+   * another signed-in device to wrap the account's data key to, and `pollPairing` drives the rest.
+   * Null when this device is not waiting for a key, or when the session carrying it is gone.
+   */
+  async beginPairing(): Promise<{ pairingId: string } | null> {
+    if (this.status !== 'needs_enroll') {
+      return null;
+    }
+    const epoch = this.accountEpoch;
+    const before = this.status;
+    try {
+      // Inside the try like resumeEnrollWithCode's: a storage fault reading the session belongs in
+      // the shared mapping below, not out as a raw rejection.
+      if (!(await this.deps.sessionManager.isSignedIn())) {
+        // A disable is why the session is gone, and it has already cleared it; handleAuthLoss
+        // would repaint the pill as "Sign-in expired" for a device the user disconnected.
+        if (!this.enrollSuperseded(epoch)) {
+          await this.handleAuthLoss();
+        }
+        return null;
+      }
+      const keypair = await generatePairingKeypair();
+      const created = await this.deps.apiClient.createPairing(b64urlEncode(keypair.publicKey));
+      if (this.enrollSuperseded(epoch)) {
+        // Left standing, the row invites another device to wrap this account's key to one the
+        // user has just disconnected from it.
+        await this.bestEffort(
+          () => this.deps.apiClient.deletePairing(created.id),
+          'abandoned pairing request cleanup'
+        );
+        return null;
+      }
+      this.pairing = { id: created.id, keypair, sas: null, approverPub: null };
+      return { pairingId: created.id };
+    } catch (err) {
+      // Rethrows anything that is neither auth loss nor a disable, so the caller can show it.
+      await this.handleEnableError(err, before, epoch);
+      return null;
+    }
+  }
+
+  /**
+   * One poll of the request `beginPairing` started (callers loop it while their screen is up).
+   * Never throws: a fault is answered as `failed`, and every `failed` is terminal — the request is
+   * forgotten, so the caller must start another rather than keep polling.
+   */
+  async pollPairing(): Promise<PairingPollResult> {
+    const pairing = this.pairing;
+    if (pairing === null) {
+      return { kind: 'failed', reason: 'error' };
+    }
+    const epoch = this.accountEpoch;
+    const before = this.status;
+    try {
+      const found = await this.deps.apiClient.getPairing(pairing.id);
+      if (found === null) {
+        this.pairing = null;
+        return { kind: 'failed', reason: 'expired_or_denied' };
+      }
+      if (found.approverPublicKey !== null && pairing.approverPub === null) {
+        pairing.approverPub = b64urlDecode(found.approverPublicKey);
+        pairing.sas = await derivePairingSas(
+          pairing.keypair.publicKey,
+          pairing.approverPub,
+          pairing.id
+        );
+        // Answered even when the envelope is already waiting: the digits must reach this screen
+        // before the device will open a key wrapped by the peer that sent them.
+        return { kind: 'confirm', sas: pairing.sas };
+      }
+      const approverPub = pairing.approverPub;
+      if (found.envelope !== null && approverPub !== null) {
+        return await this.adoptPairedKey(pairing, approverPub, found.envelope, epoch);
+      }
+      if (pairing.sas !== null) {
+        return { kind: 'confirm', sas: pairing.sas };
+      }
+      return { kind: 'waiting' };
+    } catch (err) {
+      return await this.failPairing(err, before, epoch);
+    }
+  }
+
+  /** Opens the peer-wrapped key and adopts it through the same tail an enroll ends with. */
+  private async adoptPairedKey(
+    pairing: PairingRequest,
+    approverPub: Uint8Array,
+    envelope: string,
+    epoch: number
+  ): Promise<PairingPollResult> {
+    const { dk, keyId } = await unwrapDataKeyFromPeer(
+      pairing.keypair.privateKey,
+      approverPub,
+      envelope,
+      pairing.id
+    );
+    // Before the key is adopted, so a disable landing inside activateWithKey rolls this write back
+    // with the rest; after it, the rollback would have run first and left the key on disk.
+    this.pairing = null;
+    // The enroll path's initOrEnrollKey persists what it resolved; this path has to persist its
+    // own, or the paired device is keyless again at its next start().
+    await persistDataKey(this.deps.keyStore, keyId, dk);
+    await this.activateWithKey(dk, keyId, epoch, false);
+    if (this.accountEpoch !== epoch) {
+      // activateWithKey rolled its own work back rather than adopt a key for a removed account.
+      return { kind: 'failed', reason: 'error' };
+    }
+    return { kind: 'complete' };
+  }
+
+  /** Maps a poll fault through the shared enable/enroll handling, then names it for the caller. */
+  private async failPairing(
+    err: unknown,
+    before: SyncStatus,
+    epoch: number
+  ): Promise<PairingPollResult> {
+    this.pairing = null;
+    try {
+      await this.handleEnableError(err, before, epoch);
+    } catch {
+      // Rethrown by design once it has been recorded, and a poll answers faults instead of throwing.
+    }
+    if (this.status === 'signed_out') {
+      return { kind: 'failed', reason: 'signed_out' };
+    }
+    return { kind: 'failed', reason: 'error' };
   }
 
   /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
@@ -484,6 +648,8 @@ export class SyncEngine {
     }
     this.dk = null;
     this.keyId = null;
+    // Whatever a pairing in flight is offered, it would be a key for the account just removed.
+    this.pairing = null;
     this.lastSyncedAt = null;
     this.lastCycle = null;
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
@@ -1226,6 +1392,8 @@ export class SyncEngine {
 
   // Auth 401 (spec §5): drop the session, stop the loop, keep local data + DK. User re-enables.
   private async handleAuthLoss(): Promise<void> {
+    // A pairing request rides the session that was just lost, so nothing can finish it.
+    this.pairing = null;
     // Status first, steps independent: a partial cleanup failure must never leave the engine
     // reporting health — armPullLoopUnlessOff reads that status to decide whether to poll on.
     await this.bestEffort(() => this.setStatus('signed_out'), 'signed-out status notification');
