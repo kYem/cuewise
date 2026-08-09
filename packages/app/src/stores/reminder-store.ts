@@ -302,8 +302,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           // Any recurring reminder (active OR paused) advances to its next occurrence
           // instead of being marked complete, which would permanently destroy it.
           if (isCompleting && r.recurring) {
-            // Not-yet-due is skipped to the next occurrence — calendar keeps its clock time,
-            // interval adds one cadence; due or overdue restarts the cadence from now.
+            // Calendar cadences keep their stored clock time either way; only interval differs —
+            // an early skip adds one cadence to the due date, a due or overdue one restarts at now.
             const nextDueDate = isUpcomingRecurringOccurrence(r, now)
               ? skipReminderOccurrence(r)
               : nextReminderDueDate(r, now);
@@ -410,16 +410,28 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       // Honor the persist result before committing state or updating the alarm.
+      const applied = { found: false };
       const { result, reminders: updatedReminders } = await updateReminders((current) =>
-        current.map((reminder) =>
-          reminder.id === reminderId ? { ...reminder, ...updates } : reminder
-        )
+        current.map((reminder) => {
+          if (reminder.id !== reminderId) {
+            return reminder;
+          }
+          applied.found = true;
+          return { ...reminder, ...updates };
+        })
       );
       if (result?.success === false) {
         logger.error('Failed to persist reminder update', result.error);
         const errorMessage = 'Failed to update reminder. Please try again.';
         set({ error: errorMessage });
         useToastStore.getState().error(errorMessage);
+        return false;
+      }
+      // A pull deleted it while the lock was held: the edit went nowhere, so reporting success
+      // would close the form as if it had saved.
+      if (!applied.found) {
+        logger.warn(`updateReminder: Reminder with id ${reminderId} was removed before the write`);
+        useToastStore.getState().warning('This reminder no longer exists');
         return false;
       }
 
@@ -429,7 +441,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // Update alarm if dueDate changed
       if (updates.dueDate) {
         await clearReminderAlarm(reminderId);
-        // Don't re-arm a paused reminder, or one a pull deleted while the lock was held.
+        // Don't re-arm a paused reminder.
         const updatedReminder = updatedReminders.find((r) => r.id === reminderId);
         if (updatedReminder !== undefined && !updatedReminder.paused) {
           await armReminderAlarm(reminderId, new Date(updates.dueDate).getTime());
@@ -474,11 +486,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updatedReminders);
-      notifyMutated('reminders', reminderId);
 
-      // Only touch the alarm for a reminder the write actually found: a pull may have deleted
-      // or paused it while this waited on the lock, and arming it then resurrects a dead wake.
+      // Only for a reminder the write actually found: a pull may have deleted or paused it while
+      // this waited on the lock, and marking a gone id dirty pushes a tombstone we never authored.
       const snoozed = updatedReminders.find((r) => r.id === reminderId);
+      if (snoozed !== undefined) {
+        notifyMutated('reminders', reminderId);
+      }
       if (snoozed !== undefined && snoozed.paused !== true) {
         await clearReminderAlarm(reminderId);
         await armReminderAlarm(reminderId, newDueDate.getTime());
@@ -525,7 +539,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       commitReminders(set, updated);
-      notifyMutated('reminders', reminderId);
+      if (applied.paused || applied.dueDate !== null) {
+        notifyMutated('reminders', reminderId);
+      }
 
       // Only when the write found it still recurring: cancelling the alarm of a reminder a pull
       // turned into a one-off leaves storage saying active while nothing will ever fire.

@@ -619,7 +619,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       };
 
       const updatedGoals = await persistGoals((goals) => [...goals, newGoal]);
-      set({ goals: updatedGoals });
+      // An objective never joins the today list, but updatedGoals is storage now, so it can carry
+      // a task a pull added — and the observer's equality guard will not recompute it for us.
+      set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', newGoal.id);
 
       useToastStore.getState().success('Goal created');
@@ -652,7 +654,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
           return goal;
         })
       );
-      set({ goals: updatedGoals });
+      set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       notifyMutated('goals', goalId);
 
       if (updates.completed === true) {

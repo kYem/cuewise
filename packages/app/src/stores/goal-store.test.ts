@@ -1582,6 +1582,21 @@ describe('writers read storage, not their own snapshot', () => {
     expect(written.map((goal) => goal.id).sort()).toEqual([overdue.id, pulled.id].sort());
   });
 
+  // Same trap as reorderTasks: addGoal writes an objective, but updatedGoals is storage now, so
+  // it carries a task the pull added — and the observer's guard will not recompute the list.
+  it('addGoal shows a task pulled into today by someone else', async () => {
+    const today = getTodayDateString();
+    const existing = goalFactory.build({ date: today });
+    const pulled = goalFactory.build({ date: today });
+    useGoalStore.setState({ goals: [existing], todayTasks: [existing] });
+    vi.mocked(storage.getGoals).mockResolvedValue([existing, pulled]);
+
+    await useGoalStore.getState().addGoal('Ship the lock', today);
+
+    const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
+    expect(shown).toContain(pulled.id);
+  });
+
   // The observer cannot repair this one: after the write, goals already equals storage, so its
   // equality guard returns early and never recomputes the today list.
   it('reorderTasks shows a task pulled into today mid-drag', async () => {

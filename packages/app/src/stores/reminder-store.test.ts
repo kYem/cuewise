@@ -598,6 +598,19 @@ describe('sync sink wiring', () => {
     expect(markMutated).toHaveBeenCalledWith('reminders', created.id);
   });
 
+  // Marking a gone id dirty makes the next push seal a tombstone this device never authored.
+  it('does not mark a reminder dirty when the pull deleted it before the write', async () => {
+    const recurring = { frequency: 'interval' as const, intervalMinutes: 30 };
+    const mine = recurringReminderFactory.build({ id: 'gone', recurring, paused: false });
+    useReminderStore.setState({ reminders: [mine] });
+    getRemindersMock.mockResolvedValue([]);
+
+    await useReminderStore.getState().snoozeReminder('gone', 5);
+    await useReminderStore.getState().setReminderPaused('gone', true);
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
   it('notifies markDeleted with the reminder id after deleteReminder persists', async () => {
     const reminder = reminderFactory.build();
     useReminderStore.setState({ reminders: [reminder] });
@@ -912,6 +925,17 @@ describe('writers read storage, not their own snapshot', () => {
     await useReminderStore.getState().snoozeReminder('gone', 5);
 
     expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  // EditReminderForm closes on `true`, so reporting success here loses the edit silently.
+  it('updateReminder reports failure when the pull deleted it', async () => {
+    const mine = reminderFactory.build({ id: 'gone', text: 'Stretch' });
+    storageAheadOfStore([mine], []);
+
+    const ok = await useReminderStore.getState().updateReminder('gone', { text: 'Stretch legs' });
+
+    expect(ok).toBe(false);
+    expect(toastWarning).toHaveBeenCalledWith('This reminder no longer exists');
   });
 
   // Arming here resurrects a wake on a reminder the user explicitly paused.

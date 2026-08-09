@@ -11,10 +11,7 @@ export function createLockManagerMock(): LockManager {
       () => callback({ name, mode: 'exclusive' }),
       () => callback({ name, mode: 'exclusive' })
     );
-    chains.set(
-      name,
-      next.catch(() => undefined)
-    );
+    chains.set(name, next);
     return next;
   };
 
