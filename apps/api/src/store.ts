@@ -26,6 +26,24 @@ export interface AuthCodePayload {
   email?: string;
 }
 
+// Device-to-device pairing (ENG-50): a short-lived relay row so a new device can join an
+// account by scanning/approving from one already signed in, without typing a code by hand.
+export const PAIRING_TTL_MS = 10 * 60 * 1000;
+
+export interface PendingPairing {
+  id: string;
+  deviceName: string;
+  requesterPublicKey: string;
+  createdAt: number;
+}
+
+export interface PairingForRequester {
+  id: string;
+  approverPublicKey: string | null;
+  envelope: string | null;
+  expiresAt: number;
+}
+
 /** Thrown by `applyChanges` when a push would take the user past their per-user record cap. */
 export class StorageQuotaExceededError extends Error {
   constructor(message?: string) {
@@ -79,4 +97,39 @@ export interface SyncStore {
     tokenHash: SessionTokenHash,
     windowMs: number
   ): Promise<{ count: number; resetInMs: number } | null>;
+  // Session identity rides the caller's tokenHash; the store resolves it to the tokens.id
+  // handle internally, so a route never sees or stores a bare session id for pairing.
+  createPairing(
+    userId: string,
+    requesterTokenHash: SessionTokenHash,
+    publicKey: string,
+    now: number
+  ): Promise<{ id: string; expiresAt: number }>;
+  // null covers both an unknown id and an expired row — the caller can't distinguish, by design.
+  getPairingForRequester(
+    userId: string,
+    id: string,
+    now: number
+  ): Promise<PairingForRequester | null>;
+  listPendingPairings(
+    userId: string,
+    excludeTokenHash: SessionTokenHash,
+    now: number
+  ): Promise<PendingPairing[]>;
+  commitPairing(
+    userId: string,
+    id: string,
+    approverTokenHash: SessionTokenHash,
+    publicKey: string,
+    now: number
+  ): Promise<'committed' | 'conflict' | 'not_found'>;
+  putPairingEnvelope(
+    userId: string,
+    id: string,
+    approverTokenHash: SessionTokenHash,
+    envelope: string,
+    now: number
+  ): Promise<'stored' | 'conflict' | 'not_found'>;
+  deletePairing(userId: string, id: string): Promise<boolean>;
+  purgeExpiredPairings(now: number): Promise<number>;
 }

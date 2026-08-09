@@ -14,6 +14,9 @@ import {
   type Identity,
   type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
+  PAIRING_TTL_MS,
+  type PairingForRequester,
+  type PendingPairing,
   type PushRecord,
   type Session,
   StorageQuotaExceededError,
@@ -490,5 +493,155 @@ export class D1SyncStore implements SyncStore {
       count: row.window_count,
       resetInMs: Math.max(0, row.window_start + windowMs - ts),
     };
+  }
+
+  // One batch: replacing the caller's own prior row first means the unique index on
+  // requester_session_id never sees the new INSERT collide with it.
+  async createPairing(
+    userId: string,
+    requesterTokenHash: SessionTokenHash,
+    publicKey: string,
+    now: number
+  ): Promise<{ id: string; expiresAt: number }> {
+    const expiresAt = now + PAIRING_TTL_MS;
+    const results = await this.db.batch<{ id: string; expires_at: number }>([
+      this.db
+        .prepare(
+          'DELETE FROM pairings WHERE requester_session_id = (SELECT id FROM tokens WHERE token_hash = ?)'
+        )
+        .bind(requesterTokenHash),
+      this.db
+        .prepare(
+          `INSERT INTO pairings (user_id, requester_session_id, requester_public_key, created_at, expires_at)
+           VALUES (?, (SELECT id FROM tokens WHERE token_hash = ?), ?, ?, ?)
+           RETURNING id, expires_at`
+        )
+        .bind(userId, requesterTokenHash, publicKey, now, expiresAt),
+    ]);
+    const inserted = results[1];
+    if (inserted === undefined || inserted.results[0] === undefined) {
+      throw new Error('createPairing: missing insert result');
+    }
+    return { id: inserted.results[0].id, expiresAt: inserted.results[0].expires_at };
+  }
+
+  async getPairingForRequester(
+    userId: string,
+    id: string,
+    now: number
+  ): Promise<PairingForRequester | null> {
+    const row = await this.db
+      .prepare(
+        'SELECT id, approver_public_key, envelope, expires_at FROM pairings WHERE id = ? AND user_id = ? AND expires_at > ?'
+      )
+      .bind(id, userId, now)
+      .first<{
+        id: string;
+        approver_public_key: string | null;
+        envelope: string | null;
+        expires_at: number;
+      }>();
+    if (row === null) {
+      return null;
+    }
+    return {
+      id: row.id,
+      approverPublicKey: row.approver_public_key,
+      envelope: row.envelope,
+      expiresAt: row.expires_at,
+    };
+  }
+
+  async listPendingPairings(
+    userId: string,
+    excludeTokenHash: SessionTokenHash,
+    now: number
+  ): Promise<PendingPairing[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT p.id, p.requester_public_key, p.created_at, t.device_name
+         FROM pairings p JOIN tokens t ON t.id = p.requester_session_id
+         WHERE p.user_id = ? AND p.expires_at > ? AND p.envelope IS NULL
+           AND p.requester_session_id <> (SELECT id FROM tokens WHERE token_hash = ?)`
+      )
+      .bind(userId, now, excludeTokenHash)
+      .all<{
+        id: string;
+        requester_public_key: string;
+        created_at: number;
+        device_name: string;
+      }>();
+    return results.map((row) => ({
+      id: row.id,
+      deviceName: row.device_name,
+      requesterPublicKey: row.requester_public_key,
+      createdAt: row.created_at,
+    }));
+  }
+
+  // 0 rows changed is ambiguous between "no such live row" and "already committed by someone
+  // else"; the re-read after a failed update is what tells those two apart.
+  async commitPairing(
+    userId: string,
+    id: string,
+    approverTokenHash: SessionTokenHash,
+    publicKey: string,
+    now: number
+  ): Promise<'committed' | 'conflict' | 'not_found'> {
+    const res = await this.db
+      .prepare(
+        `UPDATE pairings SET approver_session_id = (SELECT id FROM tokens WHERE token_hash = ?), approver_public_key = ?
+         WHERE id = ? AND user_id = ? AND approver_session_id IS NULL AND expires_at > ?`
+      )
+      .bind(approverTokenHash, publicKey, id, userId, now)
+      .run();
+    if ((res.meta.changes ?? 0) > 0) {
+      return 'committed';
+    }
+    const row = await this.db
+      .prepare('SELECT id FROM pairings WHERE id = ? AND user_id = ? AND expires_at > ?')
+      .bind(id, userId, now)
+      .first<{ id: string }>();
+    return row === null ? 'not_found' : 'conflict';
+  }
+
+  // Same ambiguous-zero-rows pattern as commitPairing: the WHERE also requires the caller's
+  // session to be the one that committed, so an uncommitted row reads back as conflict too.
+  async putPairingEnvelope(
+    userId: string,
+    id: string,
+    approverTokenHash: SessionTokenHash,
+    envelope: string,
+    now: number
+  ): Promise<'stored' | 'conflict' | 'not_found'> {
+    const res = await this.db
+      .prepare(
+        `UPDATE pairings SET envelope = ?
+         WHERE id = ? AND user_id = ? AND expires_at > ?
+           AND approver_session_id = (SELECT id FROM tokens WHERE token_hash = ?)`
+      )
+      .bind(envelope, id, userId, now, approverTokenHash)
+      .run();
+    if ((res.meta.changes ?? 0) > 0) {
+      return 'stored';
+    }
+    const row = await this.db
+      .prepare('SELECT id FROM pairings WHERE id = ? AND user_id = ? AND expires_at > ?')
+      .bind(id, userId, now)
+      .first<{ id: string }>();
+    return row === null ? 'not_found' : 'conflict';
+  }
+
+  async deletePairing(userId: string, id: string): Promise<boolean> {
+    const res = await this.db
+      .prepare('DELETE FROM pairings WHERE id = ? AND user_id = ?')
+      .bind(id, userId)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async purgeExpiredPairings(now: number): Promise<number> {
+    const res = await this.db.prepare('DELETE FROM pairings WHERE expires_at <= ?').bind(now).run();
+    return res.meta.changes ?? 0;
   }
 }

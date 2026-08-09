@@ -1,0 +1,196 @@
+import { env } from 'cloudflare:test';
+import { describe, expect, it } from 'vitest';
+import { clockedStore, newUser } from './__fixtures__/api-test-helpers.fixtures';
+import { hashSessionToken } from './crypto-utils';
+import { D1SyncStore } from './d1-store';
+import { PAIRING_TTL_MS } from './store';
+
+describe('D1SyncStore pairings', () => {
+  it("createPairing answers an id and expiry, and replaces the same session's prior request", async () => {
+    const { store, tick } = clockedStore(1_000);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+
+    const first = await store.createPairing(userId, requesterHash, 'pubkey-1', 1_000);
+    expect(first.id.length).toBeGreaterThan(0);
+    expect(first.expiresAt).toBe(1_000 + PAIRING_TTL_MS);
+
+    tick(10);
+    const second = await store.createPairing(userId, requesterHash, 'pubkey-2', 1_010);
+
+    const rows = await env.DB.prepare(
+      'SELECT id, requester_public_key FROM pairings WHERE user_id = ?'
+    )
+      .bind(userId)
+      .all<{ id: string; requester_public_key: string }>();
+    expect(rows.results).toHaveLength(1);
+    expect(rows.results[0]?.id).toBe(second.id);
+    expect(rows.results[0]?.requester_public_key).toBe('pubkey-2');
+  });
+
+  it("getPairingForRequester answers null for an unknown id, another user's id, or an expired row", async () => {
+    const store = new D1SyncStore(env.DB);
+    const userA = await newUser(store, `u-${crypto.randomUUID()}`);
+    const userB = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userA, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+
+    const { id } = await store.createPairing(userA, requesterHash, 'pubkey', 1_000);
+
+    await expect(store.getPairingForRequester(userA, 'unknown-id', 1_000)).resolves.toBeNull();
+    await expect(store.getPairingForRequester(userB, id, 1_000)).resolves.toBeNull();
+    await expect(
+      store.getPairingForRequester(userA, id, 1_000 + PAIRING_TTL_MS + 1)
+    ).resolves.toBeNull();
+
+    const fresh = await store.getPairingForRequester(userA, id, 1_000);
+    expect(fresh).toEqual({
+      id,
+      approverPublicKey: null,
+      envelope: null,
+      expiresAt: 1_000 + PAIRING_TTL_MS,
+    });
+  });
+
+  it("listPendingPairings excludes the caller's own request and joins the requester deviceName", async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'new-phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+
+    const { id } = await store.createPairing(userId, requesterHash, 'pubkey-1', 1_000);
+
+    const fromApprover = await store.listPendingPairings(userId, approverHash, 1_000);
+    expect(fromApprover).toEqual([
+      { id, deviceName: 'new-phone', requesterPublicKey: 'pubkey-1', createdAt: 1_000 },
+    ]);
+
+    const fromRequester = await store.listPendingPairings(userId, requesterHash, 1_000);
+    expect(fromRequester).toEqual([]);
+  });
+
+  it('commitPairing stores the approver key once; a second commit answers conflict', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+    const otherApproverToken = await store.createSession(userId, 'desktop');
+    const otherApproverHash = await hashSessionToken(otherApproverToken);
+
+    const { id } = await store.createPairing(userId, requesterHash, 'requester-pubkey', 1_000);
+
+    await expect(
+      store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000)
+    ).resolves.toBe('committed');
+
+    const committed = await store.getPairingForRequester(userId, id, 1_000);
+    expect(committed?.approverPublicKey).toBe('approver-pubkey');
+
+    await expect(
+      store.commitPairing(userId, id, otherApproverHash, 'second-pubkey', 1_000)
+    ).resolves.toBe('conflict');
+  });
+
+  it('commitPairing answers not_found for expired rows', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+
+    const { id } = await store.createPairing(userId, requesterHash, 'requester-pubkey', 1_000);
+
+    await expect(
+      store.commitPairing(userId, 'unknown-id', approverHash, 'pubkey', 1_000)
+    ).resolves.toBe('not_found');
+    await expect(
+      store.commitPairing(userId, id, approverHash, 'pubkey', 1_000 + PAIRING_TTL_MS + 1)
+    ).resolves.toBe('not_found');
+  });
+
+  it('putPairingEnvelope requires the committing session; another session answers conflict', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+    const otherToken = await store.createSession(userId, 'desktop');
+    const otherHash = await hashSessionToken(otherToken);
+
+    const { id } = await store.createPairing(userId, requesterHash, 'requester-pubkey', 1_000);
+    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
+
+    await expect(
+      store.putPairingEnvelope(userId, id, otherHash, 'envelope-blob', 1_000)
+    ).resolves.toBe('conflict');
+
+    await expect(
+      store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000)
+    ).resolves.toBe('stored');
+
+    const stored = await store.getPairingForRequester(userId, id, 1_000);
+    expect(stored?.envelope).toBe('envelope-blob');
+  });
+
+  it('putPairingEnvelope before any commit answers conflict', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+
+    const { id } = await store.createPairing(userId, requesterHash, 'requester-pubkey', 1_000);
+
+    await expect(
+      store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000)
+    ).resolves.toBe('conflict');
+  });
+
+  it("deletePairing answers false for an id that is not this user's", async () => {
+    const store = new D1SyncStore(env.DB);
+    const userA = await newUser(store, `u-${crypto.randomUUID()}`);
+    const userB = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userA, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+
+    const { id } = await store.createPairing(userA, requesterHash, 'pubkey', 1_000);
+
+    await expect(store.deletePairing(userB, id)).resolves.toBe(false);
+    await expect(store.getPairingForRequester(userA, id, 1_000)).resolves.not.toBeNull();
+
+    await expect(store.deletePairing(userA, id)).resolves.toBe(true);
+    await expect(store.getPairingForRequester(userA, id, 1_000)).resolves.toBeNull();
+  });
+
+  it('purgeExpiredPairings removes only expired rows', async () => {
+    const { store, tick } = clockedStore(1_000);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const staleToken = await store.createSession(userId, 'old-phone');
+    const staleHash = await hashSessionToken(staleToken);
+    await store.createPairing(userId, staleHash, 'stale-pubkey', 1_000);
+
+    tick(PAIRING_TTL_MS + 1);
+    const freshToken = await store.createSession(userId, 'new-phone');
+    const freshHash = await hashSessionToken(freshToken);
+    const { id: freshId } = await store.createPairing(
+      userId,
+      freshHash,
+      'fresh-pubkey',
+      1_000 + PAIRING_TTL_MS + 1
+    );
+
+    const removed = await store.purgeExpiredPairings(1_000 + PAIRING_TTL_MS + 1);
+
+    expect(removed).toBe(1);
+    const rows = await env.DB.prepare('SELECT id FROM pairings').all<{ id: string }>();
+    expect(rows.results.map((r) => r.id)).toEqual([freshId]);
+  });
+});
