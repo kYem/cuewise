@@ -22,6 +22,12 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `revokeSession(id)` | `DELETE /v1/sessions/:id` | Yes |
 | `renameSession(id, deviceName)` | `PATCH /v1/sessions/:id` | Yes |
 | `revokeOtherSessions()` | `POST /v1/sessions/revoke-others` | Yes |
+| `createPairing(publicKey)` | `POST /v1/pairings` | Yes |
+| `getPairing(id)` | `GET /v1/pairings/:id` | Yes |
+| `listPairings()` | `GET /v1/pairings` | Yes |
+| `commitPairing(id, publicKey)` | `POST /v1/pairings/:id/commit` | Yes |
+| `putPairingEnvelope(id, envelope)` | `PUT /v1/pairings/:id/envelope` | Yes |
+| `deletePairing(id)` | `DELETE /v1/pairings/:id` | Yes |
 
 **Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried a `retryAfter` (problem+json body) or a numeric `Retry-After` header, which takes priority. Any other 4xx throws immediately, no retry.
 
