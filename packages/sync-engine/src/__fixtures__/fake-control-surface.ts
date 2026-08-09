@@ -24,7 +24,7 @@ export function fakeControlSurface(
     // No pending requests and nothing to resolve — the approver's card has nothing to show either.
     listPairingRequests: vi.fn().mockResolvedValue([]),
     commitPairing: vi.fn().mockResolvedValue(null),
-    pollApproval: vi.fn().mockResolvedValue({ kind: 'failed' }),
+    pollApproval: vi.fn().mockResolvedValue({ kind: 'failed', reason: 'gone' }),
     approvePairing: vi.fn().mockResolvedValue(false),
     denyPairing: vi.fn().mockResolvedValue(undefined),
     regenerateRecoveryCode: vi.fn().mockResolvedValue('CW1-NEW00-00000-00000-00000-00000-00000'),

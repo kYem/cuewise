@@ -160,12 +160,14 @@ export type PairingPollResult =
 /**
  * What one poll of a request this device COMMITTED to found. The digits cannot exist at commit
  * time — they cover a key the requester only reveals afterwards — so this is the wait that earns
- * them. `failed` is terminal: the row is gone, or its reveal did not match the commitment.
+ * them. `error` is NON-terminal: the request still stands and the next tick may answer it.
+ * `tampered` is the one outcome a user must be told about — a caught key substitution.
  */
 export type PairingApprovalResult =
   | { kind: 'waiting' }
   | { kind: 'confirm'; sas: string }
-  | { kind: 'failed' };
+  | { kind: 'error' }
+  | { kind: 'failed'; reason: 'tampered' | 'gone' };
 
 /**
  * Statuses no pairing request may start from: `active` already has a key, and the four mid-enroll
@@ -589,27 +591,41 @@ export class SyncEngine {
 
   /**
    * One poll of the request this device committed to (callers loop it while their screen is up).
-   * Rejects on a transport fault like `listPairingRequests`; `failed` is reserved for an outcome
-   * no retry can fix — the row is gone, or its reveal did not match the commitment.
+   * Never throws, like `pollPairing`: a transport fault is `error`, which leaves the request
+   * standing for the next tick, and only `failed` means no retry can help.
    */
   async pollApproval(id: string): Promise<PairingApprovalResult> {
     const approving = this.approving;
     if (approving === null || approving.id !== id) {
-      return { kind: 'failed' };
+      return { kind: 'failed', reason: 'gone' };
     }
     if (approving.sas !== null) {
       return { kind: 'confirm', sas: approving.sas };
     }
+    try {
+      return await this.resolveApproval(id, approving);
+    } catch (err) {
+      // Non-terminal, and the slot is untouched: an offline tick must not end a live request.
+      logger.warn(`Could not poll a pairing approval: ${describeThrown(err)}`, { error: err });
+      return { kind: 'error' };
+    }
+  }
+
+  /** Reads the row this device committed to and turns its reveal into digits, or into a refusal. */
+  private async resolveApproval(
+    id: string,
+    approving: PairingApproval
+  ): Promise<PairingApprovalResult> {
     const rows = await this.deps.apiClient.listPairings();
     // Two overlapping polls, or a deny/disable landing across the list call: this slot no longer
     // speaks for what the engine is doing.
     if (this.approving !== approving) {
-      return { kind: 'failed' };
+      return { kind: 'failed', reason: 'gone' };
     }
     const row = rows.find((candidate) => candidate.id === id);
     if (row === undefined) {
       this.approving = null;
-      return { kind: 'failed' };
+      return { kind: 'failed', reason: 'gone' };
     }
     if (row.requesterPublicKey === null || row.requesterNonce === null) {
       return { kind: 'waiting' };
@@ -624,7 +640,7 @@ export class SyncEngine {
       return await this.denyTamperedReveal(id, approving);
     }
     if (this.approving !== approving) {
-      return { kind: 'failed' };
+      return { kind: 'failed', reason: 'gone' };
     }
     approving.requesterPub = requesterPub;
     approving.sas = await derivePairingSas(requesterPub, approving.keypair.publicKey, id);
@@ -633,7 +649,8 @@ export class SyncEngine {
 
   /**
    * A revealed key the commitment does not cover means the relay swapped it, so the row is deleted
-   * rather than left for a retry to land on — and the user is told, since nothing they do is wrong.
+   * rather than left for a retry to land on. Answered as its own reason, not as an ordinary
+   * failure: this is the substitution the whole exchange exists to catch, and the caller says so.
    */
   private async denyTamperedReveal(
     id: string,
@@ -649,7 +666,7 @@ export class SyncEngine {
       () => this.deps.apiClient.deletePairing(id),
       'tampered pairing request cleanup'
     );
-    return { kind: 'failed' };
+    return { kind: 'failed', reason: 'tampered' };
   }
 
   /**

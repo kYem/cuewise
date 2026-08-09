@@ -9,7 +9,7 @@ import {
 } from '@cuewise/crypto';
 import { configurePlatform } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
-import { SessionManager, SYNC_SESSION_KEY } from '@cuewise/sync-client';
+import { ApiError, SessionManager, SYNC_SESSION_KEY } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer, PAIRING_TTL_MS } from './__fixtures__/fake-api-client';
@@ -653,11 +653,37 @@ describe('SyncEngine approver pairing methods', () => {
     expect(lists).not.toHaveBeenCalled();
   });
 
-  it('pollApproval answers failed for an id this device never committed to', async () => {
+  it('pollApproval answers gone for an id this device never committed to', async () => {
     const flow = await approverFlow();
     const id = await beginPairing(flow.requester.engine);
 
-    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'failed' });
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'failed', reason: 'gone' });
+  });
+
+  it('pollApproval answers gone once the request it committed to has vanished', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    // The requester cancelled — the ordinary end of a request nobody tampered with.
+    await flow.requester.apiClient.deletePairing(id);
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'failed', reason: 'gone' });
+  });
+
+  it('pollApproval answers a non-terminal error on a transport fault, keeping the request', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    await flow.requester.engine.pollPairing();
+    vi.spyOn(flow.approver.apiClient, 'listPairings').mockRejectedValueOnce(
+      new ApiError('network_error', 0)
+    );
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'error' });
+
+    // One offline tick must not end a live request: the next one still earns the digits.
+    expect(await flow.approver.engine.pollApproval(id)).toMatchObject({ kind: 'confirm' });
+    expect(await flow.approver.engine.approvePairing(id)).toBe(true);
   });
 
   it('pollApproval refuses a reveal the commitment does not cover, and denies the row', async () => {
@@ -670,7 +696,11 @@ describe('SyncEngine approver pairing methods', () => {
     const substituted = await generatePairingKeypair();
     flow.server.substituteRevealedPublicKey(id, b64urlEncode(substituted.publicKey));
 
-    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'failed' });
+    // Its own reason: the user has to be told a key was swapped, not shown "it expired".
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({
+      kind: 'failed',
+      reason: 'tampered',
+    });
 
     // The row is gone, so no retry can land on it and nothing may be wrapped to that key.
     expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
