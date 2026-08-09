@@ -556,7 +556,9 @@ describe('ApiClient', () => {
     const pendingPairingFixture = {
       id: 'p1',
       deviceName: 'Kes iPhone',
-      requesterPublicKey: 'requester-pubkey',
+      requesterCommitment: 'requester-commitment',
+      requesterPublicKey: null,
+      requesterNonce: null,
       createdAt: 1_700_000_000_000,
     };
     const pairingForRequesterFixture = {
@@ -566,18 +568,29 @@ describe('ApiClient', () => {
       expiresAt: 1_700_000_600_000,
     };
 
-    it('createPairing POSTs { publicKey } to /v1/pairings and returns { id, expiresAt }', async () => {
+    it('createPairing POSTs { commitment } to /v1/pairings and returns { id, expiresAt }', async () => {
       const { fetchFn, calls } = stubFetch([{ status: 200, body: pairingCreatedFixture }]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      const result = await client.createPairing('requester-pubkey');
+      const result = await client.createPairing('requester-commitment');
 
       expect(result).toEqual(pairingCreatedFixture);
       expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings`);
       expect(calls[0].init.method).toBe('POST');
-      expect(JSON.parse(calls[0].init.body as string)).toEqual({ publicKey: 'requester-pubkey' });
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({
+        commitment: 'requester-commitment',
+      });
       const headers = new Headers(calls[0].init.headers);
       expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('createPairing sends no public key, so a commitment is all the server can hold', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 200, body: pairingCreatedFixture }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await client.createPairing('requester-commitment');
+
+      expect(Object.keys(JSON.parse(calls[0].init.body as string))).toEqual(['commitment']);
     });
 
     it('listPairings GETs /v1/pairings and unwraps the pairings array', async () => {
@@ -648,6 +661,36 @@ describe('ApiClient', () => {
         status: 404,
         retryable: false,
       });
+    });
+
+    it('revealPairing PUTs { publicKey, nonce } to /v1/pairings/:id/reveal and resolves on 204', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(
+        client.revealPairing('p1', 'requester-pubkey', 'requester-nonce')
+      ).resolves.toBeUndefined();
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1/reveal`);
+      expect(calls[0].init.method).toBe('PUT');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({
+        publicKey: 'requester-pubkey',
+        nonce: 'requester-nonce',
+      });
+      const headers = new Headers(calls[0].init.headers);
+      expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('revealPairing rejects with a typed ApiError on a 409 (no commit yet, or already revealed)', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('pairing_conflict', 409)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.revealPairing('p1', 'pub', 'nonce')).rejects.toMatchObject({
+        code: 'pairing_conflict',
+        status: 409,
+        retryable: false,
+      });
+      expect(calls).toHaveLength(1);
     });
 
     it('putPairingEnvelope PUTs { envelope } to /v1/pairings/:id/envelope and resolves on 204', async () => {

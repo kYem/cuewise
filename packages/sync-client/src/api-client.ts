@@ -160,15 +160,15 @@ export class ApiClient {
     );
   }
 
-  // Device pairing (ENG-50): a requester creates the row and polls it; an approver commits it
-  // from an already-signed-in device. `id` is the server's opaque row handle.
-  async createPairing(publicKey: string): Promise<PairingCreated> {
+  // Device pairing (ENG-50): a requester creates the row with only a commitment to its key, an
+  // approver commits its own, and the requester then reveals. `id` is the server's row handle.
+  async createPairing(commitment: string): Promise<PairingCreated> {
     const res = await this.request(
       '/v1/pairings',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey }),
+        body: JSON.stringify({ commitment }),
       },
       { auth: true }
     );
@@ -205,6 +205,19 @@ export class ApiClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicKey }),
+      },
+      { auth: true }
+    );
+  }
+
+  // 409 `pairing_conflict` before an approver has committed, or once a reveal is already stored.
+  async revealPairing(id: string, publicKey: string, nonce: string): Promise<void> {
+    await this.request(
+      `/v1/pairings/${encodeURIComponent(id)}/reveal`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey, nonce }),
       },
       { auth: true }
     );

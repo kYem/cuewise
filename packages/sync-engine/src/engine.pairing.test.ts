@@ -114,7 +114,6 @@ interface PairingFlow {
 /** The approver's half after it has committed: the row it answered, and the key it answered with. */
 interface ApproverSide {
   id: string;
-  requesterPublicKey: string;
   keypair: X25519KeyPair;
 }
 
@@ -167,14 +166,23 @@ async function commitAsApprover(flow: PairingFlow): Promise<ApproverSide> {
   const row = pending[0];
   const keypair = await generatePairingKeypair();
   await flow.approver.commitPairing(row.id, b64urlEncode(keypair.publicKey));
-  return { id: row.id, requesterPublicKey: row.requesterPublicKey, keypair };
+  return { id: row.id, keypair };
 }
 
-/** The approver's confirm: the account's data key, wrapped to the requester's public key. */
+/** The key the requester published once a poll revealed it — a loud failure before that. */
+async function revealedPub(flow: PairingFlow, id: string): Promise<Uint8Array> {
+  const row = (await flow.approver.listPairings()).find((candidate) => candidate.id === id);
+  if (row === undefined || row.requesterPublicKey === null) {
+    throw new Error(`the request has revealed no key to answer: ${id}`);
+  }
+  return b64urlDecode(row.requesterPublicKey);
+}
+
+/** The approver's confirm: the account's data key, wrapped to the key the requester revealed. */
 async function wrapKeyAsApprover(flow: PairingFlow, side: ApproverSide): Promise<void> {
   const envelope = await wrapDataKeyToPeer(
     side.keypair.privateKey,
-    b64urlDecode(side.requesterPublicKey),
+    await revealedPub(flow, side.id),
     flow.dk,
     flow.keyId,
     side.id
@@ -183,8 +191,8 @@ async function wrapKeyAsApprover(flow: PairingFlow, side: ApproverSide): Promise
 }
 
 /** The digits the approver's own screen derives, requester key first. */
-function approverSas(side: ApproverSide): Promise<string> {
-  return derivePairingSas(b64urlDecode(side.requesterPublicKey), side.keypair.publicKey, side.id);
+async function approverSas(flow: PairingFlow, side: ApproverSide): Promise<string> {
+  return derivePairingSas(await revealedPub(flow, side.id), side.keypair.publicKey, side.id);
 }
 
 describe('SyncEngine.beginPairing', () => {
@@ -227,6 +235,10 @@ describe('SyncEngine.beginPairing', () => {
     const pending = await flow.approver.listPairings();
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({ id, deviceName: 'Device A' });
+    // A commitment and nothing else: the key it covers never leaves the device until an approver's
+    // own key is fixed, which is what stops a relay grinding one to force the digits.
+    expect(pending[0]).toMatchObject({ requesterPublicKey: null, requesterNonce: null });
+    expect(pending[0].requesterCommitment).toMatch(/^[\w-]+$/);
     // Never to the device that asked: approving your own request approves nothing.
     expect(await flow.requester.apiClient.listPairings()).toEqual([]);
   });
@@ -251,23 +263,84 @@ describe('SyncEngine.pollPairing', () => {
 
     const polled = await flow.requester.engine.pollPairing();
 
-    expect(polled).toEqual({ kind: 'confirm', sas: await approverSas(side) });
+    expect(polled).toEqual({ kind: 'confirm', sas: await approverSas(flow, side) });
     expect(polled).toMatchObject({ sas: expect.stringMatching(/^\d{6}$/) });
   });
 
-  it('shows the digits before it will open an envelope that arrived with them', async () => {
+  it('reveals the key it committed to, once, on the poll that first sees the approver', async () => {
+    const flow = await pairingFlow();
+    const id = await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
+
+    expect(await flow.requester.engine.pollPairing()).toMatchObject({ kind: 'confirm' });
+    expect(await flow.requester.engine.pollPairing()).toMatchObject({ kind: 'confirm' });
+
+    expect(reveals).toHaveBeenCalledTimes(1);
+    // What it revealed is what the commitment covered, so the approver's check passes.
+    expect(await approverSas(flow, side)).toMatch(/^\d{6}$/);
+    expect(await flow.requester.apiClient.getPairing(id)).not.toBeNull();
+  });
+
+  it('reveals once when two polls see the approver key together', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    await commitAsApprover(flow);
+
+    // Both polls park inside getPairing and are released together, so each reads a row whose
+    // approver key is present and whose reveal is not.
+    const gate = heldAnswer();
+    const answer = flow.requester.apiClient.getPairing.bind(flow.requester.apiClient);
+    let parked = 0;
+    vi.spyOn(flow.requester.apiClient, 'getPairing').mockImplementation(async (id) => {
+      parked += 1;
+      await gate.held();
+      return answer(id);
+    });
+    const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
+
+    const both = [flow.requester.engine.pollPairing(), flow.requester.engine.pollPairing()];
+    await gate.awaited;
+    expect(parked).toBe(2);
+    gate.release();
+
+    // A second reveal would be refused, and the poll that made it would fail a healthy request.
+    for (const result of await Promise.all(both)) {
+      expect(result).toMatchObject({ kind: 'confirm' });
+    }
+    expect(reveals).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the digits before it will open the envelope that follows them', async () => {
     const flow = await pairingFlow();
     await beginPairing(flow.requester.engine);
     const side = await commitAsApprover(flow);
-    await wrapKeyAsApprover(flow, side);
 
-    // Both halves landed between two polls, and the digits still have to be seen first.
+    // No envelope can exist yet: the approver has nothing to wrap to until this poll reveals.
     expect(await flow.requester.engine.pollPairing()).toEqual({
       kind: 'confirm',
-      sas: await approverSas(side),
+      sas: await approverSas(flow, side),
     });
     expect(flow.requester.engine.getStatus()).toBe('needs_enroll');
+
+    await wrapKeyAsApprover(flow, side);
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
+  });
+
+  it('fails cleanly when the row already holds a reveal this device cannot open', async () => {
+    const flow = await pairingFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitAsApprover(flow);
+    // A reveal from a slot this engine no longer holds — a previous process's, gone along with
+    // the one private key that could have opened what it earns.
+    await flow.requester.apiClient.revealPairing(id, 'another-public-key', 'another-nonce');
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
+
+    // Terminal and quiet: the request is forgotten, and the device is still one that may ask again.
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
+    expect(flow.requester.engine.getStatus()).toBe('needs_enroll');
+    expect(await beginPairing(flow.requester.engine)).not.toBe(id);
   });
 
   it('installs the wrapped key, activates, and opens the account records with it', async () => {
@@ -442,6 +515,37 @@ describe('the fake pairing relay', () => {
       status: 404,
     });
   });
+
+  it('refuses a reveal before any commit, and a second one after it', async () => {
+    const flow = await pairingFlow();
+    const id = await beginPairing(flow.requester.engine);
+
+    await expect(flow.requester.apiClient.revealPairing(id, 'pub', 'nonce')).rejects.toMatchObject({
+      code: 'pairing_conflict',
+      status: 409,
+    });
+
+    await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await expect(flow.requester.apiClient.revealPairing(id, 'pub', 'nonce')).rejects.toMatchObject({
+      code: 'pairing_conflict',
+      status: 409,
+    });
+  });
+
+  it('refuses an envelope until the reveal is stored', async () => {
+    const flow = await pairingFlow();
+    const id = await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+
+    await expect(flow.approver.putPairingEnvelope(id, 'v1.dk-1.aaaa.bbbb')).rejects.toMatchObject({
+      code: 'pairing_conflict',
+      status: 409,
+    });
+
+    await flow.requester.engine.pollPairing();
+    await expect(wrapKeyAsApprover(flow, side)).resolves.toBeUndefined();
+  });
 });
 
 /** Device A: fully enrolled and active, holding the account's real data key. */
@@ -470,13 +574,21 @@ async function approverFlow(): Promise<ApproverFlow> {
   return { server, approver, requester };
 }
 
-/** commitPairing's sas, or a loud failure — narrows without a non-null assertion. */
-async function commitPairing(engine: SyncEngine, id: string): Promise<string> {
+/** Commits, or fails loudly — a null answer means the row was gone before this device saw it. */
+async function commitPairing(engine: SyncEngine, id: string): Promise<void> {
   const committed = await engine.commitPairing(id);
   if (committed === null) {
     throw new Error('commitPairing answered null for a pending request');
   }
-  return committed.sas;
+}
+
+/** pollApproval's digits, or a loud failure — narrows without a non-null assertion. */
+async function approvalSas(engine: SyncEngine, id: string): Promise<string> {
+  const polled = await engine.pollApproval(id);
+  if (polled.kind !== 'confirm') {
+    throw new Error(`pollApproval answered ${polled.kind} where the digits were due`);
+  }
+  return polled.sas;
 }
 
 describe('SyncEngine approver pairing methods', () => {
@@ -505,13 +617,68 @@ describe('SyncEngine approver pairing methods', () => {
     expect(await bystander.engine.listPairingRequests()).toEqual([]);
   });
 
-  it('commitPairing answers the same sas the requester derives', async () => {
+  it('commitPairing answers pending, and pollApproval waits until the reveal lands', async () => {
     const flow = await approverFlow();
     const id = await beginPairing(flow.requester.engine);
 
-    const sas = await commitPairing(flow.approver.engine, id);
+    expect(await flow.approver.engine.commitPairing(id)).toEqual({ pending: true });
 
-    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'confirm', sas });
+    // No digits yet, and none possible: they cover a key the requester has only committed to.
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'waiting' });
+  });
+
+  it('pollApproval answers the same digits the requester is shown', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+
+    const shownToRequester = await flow.requester.engine.pollPairing();
+
+    expect(shownToRequester).toEqual({
+      kind: 'confirm',
+      sas: await approvalSas(flow.approver.engine, id),
+    });
+  });
+
+  it('pollApproval answers the digits it already has without asking the server again', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    await flow.requester.engine.pollPairing();
+    const sas = await approvalSas(flow.approver.engine, id);
+    const lists = vi.spyOn(flow.approver.apiClient, 'listPairings');
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'confirm', sas });
+
+    expect(lists).not.toHaveBeenCalled();
+  });
+
+  it('pollApproval answers failed for an id this device never committed to', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'failed' });
+  });
+
+  it('pollApproval refuses a reveal the commitment does not cover, and denies the row', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    await flow.requester.engine.pollPairing();
+    // The relay swaps the revealed key for one it holds the private half of — the substitution
+    // the commitment exists to catch, and the only way it could force matching digits.
+    const substituted = await generatePairingKeypair();
+    flow.server.substituteRevealedPublicKey(id, b64urlEncode(substituted.publicKey));
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'failed' });
+
+    // The row is gone, so no retry can land on it and nothing may be wrapped to that key.
+    expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
+    expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'expired_or_denied',
+    });
   });
 
   it('commitPairing answers null once another session has already committed', async () => {
@@ -529,8 +696,9 @@ describe('SyncEngine approver pairing methods', () => {
     const flow = await approverFlow();
     const id = await beginPairing(flow.requester.engine);
     await commitPairing(flow.approver.engine, id);
-    // The digits must reach the requester's screen before the device will open an envelope.
+    // The digits must reach both screens before the account's key is wrapped to anything.
     await flow.requester.engine.pollPairing();
+    await approvalSas(flow.approver.engine, id);
 
     expect(await flow.approver.engine.approvePairing(id)).toBe(true);
 
@@ -543,6 +711,22 @@ describe('SyncEngine approver pairing methods', () => {
     const id = await beginPairing(flow.requester.engine);
 
     expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+  });
+
+  it('approvePairing answers false until a reveal has been verified', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+
+    // Committed, and nothing to wrap to — the requester's key is still only a commitment.
+    expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+
+    // Revealed on the server, but unverified here: the check is this device's, not the relay's.
+    await flow.requester.engine.pollPairing();
+    expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+
+    await approvalSas(flow.approver.engine, id);
+    expect(await flow.approver.engine.approvePairing(id)).toBe(true);
   });
 
   it('approvePairing answers false for an id other than the one committed', async () => {

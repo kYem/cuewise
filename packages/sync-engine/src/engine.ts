@@ -6,8 +6,10 @@ import {
   derivePairingSas,
   generatePairingKeypair,
   generateRecoveryCode,
+  makePairingCommitment,
   RecoveryCodeError,
   unwrapDataKeyFromPeer,
+  verifyPairingCommitment,
   wrapDataKey,
   wrapDataKeyToPeer,
   type X25519KeyPair,
@@ -139,6 +141,7 @@ export type EngineApiClient = Pick<
   | 'listPairings'
   | 'getPairing'
   | 'commitPairing'
+  | 'revealPairing'
   | 'putPairingEnvelope'
   | 'deletePairing'
 >;
@@ -153,6 +156,16 @@ export type PairingPollResult =
   | { kind: 'confirm'; sas: string }
   | { kind: 'complete' }
   | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' };
+
+/**
+ * What one poll of a request this device COMMITTED to found. The digits cannot exist at commit
+ * time — they cover a key the requester only reveals afterwards — so this is the wait that earns
+ * them. `failed` is terminal: the row is gone, or its reveal did not match the commitment.
+ */
+export type PairingApprovalResult =
+  | { kind: 'waiting' }
+  | { kind: 'confirm'; sas: string }
+  | { kind: 'failed' };
 
 /**
  * Statuses no pairing request may start from: `active` already has a key, and the four mid-enroll
@@ -170,8 +183,25 @@ const PAIRING_BLOCKED_STATUSES: readonly SyncStatus[] = [
 interface PairingRequest {
   id: string;
   keypair: X25519KeyPair;
+  /** Opens the commitment the create posted; useless to anyone but this device until revealed. */
+  nonce: Uint8Array;
+  revealed: boolean;
   sas: string | null;
   approverPub: Uint8Array | null;
+}
+
+/**
+ * The approver's half: what it committed to, and what the requester's reveal turned out to be.
+ * `commitment` is captured from the row BEFORE the commit, so the key it covers is fixed before
+ * this device's own key exists on the server for anyone to grind against.
+ */
+interface PairingApproval {
+  id: string;
+  keypair: X25519KeyPair;
+  commitment: string;
+  /** Both stay null until a reveal verifies against `commitment`; nothing may be wrapped before. */
+  requesterPub: Uint8Array | null;
+  sas: string | null;
 }
 
 export interface SyncEngineDeps {
@@ -248,7 +278,7 @@ export class SyncEngine {
   private pairing: PairingRequest | null = null;
   // The approver's half of the same handshake: held between commitPairing and the
   // approvePairing/denyPairing that resolves it, cleared the same way as `pairing` above.
-  private approving: { id: string; keypair: X25519KeyPair; requesterPub: Uint8Array } | null = null;
+  private approving: PairingApproval | null = null;
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
@@ -331,8 +361,9 @@ export class SyncEngine {
   }
 
   /**
-   * Starts a device-pairing request (ENG-50): this device publishes a one-shot public key for
-   * another signed-in device to wrap the account's data key to, and `pollPairing` drives the rest.
+   * Starts a device-pairing request (ENG-50): this device publishes a COMMITMENT to a one-shot
+   * public key — never the key itself, which only `pollPairing` reveals once an approver's own key
+   * is fixed — for another signed-in device to wrap the account's data key to.
    * Null unless this device holds no key and is not mid-enroll — both surfaces that ask for a
    * recovery code qualify, a fresh device #2 (`disabled`) and one that lost its key
    * (`needs_enroll`) — or when the session that would carry the request is gone.
@@ -355,7 +386,8 @@ export class SyncEngine {
         return null;
       }
       const keypair = await generatePairingKeypair();
-      const created = await this.deps.apiClient.createPairing(b64urlEncode(keypair.publicKey));
+      const { commitment, nonce } = await makePairingCommitment(keypair.publicKey);
+      const created = await this.deps.apiClient.createPairing(commitment);
       if (this.enrollSuperseded(epoch)) {
         // Left standing, the row invites another device to wrap this account's key to one the
         // user has just disconnected from it.
@@ -365,7 +397,14 @@ export class SyncEngine {
         );
         return null;
       }
-      this.pairing = { id: created.id, keypair, sas: null, approverPub: null };
+      this.pairing = {
+        id: created.id,
+        keypair,
+        nonce,
+        revealed: false,
+        sas: null,
+        approverPub: null,
+      };
       return { pairingId: created.id };
     } catch (err) {
       // Rethrows anything that is neither auth loss nor a disable, so the caller can show it.
@@ -397,9 +436,16 @@ export class SyncEngine {
         this.pairing = null;
         return { kind: 'failed', reason: 'expired_or_denied' };
       }
-      // Unclaimed, unlike the adoption below, because it needs no claim: two polls here decode the
-      // same key and derive the same digits from it, so either order leaves the same request.
       if (found.approverPublicKey !== null && pairing.approverPub === null) {
+        if ((await this.revealOnce(pairing)) === 'conflict') {
+          // Someone else's key is on the row, or a reveal outlived the slot holding the only
+          // private key that could open what it earns: nothing here can finish this request.
+          this.pairing = null;
+          return { kind: 'failed', reason: 'error' };
+        }
+        if (this.pairing !== pairing) {
+          return { kind: 'failed', reason: 'error' };
+        }
         pairing.approverPub = b64urlDecode(found.approverPublicKey);
         pairing.sas = await derivePairingSas(
           pairing.keypair.publicKey,
@@ -420,6 +466,32 @@ export class SyncEngine {
       return { kind: 'waiting' };
     } catch (err) {
       return await this.failPairing(err, before, epoch);
+    }
+  }
+
+  /**
+   * Publishes the key the create only committed to, at most once — the server refuses a second
+   * reveal, and every extra one would be another chance to substitute a key under the same digits.
+   */
+  private async revealOnce(pairing: PairingRequest): Promise<'revealed' | 'conflict'> {
+    if (pairing.revealed) {
+      return 'revealed';
+    }
+    // Claimed before the first await, so of two polls that read the same approver key only one
+    // reaches the reveal; the other proceeds to the digits, which need no server call.
+    pairing.revealed = true;
+    try {
+      await this.deps.apiClient.revealPairing(
+        pairing.id,
+        b64urlEncode(pairing.keypair.publicKey),
+        b64urlEncode(pairing.nonce)
+      );
+      return 'revealed';
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'pairing_conflict') {
+        return 'conflict';
+      }
+      throw err;
     }
   }
 
@@ -480,11 +552,12 @@ export class SyncEngine {
   }
 
   /**
-   * Commits this device's key to a request, so its screen and the requester's derive the same
-   * digits. Null once the row is gone or another session already committed — both are the same
-   * `pairing_not_found`/`pairing_conflict` the server answers; anything else rethrows.
+   * Commits this device's key to a request. No digits yet — they cover the requester's key, which
+   * is still only a commitment at this point; `pollApproval` earns them. Null once the row is gone
+   * or another session already committed — both are the same `pairing_not_found`/`pairing_conflict`
+   * the server answers; anything else rethrows.
    */
-  async commitPairing(id: string): Promise<{ sas: string } | null> {
+  async commitPairing(id: string): Promise<{ pending: true } | null> {
     const rows = await this.deps.apiClient.listPairings();
     const row = rows.find((candidate) => candidate.id === id);
     if (row === undefined) {
@@ -502,15 +575,87 @@ export class SyncEngine {
       }
       throw err;
     }
+    // The commitment as it stood before this device's key existed on the server — the whole point
+    // of the exchange: nothing revealed afterwards can be ground against what is already fixed.
+    this.approving = {
+      id,
+      keypair,
+      commitment: row.requesterCommitment,
+      requesterPub: null,
+      sas: null,
+    };
+    return { pending: true };
+  }
+
+  /**
+   * One poll of the request this device committed to (callers loop it while their screen is up).
+   * Rejects on a transport fault like `listPairingRequests`; `failed` is reserved for an outcome
+   * no retry can fix — the row is gone, or its reveal did not match the commitment.
+   */
+  async pollApproval(id: string): Promise<PairingApprovalResult> {
+    const approving = this.approving;
+    if (approving === null || approving.id !== id) {
+      return { kind: 'failed' };
+    }
+    if (approving.sas !== null) {
+      return { kind: 'confirm', sas: approving.sas };
+    }
+    const rows = await this.deps.apiClient.listPairings();
+    // Two overlapping polls, or a deny/disable landing across the list call: this slot no longer
+    // speaks for what the engine is doing.
+    if (this.approving !== approving) {
+      return { kind: 'failed' };
+    }
+    const row = rows.find((candidate) => candidate.id === id);
+    if (row === undefined) {
+      this.approving = null;
+      return { kind: 'failed' };
+    }
+    if (row.requesterPublicKey === null || row.requesterNonce === null) {
+      return { kind: 'waiting' };
+    }
     const requesterPub = b64urlDecode(row.requesterPublicKey);
-    this.approving = { id, keypair, requesterPub };
-    return { sas: await derivePairingSas(requesterPub, keypair.publicKey, id) };
+    const verified = await verifyPairingCommitment(
+      approving.commitment,
+      requesterPub,
+      b64urlDecode(row.requesterNonce)
+    );
+    if (!verified) {
+      return await this.denyTamperedReveal(id, approving);
+    }
+    if (this.approving !== approving) {
+      return { kind: 'failed' };
+    }
+    approving.requesterPub = requesterPub;
+    approving.sas = await derivePairingSas(requesterPub, approving.keypair.publicKey, id);
+    return { kind: 'confirm', sas: approving.sas };
+  }
+
+  /**
+   * A revealed key the commitment does not cover means the relay swapped it, so the row is deleted
+   * rather than left for a retry to land on — and the user is told, since nothing they do is wrong.
+   */
+  private async denyTamperedReveal(
+    id: string,
+    approving: PairingApproval
+  ): Promise<PairingApprovalResult> {
+    if (this.approving === approving) {
+      this.approving = null;
+    }
+    logger.error(
+      'Cloud sync refused a pairing request: the other device revealed a key it had not committed to'
+    );
+    await this.bestEffort(
+      () => this.deps.apiClient.deletePairing(id),
+      'tampered pairing request cleanup'
+    );
+    return { kind: 'failed' };
   }
 
   /**
    * Wraps the account's data key to the request this device committed to and uploads it. False
-   * without a matching commit in hand: a stale id, a second call, or a device that lost its key
-   * between commit and approve.
+   * without a VERIFIED reveal in hand: a stale id, a second call, a device that lost its key
+   * between commit and approve, or digits nobody has been shown yet.
    */
   async approvePairing(id: string): Promise<boolean> {
     if (this.approving === null || this.approving.id !== id) {
@@ -520,6 +665,9 @@ export class SyncEngine {
       return false;
     }
     const { keypair, requesterPub } = this.approving;
+    if (requesterPub === null) {
+      return false;
+    }
     const envelope = await wrapDataKeyToPeer(
       keypair.privateKey,
       requesterPub,

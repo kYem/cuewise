@@ -22,10 +22,11 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `revokeSession(id)` | `DELETE /v1/sessions/:id` | Yes |
 | `renameSession(id, deviceName)` | `PATCH /v1/sessions/:id` | Yes |
 | `revokeOtherSessions()` | `POST /v1/sessions/revoke-others` | Yes |
-| `createPairing(publicKey)` | `POST /v1/pairings` | Yes |
+| `createPairing(commitment)` | `POST /v1/pairings` | Yes |
 | `getPairing(id)` | `GET /v1/pairings/:id` | Yes |
 | `listPairings()` | `GET /v1/pairings` | Yes |
 | `commitPairing(id, publicKey)` | `POST /v1/pairings/:id/commit` | Yes |
+| `revealPairing(id, publicKey, nonce)` | `PUT /v1/pairings/:id/reveal` | Yes |
 | `putPairingEnvelope(id, envelope)` | `PUT /v1/pairings/:id/envelope` | Yes |
 | `deletePairing(id)` | `DELETE /v1/pairings/:id` | Yes |
 

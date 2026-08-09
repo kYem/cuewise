@@ -26,6 +26,7 @@ export {
   type EngineApiClient,
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
+  type PairingApprovalResult,
   type PairingPollResult,
   RECOVERY_ENVELOPE_KEY,
   type RecoveryEnvelopeState,
@@ -44,6 +45,7 @@ export type SyncEngineControlSurface = Pick<
   | 'pollPairing'
   | 'listPairingRequests'
   | 'commitPairing'
+  | 'pollApproval'
   | 'approvePairing'
   | 'denyPairing'
   | 'disableSync'

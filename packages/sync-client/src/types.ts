@@ -41,6 +41,9 @@ export interface PairingForRequester {
 export interface PendingPairing {
   id: string;
   deviceName: string;
-  requesterPublicKey: string;
+  requesterCommitment: string;
+  // Both null until the requester reveals, which the server refuses before an approver has committed.
+  requesterPublicKey: string | null;
+  requesterNonce: string | null;
   createdAt: number;
 }

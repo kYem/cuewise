@@ -408,15 +408,16 @@ describe('pairing: a second device enrolls by approval, never typing the recover
     const requests = await deviceA.engine.listPairingRequests();
     expect(requests.map((r) => r.deviceName)).toEqual(['Device B']);
     const committed = await deviceA.engine.commitPairing(requests[0].id);
-    if (committed === null) {
-      throw new Error('commitPairing answered null for a pending request');
-    }
+    expect(committed).toEqual({ pending: true });
+    // No digits yet: they cover a key device B has so far only committed to.
+    await expect(deviceA.engine.pollApproval(requests[0].id)).resolves.toEqual({ kind: 'waiting' });
 
     useStorage(deviceB);
     const confirm = await deviceB.engine.pollPairing();
-    expect(confirm).toEqual({ kind: 'confirm', sas: committed.sas });
 
     useStorage(deviceA);
+    // The same six digits on both screens, each derived from the keys its own device verified.
+    await expect(deviceA.engine.pollApproval(requests[0].id)).resolves.toEqual(confirm);
     await expect(deviceA.engine.approvePairing(requests[0].id)).resolves.toBe(true);
 
     useStorage(deviceB);

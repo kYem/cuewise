@@ -21,7 +21,10 @@ export const PAIRING_TTL_MS = 10 * 60 * 1000;
 interface FakePairing {
   id: string;
   requesterSession: string;
-  requesterPublicKey: string;
+  requesterCommitment: string;
+  // Both null until the reveal, which is refused before a commit and again once one is stored.
+  requesterPublicKey: string | null;
+  requesterNonce: string | null;
   deviceName: string;
   approverSession: string | null;
   approverPublicKey: string | null;
@@ -93,11 +96,12 @@ export class FakeSyncServer {
   }
 
   // Device pairing (ENG-50), mirroring D1SyncStore: one live request per requester session,
-  // commit only while no approver holds it, and the envelope only from the session that did.
+  // commit only while no approver holds it, reveal only after that commit and only once, and the
+  // envelope only from the session that committed, once the reveal is stored.
   createPairing(
     session: string,
     deviceName: string,
-    publicKey: string,
+    commitment: string,
     now: number
   ): PairingCreated {
     for (const [id, row] of this.pairings) {
@@ -111,7 +115,9 @@ export class FakeSyncServer {
     this.pairings.set(id, {
       id,
       requesterSession: session,
-      requesterPublicKey: publicKey,
+      requesterCommitment: commitment,
+      requesterPublicKey: null,
+      requesterNonce: null,
       deviceName,
       approverSession: null,
       approverPublicKey: null,
@@ -145,7 +151,9 @@ export class FakeSyncServer {
       .map((row) => ({
         id: row.id,
         deviceName: row.deviceName,
+        requesterCommitment: row.requesterCommitment,
         requesterPublicKey: row.requesterPublicKey,
+        requesterNonce: row.requesterNonce,
         createdAt: row.createdAt,
       }));
   }
@@ -168,6 +176,31 @@ export class FakeSyncServer {
     return 'committed';
   }
 
+  revealPairing(
+    id: string,
+    session: string,
+    publicKey: string,
+    nonce: string,
+    now: number
+  ): 'revealed' | 'conflict' | 'not_found' {
+    const row = this.livePairing(id, now);
+    if (row === undefined) {
+      return 'not_found';
+    }
+    // Another session's reveal, one before any approver committed, and a second reveal all read
+    // back as conflict, exactly as the real UPDATE's WHERE does.
+    if (
+      row.requesterSession !== session ||
+      row.approverPublicKey === null ||
+      row.requesterPublicKey !== null
+    ) {
+      return 'conflict';
+    }
+    row.requesterPublicKey = publicKey;
+    row.requesterNonce = nonce;
+    return 'revealed';
+  }
+
   putPairingEnvelope(
     id: string,
     session: string,
@@ -178,8 +211,9 @@ export class FakeSyncServer {
     if (row === undefined) {
       return 'not_found';
     }
-    // An uncommitted row reads back as a conflict too, exactly as the real UPDATE's WHERE does.
-    if (row.approverSession !== session) {
+    // An uncommitted or unrevealed row reads back as a conflict too, exactly as the real
+    // UPDATE's WHERE does.
+    if (row.approverSession !== session || row.requesterPublicKey === null) {
       return 'conflict';
     }
     row.envelope = envelope;
@@ -196,6 +230,18 @@ export class FakeSyncServer {
       return undefined;
     }
     return row;
+  }
+
+  /**
+   * Test-only: the malicious-relay case — swaps a stored reveal for a key the commitment the
+   * approver captured does not cover. Nothing a real server may do, and everything it might try.
+   */
+  substituteRevealedPublicKey(id: string, publicKey: string): void {
+    const row = this.pairings.get(id);
+    if (row === undefined || row.requesterPublicKey === null) {
+      throw new Error(`no revealed pairing to substitute a key on: ${id}`);
+    }
+    row.requesterPublicKey = publicKey;
   }
 
   /** Test-only inspection of everything the server currently holds. */
@@ -334,9 +380,9 @@ export class FakeApiClient implements EngineApiClient {
     this.server.putRecoveryEnvelope(envelope, opts?.ifAbsent === true);
   }
 
-  async createPairing(publicKey: string): Promise<PairingCreated> {
+  async createPairing(commitment: string): Promise<PairingCreated> {
     this.assertAuthorized();
-    return this.server.createPairing(this.sessionId, this.deviceName, publicKey, this.now());
+    return this.server.createPairing(this.sessionId, this.deviceName, commitment, this.now());
   }
 
   async listPairings(): Promise<PendingPairing[]> {
@@ -355,6 +401,14 @@ export class FakeApiClient implements EngineApiClient {
     this.assertAuthorized();
     const result = this.server.commitPairing(id, this.sessionId, publicKey, this.now());
     if (result !== 'committed') {
+      throw pairingError(result);
+    }
+  }
+
+  async revealPairing(id: string, publicKey: string, nonce: string): Promise<void> {
+    this.assertAuthorized();
+    const result = this.server.revealPairing(id, this.sessionId, publicKey, nonce, this.now());
+    if (result !== 'revealed') {
       throw pairingError(result);
     }
   }
