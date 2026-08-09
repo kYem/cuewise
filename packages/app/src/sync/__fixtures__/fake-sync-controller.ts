@@ -1,5 +1,5 @@
 import type { SyncSession } from '@cuewise/shared';
-import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type { PairingPollResult, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
 import type {
   EnableResult,
   LastCycleRead,
@@ -17,6 +17,7 @@ interface RecordedCall {
 
 type FailableMethod =
   | 'enable'
+  | 'beginPairing'
   | 'enableWithGoogle'
   | 'enrollWithCode'
   | 'reconnect'
@@ -468,5 +469,34 @@ export class FakeSyncController implements SyncController {
   /** Queues the result the next `enrollWithCode()` call resolves to. */
   scriptEnrollWithCode(result: EnableResult): void {
     this.enrollWithCodeResults.push(result);
+  }
+
+  /** What `beginPairing()` answers; null models a device that cannot pair (keyed, mid-enroll, signed out). */
+  private pairingStart: { pairingId: string } | null = { pairingId: 'pairing-1' };
+  private readonly pairingPolls: PairingPollResult[] = [];
+
+  /** Sets what every `beginPairing()` call answers from now on. */
+  scriptBeginPairing(result: { pairingId: string } | null): void {
+    this.pairingStart = result;
+  }
+
+  /** Queues what the next `pollPairing()` calls answer; unqueued polls answer `waiting`. */
+  scriptPairingPolls(...results: PairingPollResult[]): void {
+    this.pairingPolls.push(...results);
+  }
+
+  async beginPairing(): Promise<{ pairingId: string } | null> {
+    this.calls.push({ method: 'beginPairing', args: [] });
+    this.maybeFail('beginPairing');
+    return this.pairingStart;
+  }
+
+  async pollPairing(): Promise<PairingPollResult> {
+    this.calls.push({ method: 'pollPairing', args: [] });
+    const next = this.pairingPolls.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return { kind: 'waiting' };
   }
 }

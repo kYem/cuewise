@@ -37,6 +37,8 @@ export type SyncEngineControlSurface = Pick<
   SyncEngine,
   | 'enableSync'
   | 'resumeEnrollWithCode'
+  | 'beginPairing'
+  | 'pollPairing'
   | 'disableSync'
   | 'regenerateRecoveryCode'
   | 'syncNow'

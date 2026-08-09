@@ -10,6 +10,7 @@ import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
+  type PairingPollResult,
   type SyncNowResult,
   type SyncSignInProvider,
 } from '@cuewise/sync-engine';
@@ -495,6 +496,45 @@ export class BridgeSyncController implements SyncController {
     } catch (error) {
       logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);
       return LAST_CYCLE_UNAVAILABLE;
+    }
+  }
+
+  // Both pairing ops answer rather than throw, like the informational reads: a dead worker or a
+  // skewed response means this device cannot pair right now, which is what the screen already
+  // renders — and every `failed` is terminal, so the user's way out is the retry it offers.
+  async beginPairing(): Promise<{ pairingId: string } | null> {
+    try {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'beginPairing' });
+      if (response?.ok && response.kind === 'pairingStarted') {
+        return response.pairing;
+      }
+      logger.error(
+        `Cloud sync pairing request unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return null;
+    } catch (error) {
+      logger.error(`Cloud sync pairing request failed: ${describeThrown(error)}`, error);
+      return null;
+    }
+  }
+
+  async pollPairing(): Promise<PairingPollResult> {
+    try {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'pollPairing' });
+      if (response?.ok && response.kind === 'pairingPoll') {
+        return response.result;
+      }
+      logger.error(
+        `Cloud sync pairing poll unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return { kind: 'failed', reason: 'error' };
+    } catch (error) {
+      logger.error(`Cloud sync pairing poll failed: ${describeThrown(error)}`, error);
+      return { kind: 'failed', reason: 'error' };
     }
   }
 

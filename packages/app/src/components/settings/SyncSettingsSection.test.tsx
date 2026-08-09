@@ -34,6 +34,12 @@ const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
 const DEVICE_FAILURE_MESSAGE =
   "Cloud Sync couldn't finish on this device. Your data is safe here and it will keep retrying.";
+const PAIRING_HEADING = 'Approve from another device';
+const PAIRING_BODY = 'On your other device, open Settings → Cloud Sync and approve this device.';
+const PAIRING_WAITING = 'Waiting for approval…';
+const PAIRING_FAILED = 'Not approved — try again, or use your recovery code.';
+const PAIRING_CODE_LINK = 'Enter your recovery code instead';
+const PAIRING_POLL_MS = 3000;
 
 function sectionProps(overrides: Partial<SettingsSectionProps> = {}): SettingsSectionProps {
   return {
@@ -1496,7 +1502,7 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument());
   });
 
-  it('asks for the recovery code, not a re-auth, when this device has no key', async () => {
+  it('offers pairing and the recovery code, not a re-auth, when this device has no key', async () => {
     const controller = new FakeSyncController();
     renderSection(controller);
 
@@ -1505,7 +1511,9 @@ describe('SyncSettingsSectionComponent', () => {
     expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
       /can't read its encryption key/i
     );
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: PAIRING_CODE_LINK })).toBeInTheDocument();
+    // A re-auth cannot restore a key, so this status must never offer one.
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
     // Both would fail without a key, so offering either offers a broken button.
     expect(screen.queryByRole('button', { name: 'Sync now' })).not.toBeInTheDocument();
     expect(
@@ -2280,5 +2288,129 @@ describe('SyncSettingsSectionComponent', () => {
     const reconnectButton = await screen.findByRole('button', { name: 'Reconnect' });
     expect(reconnectButton).toBeEnabled();
     expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+  });
+
+  describe('pairing (requester)', () => {
+    /** Lets a settled controller promise reach the panel without advancing the fake clock. */
+    async function flush(): Promise<void> {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    /** One poll tick on the fake clock, with the state update it causes flushed. */
+    async function pollTick(): Promise<void> {
+      await act(async () => {
+        vi.advanceTimersByTime(PAIRING_POLL_MS);
+      });
+    }
+
+    /** Renders a keyless device's panel with its pairing request already begun. */
+    async function renderPairingScreen(controller: FakeSyncController): Promise<void> {
+      renderSection(controller);
+      act(() => controller.setStatus('needs_enroll'));
+      await flush();
+    }
+
+    const pollCount = (controller: FakeSyncController): number =>
+      controller.calls.filter((call) => call.method === 'pollPairing').length;
+
+    it('leads with pairing, not the recovery code, when this device has no key', async () => {
+      const controller = new FakeSyncController();
+      renderSection(controller);
+
+      act(() => controller.setStatus('needs_enroll'));
+
+      expect(await screen.findByText(PAIRING_HEADING)).toBeInTheDocument();
+      expect(screen.getByText(PAIRING_BODY)).toBeInTheDocument();
+      expect(screen.getByText(PAIRING_WAITING)).toBeInTheDocument();
+      expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(1);
+    });
+
+    it('shows the confirmation code, grouped, once the other device answers', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'waiting' }, { kind: 'confirm', sas: '391554' });
+      try {
+        await renderPairingScreen(controller);
+
+        await pollTick();
+        expect(screen.queryByText('391 554')).not.toBeInTheDocument();
+        await pollTick();
+
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+        expect(screen.queryByText(PAIRING_WAITING)).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The recovery code stays reachable, and reaches exactly the call the old Reconnect flow ended at.
+    it('reveals the unchanged recovery-code flow behind the secondary link', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      await renderPairingScreen(controller);
+
+      await user.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+      await user.type(await screen.findByLabelText('Recovery code'), CODE);
+      await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+      await waitFor(() =>
+        expect(controller.calls).toContainEqual({ method: 'reconnect', args: [CODE] })
+      );
+    });
+
+    it('offers a fresh request after the other device did not approve', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'failed', reason: 'expired_or_denied' });
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+        expect(screen.getByText(PAIRING_FAILED)).toBeInTheDocument();
+      } finally {
+        // Back on the real clock for the click: userEvent drives timers of its own.
+        vi.useRealTimers();
+      }
+      const user = userEvent.setup();
+
+      await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+      await waitFor(() =>
+        expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(2)
+      );
+      expect(screen.queryByText(PAIRING_FAILED)).not.toBeInTheDocument();
+    });
+
+    // A panel left polling after it is gone keeps asking the server on behalf of nobody.
+    it('stops polling once the panel is gone', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      try {
+        const { unmount } = renderSection(controller);
+        act(() => controller.setStatus('needs_enroll'));
+        await flush();
+        await pollTick();
+        await pollTick();
+        const polled = pollCount(controller);
+        expect(polled).toBe(2);
+
+        unmount();
+        await pollTick();
+        await pollTick();
+
+        expect(pollCount(controller)).toBe(polled);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shows the retry line when the pairing request itself fails', async () => {
+      const controller = new FakeSyncController();
+      controller.failNext('beginPairing');
+      await renderPairingScreen(controller);
+
+      expect(await screen.findByText(PAIRING_FAILED)).toBeInTheDocument();
+    });
   });
 });

@@ -14,6 +14,8 @@ import type {
   SyncDetailsResponse,
   SyncLastCycleResponse,
   SyncOutcomeResponse,
+  SyncPairingPollResponse,
+  SyncPairingStartedResponse,
   SyncRevokedCountResponse,
   SyncSessionsResponse,
 } from './sync-control-messages';
@@ -127,7 +129,13 @@ async function runOp(
     op: Exclude<SyncControlMessage['op'], 'details' | 'getLastCycle' | 'listSessions'>;
   },
   deps: SyncControlDeps
-): Promise<SyncControlResponse | SyncOutcomeResponse | SyncRevokedCountResponse> {
+): Promise<
+  | SyncControlResponse
+  | SyncOutcomeResponse
+  | SyncRevokedCountResponse
+  | SyncPairingStartedResponse
+  | SyncPairingPollResponse
+> {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -180,6 +188,12 @@ async function runOp(
         return { ok: true };
       case 'revokeOtherSessions':
         return { ok: true, kind: 'revokedCount', revoked: await engine.revokeOtherSessions() };
+      // Serialized with the enroll ops, not bypassed like the read-only ones: a poll can adopt a
+      // peer-wrapped key and activate, which must never interleave with an enable doing the same.
+      case 'beginPairing':
+        return { ok: true, kind: 'pairingStarted', pairing: await engine.beginPairing() };
+      case 'pollPairing':
+        return { ok: true, kind: 'pairingPoll', result: await engine.pollPairing() };
       default: {
         // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
         // silent fallthrough into some other operation.

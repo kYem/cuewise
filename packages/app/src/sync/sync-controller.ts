@@ -1,5 +1,10 @@
 import type { SyncSession } from '@cuewise/shared';
-import type { RecoveryEnvelopeState, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PairingPollResult,
+  RecoveryEnvelopeState,
+  SyncNowResult,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -164,6 +169,17 @@ export interface SyncController {
    * crosses a realm boundary; macOS reads it synchronously from the engine and resolves.
    */
   getLastCycle(): Promise<LastCycleRead>;
+  /**
+   * Starts a device-pairing request (ENG-50) so a device that already holds the key can approve
+   * this one. Null when this device cannot pair right now — it already has a key, an enroll is
+   * mid-flight, or the session that would carry the request is gone.
+   */
+  beginPairing(): Promise<{ pairingId: string } | null>;
+  /**
+   * One poll of the request beginPairing started; the requester screen loops it while it is up.
+   * Never throws — a fault is answered as `failed`, and every `failed` is terminal.
+   */
+  pollPairing(): Promise<PairingPollResult>;
   /**
    * Aborts a pending enableWithGoogle flow (the pending result resolves as a quiet cancel).
    * Only hosts whose OAuth flow can be aborted implement it (macOS system-browser); the UI

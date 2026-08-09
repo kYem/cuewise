@@ -22,6 +22,7 @@ import {
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
+import { PairingPanel } from './PairingPanel';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
 import { SessionList } from './SessionList';
 import { SettingRow, SettingSubgroup, Switch } from './SettingControls';
@@ -56,11 +57,13 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-/** What a status puts on screen. A pill and a reconnect prompt are alternatives, never both. */
+/** What a status puts on screen. A pill and a prompt are alternatives, never both. */
 type StatusPresentation =
   | { readonly kind: 'quiet' }
   | { readonly kind: 'pill'; readonly label: string }
-  | { readonly kind: 'reconnect'; readonly prompt: string };
+  | { readonly kind: 'reconnect'; readonly prompt: string }
+  /** Same explanation, but the fix is another device approving this one (ENG-50). */
+  | { readonly kind: 'pairing'; readonly prompt: string };
 
 const QUIET: StatusPresentation = { kind: 'quiet' };
 
@@ -73,11 +76,11 @@ const STATUS_PRESENTATION_BY_STATUS: Record<SyncUiStatus, StatusPresentation> = 
   active: { kind: 'pill', label: 'Active' },
   error: QUIET,
   needs_reauth: { kind: 'reconnect', prompt: 'Sign-in expired — reconnect to keep syncing.' },
-  // "can't read" rather than "is missing": a transient read failure reaches this status too.
+  // "can't read" rather than "is missing": a transient read failure reaches this status too. The
+  // panel below says what to do about it, so this line only names the state.
   needs_enroll: {
-    kind: 'reconnect',
-    prompt:
-      "This device can't read its encryption key, so nothing can sync. Reconnect with your recovery code to restore it.",
+    kind: 'pairing',
+    prompt: "This device can't read its encryption key, so nothing can sync.",
   },
 };
 
@@ -698,6 +701,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     await handleEnable();
   };
 
+  // The keyless device's code path is the reconnect one without the code-less attempt that can
+  // only fail: reconnect(code) is where that flow already ended.
+  const handleUseRecoveryCode = () => {
+    setEnrollSource('reconnect');
+    setEnrollOpen(true);
+  };
+
   const handleToggle = (checked: boolean) => {
     if (status === 'off') {
       setEnabling(checked);
@@ -755,7 +765,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // The badge outranks it: a carried-forward failure is the stronger claim. Only 'active' makes a
   // freshness claim worth qualifying — connecting and syncing have not made one yet.
   const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
-  const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
+  // Both prompts explain a device that has stopped syncing; only the fix offered below differs.
+  const stoppedPrompt =
+    presentation.kind === 'reconnect' || presentation.kind === 'pairing'
+      ? presentation.prompt
+      : null;
   // Only an explicit 'missing': 'unknown' means nothing has answered yet, and an older worker
   // answers details with the field absent entirely. Neither may claim an account has no code.
   // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.
@@ -953,21 +967,26 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         </SettingSubgroup>
       )}
 
-      {reconnectPrompt !== null && (
+      {stoppedPrompt !== null && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
             <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">
-              {reconnectPrompt}
+              {stoppedPrompt}
             </p>
-            <button
-              type="button"
-              onClick={handleReconnect}
-              disabled={isReconnecting}
-              className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isReconnecting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isReconnecting ? 'Reconnecting…' : 'Reconnect'}
-            </button>
+            {presentation.kind === 'pairing' && (
+              <PairingPanel onUseRecoveryCode={handleUseRecoveryCode} />
+            )}
+            {presentation.kind === 'reconnect' && (
+              <button
+                type="button"
+                onClick={handleReconnect}
+                disabled={isReconnecting}
+                className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isReconnecting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isReconnecting ? 'Reconnecting…' : 'Reconnect'}
+              </button>
+            )}
           </div>
         </SettingSubgroup>
       )}

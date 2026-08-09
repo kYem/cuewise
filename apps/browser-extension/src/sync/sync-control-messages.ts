@@ -1,6 +1,11 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSession } from '@cuewise/shared';
-import type { SyncNowResult, SyncOutcome, SyncSignInProvider } from '@cuewise/sync-engine';
+import type {
+  PairingPollResult,
+  SyncNowResult,
+  SyncOutcome,
+  SyncSignInProvider,
+} from '@cuewise/sync-engine';
 import { z } from 'zod/mini';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
@@ -16,6 +21,8 @@ export const SYNC_CONTROL_OPS = [
   'revokeSession',
   'renameSession',
   'revokeOtherSessions',
+  'beginPairing',
+  'pollPairing',
 ] as const;
 export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 
@@ -89,6 +96,20 @@ export interface SyncRevokedCountResponse {
   revoked: number;
 }
 
+/** Response to the 'beginPairing' op; `pairing` is null when this device cannot pair right now. */
+export interface SyncPairingStartedResponse {
+  ok: true;
+  kind: 'pairingStarted';
+  pairing: { pairingId: string } | null;
+}
+
+/** Response to the 'pollPairing' op — one poll of the request beginPairing started. */
+export interface SyncPairingPollResponse {
+  ok: true;
+  kind: 'pairingPoll';
+  result: PairingPollResult;
+}
+
 /**
  * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
  * silently mis-assume one (adding an op without an entry here is a compile error at send).
@@ -109,6 +130,8 @@ export interface SyncOpResponse {
   revokeSession: SyncControlResponse;
   renameSession: SyncControlResponse;
   revokeOtherSessions: SyncRevokedCountResponse | Extract<SyncControlResponse, { ok: false }>;
+  beginPairing: SyncPairingStartedResponse | Extract<SyncControlResponse, { ok: false }>;
+  pollPairing: SyncPairingPollResponse | Extract<SyncControlResponse, { ok: false }>;
 }
 
 /** Any op's response — derived from the map so the two never drift. */

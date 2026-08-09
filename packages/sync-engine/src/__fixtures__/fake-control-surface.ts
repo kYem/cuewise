@@ -18,6 +18,9 @@ export function fakeControlSurface(
     enableSync: vi.fn().mockResolvedValue(undefined),
     disableSync: vi.fn().mockResolvedValue(undefined),
     resumeEnrollWithCode: vi.fn().mockResolvedValue(undefined),
+    // Null and a failed poll are what a device holding its key answers: it has nothing to pair for.
+    beginPairing: vi.fn().mockResolvedValue(null),
+    pollPairing: vi.fn().mockResolvedValue({ kind: 'failed', reason: 'error' }),
     regenerateRecoveryCode: vi.fn().mockResolvedValue('CW1-NEW00-00000-00000-00000-00000-00000'),
     syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
     getStatus: vi.fn().mockReturnValue('active' as SyncStatus),

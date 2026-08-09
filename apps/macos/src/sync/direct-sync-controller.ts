@@ -11,6 +11,7 @@ import { type KeyValueStore, logger, type Scheduler, type SyncSession } from '@c
 import { ApiError } from '@cuewise/sync-client';
 import {
   createSyncEngine,
+  type PairingPollResult,
   RecoveryCodeError,
   RecoveryCodeRequiredError,
   type SyncEngine,
@@ -355,6 +356,15 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     },
     enrollWithCode(deviceName: string, recoveryCode: string): Promise<EnableResult> {
       return serialize(() => enrollExistingGoogleSession(deviceName, recoveryCode));
+    },
+    // Serialized like the enroll flows, and for the same reason: a poll that finds an approval
+    // adopts the wrapped key and activates, which must never interleave with an enrol doing the
+    // same. The requester screen polls one at a time, so nothing piles up behind a slow sign-in.
+    beginPairing(): Promise<{ pairingId: string } | null> {
+      return serialize(() => engine.beginPairing());
+    },
+    pollPairing(): Promise<PairingPollResult> {
+      return serialize(() => engine.pollPairing());
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
