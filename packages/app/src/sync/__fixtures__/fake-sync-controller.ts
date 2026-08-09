@@ -537,6 +537,22 @@ export class FakeSyncController implements SyncController {
   pairingRequests: PendingPairing[] = [];
   private readonly commitPairingResults: ({ sas: string } | null)[] = [];
   private readonly approvePairingResults: boolean[] = [];
+  private deferredPairingRequests = false;
+  private pendingPairingRequests: ((requests: PendingPairing[]) => void) | null = null;
+
+  /** Makes the next listPairingRequests() hang until resolveListPairingRequests() — for asserting the poll's overlap guard. */
+  deferNextListPairingRequests(): void {
+    this.deferredPairingRequests = true;
+  }
+
+  /** Releases a listPairingRequests() call armed via deferNextListPairingRequests(). */
+  resolveListPairingRequests(requests: PendingPairing[]): void {
+    if (this.pendingPairingRequests === null) {
+      throw new Error('FakeSyncController: no pending listPairingRequests() to resolve');
+    }
+    this.pendingPairingRequests(requests);
+    this.pendingPairingRequests = null;
+  }
 
   /** Queues the result the next `commitPairing()` call resolves to. */
   scriptCommitPairing(result: { sas: string } | null): void {
@@ -551,6 +567,12 @@ export class FakeSyncController implements SyncController {
   async listPairingRequests(): Promise<PendingPairing[]> {
     this.calls.push({ method: 'listPairingRequests', args: [] });
     this.maybeFail('listPairingRequests');
+    if (this.deferredPairingRequests) {
+      this.deferredPairingRequests = false;
+      return new Promise((resolve) => {
+        this.pendingPairingRequests = resolve;
+      });
+    }
     return this.pairingRequests;
   }
 

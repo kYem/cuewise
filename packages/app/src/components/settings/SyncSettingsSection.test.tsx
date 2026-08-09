@@ -2720,5 +2720,31 @@ describe('SyncSettingsSectionComponent', () => {
         vi.useRealTimers();
       }
     });
+
+    // A slow listPairingRequests() must not have the next tick stack a second call on top of it.
+    it('does not stack a poll on top of one still in flight', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      const callCount = () =>
+        controller.calls.filter((call) => call.method === 'listPairingRequests').length;
+      try {
+        controller.deferNextListPairingRequests();
+        renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await flush();
+        expect(callCount()).toBe(1);
+
+        await pollTick();
+        await pollTick();
+        expect(callCount()).toBe(1);
+
+        act(() => controller.resolveListPairingRequests([]));
+        await flush();
+        await pollTick();
+        expect(callCount()).toBe(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

@@ -324,10 +324,20 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return undefined;
     }
     let cancelled = false;
+    let polling = false;
     const poll = async () => {
-      const requests = await controller.listPairingRequests();
-      if (!cancelled) {
-        setPairingRequests(requests);
+      // A slow poll must not have the next tick stack on top of it — same guard as PairingPanel's.
+      if (polling) {
+        return;
+      }
+      polling = true;
+      try {
+        const requests = await controller.listPairingRequests();
+        if (!cancelled) {
+          setPairingRequests(requests);
+        }
+      } finally {
+        polling = false;
       }
     };
     void poll();
