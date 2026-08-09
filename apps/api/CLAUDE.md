@@ -78,8 +78,8 @@ All endpoints are under `/v1`.
 | `PATCH` | `/v1/sessions/:id` | Rename a session, `{deviceName}`, bounded by the same `MAX_DEVICE_NAME_LENGTH` as enrol | Yes |
 | `POST` | `/v1/sessions/revoke-others` | Revoke every session but the caller's; answers `{revoked: <count>}` | Yes |
 | `POST` | `/v1/pairings` | Create a pairing request for the caller's device (`{publicKey}`); replaces the caller's own prior request | Yes |
-| `GET` | `/v1/pairings` | List the caller's pending pairing requests, for the approver to pick from | Yes |
-| `GET` | `/v1/pairings/:id` | Poll one pairing request for the approver's public key/envelope. 404 `pairing_not_found` once expired or denied | Yes |
+| `GET` | `/v1/pairings` | List pending pairing requests from the caller's other sessions, for the approver to pick from | Yes |
+| `GET` | `/v1/pairings/:id` | Poll one pairing request for the requester to learn the approver's public key/envelope. 404 `pairing_not_found` once expired or denied | Yes |
 | `POST` | `/v1/pairings/:id/commit` | Approve a pairing (`{publicKey}`). 409 `pairing_conflict` if already committed | Yes |
 | `PUT` | `/v1/pairings/:id/envelope` | Store the wrapped key envelope for a committed pairing, ≤1024 bytes | Yes |
 | `DELETE` | `/v1/pairings/:id` | Cancel/deny a pairing request; idempotent, 404 once gone | Yes |

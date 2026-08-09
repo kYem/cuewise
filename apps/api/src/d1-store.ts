@@ -399,6 +399,7 @@ export class D1SyncStore implements SyncStore {
       this.db.prepare('DELETE FROM tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM pairings WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
   }
