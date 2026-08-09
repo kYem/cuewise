@@ -501,7 +501,7 @@ export class D1SyncStore implements SyncStore {
   async createPairing(
     userId: string,
     requesterTokenHash: SessionTokenHash,
-    publicKey: string,
+    commitment: string,
     now: number
   ): Promise<{ id: string; expiresAt: number }> {
     const expiresAt = now + PAIRING_TTL_MS;
@@ -513,11 +513,11 @@ export class D1SyncStore implements SyncStore {
         .bind(requesterTokenHash),
       this.db
         .prepare(
-          `INSERT INTO pairings (user_id, requester_session_id, requester_public_key, created_at, expires_at)
+          `INSERT INTO pairings (user_id, requester_session_id, requester_commitment, created_at, expires_at)
            VALUES (?, (SELECT id FROM tokens WHERE token_hash = ?), ?, ?, ?)
            RETURNING id, expires_at`
         )
-        .bind(userId, requesterTokenHash, publicKey, now, expiresAt),
+        .bind(userId, requesterTokenHash, commitment, now, expiresAt),
     ]);
     const inserted = results[1];
     if (inserted === undefined || inserted.results[0] === undefined) {
@@ -560,7 +560,7 @@ export class D1SyncStore implements SyncStore {
   ): Promise<PendingPairing[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT p.id, p.requester_public_key, p.created_at, t.device_name
+        `SELECT p.id, p.requester_commitment, p.requester_public_key, p.requester_nonce, p.created_at, t.device_name
          FROM pairings p JOIN tokens t ON t.id = p.requester_session_id
          WHERE p.user_id = ? AND p.expires_at > ? AND p.envelope IS NULL
            AND p.requester_session_id <> (SELECT id FROM tokens WHERE token_hash = ?)`
@@ -568,14 +568,18 @@ export class D1SyncStore implements SyncStore {
       .bind(userId, now, excludeTokenHash)
       .all<{
         id: string;
-        requester_public_key: string;
+        requester_commitment: string;
+        requester_public_key: string | null;
+        requester_nonce: string | null;
         created_at: number;
         device_name: string;
       }>();
     return results.map((row) => ({
       id: row.id,
       deviceName: row.device_name,
+      requesterCommitment: row.requester_commitment,
       requesterPublicKey: row.requester_public_key,
+      requesterNonce: row.requester_nonce,
       createdAt: row.created_at,
     }));
   }
@@ -606,8 +610,40 @@ export class D1SyncStore implements SyncStore {
     return row === null ? 'not_found' : 'conflict';
   }
 
+  // Same ambiguous-zero-rows pattern as commitPairing: the WHERE requires both the caller's
+  // session to be the requester's and that the approver has committed, so an uncommitted row —
+  // or a reveal from any other session — reads back as conflict too.
+  async revealPairing(
+    userId: string,
+    id: string,
+    requesterTokenHash: SessionTokenHash,
+    publicKey: string,
+    nonce: string,
+    now: number
+  ): Promise<'revealed' | 'conflict' | 'not_found'> {
+    const res = await this.db
+      .prepare(
+        `UPDATE pairings SET requester_public_key = ?, requester_nonce = ?
+         WHERE id = ? AND user_id = ? AND expires_at > ?
+           AND requester_session_id = (SELECT id FROM tokens WHERE token_hash = ?)
+           AND approver_public_key IS NOT NULL
+           AND requester_public_key IS NULL`
+      )
+      .bind(publicKey, nonce, id, userId, now, requesterTokenHash)
+      .run();
+    if ((res.meta.changes ?? 0) > 0) {
+      return 'revealed';
+    }
+    const row = await this.db
+      .prepare('SELECT id FROM pairings WHERE id = ? AND user_id = ? AND expires_at > ?')
+      .bind(id, userId, now)
+      .first<{ id: string }>();
+    return row === null ? 'not_found' : 'conflict';
+  }
+
   // Same ambiguous-zero-rows pattern as commitPairing: the WHERE also requires the caller's
-  // session to be the one that committed, so an uncommitted row reads back as conflict too.
+  // session to be the one that committed and that the reveal is stored, so an uncommitted or
+  // unrevealed row reads back as conflict too.
   async putPairingEnvelope(
     userId: string,
     id: string,
@@ -619,7 +655,8 @@ export class D1SyncStore implements SyncStore {
       .prepare(
         `UPDATE pairings SET envelope = ?
          WHERE id = ? AND user_id = ? AND expires_at > ?
-           AND approver_session_id = (SELECT id FROM tokens WHERE token_hash = ?)`
+           AND approver_session_id = (SELECT id FROM tokens WHERE token_hash = ?)
+           AND requester_public_key IS NOT NULL`
       )
       .bind(envelope, id, userId, now, approverTokenHash)
       .run();

@@ -9,17 +9,27 @@ import { PAIRING_TTL_MS } from '../store';
 type CreateBody = { id: string; expiresAt: number };
 type PairingBody = { id: string; approverPublicKey: string | null; envelope: string | null };
 type ListBody = {
-  pairings: { id: string; deviceName: string; requesterPublicKey: string; createdAt: number }[];
+  pairings: {
+    id: string;
+    deviceName: string;
+    requesterCommitment: string;
+    requesterPublicKey: string | null;
+    requesterNonce: string | null;
+    createdAt: number;
+  }[];
 };
 type ProblemBody = { code: string };
 
-async function createPairing(token: string, publicKey = 'requester-pubkey'): Promise<Response> {
+async function createPairing(
+  token: string,
+  commitment = 'requester-commitment'
+): Promise<Response> {
   return app.request(
     '/v1/pairings',
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey }),
+      body: JSON.stringify({ commitment }),
     },
     env
   );
@@ -44,6 +54,23 @@ async function commitPairing(
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ publicKey }),
+    },
+    env
+  );
+}
+
+async function revealPairing(
+  token: string,
+  id: string,
+  publicKey = 'requester-pubkey',
+  nonce = 'requester-nonce'
+): Promise<Response> {
+  return app.request(
+    `/v1/pairings/${id}/reveal`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey, nonce }),
     },
     env
   );
@@ -96,19 +123,19 @@ describe('/v1/pairings', () => {
 
   it('creating a second pairing from the same session replaces the first', async () => {
     const { token } = await signedInToken();
-    const first = await (await createPairing(token, 'pubkey-1')).json<CreateBody>();
-    const second = await (await createPairing(token, 'pubkey-2')).json<CreateBody>();
+    const first = await (await createPairing(token, 'commitment-1')).json<CreateBody>();
+    const second = await (await createPairing(token, 'commitment-2')).json<CreateBody>();
     expect(second.id).not.toBe(first.id);
 
     expect((await getPairing(token, first.id)).status).toBe(404);
     expect((await getPairing(token, second.id)).status).toBe(200);
   });
 
-  it('the pending list is visible from another session on the account and excludes the requester', async () => {
+  it('the pending list is visible from another session on the account, excludes the requester, and withholds the key before reveal', async () => {
     const { token: requesterToken, userId } = await signedInToken();
     const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
     const created = await (
-      await createPairing(requesterToken, 'requester-pubkey')
+      await createPairing(requesterToken, 'requester-commitment')
     ).json<CreateBody>();
 
     const fromApprover = await listPairings(approverToken);
@@ -118,7 +145,9 @@ describe('/v1/pairings', () => {
       {
         id: created.id,
         deviceName: 'test-device',
-        requesterPublicKey: 'requester-pubkey',
+        requesterCommitment: 'requester-commitment',
+        requesterPublicKey: null,
+        requesterNonce: null,
         createdAt: expect.any(Number),
       },
     ]);
@@ -154,6 +183,59 @@ describe('/v1/pairings', () => {
     expect((await second.json<ProblemBody>()).code).toBe('pairing_conflict');
   });
 
+  it('revealing before any commit answers 409 pairing_conflict', async () => {
+    const { token: requesterToken } = await signedInToken();
+    const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
+
+    const res = await revealPairing(requesterToken, id);
+    expect(res.status).toBe(409);
+    expect((await res.json<ProblemBody>()).code).toBe('pairing_conflict');
+  });
+
+  // Only the requester session that created the row may reveal — the approver's own session
+  // hits the same ambiguous zero-rows path as a wrong session, so it reads back as conflict
+  // (the row exists, just not for this caller), mirroring commitPairing/putPairingEnvelope.
+  it('revealing from the approver session answers 409 pairing_conflict', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+    const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
+    await commitPairing(approverToken, id);
+
+    const res = await revealPairing(approverToken, id);
+    expect(res.status).toBe(409);
+    expect((await res.json<ProblemBody>()).code).toBe('pairing_conflict');
+  });
+
+  it('reveal stores the requester key once; a second reveal answers 409 pairing_conflict', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+    const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
+    await commitPairing(approverToken, id);
+
+    expect((await revealPairing(requesterToken, id)).status).toBe(204);
+
+    const second = await revealPairing(requesterToken, id);
+    expect(second.status).toBe(409);
+    expect((await second.json<ProblemBody>()).code).toBe('pairing_conflict');
+  });
+
+  it('a revealed key becomes visible on the approver list', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+    const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
+    await commitPairing(approverToken, id);
+    await revealPairing(requesterToken, id, 'requester-pubkey', 'requester-nonce');
+
+    const list = await (await listPairings(approverToken)).json<ListBody>();
+    expect(list.pairings).toEqual([
+      expect.objectContaining({
+        id,
+        requesterPublicKey: 'requester-pubkey',
+        requesterNonce: 'requester-nonce',
+      }),
+    ]);
+  });
+
   it('storing an envelope before any commit answers 409 pairing_conflict', async () => {
     const { token: requesterToken, userId } = await signedInToken();
     const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
@@ -164,11 +246,23 @@ describe('/v1/pairings', () => {
     expect((await res.json<ProblemBody>()).code).toBe('pairing_conflict');
   });
 
-  it('storing the envelope after commit is visible to the requester GET', async () => {
+  it('storing an envelope after commit but before reveal answers 409 pairing_conflict', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+    const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
+    await commitPairing(approverToken, id);
+
+    const res = await putEnvelope(approverToken, id);
+    expect(res.status).toBe(409);
+    expect((await res.json<ProblemBody>()).code).toBe('pairing_conflict');
+  });
+
+  it('storing the envelope after commit and reveal is visible to the requester GET', async () => {
     const { token: requesterToken, userId } = await signedInToken();
     const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
     const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
     await commitPairing(approverToken, id, 'approver-pubkey');
+    await revealPairing(requesterToken, id);
 
     const putRes = await putEnvelope(approverToken, id, 'envelope-blob');
     expect(putRes.status).toBe(204);
@@ -178,7 +272,39 @@ describe('/v1/pairings', () => {
     expect(body.envelope).toBe('envelope-blob');
   });
 
-  it('get, commit, and delete 404 pairing_not_found for a pairing on another account', async () => {
+  it('the full create, commit, reveal, envelope order succeeds end to end', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+
+    const { id } = await (
+      await createPairing(requesterToken, 'requester-commitment')
+    ).json<CreateBody>();
+    expect((await commitPairing(approverToken, id, 'approver-pubkey')).status).toBe(204);
+    expect(
+      (await revealPairing(requesterToken, id, 'requester-pubkey', 'requester-nonce')).status
+    ).toBe(204);
+
+    // Checked before the envelope step: a completed pairing drops off the pending list.
+    const approverList = await (await listPairings(approverToken)).json<ListBody>();
+    expect(approverList.pairings).toEqual([
+      expect.objectContaining({
+        id,
+        requesterCommitment: 'requester-commitment',
+        requesterPublicKey: 'requester-pubkey',
+        requesterNonce: 'requester-nonce',
+      }),
+    ]);
+
+    expect((await putEnvelope(approverToken, id, 'envelope-blob')).status).toBe(204);
+
+    const requesterView = await (await getPairing(requesterToken, id)).json<
+      PairingBody & { expiresAt: number }
+    >();
+    expect(requesterView.approverPublicKey).toBe('approver-pubkey');
+    expect(requesterView.envelope).toBe('envelope-blob');
+  });
+
+  it('get, commit, reveal, and delete 404 pairing_not_found for a pairing on another account', async () => {
     const { token: requesterToken } = await signedInToken();
     const { token: otherAccountToken } = await signedInToken();
     const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
@@ -191,6 +317,10 @@ describe('/v1/pairings', () => {
     expect(commitRes.status).toBe(404);
     expect((await commitRes.json<ProblemBody>()).code).toBe('pairing_not_found');
 
+    const revealRes = await revealPairing(otherAccountToken, id);
+    expect(revealRes.status).toBe(404);
+    expect((await revealRes.json<ProblemBody>()).code).toBe('pairing_not_found');
+
     const deleteRes = await deletePairing(otherAccountToken, id);
     expect(deleteRes.status).toBe(404);
     expect((await deleteRes.json<ProblemBody>()).code).toBe('pairing_not_found');
@@ -198,7 +328,7 @@ describe('/v1/pairings', () => {
     expect((await getPairing(requesterToken, id)).status).toBe(200);
   });
 
-  it('an expired pairing 404s pairing_not_found on get and commit', async () => {
+  it('an expired pairing 404s pairing_not_found on get, commit, and reveal', async () => {
     const { token, userId } = await signedInToken();
     const requesterHash = await hashSessionToken(token);
     // Routes read Date.now() themselves, so plant the row as already 10+ minutes stale
@@ -207,7 +337,7 @@ describe('/v1/pairings', () => {
     const { id } = await store.createPairing(
       userId,
       requesterHash,
-      'pubkey',
+      'commitment',
       Date.now() - PAIRING_TTL_MS - 1_000
     );
 
@@ -218,6 +348,10 @@ describe('/v1/pairings', () => {
     const commitRes = await commitPairing(token, id, 'pubkey');
     expect(commitRes.status).toBe(404);
     expect((await commitRes.json<ProblemBody>()).code).toBe('pairing_not_found');
+
+    const revealRes = await revealPairing(token, id);
+    expect(revealRes.status).toBe(404);
+    expect((await revealRes.json<ProblemBody>()).code).toBe('pairing_not_found');
   });
 
   // deletePairing has no expiry check by design (Task 3): a still-present, past-TTL row is a
@@ -229,7 +363,7 @@ describe('/v1/pairings', () => {
     const { id } = await store.createPairing(
       userId,
       requesterHash,
-      'pubkey',
+      'commitment',
       Date.now() - PAIRING_TTL_MS - 1_000
     );
 
@@ -237,11 +371,31 @@ describe('/v1/pairings', () => {
     expect((await deletePairing(token, id)).status).toBe(404);
   });
 
-  it('rejects an oversized publicKey on create with 400 invalid_request', async () => {
+  it('rejects an oversized commitment on create with 400 invalid_request', async () => {
     const { token } = await signedInToken();
     const res = await createPairing(token, 'x'.repeat(65));
     expect(res.status).toBe(400);
     expect((await res.json<ProblemBody>()).code).toBe('invalid_request');
+  });
+
+  it('rejects an oversized publicKey or nonce on reveal with 400 invalid_request', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+    const { id } = await (await createPairing(requesterToken)).json<CreateBody>();
+    await commitPairing(approverToken, id);
+
+    const oversizedKey = await revealPairing(requesterToken, id, 'x'.repeat(65));
+    expect(oversizedKey.status).toBe(400);
+    expect((await oversizedKey.json<ProblemBody>()).code).toBe('invalid_request');
+
+    const oversizedNonce = await revealPairing(
+      requesterToken,
+      id,
+      'requester-pubkey',
+      'x'.repeat(65)
+    );
+    expect(oversizedNonce.status).toBe(400);
+    expect((await oversizedNonce.json<ProblemBody>()).code).toBe('invalid_request');
   });
 
   it('rejects an oversized envelope on PUT with 400 invalid_request', async () => {

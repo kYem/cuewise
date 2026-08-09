@@ -5,7 +5,8 @@ import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
 
-const MAX_PUBLIC_KEY_BYTES = 64; // 32 raw bytes base64url ≈ 43 chars; 64 is headroom, not spec
+// Bounds the commitment, publicKey, and nonce fields alike: all are ~32-43 byte b64url values.
+const MAX_KEY_MATERIAL_BYTES = 64;
 const MAX_ENVELOPE_BYTES = 1024; // same bound as /v1/keys/recovery
 const NO_SUCH_PAIRING = 'No such pairing request for this account.';
 
@@ -18,21 +19,21 @@ export function registerPairingsRoutes(
     if (raw instanceof Response) {
       return raw;
     }
-    // `raw` can be JSON `null`, which is typeof 'object' — guard before reading `.publicKey`.
+    // `raw` can be JSON `null`, which is typeof 'object' — guard before reading `.commitment`.
     if (raw === null || typeof raw !== 'object') {
       return problem('invalid_request');
     }
-    const publicKey = (raw as { publicKey?: unknown }).publicKey;
+    const commitment = (raw as { commitment?: unknown }).commitment;
     const issues: ValidationIssue[] = [];
-    requireNonEmptyString(publicKey, '/publicKey', issues, { maxLength: MAX_PUBLIC_KEY_BYTES });
-    if (typeof publicKey !== 'string' || issues.length > 0) {
+    requireNonEmptyString(commitment, '/commitment', issues, { maxLength: MAX_KEY_MATERIAL_BYTES });
+    if (typeof commitment !== 'string' || issues.length > 0) {
       return problem('invalid_request', { errors: issues });
     }
     const store = deps.storeFactory(c.env.DB);
     const created = await store.createPairing(
       c.get('userId'),
       c.get('tokenHash'),
-      publicKey,
+      commitment,
       Date.now()
     );
     return c.json(created);
@@ -71,7 +72,7 @@ export function registerPairingsRoutes(
     }
     const publicKey = (raw as { publicKey?: unknown }).publicKey;
     const issues: ValidationIssue[] = [];
-    requireNonEmptyString(publicKey, '/publicKey', issues, { maxLength: MAX_PUBLIC_KEY_BYTES });
+    requireNonEmptyString(publicKey, '/publicKey', issues, { maxLength: MAX_KEY_MATERIAL_BYTES });
     if (typeof publicKey !== 'string' || issues.length > 0) {
       return problem('invalid_request', { errors: issues });
     }
@@ -81,6 +82,40 @@ export function registerPairingsRoutes(
       c.req.param('id'),
       c.get('tokenHash'),
       publicKey,
+      Date.now()
+    );
+    if (result === 'not_found') {
+      return problem('pairing_not_found', { detail: NO_SUCH_PAIRING });
+    }
+    if (result === 'conflict') {
+      return problem('pairing_conflict');
+    }
+    return c.body(null, 204);
+  });
+
+  app.put('/v1/pairings/:id/reveal', async (c) => {
+    const raw = await parseJsonBody(c);
+    if (raw instanceof Response) {
+      return raw;
+    }
+    if (raw === null || typeof raw !== 'object') {
+      return problem('invalid_request');
+    }
+    const publicKey = (raw as { publicKey?: unknown }).publicKey;
+    const nonce = (raw as { nonce?: unknown }).nonce;
+    const issues: ValidationIssue[] = [];
+    requireNonEmptyString(publicKey, '/publicKey', issues, { maxLength: MAX_KEY_MATERIAL_BYTES });
+    requireNonEmptyString(nonce, '/nonce', issues, { maxLength: MAX_KEY_MATERIAL_BYTES });
+    if (typeof publicKey !== 'string' || typeof nonce !== 'string' || issues.length > 0) {
+      return problem('invalid_request', { errors: issues });
+    }
+    const store = deps.storeFactory(c.env.DB);
+    const result = await store.revealPairing(
+      c.get('userId'),
+      c.req.param('id'),
+      c.get('tokenHash'),
+      publicKey,
+      nonce,
       Date.now()
     );
     if (result === 'not_found') {

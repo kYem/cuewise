@@ -33,7 +33,10 @@ export const PAIRING_TTL_MS = 10 * 60 * 1000;
 export interface PendingPairing {
   id: string;
   deviceName: string;
-  requesterPublicKey: string;
+  requesterCommitment: string;
+  // Null until the requester reveals, which the server refuses before the approver has committed.
+  requesterPublicKey: string | null;
+  requesterNonce: string | null;
   createdAt: number;
 }
 
@@ -102,7 +105,7 @@ export interface SyncStore {
   createPairing(
     userId: string,
     requesterTokenHash: SessionTokenHash,
-    publicKey: string,
+    commitment: string,
     now: number
   ): Promise<{ id: string; expiresAt: number }>;
   // null covers both an unknown id and an expired row — the caller can't distinguish, by design.
@@ -123,6 +126,16 @@ export interface SyncStore {
     publicKey: string,
     now: number
   ): Promise<'committed' | 'conflict' | 'not_found'>;
+  // Only the requester session that created the row may reveal, refused until the approver has
+  // committed. 'conflict' also covers a wrong-session caller (same ambiguity as commitPairing).
+  revealPairing(
+    userId: string,
+    id: string,
+    requesterTokenHash: SessionTokenHash,
+    publicKey: string,
+    nonce: string,
+    now: number
+  ): Promise<'revealed' | 'conflict' | 'not_found'>;
   putPairingEnvelope(
     userId: string,
     id: string,

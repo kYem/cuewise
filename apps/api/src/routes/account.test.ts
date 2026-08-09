@@ -103,7 +103,7 @@ describe('DELETE /v1/account', () => {
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey: 'requester-pubkey' }),
+        body: JSON.stringify({ commitment: 'requester-commitment' }),
       },
       env
     );
