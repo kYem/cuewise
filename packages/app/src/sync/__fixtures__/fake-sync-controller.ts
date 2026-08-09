@@ -1,5 +1,10 @@
 import type { SyncSession } from '@cuewise/shared';
-import type { PairingPollResult, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PairingPollResult,
+  PendingPairing,
+  SyncNowResult,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import type {
   EnableResult,
   LastCycleRead,
@@ -29,11 +34,16 @@ type FailableMethod =
   | 'listSessions'
   | 'revokeSession'
   | 'renameSession'
-  | 'revokeOtherSessions';
+  | 'revokeOtherSessions'
+  | 'listPairingRequests'
+  | 'commitPairing'
+  | 'approvePairing'
+  | 'denyPairing';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
 const DEFAULT_SYNC_OUTCOME: SyncNowResult = { kind: 'synced' };
+const DEFAULT_SAS = '391554';
 
 /** Scriptable SyncController fake for UI tests: settable status, queued enable/reconnect results, recorded calls. */
 export class FakeSyncController implements SyncController {
@@ -521,5 +531,51 @@ export class FakeSyncController implements SyncController {
       return next;
     }
     return { kind: 'waiting' };
+  }
+
+  /** What `listPairingRequests()` resolves to; test-settable, defaults to no pending requests. */
+  pairingRequests: PendingPairing[] = [];
+  private readonly commitPairingResults: ({ sas: string } | null)[] = [];
+  private readonly approvePairingResults: boolean[] = [];
+
+  /** Queues the result the next `commitPairing()` call resolves to. */
+  scriptCommitPairing(result: { sas: string } | null): void {
+    this.commitPairingResults.push(result);
+  }
+
+  /** Queues the result the next `approvePairing()` call resolves to. */
+  scriptApprovePairing(result: boolean): void {
+    this.approvePairingResults.push(result);
+  }
+
+  async listPairingRequests(): Promise<PendingPairing[]> {
+    this.calls.push({ method: 'listPairingRequests', args: [] });
+    this.maybeFail('listPairingRequests');
+    return this.pairingRequests;
+  }
+
+  async commitPairing(id: string): Promise<{ sas: string } | null> {
+    this.calls.push({ method: 'commitPairing', args: [id] });
+    this.maybeFail('commitPairing');
+    const next = this.commitPairingResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return { sas: DEFAULT_SAS };
+  }
+
+  async approvePairing(id: string): Promise<boolean> {
+    this.calls.push({ method: 'approvePairing', args: [id] });
+    this.maybeFail('approvePairing');
+    const next = this.approvePairingResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return true;
+  }
+
+  async denyPairing(id: string): Promise<void> {
+    this.calls.push({ method: 'denyPairing', args: [id] });
+    this.maybeFail('denyPairing');
   }
 }

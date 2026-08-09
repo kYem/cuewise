@@ -7,11 +7,18 @@ import type {
   SyncUiStatus,
 } from '@cuewise/app';
 import { AUTH_CANCELLED_DETAIL, buildSyncDetails, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
-import { type KeyValueStore, logger, type Scheduler, type SyncSession } from '@cuewise/shared';
+import {
+  describeThrown,
+  type KeyValueStore,
+  logger,
+  type Scheduler,
+  type SyncSession,
+} from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
   createSyncEngine,
   type PairingPollResult,
+  type PendingPairing,
   RecoveryCodeError,
   RecoveryCodeRequiredError,
   type SyncEngine,
@@ -365,6 +372,49 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     },
     pollPairing(): Promise<PairingPollResult> {
       return serialize(() => engine.pollPairing());
+    },
+    // Same mutex as beginPairing/pollPairing, and for the same reason — approving wraps and
+    // uploads the account key, which must never interleave with an enrol doing the same. Unlike
+    // pollPairing, none of these four engine methods self-contain their errors (no internal
+    // catch), so each is wrapped here to keep the controller's never-throws contract.
+    listPairingRequests(): Promise<PendingPairing[]> {
+      return serialize(async () => {
+        try {
+          return await engine.listPairingRequests();
+        } catch (error) {
+          logger.error(`Cloud sync pairing requests failed: ${describeThrown(error)}`, error);
+          return [];
+        }
+      });
+    },
+    commitPairing(id: string): Promise<{ sas: string } | null> {
+      return serialize(async () => {
+        try {
+          return await engine.commitPairing(id);
+        } catch (error) {
+          logger.error(`Cloud sync pairing commit failed: ${describeThrown(error)}`, error);
+          return null;
+        }
+      });
+    },
+    approvePairing(id: string): Promise<boolean> {
+      return serialize(async () => {
+        try {
+          return await engine.approvePairing(id);
+        } catch (error) {
+          logger.error(`Cloud sync pairing approve failed: ${describeThrown(error)}`, error);
+          return false;
+        }
+      });
+    },
+    denyPairing(id: string): Promise<void> {
+      return serialize(async () => {
+        try {
+          await engine.denyPairing(id);
+        } catch (error) {
+          logger.error(`Cloud sync pairing deny failed: ${describeThrown(error)}`, error);
+        }
+      });
     },
     reconnect(recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {

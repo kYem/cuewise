@@ -14,7 +14,10 @@ import type {
   SyncDetailsResponse,
   SyncLastCycleResponse,
   SyncOutcomeResponse,
+  SyncPairingApproveResponse,
+  SyncPairingCommitResponse,
   SyncPairingPollResponse,
+  SyncPairingRequestsResponse,
   SyncPairingStartedResponse,
   SyncRevokedCountResponse,
   SyncSessionsResponse,
@@ -135,6 +138,9 @@ async function runOp(
   | SyncRevokedCountResponse
   | SyncPairingStartedResponse
   | SyncPairingPollResponse
+  | SyncPairingRequestsResponse
+  | SyncPairingCommitResponse
+  | SyncPairingApproveResponse
 > {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
@@ -194,6 +200,38 @@ async function runOp(
         return { ok: true, kind: 'pairingStarted', pairing: await engine.beginPairing() };
       case 'pollPairing':
         return { ok: true, kind: 'pairingPoll', result: await engine.pollPairing() };
+      // Serialized with the enroll/pairing ops above, not bypassed like the read-only ones: this
+      // account's pending-request list and the commit/approve/deny below all touch the same
+      // approver-side handshake state, which must not interleave with an enrol adopting a key.
+      case 'listPairingRequests':
+        return { ok: true, kind: 'pairingRequests', requests: await engine.listPairingRequests() };
+      case 'commitPairing':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing commit rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        return {
+          ok: true,
+          kind: 'pairingCommit',
+          result: await engine.commitPairing(msg.pairingRequestId),
+        };
+      case 'approvePairing':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing approve rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        return {
+          ok: true,
+          kind: 'pairingApprove',
+          approved: await engine.approvePairing(msg.pairingRequestId),
+        };
+      case 'denyPairing':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing deny rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        await engine.denyPairing(msg.pairingRequestId);
+        return { ok: true };
       default: {
         // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
         // silent fallthrough into some other operation.

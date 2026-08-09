@@ -12,7 +12,7 @@ const NOT_APPROVED = 'Not approved — try again, or use your recovery code.';
 const USE_RECOVERY_CODE = 'Enter your recovery code instead';
 const RETRY = 'Try again';
 
-const POLL_INTERVAL_MS = 3000;
+export const POLL_INTERVAL_MS = 3000;
 
 /**
  * What the requester's screen shows for the one request it is running. Every `failed` poll reason
@@ -29,7 +29,7 @@ const WAITING_STATE: PairingState = { kind: 'waiting' };
 const FAILED: PairingState = { kind: 'failed' };
 
 /** `391554` → `391 554`: two groups is what someone can read aloud without losing their place. */
-function formatSas(sas: string): string {
+export function formatSas(sas: string): string {
   return `${sas.slice(0, 3)} ${sas.slice(3)}`;
 }
 

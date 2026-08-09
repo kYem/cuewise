@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import type { PendingPairing, SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -2583,6 +2583,142 @@ describe('SyncSettingsSectionComponent', () => {
       await renderPairingScreen(controller);
 
       expect(await screen.findByText(PAIRING_FAILED)).toBeInTheDocument();
+    });
+  });
+
+  describe('pairing (approver)', () => {
+    async function flush(): Promise<void> {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    async function pollTick(): Promise<void> {
+      await act(async () => {
+        vi.advanceTimersByTime(PAIRING_POLL_MS);
+      });
+    }
+
+    const REQUEST: PendingPairing = {
+      id: 'pairing-1',
+      deviceName: "Alex's Phone",
+      requesterPublicKey: 'requester-pub-key',
+      createdAt: Date.now(),
+    };
+
+    const showCode = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole('button', { name: 'Show code' }));
+    };
+
+    it('renders a card for a pending request once the section is active', async () => {
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+
+      expect(await screen.findByTestId('pairing-request-card')).toHaveTextContent(
+        `${REQUEST.deviceName} wants to join your sync`
+      );
+    });
+
+    it('shows the code from commitPairing and enables Approve only once it is shown', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ sas: '391554' });
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+
+      await showCode(user);
+
+      expect(await screen.findByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+      expect(screen.getByText('Do the codes match?')).toBeInTheDocument();
+      expect(controller.calls).toContainEqual({
+        method: 'commitPairing',
+        args: [REQUEST.id],
+      });
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+    });
+
+    it('calls approvePairing with the id and removes the card', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ sas: '391554' });
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+      await showCode(user);
+      await screen.findByTestId('pairing-request-sas');
+
+      await user.click(screen.getByRole('button', { name: 'Approve' }));
+
+      await waitFor(() =>
+        expect(controller.calls).toContainEqual({
+          method: 'approvePairing',
+          args: [REQUEST.id],
+        })
+      );
+      expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+    });
+
+    it('calls denyPairing and removes the card', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+
+      await user.click(screen.getByRole('button', { name: 'Deny' }));
+
+      await waitFor(() =>
+        expect(controller.calls).toContainEqual({ method: 'denyPairing', args: [REQUEST.id] })
+      );
+      expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+    });
+
+    it('removes the card when commitPairing answers null (another device won or it expired)', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing(null);
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+
+      await showCode(user);
+
+      await waitFor(() =>
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument()
+      );
+    });
+
+    // A section left polling after it is gone keeps asking the server on behalf of nobody.
+    it('stops polling for requests once the section is unmounted', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      try {
+        const { unmount } = renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await flush();
+        const before = controller.calls.filter(
+          (call) => call.method === 'listPairingRequests'
+        ).length;
+        expect(before).toBeGreaterThan(0);
+
+        unmount();
+        await pollTick();
+        await pollTick();
+
+        expect(
+          controller.calls.filter((call) => call.method === 'listPairingRequests')
+        ).toHaveLength(before);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

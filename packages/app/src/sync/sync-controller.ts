@@ -1,6 +1,7 @@
 import type { SyncSession } from '@cuewise/shared';
 import type {
   PairingPollResult,
+  PendingPairing,
   RecoveryEnvelopeState,
   SyncNowResult,
   SyncOutcome,
@@ -180,6 +181,23 @@ export interface SyncController {
    * Never throws — a fault is answered as `failed`, and every `failed` is terminal.
    */
   pollPairing(): Promise<PairingPollResult>;
+  /**
+   * Pending requests on this account (ENG-50), for the approver's card. `[]` when this device
+   * cannot answer (not active/keyed) or the read failed — never throws.
+   */
+  listPairingRequests(): Promise<PendingPairing[]>;
+  /**
+   * Commits this device's key to a request, so both screens derive the same digits. Null when the
+   * request is gone, another device already committed, or the call failed — never throws.
+   */
+  commitPairing(id: string): Promise<{ sas: string } | null>;
+  /**
+   * Wraps and uploads the account's key to the request this device committed to. False without a
+   * matching commit, or on failure — never throws.
+   */
+  approvePairing(id: string): Promise<boolean>;
+  /** Declines a pending request; never throws — a failure just leaves the row for the next poll. */
+  denyPairing(id: string): Promise<void>;
   /**
    * Aborts a pending enableWithGoogle flow (the pending result resolves as a quiet cancel).
    * Only hosts whose OAuth flow can be aborted implement it (macOS system-browser); the UI

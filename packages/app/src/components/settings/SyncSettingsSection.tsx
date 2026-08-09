@@ -1,5 +1,10 @@
 import { describeThrown, logger } from '@cuewise/shared';
-import type { SyncFailureReason, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PendingPairing,
+  SyncFailureReason,
+  SyncNowResult,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
@@ -23,7 +28,8 @@ import {
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
-import { PairingPanel } from './PairingPanel';
+import { PairingPanel, POLL_INTERVAL_MS } from './PairingPanel';
+import { PairingRequestCard } from './PairingRequestCard';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
 import { SessionList } from './SessionList';
 import { SettingRow, SettingSubgroup, Switch } from './SettingControls';
@@ -300,6 +306,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const accountGenRef = useRef(0);
   const lastCycleGenRef = useRef(0);
   const lastCycleRequestedRef = useRef(false);
+  // The approver's card (ENG-50): requests this device can wrap its key to, polled only while
+  // active — every id here came from a GATED listPairingRequests, never cached across a status
+  // change (see PairingRequestCard's commitPairing note).
+  const [pairingRequests, setPairingRequests] = useState<PendingPairing[]>([]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -307,6 +317,28 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!controller || status !== 'active') {
+      setPairingRequests([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      const requests = await controller.listPairingRequests();
+      if (!cancelled) {
+        setPairingRequests(requests);
+      }
+    };
+    void poll();
+    const timer = setInterval(() => {
+      void poll();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [controller, status]);
 
   // Any status change ends the window, in either direction: active/syncing means the enrol this
   // covered is visible now, off/needs_enroll that the device is keyless again. The window itself is
@@ -816,6 +848,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setUnsavedCode(true);
   };
 
+  // Approved, denied, or lost the commit race — the next poll would drop it anyway; this is what
+  // makes the card disappear immediately instead of waiting up to POLL_INTERVAL_MS.
+  const handlePairingRequestResolved = (id: string) => {
+    setPairingRequests((previous) => previous.filter((request) => request.id !== id));
+  };
+
   const switchChecked = status === 'off' ? enabling : true;
   // `?? QUIET` so a status this build does not know renders nothing, not an empty pill or prompt.
   const presentation = STATUS_PRESENTATION[status] ?? QUIET;
@@ -1020,6 +1058,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 Regenerate recovery code
               </button>
             </div>
+            {pairingRequests.length > 0 && (
+              <PairingRequestCard
+                key={pairingRequests[0].id}
+                request={pairingRequests[0]}
+                onResolved={handlePairingRequestResolved}
+              />
+            )}
             <SessionList
               onRegenerateRecoveryCode={handleRegenerate}
               isRegeneratingRecoveryCode={isRegenerating}
