@@ -10,6 +10,7 @@ import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
+  type PairingApprovalResult,
   type PairingPollResult,
   type PendingPairing,
   type SyncNowResult,
@@ -539,7 +540,7 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
-  // The four ops below answer rather than throw, like beginPairing/pollPairing: a dead worker or a
+  // The five ops below answer rather than throw, like beginPairing/pollPairing: a dead worker or a
   // skewed response leaves the approver's card exactly where it already is (absent, or waiting on
   // its next poll) instead of turning a background hiccup into an unhandled rejection.
   async listPairingRequests(): Promise<PendingPairing[]> {
@@ -563,7 +564,7 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
-  async commitPairing(id: string): Promise<{ sas: string } | null> {
+  async commitPairing(id: string): Promise<{ pending: true } | null> {
     try {
       const response = await this.send({
         kind: 'cuewise-sync-control',
@@ -582,6 +583,28 @@ export class BridgeSyncController implements SyncController {
     } catch (error) {
       logger.error(`Cloud sync pairing commit failed: ${describeThrown(error)}`, error);
       return null;
+    }
+  }
+
+  async pollApproval(id: string): Promise<PairingApprovalResult> {
+    try {
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'pollApproval',
+        pairingRequestId: id,
+      });
+      if (response?.ok && response.kind === 'pairingApproval') {
+        return response.result;
+      }
+      logger.error(
+        `Cloud sync pairing approval poll unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return { kind: 'error' };
+    } catch (error) {
+      logger.error(`Cloud sync pairing approval poll failed: ${describeThrown(error)}`, error);
+      return { kind: 'error' };
     }
   }
 

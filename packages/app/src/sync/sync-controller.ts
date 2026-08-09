@@ -1,5 +1,6 @@
 import type { SyncSession } from '@cuewise/shared';
 import type {
+  PairingApprovalResult,
   PairingPollResult,
   PendingPairing,
   RecoveryEnvelopeState,
@@ -187,10 +188,16 @@ export interface SyncController {
    */
   listPairingRequests(): Promise<PendingPairing[]>;
   /**
-   * Commits this device's key to a request, so both screens derive the same digits. Null when the
-   * request is gone, another device already committed, or the call failed — never throws.
+   * Commits this device's key to a request. No digits yet — they cover the requester's key, which
+   * is still unrevealed at commit time; `pollApproval` earns them. Null when the request is gone,
+   * another device already committed, or the call failed — never throws.
    */
-  commitPairing(id: string): Promise<{ sas: string } | null>;
+  commitPairing(id: string): Promise<{ pending: true } | null>;
+  /**
+   * One poll of the request this device committed to; the approver's card loops it while it is up.
+   * Never throws — `error` is a non-terminal transport fault (retry next tick); `failed` is not.
+   */
+  pollApproval(id: string): Promise<PairingApprovalResult>;
   /**
    * Wraps and uploads the account's key to the request this device committed to. False without a
    * matching commit, or on failure — never throws.

@@ -14,6 +14,7 @@ import type {
   SyncDetailsResponse,
   SyncLastCycleResponse,
   SyncOutcomeResponse,
+  SyncPairingApprovalResponse,
   SyncPairingApproveResponse,
   SyncPairingCommitResponse,
   SyncPairingPollResponse,
@@ -140,6 +141,7 @@ async function runOp(
   | SyncPairingPollResponse
   | SyncPairingRequestsResponse
   | SyncPairingCommitResponse
+  | SyncPairingApprovalResponse
   | SyncPairingApproveResponse
 > {
   if (msg.op === 'enable') {
@@ -201,7 +203,7 @@ async function runOp(
       case 'pollPairing':
         return { ok: true, kind: 'pairingPoll', result: await engine.pollPairing() };
       // Serialized with the enroll/pairing ops above, not bypassed like the read-only ones: this
-      // account's pending-request list and the commit/approve/deny below all touch the same
+      // account's pending-request list and the commit/poll/approve/deny below all touch the same
       // approver-side handshake state, which must not interleave with an enrol adopting a key.
       case 'listPairingRequests':
         return { ok: true, kind: 'pairingRequests', requests: await engine.listPairingRequests() };
@@ -214,6 +216,16 @@ async function runOp(
           ok: true,
           kind: 'pairingCommit',
           result: await engine.commitPairing(msg.pairingRequestId),
+        };
+      case 'pollApproval':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing approval poll rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        return {
+          ok: true,
+          kind: 'pairingApproval',
+          result: await engine.pollApproval(msg.pairingRequestId),
         };
       case 'approvePairing':
         if (!msg.pairingRequestId) {

@@ -1,6 +1,7 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSession } from '@cuewise/shared';
 import type {
+  PairingApprovalResult,
   PairingPollResult,
   PendingPairing,
   SyncNowResult,
@@ -26,6 +27,7 @@ export const SYNC_CONTROL_OPS = [
   'pollPairing',
   'listPairingRequests',
   'commitPairing',
+  'pollApproval',
   'approvePairing',
   'denyPairing',
 ] as const;
@@ -48,7 +50,7 @@ export interface SyncControlMessage {
   recoveryCode?: string;
   // revokeSession/renameSession-only: the opaque session handle from listSessions. Never a token.
   sessionId?: string;
-  // commitPairing/approvePairing/denyPairing-only: the request id from listPairingRequests.
+  // commitPairing/pollApproval/approvePairing/denyPairing-only: the request id from listPairingRequests.
   pairingRequestId?: string;
   // details-only: also ask the server about the recovery envelope. Absent (a page realm predating
   // the flag, or a surface that only shows the identity) reports the last recorded answer instead.
@@ -128,7 +130,14 @@ export interface SyncPairingRequestsResponse {
 export interface SyncPairingCommitResponse {
   ok: true;
   kind: 'pairingCommit';
-  result: { sas: string } | null;
+  result: { pending: true } | null;
+}
+
+/** Response to the 'pollApproval' op — one poll of the request this device committed to. */
+export interface SyncPairingApprovalResponse {
+  ok: true;
+  kind: 'pairingApproval';
+  result: PairingApprovalResult;
 }
 
 /** Response to the 'approvePairing' op — whether this device had a matching commit to approve. */
@@ -162,6 +171,7 @@ export interface SyncOpResponse {
   pollPairing: SyncPairingPollResponse | Extract<SyncControlResponse, { ok: false }>;
   listPairingRequests: SyncPairingRequestsResponse | Extract<SyncControlResponse, { ok: false }>;
   commitPairing: SyncPairingCommitResponse | Extract<SyncControlResponse, { ok: false }>;
+  pollApproval: SyncPairingApprovalResponse | Extract<SyncControlResponse, { ok: false }>;
   approvePairing: SyncPairingApproveResponse | Extract<SyncControlResponse, { ok: false }>;
   denyPairing: SyncControlResponse;
 }

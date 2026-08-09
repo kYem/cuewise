@@ -1,24 +1,29 @@
 import { describeThrown, logger } from '@cuewise/shared';
-import type { PendingPairing } from '@cuewise/sync-engine';
+import type { PairingApprovalResult, PendingPairing } from '@cuewise/sync-engine';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useToastStore } from '../../stores/toast-store';
 import { useSyncController } from '../../sync/sync-controller';
-import { formatSas } from './PairingPanel';
+import { formatSas, POLL_INTERVAL_MS } from './PairingPanel';
 
 const SHOW_CODE = 'Show code';
+const WAITING_FOR_DEVICE = 'Waiting for your other device…';
 const CONFIRM_PROMPT = 'Do the codes match?';
 const APPROVE = 'Approve';
 const DENY = 'Deny';
+const TAMPERED_MESSAGE = "Pairing blocked: the request didn't verify. Try again on the new device.";
 
 /** What one card shows for the one request it was handed. */
 type CardState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'committing' }
+  | { readonly kind: 'waiting' }
   | { readonly kind: 'confirm'; readonly sas: string }
   | { readonly kind: 'resolving' };
 
 const IDLE: CardState = { kind: 'idle' };
 const COMMITTING: CardState = { kind: 'committing' };
+const WAITING: CardState = { kind: 'waiting' };
 const RESOLVING: CardState = { kind: 'resolving' };
 
 interface PairingRequestCardProps {
@@ -36,6 +41,59 @@ interface PairingRequestCardProps {
 export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request, onResolved }) => {
   const controller = useSyncController();
   const [state, setState] = useState<CardState>(IDLE);
+  // Read through a ref, so a parent re-render's new closure cannot restart the poll interval.
+  const onResolvedRef = useRef(onResolved);
+
+  useEffect(() => {
+    onResolvedRef.current = onResolved;
+  }, [onResolved]);
+
+  // Only live between a successful commit and a terminal poll answer — cleared whenever the card
+  // leaves `waiting` (confirm, removal, or unmount), same overlap guard as PairingPanel's poll.
+  useEffect(() => {
+    if (controller === null || state.kind !== 'waiting') {
+      return undefined;
+    }
+    let cancelled = false;
+    let polling = false;
+    const poll = async () => {
+      if (polling) {
+        return;
+      }
+      polling = true;
+      let result: PairingApprovalResult;
+      try {
+        result = await controller.pollApproval(request.id);
+      } catch (error) {
+        // Contracted never to reject; a host that breaks that is treated like a transport fault.
+        logger.error(`Cloud sync pairing approval poll failed: ${describeThrown(error)}`, error);
+        result = { kind: 'error' };
+      } finally {
+        polling = false;
+      }
+      if (cancelled) {
+        return;
+      }
+      if (result.kind === 'confirm') {
+        setState({ kind: 'confirm', sas: result.sas });
+        return;
+      }
+      if (result.kind === 'failed') {
+        if (result.reason === 'tampered') {
+          useToastStore.getState().error(TAMPERED_MESSAGE);
+        }
+        onResolvedRef.current(request.id);
+      }
+      // waiting/error: stay put — the next tick retries.
+    };
+    const timer = setInterval(() => {
+      void poll();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [controller, state.kind, request.id]);
 
   if (controller === null) {
     return null;
@@ -43,7 +101,7 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
 
   const handleShowCode = async () => {
     setState(COMMITTING);
-    let result: { sas: string } | null;
+    let result: { pending: true } | null;
     try {
       result = await controller.commitPairing(request.id);
     } catch (error) {
@@ -55,7 +113,7 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
       onResolved(request.id);
       return;
     }
-    setState({ kind: 'confirm', sas: result.sas });
+    setState(WAITING);
   };
 
   const handleApprove = async () => {
@@ -78,6 +136,7 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
     onResolved(request.id);
   };
 
+  const waiting = state.kind === 'waiting';
   const codeShown = state.kind === 'confirm';
   const busy = state.kind === 'committing' || state.kind === 'resolving';
 
@@ -89,6 +148,11 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
       <p className="text-sm text-primary">
         <strong className="font-medium">{request.deviceName}</strong> wants to join your sync
       </p>
+      {waiting && (
+        <p data-testid="pairing-request-waiting" className="text-xs text-tertiary">
+          {WAITING_FOR_DEVICE}
+        </p>
+      )}
       {codeShown && (
         <div className="flex flex-col gap-1">
           <p
@@ -104,7 +168,7 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
         <button
           type="button"
           onClick={() => void handleShowCode()}
-          disabled={busy || codeShown}
+          disabled={busy || waiting || codeShown}
           className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
         >
           {SHOW_CODE}

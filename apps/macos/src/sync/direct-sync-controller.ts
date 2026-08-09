@@ -17,6 +17,7 @@ import {
 import { ApiError } from '@cuewise/sync-client';
 import {
   createSyncEngine,
+  type PairingApprovalResult,
   type PairingPollResult,
   type PendingPairing,
   RecoveryCodeError,
@@ -373,10 +374,14 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     pollPairing(): Promise<PairingPollResult> {
       return serialize(() => engine.pollPairing());
     },
+    // Same mutex, and self-contained like pollPairing (never throws) — no try/catch needed here.
+    pollApproval(id: string): Promise<PairingApprovalResult> {
+      return serialize(() => engine.pollApproval(id));
+    },
     // Same mutex as beginPairing/pollPairing, and for the same reason — approving wraps and
     // uploads the account key, which must never interleave with an enrol doing the same. Unlike
-    // pollPairing, none of these four engine methods self-contain their errors (no internal
-    // catch), so each is wrapped here to keep the controller's never-throws contract.
+    // pollPairing/pollApproval, none of these four engine methods self-contain their errors (no
+    // internal catch), so each is wrapped here to keep the controller's never-throws contract.
     listPairingRequests(): Promise<PendingPairing[]> {
       return serialize(async () => {
         try {
@@ -387,7 +392,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         }
       });
     },
-    commitPairing(id: string): Promise<{ sas: string } | null> {
+    commitPairing(id: string): Promise<{ pending: true } | null> {
       return serialize(async () => {
         try {
           return await engine.commitPairing(id);

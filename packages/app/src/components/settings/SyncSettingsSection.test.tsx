@@ -39,6 +39,9 @@ const PAIRING_BODY = 'On your other device, open Settings → Cloud Sync and app
 const PAIRING_WAITING = 'Waiting for approval…';
 const PAIRING_FAILED = 'Not approved — try again, or use your recovery code.';
 const PAIRING_CODE_LINK = 'Enter your recovery code instead';
+const PAIRING_REQUEST_WAITING = 'Waiting for your other device…';
+const PAIRING_TAMPERED_MESSAGE =
+  "Pairing blocked: the request didn't verify. Try again on the new device.";
 const PAIRING_POLL_MS = 3000;
 
 function sectionProps(overrides: Partial<SettingsSectionProps> = {}): SettingsSectionProps {
@@ -2602,13 +2605,25 @@ describe('SyncSettingsSectionComponent', () => {
     const REQUEST: PendingPairing = {
       id: 'pairing-1',
       deviceName: "Alex's Phone",
-      requesterPublicKey: 'requester-pub-key',
+      requesterCommitment: 'requester-commitment-hash',
+      requesterPublicKey: null,
+      requesterNonce: null,
       createdAt: Date.now(),
     };
 
     const showCode = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.click(screen.getByRole('button', { name: 'Show code' }));
     };
+
+    /** Renders the card, activates the section, and clicks Show code — the shared setup every
+     * wait-state/poll test below starts from. Assumes fake timers are already armed. */
+    async function renderAndShowCode(controller: FakeSyncController): Promise<void> {
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await flush();
+      fireEvent.click(screen.getByRole('button', { name: 'Show code' }));
+      await flush();
+    }
 
     it('renders a card for a pending request once the section is active', async () => {
       const controller = new FakeSyncController();
@@ -2621,47 +2636,177 @@ describe('SyncSettingsSectionComponent', () => {
       );
     });
 
-    it('shows the code from commitPairing and enables Approve only once it is shown', async () => {
-      const user = userEvent.setup();
+    it('shows the wait-state copy after Show code, before the other device replies', async () => {
+      vi.useFakeTimers();
       const controller = new FakeSyncController();
       controller.pairingRequests = [REQUEST];
-      controller.scriptCommitPairing({ sas: '391554' });
-      renderSection(controller);
-      act(() => controller.setStatus('active'));
-      await screen.findByTestId('pairing-request-card');
-      expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+      controller.scriptCommitPairing({ pending: true });
+      try {
+        await renderAndShowCode(controller);
 
-      await showCode(user);
+        expect(screen.getByText(PAIRING_REQUEST_WAITING)).toBeInTheDocument();
+        expect(controller.calls).toContainEqual({ method: 'commitPairing', args: [REQUEST.id] });
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Show code' })).toBeDisabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
-      expect(await screen.findByTestId('pairing-request-sas')).toHaveTextContent('391 554');
-      expect(screen.getByText('Do the codes match?')).toBeInTheDocument();
-      expect(controller.calls).toContainEqual({
-        method: 'commitPairing',
-        args: [REQUEST.id],
-      });
-      expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+    it('shows the code once pollApproval confirms the reveal', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(screen.getByText('Do the codes match?')).toBeInTheDocument();
+        expect(screen.queryByText(PAIRING_REQUEST_WAITING)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps waiting when pollApproval answers error, and retries next tick', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'error' }, { kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+        expect(screen.getByText(PAIRING_REQUEST_WAITING)).toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-request-sas')).not.toBeInTheDocument();
+
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('removes the card silently when pollApproval answers failed/gone', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'failed', reason: 'gone' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+        expect(toastError).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('removes the card and toasts when pollApproval answers failed/tampered', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'failed', reason: 'tampered' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+        expect(toastError).toHaveBeenCalledWith(PAIRING_TAMPERED_MESSAGE);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops polling pollApproval once the card is unmounted', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      try {
+        const { unmount } = renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: 'Show code' }));
+        await flush();
+        await pollTick();
+        const before = controller.calls.filter((call) => call.method === 'pollApproval').length;
+        expect(before).toBeGreaterThan(0);
+
+        unmount();
+        await pollTick();
+        await pollTick();
+
+        expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(
+          before
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The parent's existing status-gated poll (see 'stops polling for requests once the section is
+    // unmounted' below) already empties pairingRequests off-active, which unmounts this card too.
+    it('stops polling pollApproval once the status leaves active', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+        const before = controller.calls.filter((call) => call.method === 'pollApproval').length;
+        expect(before).toBeGreaterThan(0);
+
+        act(() => controller.setStatus('needs_reauth'));
+        await flush();
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+
+        await pollTick();
+        await pollTick();
+
+        expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(
+          before
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('calls approvePairing with the id and removes the card', async () => {
-      const user = userEvent.setup();
+      vi.useFakeTimers();
       const controller = new FakeSyncController();
       controller.pairingRequests = [REQUEST];
-      controller.scriptCommitPairing({ sas: '391554' });
-      renderSection(controller);
-      act(() => controller.setStatus('active'));
-      await screen.findByTestId('pairing-request-card');
-      await showCode(user);
-      await screen.findByTestId('pairing-request-sas');
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Approve' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await flush();
 
-      await waitFor(() =>
         expect(controller.calls).toContainEqual({
           method: 'approvePairing',
           args: [REQUEST.id],
-        })
-      );
-      expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('calls denyPairing and removes the card', async () => {
