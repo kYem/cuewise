@@ -500,6 +500,23 @@ describe('LocalStorageKeyValueStore.onChanged', () => {
       await expect(store.withLock('list', async () => 'after')).resolves.toBe('after');
     });
 
+    // The chain head keeps a handled copy, so a caller that ignores the returned promise does not
+    // leave the rejection unhandled — which in a service worker surfaces as an extension error.
+    it('does not leave an unhandled rejection when a fire-and-forget section throws', async () => {
+      const store = new LocalStorageKeyValueStore();
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+
+      void store.withLock('list', async () => {
+        throw new Error('boom');
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      process.off('unhandledRejection', onUnhandled);
+
+      expect(unhandled).toEqual([]);
+    });
+
     it('does not serialise unrelated names', async () => {
       const store = new LocalStorageKeyValueStore();
       const order: string[] = [];

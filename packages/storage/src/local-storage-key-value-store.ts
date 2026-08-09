@@ -209,7 +209,12 @@ export class LocalStorageKeyValueStore implements KeyValueStore {
     const previous = this.chains.get(name) ?? Promise.resolve();
     // fn is both handlers, so a section that threw still lets the next one run.
     const next = previous.then(fn, fn);
-    this.chains.set(name, next);
+    // Storing a handled copy, not `next`: it gives the rejection a handler even when the caller
+    // ignores the returned promise, which is otherwise an unhandled rejection.
+    this.chains.set(
+      name,
+      next.catch(() => undefined)
+    );
     return next;
   }
 

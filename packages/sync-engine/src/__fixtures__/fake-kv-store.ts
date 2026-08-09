@@ -116,7 +116,10 @@ export class FakeKvStore implements KeyValueStore {
   withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
     const previous = this.chains.get(name) ?? Promise.resolve();
     const next = previous.then(fn, fn);
-    this.chains.set(name, next);
+    this.chains.set(
+      name,
+      next.catch(() => undefined)
+    );
     return next;
   }
 }
