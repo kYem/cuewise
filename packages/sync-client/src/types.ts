@@ -25,3 +25,22 @@ export interface ProblemBody {
   retryAfter?: number;
   errors?: Array<{ index?: number; pointer?: string; detail: string }>;
 }
+
+export interface PairingCreated {
+  id: string;
+  expiresAt: number;
+}
+
+export interface PairingForRequester {
+  id: string;
+  approverPublicKey: string | null;
+  envelope: string | null;
+  expiresAt: number;
+}
+
+export interface PendingPairing {
+  id: string;
+  deviceName: string;
+  requesterPublicKey: string;
+  createdAt: number;
+}

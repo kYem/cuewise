@@ -550,4 +550,133 @@ describe('ApiClient', () => {
       });
     });
   });
+
+  describe('pairings', () => {
+    const pairingCreatedFixture = { id: 'p1', expiresAt: 1_700_000_600_000 };
+    const pendingPairingFixture = {
+      id: 'p1',
+      deviceName: 'Kes iPhone',
+      requesterPublicKey: 'requester-pubkey',
+      createdAt: 1_700_000_000_000,
+    };
+    const pairingForRequesterFixture = {
+      id: 'p1',
+      approverPublicKey: 'approver-pubkey',
+      envelope: 'v1.dk-1.a.b',
+      expiresAt: 1_700_000_600_000,
+    };
+
+    it('createPairing POSTs { publicKey } to /v1/pairings and returns { id, expiresAt }', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 200, body: pairingCreatedFixture }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const result = await client.createPairing('requester-pubkey');
+
+      expect(result).toEqual(pairingCreatedFixture);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings`);
+      expect(calls[0].init.method).toBe('POST');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({ publicKey: 'requester-pubkey' });
+      const headers = new Headers(calls[0].init.headers);
+      expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('listPairings GETs /v1/pairings and unwraps the pairings array', async () => {
+      const { fetchFn, calls } = stubFetch([
+        { status: 200, body: { pairings: [pendingPairingFixture] } },
+      ]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const pairings = await client.listPairings();
+
+      expect(pairings).toEqual([pendingPairingFixture]);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings`);
+      expect(calls[0].init.method).toBe('GET');
+    });
+
+    it('getPairing GETs /v1/pairings/:id and returns the parsed body on 200', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 200, body: pairingForRequesterFixture }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const result = await client.getPairing('p1');
+
+      expect(result).toEqual(pairingForRequesterFixture);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1`);
+      expect(calls[0].init.method).toBe('GET');
+      const headers = new Headers(calls[0].init.headers);
+      expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('getPairing returns null on 404 instead of throwing (expired/denied, a poll state)', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('pairing_not_found', 404)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      const result = await client.getPairing('gone');
+
+      expect(result).toBeNull();
+      expect(calls).toHaveLength(1);
+    });
+
+    it('commitPairing POSTs { publicKey } to /v1/pairings/:id/commit and resolves on 204', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.commitPairing('p1', 'approver-pubkey')).resolves.toBeUndefined();
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1/commit`);
+      expect(calls[0].init.method).toBe('POST');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({ publicKey: 'approver-pubkey' });
+    });
+
+    it('commitPairing rejects with a typed ApiError (code pairing_conflict) on a 409', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('pairing_conflict', 409)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.commitPairing('p1', 'approver-pubkey')).rejects.toMatchObject({
+        code: 'pairing_conflict',
+        status: 409,
+        retryable: false,
+      });
+      expect(calls).toHaveLength(1);
+    });
+
+    it('commitPairing rejects with a typed ApiError on a 404 (pairing gone)', async () => {
+      const { fetchFn } = stubFetch([problemResponse('pairing_not_found', 404)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.commitPairing('gone', 'approver-pubkey')).rejects.toMatchObject({
+        code: 'pairing_not_found',
+        status: 404,
+        retryable: false,
+      });
+    });
+
+    it('putPairingEnvelope PUTs { envelope } to /v1/pairings/:id/envelope and resolves on 204', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.putPairingEnvelope('p1', 'v1.dk-1.a.b')).resolves.toBeUndefined();
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1/envelope`);
+      expect(calls[0].init.method).toBe('PUT');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({ envelope: 'v1.dk-1.a.b' });
+    });
+
+    it('deletePairing DELETEs /v1/pairings/:id and resolves on 204', async () => {
+      const { fetchFn, calls } = stubFetch([{ status: 204 }]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.deletePairing('p1')).resolves.toBeUndefined();
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1`);
+      expect(calls[0].init.method).toBe('DELETE');
+    });
+
+    it('deletePairing resolves on 404 (deny of a vanished row is already done)', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('pairing_not_found', 404)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.deletePairing('gone')).resolves.toBeUndefined();
+      expect(calls).toHaveLength(1);
+    });
+  });
 });

@@ -3,6 +3,9 @@ import type {
   ExchangeTokenRequest,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
+  PairingCreated,
+  PairingForRequester,
+  PendingPairing,
   PushRecord,
   SyncRecord,
   SyncSession,
@@ -155,6 +158,84 @@ export class ApiClient {
       },
       { auth: true }
     );
+  }
+
+  // Device pairing (ENG-50): a requester creates the row and polls it; an approver commits it
+  // from an already-signed-in device. `id` is the server's opaque row handle.
+  async createPairing(publicKey: string): Promise<PairingCreated> {
+    const res = await this.request(
+      '/v1/pairings',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey }),
+      },
+      { auth: true }
+    );
+    return this.parseSuccessBody<PairingCreated>(res);
+  }
+
+  async listPairings(): Promise<PendingPairing[]> {
+    const res = await this.request('/v1/pairings', { method: 'GET' }, { auth: true });
+    return (await this.parseSuccessBody<{ pairings: PendingPairing[] }>(res)).pairings;
+  }
+
+  // 404 means expired/denied — a poll state the requester loops on, not an error; every other
+  // non-2xx still surfaces as the normal typed ApiError.
+  async getPairing(id: string): Promise<PairingForRequester | null> {
+    try {
+      const res = await this.request(
+        `/v1/pairings/${encodeURIComponent(id)}`,
+        { method: 'GET' },
+        { auth: true }
+      );
+      return await this.parseSuccessBody<PairingForRequester>(res);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async commitPairing(id: string, publicKey: string): Promise<void> {
+    await this.request(
+      `/v1/pairings/${encodeURIComponent(id)}/commit`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey }),
+      },
+      { auth: true }
+    );
+  }
+
+  async putPairingEnvelope(id: string, envelope: string): Promise<void> {
+    await this.request(
+      `/v1/pairings/${encodeURIComponent(id)}/envelope`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ envelope }),
+      },
+      { auth: true }
+    );
+  }
+
+  // 404 means the row is already gone — denying a vanished pairing is done, not an error.
+  async deletePairing(id: string): Promise<void> {
+    try {
+      await this.request(
+        `/v1/pairings/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        { auth: true }
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        return;
+      }
+      throw err;
+    }
   }
 
   private async request(
