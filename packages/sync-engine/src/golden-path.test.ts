@@ -16,6 +16,7 @@ import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { NoopStrategy } from './__fixtures__/noop-strategy';
 import { type CollectionBinding, defaultBindings } from './collections';
 import { SyncEngine, type SyncEngineDeps } from './engine';
+import { RecoveryCodeRequiredError } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 
 interface Device {
@@ -379,5 +380,49 @@ describe('settings: an enrolling device claims only the keys it explicitly wrote
     await deviceA.engine.syncNow();
     const aSettings = await getSettings();
     expect(aSettings.theme).toBe('dark');
+  });
+});
+
+describe('pairing: a second device enrolls by approval, never typing the recovery code', () => {
+  it('pairs end-to-end and the paired device pulls the account data', async () => {
+    const server = new FakeSyncServer();
+
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'Pack for the trip' })]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+
+    // Device B signs in without a recovery code. The account already has a key, so enableSync
+    // rejects and the status lands on `disabled` — the surface pairing exists to replace.
+    const deviceB = createDevice(server, makeClock(2_000_000));
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'devB-cred', 'Device B')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+    expect(deviceB.engine.getStatus()).toBe('disabled');
+
+    const begun = await deviceB.engine.beginPairing();
+    expect(begun).not.toBeNull();
+
+    useStorage(deviceA);
+    const requests = await deviceA.engine.listPairingRequests();
+    expect(requests.map((r) => r.deviceName)).toEqual(['Device B']);
+    const committed = await deviceA.engine.commitPairing(requests[0].id);
+    if (committed === null) {
+      throw new Error('commitPairing answered null for a pending request');
+    }
+
+    useStorage(deviceB);
+    const confirm = await deviceB.engine.pollPairing();
+    expect(confirm).toEqual({ kind: 'confirm', sas: committed.sas });
+
+    useStorage(deviceA);
+    await expect(deviceA.engine.approvePairing(requests[0].id)).resolves.toBe(true);
+
+    useStorage(deviceB);
+    await expect(deviceB.engine.pollPairing()).resolves.toEqual({ kind: 'complete' });
+    await deviceB.engine.syncNow();
+    const goals = await getGoals();
+    expect(goals.map((g) => g.text)).toEqual(['Pack for the trip']);
   });
 });
