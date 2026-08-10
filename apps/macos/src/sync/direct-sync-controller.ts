@@ -375,8 +375,8 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       return serialize(() => engine.pollPairing());
     },
     // Same mutex, and self-contained like pollPairing (never throws) — no try/catch needed here.
-    pollApproval(id: string): Promise<PairingApprovalResult> {
-      return serialize(() => engine.pollApproval(id));
+    pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
+      return serialize(() => engine.pollApproval(id, row));
     },
     // Same mutex as beginPairing/pollPairing, and for the same reason — approving wraps and
     // uploads the account key, which must never interleave with an enrol doing the same. Unlike

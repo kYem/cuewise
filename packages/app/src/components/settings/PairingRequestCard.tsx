@@ -45,10 +45,17 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
   const [state, setState] = useState<CardState>(IDLE);
   // Read through a ref, so a parent re-render's new closure cannot restart the poll interval.
   const onResolvedRef = useRef(onResolved);
+  // The latest row the section's list poll fetched. pollApproval reads it so the engine reuses this
+  // reveal instead of re-listing the account — one poll stream against the shared bucket, not two.
+  const requestRef = useRef(request);
 
   useEffect(() => {
     onResolvedRef.current = onResolved;
   }, [onResolved]);
+
+  useEffect(() => {
+    requestRef.current = request;
+  }, [request]);
 
   // Only live between a successful commit and a terminal poll answer — cleared whenever the card
   // leaves `waiting` (confirm, removal, or unmount), same overlap guard as PairingPanel's poll.
@@ -65,7 +72,7 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
       polling = true;
       let result: PairingApprovalResult;
       try {
-        result = await controller.pollApproval(request.id);
+        result = await controller.pollApproval(request.id, requestRef.current);
       } catch (error) {
         // Contracted never to reject; a host that breaks that is treated like a transport fault.
         logger.error(`Cloud sync pairing approval poll failed: ${describeThrown(error)}`, error);

@@ -501,9 +501,9 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
-  // Both pairing ops answer rather than throw, like the informational reads: a dead worker or a
+  // beginPairing answers rather than throws, like the informational reads: a dead worker or a
   // skewed response means this device cannot pair right now, which is what the screen already
-  // renders — and every `failed` is terminal, so the user's way out is the retry it offers.
+  // renders, and the offer to retry is the user's way out.
   async beginPairing(): Promise<{ pairingId: string } | null> {
     try {
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'beginPairing' });
@@ -522,6 +522,9 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
+  // Non-terminal `error`, never a terminal `failed`, on a dead worker or skewed response — matching
+  // the engine's own pollPairing contract, so a background hiccup retries next tick instead of
+  // ending a live request the requester screen is still driving.
   async pollPairing(): Promise<PairingPollResult> {
     try {
       const response = await this.send({ kind: 'cuewise-sync-control', op: 'pollPairing' });
@@ -533,10 +536,10 @@ export class BridgeSyncController implements SyncController {
           response?.ok === false ? response : undefined
         )}`
       );
-      return { kind: 'failed', reason: 'error' };
+      return { kind: 'error' };
     } catch (error) {
       logger.error(`Cloud sync pairing poll failed: ${describeThrown(error)}`, error);
-      return { kind: 'failed', reason: 'error' };
+      return { kind: 'error' };
     }
   }
 
@@ -586,12 +589,15 @@ export class BridgeSyncController implements SyncController {
     }
   }
 
-  async pollApproval(id: string): Promise<PairingApprovalResult> {
+  async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
     try {
       const response = await this.send({
         kind: 'cuewise-sync-control',
         op: 'pollApproval',
         pairingRequestId: id,
+        // The row the section's list poll already fetched, so the worker's engine reuses it instead
+        // of re-listing the whole account against the shared rate bucket.
+        pairingRow: row,
       });
       if (response?.ok && response.kind === 'pairingApproval') {
         return response.result;

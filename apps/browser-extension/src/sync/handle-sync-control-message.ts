@@ -225,7 +225,7 @@ async function runOp(
         return {
           ok: true,
           kind: 'pairingApproval',
-          result: await engine.pollApproval(msg.pairingRequestId),
+          result: await engine.pollApproval(msg.pairingRequestId, msg.pairingRow),
         };
       case 'approvePairing':
         if (!msg.pairingRequestId) {

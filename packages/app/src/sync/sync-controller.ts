@@ -196,8 +196,10 @@ export interface SyncController {
   /**
    * One poll of the request this device committed to; the approver's card loops it while it is up.
    * Never throws — `error` is a non-terminal transport fault (retry next tick); `failed` is not.
+   * The card passes the row its section's list poll already fetched, so the wait costs one poll
+   * stream against the shared rate bucket, not two.
    */
-  pollApproval(id: string): Promise<PairingApprovalResult>;
+  pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult>;
   /**
    * Wraps and uploads the account's key to the request this device committed to. False without a
    * matching commit, or on failure — never throws.

@@ -52,6 +52,9 @@ export interface SyncControlMessage {
   sessionId?: string;
   // commitPairing/pollApproval/approvePairing/denyPairing-only: the request id from listPairingRequests.
   pairingRequestId?: string;
+  // pollApproval-only: the row the section's list poll already fetched, so the worker's engine
+  // reuses it instead of re-listing the whole account against the shared rate bucket.
+  pairingRow?: PendingPairing;
   // details-only: also ask the server about the recovery envelope. Absent (a page realm predating
   // the flag, or a surface that only shows the identity) reports the last recorded answer instead.
   refreshRecoveryEnvelope?: boolean;

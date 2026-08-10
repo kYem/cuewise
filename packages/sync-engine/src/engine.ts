@@ -203,9 +203,9 @@ interface PairingApproval {
   id: string;
   keypair: X25519KeyPair;
   commitment: string;
-  /** Both stay null until a reveal verifies against `commitment`; nothing may be wrapped before. */
-  requesterPub: Uint8Array | null;
-  sas: string | null;
+  /** Null until a reveal verifies against `commitment` AND its digits derive; both land together,
+   *  so a rejected derive can never leave a key to wrap with no digits ever shown. */
+  verified: { requesterPub: Uint8Array; sas: string } | null;
 }
 
 export interface SyncEngineDeps {
@@ -540,6 +540,16 @@ export class SyncEngine {
       // activateWithKey rolled its own work back rather than adopt a key for a removed account.
       return { kind: 'failed', reason: 'error' };
     }
+    if (this.status === 'signed_out') {
+      // Auth loss during the initial sync: the key is on disk, but this device must reconnect, not
+      // report a completed enroll the UI then repaints as signed out.
+      return { kind: 'failed', reason: 'signed_out' };
+    }
+    // Best-effort: the row is consumed, and a lingering one only ages out at its TTL.
+    await this.bestEffort(
+      () => this.deps.apiClient.deletePairing(pairing.id),
+      'adopted pairing request cleanup'
+    );
     return { kind: 'complete' };
   }
 
@@ -613,8 +623,7 @@ export class SyncEngine {
       id,
       keypair,
       commitment: row.requesterCommitment,
-      requesterPub: null,
-      sas: null,
+      verified: null,
     };
     return { pending: true };
   }
@@ -622,18 +631,20 @@ export class SyncEngine {
   /**
    * One poll of the request this device committed to (callers loop it while their screen is up).
    * Never throws, like `pollPairing`: a transport fault is `error`, which leaves the request
-   * standing for the next tick, and only `failed` means no retry can help.
+   * standing for the next tick, and only `failed` means no retry can help. The caller may pass the
+   * row its own list poll already fetched, so the wait costs one poll stream against the shared
+   * rate bucket, not two.
    */
-  async pollApproval(id: string): Promise<PairingApprovalResult> {
+  async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
     const approving = this.approving;
     if (approving === null || approving.id !== id) {
       return { kind: 'failed', reason: 'gone' };
     }
-    if (approving.sas !== null) {
-      return { kind: 'confirm', sas: approving.sas };
+    if (approving.verified !== null) {
+      return { kind: 'confirm', sas: approving.verified.sas };
     }
     try {
-      return await this.resolveApproval(id, approving);
+      return await this.resolveApproval(id, approving, row);
     } catch (err) {
       // Non-terminal, and the slot is untouched: an offline tick must not end a live request.
       logger.warn(`Could not poll a pairing approval: ${describeThrown(err)}`, { error: err });
@@ -644,15 +655,17 @@ export class SyncEngine {
   /** Reads the row this device committed to and turns its reveal into digits, or into a refusal. */
   private async resolveApproval(
     id: string,
-    approving: PairingApproval
+    approving: PairingApproval,
+    prefetched?: PendingPairing
   ): Promise<PairingApprovalResult> {
-    const rows = await this.deps.apiClient.listPairings();
+    // The approver's list poll already fetched this row every tick; reuse it rather than re-list the
+    // whole account against the same rate bucket the pull loop shares.
+    const row = prefetched ?? (await this.findPairingRow(id));
     // Two overlapping polls, or a deny/disable landing across the list call: this slot no longer
     // speaks for what the engine is doing.
     if (this.approving !== approving) {
       return { kind: 'failed', reason: 'gone' };
     }
-    const row = rows.find((candidate) => candidate.id === id);
     if (row === undefined) {
       this.approving = null;
       return { kind: 'failed', reason: 'gone' };
@@ -660,21 +673,37 @@ export class SyncEngine {
     if (row.requesterPublicKey === null || row.requesterNonce === null) {
       return { kind: 'waiting' };
     }
-    const requesterPub = b64urlDecode(row.requesterPublicKey);
-    const verified = await verifyPairingCommitment(
-      approving.commitment,
-      requesterPub,
-      b64urlDecode(row.requesterNonce)
-    );
-    if (!verified) {
+    let requesterPub: Uint8Array;
+    let requesterNonce: Uint8Array;
+    try {
+      requesterPub = b64urlDecode(row.requesterPublicKey);
+      requesterNonce = b64urlDecode(row.requesterNonce);
+    } catch {
+      // Untrusted relay data that will not even decode is a substitution, not a transport fault.
       return await this.denyTamperedReveal(id, approving);
     }
+    const matches = await verifyPairingCommitment(
+      approving.commitment,
+      requesterPub,
+      requesterNonce
+    );
+    if (!matches) {
+      return await this.denyTamperedReveal(id, approving);
+    }
+    const sas = await derivePairingSas(requesterPub, approving.keypair.publicKey, id);
+    // Assigned once, after the derive resolves: a rejected derive leaves the slot unverified rather
+    // than holding a key to wrap with no digits ever shown.
     if (this.approving !== approving) {
       return { kind: 'failed', reason: 'gone' };
     }
-    approving.requesterPub = requesterPub;
-    approving.sas = await derivePairingSas(requesterPub, approving.keypair.publicKey, id);
-    return { kind: 'confirm', sas: approving.sas };
+    approving.verified = { requesterPub, sas };
+    return { kind: 'confirm', sas };
+  }
+
+  /** The pending request with this id from a fresh account-wide list, or undefined if gone. */
+  private async findPairingRow(id: string): Promise<PendingPairing | undefined> {
+    const rows = await this.deps.apiClient.listPairings();
+    return rows.find((candidate) => candidate.id === id);
   }
 
   /**
@@ -711,13 +740,13 @@ export class SyncEngine {
     if (this.dk === null || this.keyId === null) {
       return false;
     }
-    const { keypair, requesterPub } = this.approving;
-    if (requesterPub === null) {
+    const { keypair, verified } = this.approving;
+    if (verified === null) {
       return false;
     }
     const envelope = await wrapDataKeyToPeer(
       keypair.privateKey,
-      requesterPub,
+      verified.requesterPub,
       this.dk,
       this.keyId,
       id

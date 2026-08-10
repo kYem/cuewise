@@ -1,3 +1,4 @@
+import * as cryptoModule from '@cuewise/crypto';
 import {
   b64urlDecode,
   b64urlEncode,
@@ -562,6 +563,35 @@ describe('SyncEngine.pollPairing', () => {
     expect(await flow.requester.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
     expect(await flow.requester.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
   });
+
+  it('reports signed_out, not complete, when the initial sync after adopting loses auth', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+    // The session expires between confirm and adopt: the unwrap succeeds, but the initial sync 401s.
+    flow.requester.apiClient.rejectNextGetChangesWith401 = true;
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'signed_out',
+    });
+    expect(flow.requester.engine.getStatus()).toBe('signed_out');
+  });
+
+  it('deletes the consumed row once the requester has adopted the key', async () => {
+    const flow = await pairingFlow();
+    const id = await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
+
+    // Consumed, not left to age out at its TTL.
+    expect(await flow.requester.apiClient.getPairing(id)).toBeNull();
+  });
 });
 
 describe('the fake pairing relay', () => {
@@ -894,5 +924,66 @@ describe('SyncEngine approver pairing methods', () => {
     await flow.approver.engine.denyPairing(id);
 
     expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+  });
+
+  it('leaves the slot unverified when deriving the digits fails, so approvePairing refuses', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    await flow.requester.engine.pollPairing();
+    // The reveal verifies against the commitment, but deriving its digits throws.
+    const derive = vi
+      .spyOn(cryptoModule, 'derivePairingSas')
+      .mockRejectedValueOnce(new Error('derive boom'));
+    const envelopes = vi.spyOn(flow.approver.apiClient, 'putPairingEnvelope');
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({ kind: 'error' });
+
+    // No digits reached either screen, so the account key must not be wrapped to the peer.
+    expect(await flow.approver.engine.approvePairing(id)).toBe(false);
+    expect(envelopes).not.toHaveBeenCalled();
+
+    // The slot still stands: the next tick derives cleanly and reaches the digits.
+    derive.mockRestore();
+    expect(await flow.approver.engine.pollApproval(id)).toMatchObject({ kind: 'confirm' });
+    expect(await flow.approver.engine.approvePairing(id)).toBe(true);
+  });
+
+  it('reuses a row the caller already fetched instead of listing the account again', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    await flow.requester.engine.pollPairing();
+
+    const lists = vi.spyOn(flow.approver.apiClient, 'listPairings');
+    const rows = await flow.approver.engine.listPairingRequests();
+    const row = rows.find((candidate) => candidate.id === id);
+
+    expect(await flow.approver.engine.pollApproval(id, row)).toMatchObject({ kind: 'confirm' });
+
+    // The card fed pollApproval the row its list poll already had, so the waiting window costs one
+    // /v1/pairings stream against the shared bucket, not two.
+    expect(lists).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a reveal that will not decode as tampered, and deletes the row', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    await flow.requester.engine.pollPairing();
+    // A hostile relay swaps the revealed key for bytes that are not even base64url.
+    flow.server.substituteRevealedPublicKey(id, '!!!not-base64url!!!');
+
+    expect(await flow.approver.engine.pollApproval(id)).toEqual({
+      kind: 'failed',
+      reason: 'tampered',
+    });
+
+    // The row is gone, so no retry can land on it and nothing may be wrapped to that reveal.
+    expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'expired_or_denied',
+    });
   });
 });

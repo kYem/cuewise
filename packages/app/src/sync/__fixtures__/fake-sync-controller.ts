@@ -592,8 +592,8 @@ export class FakeSyncController implements SyncController {
     return { pending: true };
   }
 
-  async pollApproval(id: string): Promise<PairingApprovalResult> {
-    this.calls.push({ method: 'pollApproval', args: [id] });
+  async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
+    this.calls.push({ method: 'pollApproval', args: [id, row] });
     const next = this.pollApprovalResults.shift();
     if (next !== undefined) {
       return next;

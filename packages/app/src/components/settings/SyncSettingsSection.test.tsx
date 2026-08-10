@@ -2615,6 +2615,26 @@ describe('SyncSettingsSectionComponent', () => {
 
       expect(await screen.findByText(PAIRING_FAILED)).toBeInTheDocument();
     });
+
+    it('toasts when the paired-enroll tail throws', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'complete' });
+      settingsMock.syncEnabled = true;
+      settingsMock.updateSettings.mockRejectedValueOnce(new Error('storage boom'));
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+        await flush();
+        await flush();
+
+        expect(toastError).toHaveBeenCalledWith(
+          'Something went wrong enabling sync — please try again.'
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('pairing (approver)', () => {
@@ -2662,6 +2682,24 @@ describe('SyncSettingsSectionComponent', () => {
       expect(await screen.findByTestId('pairing-request-card')).toHaveTextContent(
         `${REQUEST.deviceName} wants to join your sync`
       );
+    });
+
+    it('logs and keeps the panel up when the pending-requests poll rejects', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const controller = new FakeSyncController();
+      controller.failNext('listPairingRequests');
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+
+      await waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('pairing requests poll'),
+          expect.any(Error)
+        )
+      );
+      // The rejected poll degraded rather than taking the panel down.
+      expect(screen.getByTestId('sync-status-pill')).toBeInTheDocument();
+      errorSpy.mockRestore();
     });
 
     it('shows the wait-state copy after Show code, before the other device replies', async () => {

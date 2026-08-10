@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
+import { CLOUD_SYNC_ENABLED_KEY, type PendingPairing } from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BridgeSyncController } from './bridge-sync-controller';
@@ -933,5 +933,63 @@ describe('BridgeSyncController: sessions', () => {
     const controller = new BridgeSyncController();
 
     await expect(controller.revokeOtherSessions()).rejects.toThrow();
+  });
+});
+
+describe('BridgeSyncController: pairing polls', () => {
+  const REQUEST: PendingPairing = {
+    id: 'pairing-1',
+    deviceName: 'phone',
+    requesterCommitment: 'commitment',
+    requesterPublicKey: null,
+    requesterNonce: null,
+    createdAt: 1,
+  };
+
+  // Non-terminal error, never a terminal failed: a dead worker must not end a live request the
+  // requester screen is still driving — matching the engine's own pollPairing contract.
+  it('answers a non-terminal error when pollPairing gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.pollPairing()).resolves.toEqual({ kind: 'error' });
+    errorSpy.mockRestore();
+  });
+
+  it('answers a non-terminal error when pollPairing times out', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.pollPairing()).resolves.toEqual({ kind: 'error' });
+    errorSpy.mockRestore();
+  });
+
+  it('forwards the fetched row so the worker reuses it instead of re-listing', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'pairingApproval',
+      result: { kind: 'waiting' },
+    });
+    const controller = new BridgeSyncController();
+
+    await controller.pollApproval('pairing-1', REQUEST);
+
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'pollApproval',
+      pairingRequestId: 'pairing-1',
+      pairingRow: REQUEST,
+    });
+  });
+
+  it('answers a non-terminal error when pollApproval gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.pollApproval('pairing-1', REQUEST)).resolves.toEqual({ kind: 'error' });
+    errorSpy.mockRestore();
   });
 });

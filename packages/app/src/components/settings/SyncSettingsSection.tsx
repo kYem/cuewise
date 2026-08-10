@@ -338,6 +338,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         if (!cancelled) {
           setPairingRequests(requests);
         }
+      } catch (error) {
+        // Contracted never to reject; a host that breaks that degrades to the last list rather than
+        // taking the panel down.
+        logger.error(`Cloud sync pairing requests poll failed: ${describeThrown(error)}`, error);
       } finally {
         polling = false;
       }
@@ -804,9 +808,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const finishPairedEnroll = async () => {
     latchPairedEnroll(true);
     setEnrollOpen(false);
-    await takeOverFromChromeSync();
-    await adoptNewAccount();
-    setEnabling(false);
+    try {
+      await takeOverFromChromeSync();
+      await adoptNewAccount();
+      setEnabling(false);
+    } catch (error) {
+      logger.error('Cloud sync paired enroll failed', error);
+      useToastStore.getState().error('Something went wrong enabling sync — please try again.');
+    }
   };
 
   const handlePairingComplete = () => {
