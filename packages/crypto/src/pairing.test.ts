@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { GOLDEN_PAIRING } from './__fixtures__/golden-pairing.fixtures';
+import { b64urlDecode } from './base64url';
 import { DecryptError } from './errors';
 import { generateDataKey } from './keys';
 import {
@@ -9,6 +11,7 @@ import {
   verifyPairingCommitment,
   wrapDataKeyToPeer,
 } from './pairing';
+import * as primitives from './primitives';
 
 describe('derivePairingSas', () => {
   it('both sides derive the same six digits', async () => {
@@ -152,5 +155,40 @@ describe('makePairingCommitment / verifyPairingCommitment', () => {
     const { commitment: commitment2 } = await makePairingCommitment(requester.publicKey);
 
     expect(commitment1).not.toBe(commitment2);
+  });
+});
+
+// Frozen wire vectors: two devices on different app versions must derive the identical
+// commitment/SAS from the same key material — self-consistency (round-trip tests above) cannot
+// catch a swap applied identically to both the producer and its own verifier. These pin the exact
+// byte layout (pub‖nonce, requester‖approver‖id) against values computed once and committed.
+describe('golden vectors: commitment + SAS framing', () => {
+  it('a fixed pub + nonce produce the frozen commitment', async () => {
+    const nonce = b64urlDecode(GOLDEN_PAIRING.nonceB64url);
+    vi.spyOn(primitives, 'randomBytes').mockReturnValue(nonce);
+    const pub = b64urlDecode(GOLDEN_PAIRING.pubB64url);
+
+    const { commitment, nonce: returnedNonce } = await makePairingCommitment(pub);
+
+    expect(commitment).toBe(GOLDEN_PAIRING.commitment);
+    expect(returnedNonce).toEqual(nonce);
+  });
+
+  it('verifyPairingCommitment accepts the frozen commitment against the same fixed pub + nonce', async () => {
+    const pub = b64urlDecode(GOLDEN_PAIRING.pubB64url);
+    const nonce = b64urlDecode(GOLDEN_PAIRING.nonceB64url);
+
+    const verified = await verifyPairingCommitment(GOLDEN_PAIRING.commitment, pub, nonce);
+
+    expect(verified).toBe(true);
+  });
+
+  it('fixed requester + approver pubs and pairing id produce the frozen 6-digit SAS', async () => {
+    const requesterPub = b64urlDecode(GOLDEN_PAIRING.requesterPubB64url);
+    const approverPub = b64urlDecode(GOLDEN_PAIRING.approverPubB64url);
+
+    const sas = await derivePairingSas(requesterPub, approverPub, GOLDEN_PAIRING.pairingId);
+
+    expect(sas).toBe(GOLDEN_PAIRING.sas);
   });
 });

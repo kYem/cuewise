@@ -24,6 +24,7 @@ interface RecordedCall {
 type FailableMethod =
   | 'enable'
   | 'beginPairing'
+  | 'pollPairing'
   | 'enableWithGoogle'
   | 'enrollWithCode'
   | 'reconnect'
@@ -38,6 +39,7 @@ type FailableMethod =
   | 'revokeOtherSessions'
   | 'listPairingRequests'
   | 'commitPairing'
+  | 'pollApproval'
   | 'approvePairing'
   | 'denyPairing';
 
@@ -526,6 +528,7 @@ export class FakeSyncController implements SyncController {
 
   async pollPairing(): Promise<PairingPollResult> {
     this.calls.push({ method: 'pollPairing', args: [] });
+    this.maybeFail('pollPairing');
     const next = this.pairingPolls.shift();
     if (next !== undefined) {
       return next;
@@ -594,6 +597,7 @@ export class FakeSyncController implements SyncController {
 
   async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
     this.calls.push({ method: 'pollApproval', args: [id, row] });
+    this.maybeFail('pollApproval');
     const next = this.pollApprovalResults.shift();
     if (next !== undefined) {
       return next;

@@ -2616,6 +2616,30 @@ describe('SyncSettingsSectionComponent', () => {
       expect(await screen.findByText(PAIRING_FAILED)).toBeInTheDocument();
     });
 
+    // pollPairing is contracted never to reject; PairingPanel's poll() catches a broken host and
+    // ends the request like any other fault, exactly as a `{kind:'failed', reason:'error'}` answer
+    // would. Only reachable once the fixture's pollPairing calls maybeFail.
+    it('degrades to the retry line, not a crash, when a poll violates the never-throws contract', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.failNext('pollPairing');
+      try {
+        await renderPairingScreen(controller);
+
+        await pollTick();
+
+        expect(screen.getByText(PAIRING_FAILED)).toBeInTheDocument();
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Cloud sync pairing poll failed'),
+          expect.any(Error)
+        );
+      } finally {
+        vi.useRealTimers();
+        errorSpy.mockRestore();
+      }
+    });
+
     it('toasts when the paired-enroll tail throws', async () => {
       vi.useFakeTimers();
       const controller = new FakeSyncController();
@@ -2757,6 +2781,37 @@ describe('SyncSettingsSectionComponent', () => {
         expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(2);
       } finally {
         vi.useRealTimers();
+      }
+    });
+
+    // pollApproval is contracted never to reject; PairingRequestCard's poll() catches a broken
+    // host into `{kind:'error'}` and stays put, exactly as a scripted error answer would. Only
+    // reachable once the fixture's pollApproval calls maybeFail.
+    it('keeps waiting, and logs, when the approval poll violates the never-throws contract', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.failNext('pollApproval');
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+        expect(screen.getByText(PAIRING_REQUEST_WAITING)).toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-request-sas')).not.toBeInTheDocument();
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Cloud sync pairing approval poll failed'),
+          expect.any(Error)
+        );
+
+        // The request stood past the fault, same as a scripted error answer would.
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+      } finally {
+        vi.useRealTimers();
+        errorSpy.mockRestore();
       }
     });
 

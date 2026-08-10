@@ -1,4 +1,12 @@
 import { env } from 'cloudflare:test';
+import {
+  b64urlEncode,
+  generateDataKey,
+  generatePairingKeypair,
+  makePairingCommitment,
+  unwrapDataKeyFromPeer,
+  wrapDataKeyToPeer,
+} from '@cuewise/crypto';
 import { describe, expect, it } from 'vitest';
 import { clockedStore, signedInToken } from '../__fixtures__/api-test-helpers.fixtures';
 import { hashSessionToken } from '../crypto-utils';
@@ -419,5 +427,64 @@ describe('/v1/pairings', () => {
     const res = await getPairing(token, id);
     expect(res.status).toBe(404);
     expect((await res.json<ProblemBody>()).code).toBe('pairing_not_found');
+  });
+
+  // The other tests in this file use short dummy strings ('approver-pubkey'), which never touch
+  // the MAX_KEY_MATERIAL_BYTES=64 bound with anything close to a real ~43-char b64url X25519
+  // key/nonce/commitment. This is the one test that runs create -> commit -> reveal -> envelope
+  // with genuine @cuewise/crypto material through the real validators and real D1, and then
+  // decrypts the relayed envelope — the honest closure of "tamper only tested via the fake".
+  it('runs create, commit, reveal, and envelope with real X25519 key material end to end', async () => {
+    const { token: requesterToken, userId } = await signedInToken();
+    const approverToken = await new D1SyncStore(env.DB).createSession(userId, 'laptop');
+
+    const requester = await generatePairingKeypair();
+    const approver = await generatePairingKeypair();
+    const { commitment, nonce } = await makePairingCommitment(requester.publicKey);
+    // A real SHA-256/b64url commitment is 43 bytes — comfortably inside the 64-byte bound, but
+    // well past a tightened one (e.g. 40), so a regression there fails this test, not just the
+    // short-dummy-string ones.
+    expect(commitment.length).toBeGreaterThan(40);
+
+    const created = await createPairing(requesterToken, commitment);
+    expect(created.status).toBe(200);
+    const { id } = await created.json<CreateBody>();
+
+    const approverPublicKeyB64 = b64urlEncode(approver.publicKey);
+    expect((await commitPairing(approverToken, id, approverPublicKeyB64)).status).toBe(204);
+
+    const requesterPublicKeyB64 = b64urlEncode(requester.publicKey);
+    const nonceB64 = b64urlEncode(nonce);
+    expect((await revealPairing(requesterToken, id, requesterPublicKeyB64, nonceB64)).status).toBe(
+      204
+    );
+
+    const dk = generateDataKey();
+    const keyId = 'dk-1';
+    const envelope = await wrapDataKeyToPeer(
+      approver.privateKey,
+      requester.publicKey,
+      dk,
+      keyId,
+      id
+    );
+    expect((await putEnvelope(approverToken, id, envelope)).status).toBe(204);
+
+    const requesterView = await (await getPairing(requesterToken, id)).json<
+      PairingBody & { expiresAt: number }
+    >();
+    expect(requesterView.approverPublicKey).toBe(approverPublicKeyB64);
+    expect(requesterView.envelope).toBe(envelope);
+
+    // Round-trips through the real HTTP + D1 relay without corruption: the requester can unwrap
+    // exactly the data key the approver wrapped.
+    const opened = await unwrapDataKeyFromPeer(
+      requester.privateKey,
+      approver.publicKey,
+      requesterView.envelope as string,
+      id
+    );
+    expect(opened.dk).toEqual(dk);
+    expect(opened.keyId).toBe(keyId);
   });
 });

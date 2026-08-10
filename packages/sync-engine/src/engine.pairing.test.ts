@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer, PAIRING_TTL_MS } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
-import { CLOUD_SYNC_ENABLED_KEY, SyncEngine } from './engine';
+import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps, type SyncStatus } from './engine';
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 
@@ -38,7 +38,7 @@ afterEach(async () => {
 });
 
 /** Builds one "device": its own storage/scheduler/session, sharing the given fake server. */
-function createDevice(server: FakeSyncServer): Device {
+function createDevice(server: FakeSyncServer, overrides: Partial<SyncEngineDeps> = {}): Device {
   const kv = new FakeKvStore();
   const apiClient = new FakeApiClient(server);
   const scheduler = new FakeScheduler();
@@ -49,6 +49,7 @@ function createDevice(server: FakeSyncServer): Device {
     keyStore: kv,
     scheduler,
     onRecoveryCode,
+    ...overrides,
   });
   const device = { kv, apiClient, scheduler, engine, onRecoveryCode };
   devices.push(device);
@@ -227,6 +228,31 @@ describe('SyncEngine.beginPairing', () => {
 
     await beginPairing(second.engine);
     expect(await second.engine.pollPairing()).toEqual({ kind: 'waiting' });
+  });
+
+  // The active-device case above already answers null via `this.dk !== null` alone, so it cannot
+  // tell PAIRING_BLOCKED_STATUSES apart from an empty list. key_init is reached with dk still
+  // null — enrollAndActivate sets it only after the initial-sync status that follows — so a call
+  // made from inside that window can only be refused by the status check itself.
+  it('answers null mid-enroll (key_init), while dk is still null, via PAIRING_BLOCKED_STATUSES', async () => {
+    const server = new FakeSyncServer();
+    let midEnrollResult: Promise<{ pairingId: string } | null> | undefined;
+    const onStatus = vi.fn((status: SyncStatus) => {
+      if (status === 'key_init') {
+        // Fires synchronously inside setStatus, before enrollAndActivate assigns this.dk.
+        midEnrollResult = device.engine.beginPairing();
+      }
+    });
+    const device = createDevice(server, { onStatus });
+    useStorage(device);
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(onStatus).toHaveBeenCalledWith('key_init');
+    if (midEnrollResult === undefined) {
+      throw new Error('expected beginPairing to have been called from the key_init listener');
+    }
+    await expect(midEnrollResult).resolves.toBeNull();
   });
 
   it('answers null and reports the lost sign-in when the session is gone', async () => {

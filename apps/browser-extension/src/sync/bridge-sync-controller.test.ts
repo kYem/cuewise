@@ -993,3 +993,137 @@ describe('BridgeSyncController: pairing polls', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('BridgeSyncController: pairing round trips', () => {
+  it('sends beginPairing and returns the relayed pairing id', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'pairingStarted',
+      pairing: { pairingId: 'pairing-1' },
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.beginPairing()).resolves.toEqual({ pairingId: 'pairing-1' });
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'beginPairing',
+    });
+  });
+
+  it('answers null and logs when beginPairing gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.beginPairing()).resolves.toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('sends listPairingRequests and returns the relayed pending requests', async () => {
+    const REQUEST: PendingPairing = {
+      id: 'pairing-1',
+      deviceName: 'phone',
+      requesterCommitment: 'commitment',
+      requesterPublicKey: null,
+      requesterNonce: null,
+      createdAt: 1,
+    };
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'pairingRequests',
+      requests: [REQUEST],
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listPairingRequests()).resolves.toEqual([REQUEST]);
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'listPairingRequests',
+    });
+  });
+
+  it('answers [] and logs when listPairingRequests gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.listPairingRequests()).resolves.toEqual([]);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('sends commitPairing with the id and returns the relayed pending result', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'pairingCommit',
+      result: { pending: true },
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.commitPairing('pairing-1')).resolves.toEqual({ pending: true });
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'commitPairing',
+      pairingRequestId: 'pairing-1',
+    });
+  });
+
+  it('answers null and logs when commitPairing gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.commitPairing('pairing-1')).resolves.toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('sends approvePairing with the id and returns the relayed approval', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({
+      ok: true,
+      kind: 'pairingApprove',
+      approved: true,
+    });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.approvePairing('pairing-1')).resolves.toBe(true);
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'approvePairing',
+      pairingRequestId: 'pairing-1',
+    });
+  });
+
+  it('answers false and logs when approvePairing gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.approvePairing('pairing-1')).resolves.toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('sends denyPairing with the id and resolves on an ok response', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.denyPairing('pairing-1')).resolves.toBeUndefined();
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'denyPairing',
+      pairingRequestId: 'pairing-1',
+    });
+  });
+
+  it('never throws and only logs when denyPairing gets no response', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce(undefined as never);
+    const controller = new BridgeSyncController();
+
+    await expect(controller.denyPairing('pairing-1')).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});

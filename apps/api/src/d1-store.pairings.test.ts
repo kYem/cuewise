@@ -338,4 +338,27 @@ describe('D1SyncStore pairings', () => {
       expiresAt: 1_000 + PAIRING_TTL_MS,
     });
   });
+
+  it('listPendingPairings drops a row once its envelope is stored, unlike a merely-revealed one', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const requesterToken = await store.createSession(userId, 'phone');
+    const requesterHash = await hashSessionToken(requesterToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+
+    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
+    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
+    await store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce', 1_000);
+
+    // Revealed but not yet enveloped: still pending, the state d1-store's other pairing tests
+    // already cover.
+    const beforeEnvelope = await store.listPendingPairings(userId, approverHash, 1_000);
+    expect(beforeEnvelope.map((row) => row.id)).toEqual([id]);
+
+    await store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000);
+
+    const afterEnvelope = await store.listPendingPairings(userId, approverHash, 1_000);
+    expect(afterEnvelope).toEqual([]);
+  });
 });
