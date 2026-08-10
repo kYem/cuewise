@@ -544,8 +544,7 @@ export class BridgeSyncController implements SyncController {
   }
 
   // The five ops below answer rather than throw, like beginPairing/pollPairing: a dead worker or a
-  // skewed response leaves the approver's card exactly where it already is (absent, or waiting on
-  // its next poll) instead of turning a background hiccup into an unhandled rejection.
+  // skewed response never surfaces here as an unhandled rejection.
   async listPairingRequests(): Promise<PendingPairing[]> {
     try {
       const response = await this.send({

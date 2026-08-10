@@ -27,7 +27,7 @@ export interface AuthCodePayload {
 }
 
 // Device-to-device pairing (ENG-50): a short-lived relay row so a new device can join an
-// account by scanning/approving from one already signed in, without typing a code by hand.
+// account by approving from one already signed in, without typing a code by hand.
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
 
 export interface PendingPairing {

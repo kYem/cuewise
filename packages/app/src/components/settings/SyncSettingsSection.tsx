@@ -274,10 +274,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // Whether the modal opens on the code input: true only when the screen behind it already
   // offered pairing, so the same offer is not made twice.
   const [enrollCodeFirst, setEnrollCodeFirst] = useState(false);
-  // Covers ONE pairing completion, and only until something ends it: any status change (the enrol
-  // became visible, or this device is keyless again) or a new enroll attempt starting. It exists
-  // because both hosts report status asynchronously — the extension's arrives over a storage
-  // broadcast — so in that gap nothing else knows this device already has its key.
+  // Bridges the gap between a pairing completing and status catching up — both hosts report status
+  // asynchronously (the extension's arrives over a storage broadcast) — until something ends it.
   const [pairedEnroll, setPairedEnroll] = useState(false);
   // Beside the state because a submission that resolves later reads it from a stale closure.
   const pairedEnrollRef = useRef(false);
@@ -356,9 +354,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     };
   }, [controller, status]);
 
-  // Any status change ends the window, in either direction: active/syncing means the enrol this
-  // covered is visible now, off/needs_enroll that the device is keyless again. The window itself is
-  // precisely the stretch where no change has arrived yet.
+  // Any status change ends the window — active/syncing means the enrol is visible now,
+  // off/needs_enroll that the device is keyless again — so it spans only the stretch before either.
   useEffect(() => {
     pairedEnrollRef.current = false;
     setPairedEnroll(false);
@@ -869,8 +866,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setUnsavedCode(true);
   };
 
-  // Approved, denied, or lost the commit race — the next poll would drop it anyway; this is what
-  // makes the card disappear immediately instead of waiting up to POLL_INTERVAL_MS.
+  // Only approved (envelope stored) or denied (row deleted) truly drop the request — a lost commit
+  // race leaves it pending, so this just beats POLL_INTERVAL_MS for the two cases that do drop.
   const handlePairingRequestResolved = (id: string) => {
     setPairingRequests((previous) => previous.filter((request) => request.id !== id));
   };

@@ -19,6 +19,8 @@ Exports `base64url`, `envelope`, `errors`, `keys`, `pairing`, `recovery-code`. *
 
 The wire formats (record envelope, wrapped-key blob, recovery-code layout, HKDF derivation) are **frozen** — golden fixtures in `src/__fixtures__/` are committed vectors that must decode forever. **Never regenerate them.** A format change is a new `v`/`keyId` version decoded side-by-side, not an edit to `v1`.
 
+The pairing SAS transcript, commitment, and `v1|pairing|…` wrap AAD (`pairing.ts`) are frozen for the same reason but across app versions, not just installs — a requester and approver may run different builds. Same rule: a change is a side-by-side v2, never an edit in place.
+
 ## Consumers
 
 Nothing calls this yet — ENG-45 wires the extension/macOS stores through `sealRecord`/`openRecord` and the enable/enroll flows through the key + recovery-code functions. Import directly from `@cuewise/crypto`; it is **not** re-exported by `@cuewise/sync-client` (crypto is the leaf; the sync client is the transport that will depend on it).

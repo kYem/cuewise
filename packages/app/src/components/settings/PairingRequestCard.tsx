@@ -37,8 +37,8 @@ interface PairingRequestCardProps {
 
 /**
  * The approver's half of ENG-50 pairing (packages/app/src/components/settings/SyncSettingsSection.tsx
- * polls listPairingRequests and renders one of these per pending request): Show code -> confirm
- * digits -> Approve/Deny.
+ * polls listPairingRequests and renders one of these for the first pending request): Show code ->
+ * confirm digits -> Approve/Deny.
  */
 export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request, onResolved }) => {
   const controller = useSyncController();
@@ -57,8 +57,8 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
     requestRef.current = request;
   }, [request]);
 
-  // Only live between a successful commit and a terminal poll answer — cleared whenever the card
-  // leaves `waiting` (confirm, removal, or unmount), same overlap guard as PairingPanel's poll.
+  // Live only while state.kind is 'waiting' — cleared whenever the card leaves that state (confirm,
+  // removal, or unmount), same overlap guard as PairingPanel's poll.
   useEffect(() => {
     if (controller === null || state.kind !== 'waiting') {
       return undefined;

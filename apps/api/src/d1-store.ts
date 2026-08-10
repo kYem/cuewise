@@ -611,9 +611,8 @@ export class D1SyncStore implements SyncStore {
     return row === null ? 'not_found' : 'conflict';
   }
 
-  // Same ambiguous-zero-rows pattern as commitPairing: the WHERE requires both the caller's
-  // session to be the requester's and that the approver has committed, so an uncommitted row —
-  // or a reveal from any other session — reads back as conflict too.
+  // Same ambiguous-zero-rows pattern as commitPairing: WHERE also requires the caller to be the
+  // requester with the approver already committed — an early or wrong-session reveal is 'conflict' too.
   async revealPairing(
     userId: string,
     id: string,
@@ -642,9 +641,8 @@ export class D1SyncStore implements SyncStore {
     return row === null ? 'not_found' : 'conflict';
   }
 
-  // Same ambiguous-zero-rows pattern as commitPairing: the WHERE also requires the caller's
-  // session to be the one that committed and that the reveal is stored, so an uncommitted or
-  // unrevealed row reads back as conflict too.
+  // Same ambiguous-zero-rows pattern as commitPairing: WHERE also requires the caller to be the
+  // committed approver with the reveal already stored — an early or wrong-session PUT is 'conflict' too.
   async putPairingEnvelope(
     userId: string,
     id: string,

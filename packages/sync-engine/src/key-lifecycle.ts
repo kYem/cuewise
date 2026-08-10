@@ -48,8 +48,8 @@ interface PersistedDataKey {
   dkB64: string;
 }
 
-// btoa/atob round trip, kept as its own storage-only encoding: this is a persisted format, so it
-// must not drift with @cuewise/crypto's wire framing, which has no reason to stay byte-stable.
+// btoa/atob round trip, kept as its own storage-only encoding, separate from @cuewise/crypto's
+// frozen wire format: re-encoding this persisted blob would orphan already-stored keys.
 function encodeDataKey(dk: DataKey): string {
   let binary = '';
   for (const byte of dk) {

@@ -362,7 +362,7 @@ describe('/v1/pairings', () => {
     expect((await revealRes.json<ProblemBody>()).code).toBe('pairing_not_found');
   });
 
-  // deletePairing has no expiry check by design (Task 3): a still-present, past-TTL row is a
+  // deletePairing has no expiry check by design: a still-present, past-TTL row is a
   // harmless no-op cleanup, not a 404 — unlike get/commit, which gate on expires_at.
   it('delete succeeds on an expired-but-unpurged row', async () => {
     const { token, userId } = await signedInToken();

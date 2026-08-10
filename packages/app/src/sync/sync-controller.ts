@@ -201,8 +201,9 @@ export interface SyncController {
    */
   pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult>;
   /**
-   * Wraps and uploads the account's key to the request this device committed to. False without a
-   * matching commit, or on failure — never throws.
+   * Wraps and uploads the account's key to the request this device committed to. False until a
+   * verified reveal is held for that request (no matching commit, or the SAS isn't confirmed yet),
+   * or on failure — never throws.
    */
   approvePairing(id: string): Promise<boolean>;
   /** Declines a pending request; never throws — a failure just leaves the row for the next poll. */

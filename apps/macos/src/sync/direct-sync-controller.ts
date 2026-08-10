@@ -378,10 +378,8 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
       return serialize(() => engine.pollApproval(id, row));
     },
-    // Same mutex as beginPairing/pollPairing, and for the same reason — approving wraps and
-    // uploads the account key, which must never interleave with an enrol doing the same. Unlike
-    // pollPairing/pollApproval, none of these four engine methods self-contain their errors (no
-    // internal catch), so each is wrapped here to keep the controller's never-throws contract.
+    // Same mutex as beginPairing/pollPairing (approving must not interleave with an enrol). Unlike
+    // those, these four engine methods don't self-contain their errors, so each is wrapped here.
     listPairingRequests(): Promise<PendingPairing[]> {
       return serialize(async () => {
         try {

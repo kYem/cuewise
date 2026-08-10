@@ -80,11 +80,10 @@ All endpoints are under `/v1`.
 | `POST` | `/v1/pairings` | Create a pairing request for the caller's device (`{commitment}`, a hash of the requester's key + nonce); replaces the caller's own prior request | Yes |
 | `GET` | `/v1/pairings` | List pending pairing requests from the caller's other sessions, for the approver to pick from; each answers `requesterCommitment`, plus `requesterPublicKey`/`requesterNonce` once revealed | Yes |
 | `GET` | `/v1/pairings/:id` | Poll one pairing request for the requester to learn the approver's public key/envelope. 404 `pairing_not_found` once expired or denied | Yes |
-| `POST` | `/v1/pairings/:id/commit` | Approve a pairing (`{publicKey}`). 409 `pairing_conflict` if already committed | Yes |
+| `POST` | `/v1/pairings/:id/commit` | Commit the approver's key to a pairing (`{publicKey}`). 409 `pairing_conflict` if already committed | Yes |
 | `PUT` | `/v1/pairings/:id/reveal` | Requester reveals `{publicKey, nonce}` after the approver has committed. 409 `pairing_conflict` before a commit exists or after a reveal is already stored | Yes |
 | `PUT` | `/v1/pairings/:id/envelope` | Store the wrapped key envelope for a committed *and revealed* pairing, ≤1024 bytes. 409 `pairing_conflict` until the reveal is stored | Yes |
 | `DELETE` | `/v1/pairings/:id` | Cancel/deny a pairing request; idempotent, 404 once gone | Yes |
-| `GET` | `/v1/export` | Dump all of the caller's records | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records **and every key envelope they hold** | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 | `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units}` | No |
