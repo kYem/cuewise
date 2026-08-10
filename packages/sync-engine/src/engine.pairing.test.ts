@@ -3,6 +3,7 @@ import {
   b64urlDecode,
   b64urlEncode,
   type DataKey,
+  DecryptError,
   derivePairingSas,
   generatePairingKeypair,
   wrapDataKeyToPeer,
@@ -378,6 +379,30 @@ describe('SyncEngine.pollPairing', () => {
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
     expect(flow.requester.engine.getStatus()).toBe('needs_enroll');
     expect(await beginPairing(flow.requester.engine)).not.toBe(id);
+  });
+
+  it("logs the cause when the envelope on the row cannot be opened with this device's key", async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    expect(await flow.requester.engine.pollPairing()).toMatchObject({ kind: 'confirm' });
+    // Wrapped to a key nobody holds the private half of — the corrupt/incompatible-envelope case
+    // a hostile or buggy relay can produce, distinct from the reveal-conflict case above.
+    const wrongPub = (await generatePairingKeypair()).publicKey;
+    const envelope = await wrapDataKeyToPeer(
+      side.keypair.privateKey,
+      wrongPub,
+      flow.dk,
+      flow.keyId,
+      side.id
+    );
+    await flow.approver.putPairingEnvelope(side.id, envelope);
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.any(String), expect.any(DecryptError));
+    expect(flow.requester.engine.getStatus()).toBe('error');
   });
 
   it('installs the wrapped key, activates, and opens the account records with it', async () => {

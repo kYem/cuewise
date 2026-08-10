@@ -562,8 +562,10 @@ export class SyncEngine {
     this.pairing = null;
     try {
       await this.handleEnableError(err, before, epoch);
-    } catch {
-      // Rethrown by design once it has been recorded, and a poll answers faults instead of throwing.
+    } catch (rethrown) {
+      // Only the generic branch is reachable here (401/enrollSuperseded return, recovery-code
+      // errors only arise from the enroll path) — this is where a pairing fault is recorded.
+      logger.error(`Cloud sync pairing adoption failed: ${describeThrown(rethrown)}`, rethrown);
     }
     if (this.status === 'signed_out') {
       return { kind: 'failed', reason: 'signed_out' };
