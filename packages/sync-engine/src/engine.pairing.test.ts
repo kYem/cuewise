@@ -808,24 +808,24 @@ describe('SyncEngine approver pairing methods', () => {
     expect(await flow.approver.engine.approvePairing(id)).toBe(true);
   });
 
-  it('commitPairing ends a conflicting request no slot here can finish', async () => {
+  it('commitPairing leaves a conflicting request alone for whatever slot still holds it', async () => {
     const flow = await approverFlow();
     const id = await beginPairing(flow.requester.engine);
-    // A commit from a session this engine no longer holds — a previous worker's, gone with the
-    // one private key that could have wrapped anything to the requester.
+    // A commit from a session this engine no longer holds — indistinguishable from a previous
+    // worker's dead slot and from another approver's live one, so neither may be assumed.
     const previous = new FakeApiClient(flow.server);
     await previous.exchangeToken({ provider: 'dev', credential: 'cred-a', deviceName: 'Device A' });
     await previous.commitPairing(id, b64urlEncode((await generatePairingKeypair()).publicKey));
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const deleteSpy = vi.spyOn(flow.approver.apiClient, 'deletePairing');
 
     expect(await flow.approver.engine.commitPairing(id)).toBeNull();
 
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(id));
-    // The requester fails fast instead of polling out the TTL against a row nobody can answer.
-    expect(await flow.requester.engine.pollPairing()).toEqual({
-      kind: 'failed',
-      reason: 'expired_or_denied',
-    });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(id));
+    expect(deleteSpy).not.toHaveBeenCalled();
+    // The row survives: whichever session actually holds the committed key can still reveal and
+    // reach the SAS the requester needs to confirm, instead of losing the request to a bystander.
+    expect(await flow.requester.engine.pollPairing()).toMatchObject({ kind: 'confirm' });
   });
 
   it("approvePairing uploads an envelope the requester's pollPairing completes from", async () => {

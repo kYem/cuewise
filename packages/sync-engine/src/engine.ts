@@ -577,7 +577,7 @@ export class SyncEngine {
    * is still only a commitment at this point; `pollApproval` earns them. Pending again for a
    * request this session already holds. Null once the row is gone or another session already
    * committed — both are the same `pairing_not_found`/`pairing_conflict` the server answers, and
-   * both end the row; anything else rethrows.
+   * neither deletes the row, since it may belong to a live approver; anything else rethrows.
    */
   async commitPairing(id: string): Promise<{ pending: true } | null> {
     // Already committed in this session: the server refuses a second commit, and the live slot
@@ -598,14 +598,10 @@ export class SyncEngine {
         err instanceof ApiError &&
         (err.code === 'pairing_conflict' || err.code === 'pairing_not_found')
       ) {
-        // Unless a concurrent commit of this device's own claimed the row meanwhile, nothing here
-        // holds the key it was committed with — so end it rather than let it wait out the TTL.
+        // Never delete here: the row can be this device's own dead slot after a worker
+        // restart, or another approver's live commit — the two are indistinguishable.
         if (this.approving?.id !== id) {
-          logger.error(`Cloud sync could not commit to a pairing request it cannot finish: ${id}`);
-          await this.bestEffort(
-            () => this.deps.apiClient.deletePairing(id),
-            'unfinishable pairing request cleanup'
-          );
+          logger.warn(`Cloud sync could not commit to a pairing request it cannot finish: ${id}`);
         }
         return null;
       }
