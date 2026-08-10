@@ -7,7 +7,7 @@ import {
   wrapDataKeyToPeer,
   type X25519KeyPair,
 } from '@cuewise/crypto';
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, logger } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError, SessionManager, SYNC_SESSION_KEY } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
@@ -24,6 +24,7 @@ interface Device {
   apiClient: FakeApiClient;
   scheduler: FakeScheduler;
   engine: SyncEngine;
+  onRecoveryCode: ReturnType<typeof vi.fn>;
 }
 
 // Every engine createDevice makes, so afterEach can stop() each one — a markMutated call under
@@ -40,13 +41,15 @@ function createDevice(server: FakeSyncServer): Device {
   const kv = new FakeKvStore();
   const apiClient = new FakeApiClient(server);
   const scheduler = new FakeScheduler();
+  const onRecoveryCode = vi.fn();
   const engine = new SyncEngine({
     apiClient,
     sessionManager: new SessionManager(kv),
     keyStore: kv,
     scheduler,
+    onRecoveryCode,
   });
-  const device = { kv, apiClient, scheduler, engine };
+  const device = { kv, apiClient, scheduler, engine, onRecoveryCode };
   devices.push(device);
   return device;
 }
@@ -109,6 +112,8 @@ interface PairingFlow {
   approver: FakeApiClient;
   dk: DataKey;
   keyId: string;
+  /** The code the account was created with, for the enrol path that races pairing. */
+  recoveryCode: string;
 }
 
 /** The approver's half after it has committed: the row it answered, and the key it answered with. */
@@ -132,6 +137,10 @@ async function pairingFlow(): Promise<PairingFlow> {
   if (persisted === null) {
     throw new Error('the enable left no data key to pair with');
   }
+  const recoveryCode = device.onRecoveryCode.mock.calls[0]?.[0];
+  if (typeof recoveryCode !== 'string') {
+    throw new Error('the enable minted no recovery code');
+  }
   await device.kv.remove(SYNC_DATA_KEY, 'local');
   const engine = restart(device);
   await engine.start();
@@ -145,6 +154,7 @@ async function pairingFlow(): Promise<PairingFlow> {
     approver,
     dk: persisted.dk,
     keyId: persisted.keyId,
+    recoveryCode,
   };
 }
 
@@ -468,6 +478,67 @@ describe('SyncEngine.pollPairing', () => {
     expect(flow.requester.engine.getStatus()).toBe('active');
   });
 
+  it('answers complete without adopting again once another path has enrolled this device', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    // The typed recovery code wins the race the enrol modal deliberately allows, while the
+    // pairing request is still live and its envelope already waiting on the row.
+    const writes = vi.spyOn(flow.requester.kv, 'set');
+    await flow.requester.engine.resumeEnrollWithCode(flow.recoveryCode);
+    expect(flow.requester.engine.getStatus()).toBe('active');
+    const meta = new SyncMetadataStore(flow.requester.kv);
+    const cursor = (await meta.load()).cursor;
+    expect(cursor).toBeGreaterThan(0);
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
+
+    // A second adopt would re-persist the key and rewind the cursor over the enrol that won.
+    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect((await meta.load()).cursor).toBe(cursor);
+    expect(flow.requester.engine.getStatus()).toBe('active');
+  });
+
+  it('answers a non-terminal error on a transport fault, keeping the request', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    vi.spyOn(flow.requester.apiClient, 'getPairing').mockRejectedValueOnce(
+      new ApiError('network_error', 0)
+    );
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'error' });
+
+    // One offline tick must not end a live request, nor paint a device that never enrolled.
+    expect(flow.requester.engine.getStatus()).toBe('needs_enroll');
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'confirm',
+      sas: await approverSas(flow, side),
+    });
+    await wrapKeyAsApprover(flow, side);
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
+  });
+
+  it('publishes the key on the next tick when the reveal itself faulted', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    vi.spyOn(flow.requester.apiClient, 'revealPairing').mockRejectedValueOnce(
+      new ApiError('server_error', 500)
+    );
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'error' });
+
+    // approverSas reads the revealed key off the row, so this only answers once it landed.
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'confirm',
+      sas: await approverSas(flow, side),
+    });
+  });
+
   it('never installs a key for an account disabled while the poll was in flight', async () => {
     const flow = await pairingFlow();
     await beginPairing(flow.requester.engine);
@@ -720,6 +791,41 @@ describe('SyncEngine approver pairing methods', () => {
     await rival.commitPairing(id, b64urlEncode(rivalKeypair.publicKey));
 
     expect(await flow.approver.engine.commitPairing(id)).toBeNull();
+  });
+
+  it('commitPairing answers pending again for the request it already holds', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    const commits = vi.spyOn(flow.approver.apiClient, 'commitPairing');
+
+    expect(await flow.approver.engine.commitPairing(id)).toEqual({ pending: true });
+
+    // A second commit would 409 and dismiss a card the live slot can still finish.
+    expect(commits).not.toHaveBeenCalled();
+    await flow.requester.engine.pollPairing();
+    await approvalSas(flow.approver.engine, id);
+    expect(await flow.approver.engine.approvePairing(id)).toBe(true);
+  });
+
+  it('commitPairing ends a conflicting request no slot here can finish', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    // A commit from a session this engine no longer holds — a previous worker's, gone with the
+    // one private key that could have wrapped anything to the requester.
+    const previous = new FakeApiClient(flow.server);
+    await previous.exchangeToken({ provider: 'dev', credential: 'cred-a', deviceName: 'Device A' });
+    await previous.commitPairing(id, b64urlEncode((await generatePairingKeypair()).publicKey));
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    expect(await flow.approver.engine.commitPairing(id)).toBeNull();
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(id));
+    // The requester fails fast instead of polling out the TTL against a row nobody can answer.
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'expired_or_denied',
+    });
   });
 
   it("approvePairing uploads an envelope the requester's pollPairing completes from", async () => {

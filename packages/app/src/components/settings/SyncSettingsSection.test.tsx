@@ -42,6 +42,8 @@ const PAIRING_CODE_LINK = 'Enter your recovery code instead';
 const PAIRING_REQUEST_WAITING = 'Waiting for your other device…';
 const PAIRING_TAMPERED_MESSAGE =
   "Pairing blocked: the request didn't verify. Try again on the new device.";
+const PAIRING_APPROVE_FAILED = "Couldn't approve this device — try again.";
+const PAIRING_DENY_FAILED = "Couldn't decline — try again.";
 const PAIRING_POLL_MS = 3000;
 
 function sectionProps(overrides: Partial<SettingsSectionProps> = {}): SettingsSectionProps {
@@ -2356,6 +2358,32 @@ describe('SyncSettingsSectionComponent', () => {
       }
     });
 
+    it('keeps the code on screen when a poll answers a non-terminal error', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls(
+        { kind: 'confirm', sas: '391554' },
+        { kind: 'error' },
+        { kind: 'complete' }
+      );
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+
+        await pollTick();
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-failed')).not.toBeInTheDocument();
+
+        // The request stood, so the tick after it still completes the enrol.
+        await pollTick();
+        await flush();
+        expect(screen.queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     // The recovery code stays reachable, and reaches exactly the call the old Reconnect flow ended at.
     it('reveals the unchanged recovery-code flow behind the secondary link', async () => {
       const user = userEvent.setup();
@@ -2783,6 +2811,90 @@ describe('SyncSettingsSectionComponent', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    // macOS emits 'syncing' on routine cycles, and a tick mid-confirmation must not erase the SAS.
+    it('keeps the pending card through a syncing tick', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+
+        act(() => controller.setStatus('syncing'));
+        await flush();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+
+        act(() => controller.setStatus('active'));
+        await flush();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the card for another try when approvePairing answers false', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      controller.scriptApprovePairing(false);
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await flush();
+
+        expect(toastError).toHaveBeenCalledWith(PAIRING_APPROVE_FAILED);
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the card for another try when approvePairing throws', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      controller.failNext('approvePairing');
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await flush();
+
+        expect(toastError).toHaveBeenCalledWith(PAIRING_APPROVE_FAILED);
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the card for another try when denyPairing throws', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.failNext('denyPairing');
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+
+      await user.click(screen.getByRole('button', { name: 'Deny' }));
+
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith(PAIRING_DENY_FAILED));
+      expect(screen.getByTestId('pairing-request-card')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled();
     });
 
     it('calls approvePairing with the id and removes the card', async () => {

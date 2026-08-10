@@ -107,6 +107,11 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode, o
         setState({ kind: 'confirm', sas: result.sas });
         return;
       }
+      if (result.kind === 'error') {
+        // Non-terminal: the request stands, so keep whatever is on screen — even the digits, which
+        // a wait state would erase mid-comparison — and let the next tick answer.
+        return;
+      }
       setState(WAITING_STATE);
     };
 

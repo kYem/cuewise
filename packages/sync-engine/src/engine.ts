@@ -148,13 +148,15 @@ export type EngineApiClient = Pick<
 
 /**
  * What one poll of a pairing request found (ENG-50). `confirm` carries the digits both screens
- * show; only a matching pair may be approved. Every `failed` is terminal — the caller stops
- * polling and starts a new request.
+ * show; only a matching pair may be approved. `error` is NON-terminal, like the approver's: the
+ * request still stands and the next tick may answer it. Every `failed` IS terminal — the caller
+ * stops polling and starts a new request.
  */
 export type PairingPollResult =
   | { kind: 'waiting' }
   | { kind: 'confirm'; sas: string }
   | { kind: 'complete' }
+  | { kind: 'error' }
   | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' };
 
 /**
@@ -417,8 +419,9 @@ export class SyncEngine {
 
   /**
    * One poll of the request `beginPairing` started (callers loop it while their screen is up).
-   * Never throws: a fault is answered as `failed`, and every `failed` is terminal — the request is
-   * forgotten, so the caller must start another rather than keep polling.
+   * Never throws: a transport fault is `error`, which leaves the request standing for the next
+   * tick, and only `failed` is terminal — the request is then forgotten, so the caller must start
+   * another rather than keep polling.
    */
   async pollPairing(): Promise<PairingPollResult> {
     const pairing = this.pairing;
@@ -433,6 +436,12 @@ export class SyncEngine {
       // one that lost adopts the key a second time, re-running the whole activation over the top.
       if (this.pairing !== pairing) {
         return { kind: 'failed', reason: 'error' };
+      }
+      if (this.dk !== null) {
+        // A typed recovery code won the race the enrol screen allows: this device is enrolled, and
+        // adopting again would rewind its cursor and re-stamp every record it holds.
+        this.pairing = null;
+        return { kind: 'complete' };
       }
       if (found === null) {
         this.pairing = null;
@@ -467,6 +476,13 @@ export class SyncEngine {
       }
       return { kind: 'waiting' };
     } catch (err) {
+      // Terminal only where a retry cannot help: a lost session, or a fault raised after the adopt
+      // claimed this slot. An ordinary transport fault leaves the request for the next tick.
+      const lostAuth = err instanceof ApiError && err.status === 401;
+      if (this.pairing === pairing && !lostAuth) {
+        logger.warn(`Could not poll a pairing request: ${describeThrown(err)}`, { error: err });
+        return { kind: 'error' };
+      }
       return await this.failPairing(err, before, epoch);
     }
   }
@@ -493,6 +509,9 @@ export class SyncEngine {
       if (err instanceof ApiError && err.code === 'pairing_conflict') {
         return 'conflict';
       }
+      // Un-claimed, so the retry a non-terminal poll error allows can publish it; one that did
+      // land answers conflict above rather than reaching here.
+      pairing.revealed = false;
       throw err;
     }
   }
@@ -555,11 +574,17 @@ export class SyncEngine {
 
   /**
    * Commits this device's key to a request. No digits yet — they cover the requester's key, which
-   * is still only a commitment at this point; `pollApproval` earns them. Null once the row is gone
-   * or another session already committed — both are the same `pairing_not_found`/`pairing_conflict`
-   * the server answers; anything else rethrows.
+   * is still only a commitment at this point; `pollApproval` earns them. Pending again for a
+   * request this session already holds. Null once the row is gone or another session already
+   * committed — both are the same `pairing_not_found`/`pairing_conflict` the server answers, and
+   * both end the row; anything else rethrows.
    */
   async commitPairing(id: string): Promise<{ pending: true } | null> {
+    // Already committed in this session: the server refuses a second commit, and the live slot
+    // below still holds the keypair the first one used.
+    if (this.approving?.id === id) {
+      return { pending: true };
+    }
     const rows = await this.deps.apiClient.listPairings();
     const row = rows.find((candidate) => candidate.id === id);
     if (row === undefined) {
@@ -573,6 +598,15 @@ export class SyncEngine {
         err instanceof ApiError &&
         (err.code === 'pairing_conflict' || err.code === 'pairing_not_found')
       ) {
+        // Unless a concurrent commit of this device's own claimed the row meanwhile, nothing here
+        // holds the key it was committed with — so end it rather than let it wait out the TTL.
+        if (this.approving?.id !== id) {
+          logger.error(`Cloud sync could not commit to a pairing request it cannot finish: ${id}`);
+          await this.bestEffort(
+            () => this.deps.apiClient.deletePairing(id),
+            'unfinishable pairing request cleanup'
+          );
+        }
         return null;
       }
       throw err;

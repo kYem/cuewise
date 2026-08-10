@@ -12,6 +12,8 @@ const CONFIRM_PROMPT = 'Do the codes match?';
 const APPROVE = 'Approve';
 const DENY = 'Deny';
 const TAMPERED_MESSAGE = "Pairing blocked: the request didn't verify. Try again on the new device.";
+const APPROVE_FAILED = "Couldn't approve this device — try again.";
+const DENY_FAILED = "Couldn't decline — try again.";
 
 /** What one card shows for the one request it was handed. */
 type CardState =
@@ -117,21 +119,34 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
   };
 
   const handleApprove = async () => {
+    // Restored below on failure: the engine slot is still valid, so the card must offer the retry
+    // rather than disappear as if the other device had been let in.
+    const previous = state;
     setState(RESOLVING);
+    let approved = false;
     try {
-      await controller.approvePairing(request.id);
+      approved = await controller.approvePairing(request.id);
     } catch (error) {
       logger.error(`Cloud sync pairing approve failed: ${describeThrown(error)}`, error);
+    }
+    if (!approved) {
+      useToastStore.getState().error(APPROVE_FAILED);
+      setState(previous);
+      return;
     }
     onResolved(request.id);
   };
 
   const handleDeny = async () => {
+    const previous = state;
     setState(RESOLVING);
     try {
       await controller.denyPairing(request.id);
     } catch (error) {
       logger.error(`Cloud sync pairing deny failed: ${describeThrown(error)}`, error);
+      useToastStore.getState().error(DENY_FAILED);
+      setState(previous);
+      return;
     }
     onResolved(request.id);
   };

@@ -319,7 +319,9 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   }, []);
 
   useEffect(() => {
-    if (!controller || status !== 'active') {
+    // 'syncing' too: macOS emits it on routine cycles, and dropping the list there erases the
+    // digits mid-confirmation. Only a status that ends this device's ability to wrap the key does.
+    if (!controller || (status !== 'active' && status !== 'syncing')) {
       setPairingRequests([]);
       return undefined;
     }
