@@ -143,19 +143,23 @@ export class FakeSyncServer {
 
   /** Excludes the caller's own request and anything already answered with an envelope. */
   listPendingPairings(excludeSession: string, now: number): PendingPairing[] {
-    return [...this.pairings.values()]
-      .filter(
-        (row) =>
-          row.expiresAt > now && row.envelope === null && row.requesterSession !== excludeSession
-      )
-      .map((row) => ({
-        id: row.id,
-        deviceName: row.deviceName,
-        requesterCommitment: row.requesterCommitment,
-        requesterPublicKey: row.requesterPublicKey,
-        requesterNonce: row.requesterNonce,
-        createdAt: row.createdAt,
-      }));
+    return (
+      [...this.pairings.values()]
+        .filter(
+          (row) =>
+            row.expiresAt > now && row.envelope === null && row.requesterSession !== excludeSession
+        )
+        // Oldest first, mirroring the real store's ORDER BY created_at ASC.
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((row) => ({
+          id: row.id,
+          deviceName: row.deviceName,
+          requesterCommitment: row.requesterCommitment,
+          requesterPublicKey: row.requesterPublicKey,
+          requesterNonce: row.requesterNonce,
+          createdAt: row.createdAt,
+        }))
+    );
   }
 
   commitPairing(

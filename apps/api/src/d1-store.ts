@@ -563,7 +563,8 @@ export class D1SyncStore implements SyncStore {
         `SELECT p.id, p.requester_commitment, p.requester_public_key, p.requester_nonce, p.created_at, t.device_name
          FROM pairings p JOIN tokens t ON t.id = p.requester_session_id
          WHERE p.user_id = ? AND p.expires_at > ? AND p.envelope IS NULL
-           AND p.requester_session_id <> (SELECT id FROM tokens WHERE token_hash = ?)`
+           AND p.requester_session_id <> (SELECT id FROM tokens WHERE token_hash = ?)
+         ORDER BY p.created_at ASC`
       )
       .bind(userId, now, excludeTokenHash)
       .all<{

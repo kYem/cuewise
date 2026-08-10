@@ -94,6 +94,25 @@ describe('D1SyncStore pairings', () => {
     ]);
   });
 
+  it('listPendingPairings returns pending requests oldest first, stable across polls', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, `u-${crypto.randomUUID()}`);
+    const newerToken = await store.createSession(userId, 'newer-phone');
+    const newerHash = await hashSessionToken(newerToken);
+    const olderToken = await store.createSession(userId, 'older-phone');
+    const olderHash = await hashSessionToken(olderToken);
+    const approverToken = await store.createSession(userId, 'laptop');
+    const approverHash = await hashSessionToken(approverToken);
+
+    // Inserted newest-first, so only an explicit ORDER BY created_at can put the older one first.
+    const { id: newerId } = await store.createPairing(userId, newerHash, 'c-newer', 2_000);
+    const { id: olderId } = await store.createPairing(userId, olderHash, 'c-older', 1_000);
+
+    const pending = await store.listPendingPairings(userId, approverHash, 2_001);
+
+    expect(pending.map((row) => row.id)).toEqual([olderId, newerId]);
+  });
+
   it('commitPairing stores the approver key once; a second commit answers conflict', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, `u-${crypto.randomUUID()}`);
