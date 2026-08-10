@@ -95,6 +95,27 @@ describe('DELETE /v1/account', () => {
     expect(freshBody.records).toEqual([]);
     expect(freshBody.cursor).toBe(0);
   });
+
+  it('deletes the caller pairing rows too, so the FK on pairings.user_id cannot block the delete', async () => {
+    const { token } = await signedInToken();
+    const created = await app.request(
+      '/v1/pairings',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commitment: 'requester-commitment' }),
+      },
+      env
+    );
+    expect(created.status).toBe(200);
+    const { id } = await created.json<{ id: string }>();
+
+    const del = await deleteAccount(token);
+    expect(del.status).toBe(204);
+
+    const row = await env.DB.prepare('SELECT id FROM pairings WHERE id = ?').bind(id).first();
+    expect(row).toBeNull();
+  });
 });
 
 describe('GET /v1/account', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { b64urlEncode } from './base64url';
 import { DecryptError, EnvelopeParseError } from './errors';
 import {
   deriveMasterKey,
@@ -7,7 +8,7 @@ import {
   unwrapDataKey,
   wrapDataKey,
 } from './keys';
-import { b64urlEncode, randomBytes } from './primitives';
+import { randomBytes } from './primitives';
 import { generateRecoveryCode } from './recovery-code';
 
 /** A master key derived from a freshly generated recovery code — the shared "some valid mk" fixture. */

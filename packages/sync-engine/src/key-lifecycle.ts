@@ -48,8 +48,8 @@ interface PersistedDataKey {
   dkB64: string;
 }
 
-// btoa/atob round trip. @cuewise/crypto's own b64url helper is deliberately private to that
-// package, so this is a distinct, storage-only encoding with no URL-safety requirement.
+// btoa/atob round trip, kept as its own storage-only encoding, separate from @cuewise/crypto's
+// frozen wire format: re-encoding this persisted blob would orphan already-stored keys.
 function encodeDataKey(dk: DataKey): string {
   let binary = '';
   for (const byte of dk) {
@@ -67,7 +67,12 @@ function decodeDataKey(b64: string): DataKey {
   return bytes as DataKey;
 }
 
-async function persistDataKey(keyStore: KeyValueStore, keyId: string, dk: DataKey): Promise<void> {
+/** Exported for the pairing path, which unwraps its key from a peer rather than from an envelope. */
+export async function persistDataKey(
+  keyStore: KeyValueStore,
+  keyId: string,
+  dk: DataKey
+): Promise<void> {
   const result = await keyStore.set<PersistedDataKey>(
     SYNC_DATA_KEY,
     { keyId, dkB64: encodeDataKey(dk) },

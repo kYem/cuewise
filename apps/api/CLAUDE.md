@@ -41,6 +41,7 @@ D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | The server-bounce one-time exchange codes (Apple and Google, also hash-only; `payload.provider` records which). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 | `key_envelopes` | `(user_id, kind)` (PK), `envelope`, `updated_at` | ENG-44 E2E key material, client-wrapped — `envelope` is opaque, the server never reads it. |
+| `pairings` | `id` (PK), `user_id`, `requester_session_id`, `requester_commitment`, `requester_public_key`, `requester_nonce`, `approver_session_id`, `approver_public_key`, `envelope`, `created_at`, `expires_at` | ENG-50 transient device-pairing relay rows — 10 min TTL, one live request per requester session. Commit-then-reveal (2026-08-09 spec amendment): the requester posts only `requester_commitment` up front; `requester_public_key`/`requester_nonce` fill in only once revealed, which the server refuses before `approver_public_key` is committed. All of `requester_commitment`/`requester_public_key`/`approver_public_key`/`requester_nonce`/`envelope` are opaque, purged by the daily cron alongside tombstones. |
 
 **`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. This makes re-bootstrapping from `since=0` after a logout a client contract ENG-45 must honor: a client that resumes from a persisted stale cursor after re-login — or one that pushes but never pulls for 90+ days — could miss a purged delete.
 
@@ -76,7 +77,13 @@ All endpoints are under `/v1`.
 | `DELETE` | `/v1/sessions/:id` | Revoke one session. Idempotent — a repeat answers 204 and keeps the first revocation time. 404 when the id is unknown *or* belongs to another account. | Yes |
 | `PATCH` | `/v1/sessions/:id` | Rename a session, `{deviceName}`, bounded by the same `MAX_DEVICE_NAME_LENGTH` as enrol | Yes |
 | `POST` | `/v1/sessions/revoke-others` | Revoke every session but the caller's; answers `{revoked: <count>}` | Yes |
-| `GET` | `/v1/export` | Dump all of the caller's records | Yes |
+| `POST` | `/v1/pairings` | Create a pairing request for the caller's device (`{commitment}`, a hash of the requester's key + nonce); replaces the caller's own prior request | Yes |
+| `GET` | `/v1/pairings` | List pending pairing requests from the caller's other sessions, for the approver to pick from; each answers `requesterCommitment`, plus `requesterPublicKey`/`requesterNonce` once revealed | Yes |
+| `GET` | `/v1/pairings/:id` | Poll one pairing request for the requester to learn the approver's public key/envelope. 404 `pairing_not_found` once expired or denied | Yes |
+| `POST` | `/v1/pairings/:id/commit` | Commit the approver's key to a pairing (`{publicKey}`). 409 `pairing_conflict` if already committed | Yes |
+| `PUT` | `/v1/pairings/:id/reveal` | Requester reveals `{publicKey, nonce}` after the approver has committed. 409 `pairing_conflict` before a commit exists or after a reveal is already stored | Yes |
+| `PUT` | `/v1/pairings/:id/envelope` | Store the wrapped key envelope for a committed *and revealed* pairing, ≤1024 bytes. 409 `pairing_conflict` until the reveal is stored | Yes |
+| `DELETE` | `/v1/pairings/:id` | Cancel/deny a pairing request; idempotent, 404 once gone | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records **and every key envelope they hold** | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 | `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units}` | No |

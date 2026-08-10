@@ -5,12 +5,23 @@ import { useToastStore } from '../../stores/toast-store';
 import type { EnableResult } from '../../sync/sync-controller';
 import { isCancelledEnable } from '../../sync/sync-controller';
 import { Modal } from '../Modal';
+import { PairingPanel } from './PairingPanel';
 
 export interface EnrollCodeModalProps {
   isOpen: boolean;
   onSubmit: (code: string) => Promise<EnableResult>;
   onClose: () => void;
+  /** A pairing approval enrolled this device instead of the code — the caller finishes the enrol. */
+  onPaired: () => void;
+  /**
+   * Opens straight on the code input, with no pairing lead: the screen that opened this modal is
+   * already offering pairing, and leading with it again would ask the same question twice.
+   */
+  startWithCode?: boolean;
 }
+
+// Covers both halves: this device joins the account by approval, or by the code behind the link.
+const TITLE = 'Connect this device';
 
 const BAD_CODE_MESSAGES: Record<string, string> = {
   format: "That doesn't look like a recovery code",
@@ -35,10 +46,19 @@ function messageFor(result: Extract<EnableResult, { ok: false }>): string | null
   return GENERIC_FAILURE_MESSAGE;
 }
 
-export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubmit, onClose }) => {
+export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
+  isOpen,
+  onSubmit,
+  onClose,
+  onPaired,
+  startWithCode = false,
+}) => {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Pairing leads; the code is the fallback the user asks for. Revealing it leaves the pairing
+  // request polling, so whichever finishes first enrols this device.
+  const [codeShown, setCodeShown] = useState(startWithCode);
   // A google-source submit can run a minutes-long OAuth dance; the user may dismiss the modal
   // meanwhile. The ref lets the late resolution route its error to a toast instead of a
   // no-longer-rendered error line.
@@ -50,8 +70,9 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
     if (isOpen) {
       setCode('');
       setErrorMessage(null);
+      setCodeShown(startWithCode);
     }
-  }, [isOpen]);
+  }, [isOpen, startWithCode]);
 
   // Escape can unmount the whole settings tree without an isOpen=false render (SettingsModal
   // and Modal both handle it) — treat unmount as dismissed so a late failure still toasts.
@@ -91,53 +112,68 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({ isOpen, onSubm
     }
   };
 
+  const revealCode = () => {
+    setCodeShown(true);
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Enter recovery code" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={TITLE} size="md">
       <div className="space-y-4">
-        <p className="text-sm text-secondary">
-          Enter the recovery code shown when you enabled sync on another device.
-        </p>
-
-        <div className="space-y-2">
-          <label htmlFor="enroll-code-input" className="block text-sm font-medium text-primary">
-            Recovery code
-          </label>
-          <input
-            id="enroll-code-input"
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={isSubmitting}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50"
+        {!startWithCode && (
+          <PairingPanel
+            onComplete={onPaired}
+            onUseRecoveryCode={codeShown ? undefined : revealCode}
           />
-        </div>
-
-        {errorMessage && (
-          <p role="alert" className="text-sm text-red-600">
-            {errorMessage}
-          </p>
         )}
 
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isSubmitting || code.trim() === ''}
-          className="w-full rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSubmitting ? (
-            <span className="flex items-center justify-center gap-2">
-              <span
-                data-testid="enroll-spinner"
-                className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"
+        {codeShown && (
+          <div className="space-y-4 border-t border-border pt-4">
+            <p className="text-sm text-secondary">
+              Enter the recovery code shown when you enabled sync on another device.
+            </p>
+
+            <div className="space-y-2">
+              <label htmlFor="enroll-code-input" className="block text-sm font-medium text-primary">
+                Recovery code
+              </label>
+              <input
+                id="enroll-code-input"
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                disabled={isSubmitting}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 font-mono text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50"
               />
-              Enrolling...
-            </span>
-          ) : (
-            'Enroll'
-          )}
-        </button>
+            </div>
+
+            {errorMessage && (
+              <p role="alert" className="text-sm text-red-600">
+                {errorMessage}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting || code.trim() === ''}
+              className="w-full rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span
+                    data-testid="enroll-spinner"
+                    className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin"
+                  />
+                  Enrolling...
+                </span>
+              ) : (
+                'Enroll'
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </Modal>
   );

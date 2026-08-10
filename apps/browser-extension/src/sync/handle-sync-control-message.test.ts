@@ -1,6 +1,7 @@
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
+  type PendingPairing,
   RecoveryCodeError,
   RecoveryCodeRequiredError,
   type SyncStatus,
@@ -822,5 +823,211 @@ describe('handleSyncControlMessage: sessions', () => {
     );
 
     expect(result).toEqual({ ok: true, kind: 'revokedCount', revoked: 3 });
+  });
+});
+
+describe('handleSyncControlMessage: pairing', () => {
+  const REQUEST: PendingPairing = {
+    id: 'pairing-1',
+    deviceName: 'phone',
+    requesterCommitment: 'commitment',
+    requesterPublicKey: null,
+    requesterNonce: null,
+    createdAt: 1,
+  };
+
+  it('routes beginPairing to the engine and wraps a started pairing', async () => {
+    const engine = fakeControlSurface({
+      beginPairing: vi.fn().mockResolvedValue({ pairingId: 'pairing-1' }),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'beginPairing' },
+      fakeDeps()
+    );
+
+    expect(engine.beginPairing).toHaveBeenCalledOnce();
+    expect(result).toEqual({
+      ok: true,
+      kind: 'pairingStarted',
+      pairing: { pairingId: 'pairing-1' },
+    });
+  });
+
+  it('carries a null beginPairing answer through unchanged', async () => {
+    const engine = fakeControlSurface({ beginPairing: vi.fn().mockResolvedValue(null) });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'beginPairing' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'pairingStarted', pairing: null });
+  });
+
+  it('routes pollPairing to the engine and wraps its poll result', async () => {
+    const engine = fakeControlSurface({
+      pollPairing: vi.fn().mockResolvedValue({ kind: 'confirm', sas: '123456' }),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'pollPairing' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      kind: 'pairingPoll',
+      result: { kind: 'confirm', sas: '123456' },
+    });
+  });
+
+  it('routes listPairingRequests to the engine and wraps the pending requests', async () => {
+    const engine = fakeControlSurface({
+      listPairingRequests: vi.fn().mockResolvedValue([REQUEST]),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'listPairingRequests' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: true, kind: 'pairingRequests', requests: [REQUEST] });
+  });
+
+  it('routes commitPairing to the engine with the message id and wraps the result', async () => {
+    const commitPairing = vi.fn().mockResolvedValue({ pending: true });
+    const engine = fakeControlSurface({ commitPairing });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'commitPairing', pairingRequestId: 'pairing-1' },
+      fakeDeps()
+    );
+
+    expect(commitPairing).toHaveBeenCalledWith('pairing-1');
+    expect(result).toEqual({ ok: true, kind: 'pairingCommit', result: { pending: true } });
+  });
+
+  it('rejects commitPairing with no pairingRequestId rather than forwarding it', async () => {
+    const commitPairing = vi.fn();
+    const engine = fakeControlSurface({ commitPairing });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'commitPairing' },
+      fakeDeps()
+    );
+
+    expect(commitPairing).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('routes pollApproval to the engine with the message id and forwarded row', async () => {
+    const pollApproval = vi.fn().mockResolvedValue({ kind: 'waiting' });
+    const engine = fakeControlSurface({ pollApproval });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      {
+        kind: 'cuewise-sync-control',
+        op: 'pollApproval',
+        pairingRequestId: 'pairing-1',
+        pairingRow: REQUEST,
+      },
+      fakeDeps()
+    );
+
+    expect(pollApproval).toHaveBeenCalledWith('pairing-1', REQUEST);
+    expect(result).toEqual({ ok: true, kind: 'pairingApproval', result: { kind: 'waiting' } });
+  });
+
+  it('rejects pollApproval with no pairingRequestId rather than forwarding it', async () => {
+    const pollApproval = vi.fn();
+    const engine = fakeControlSurface({ pollApproval });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'pollApproval' },
+      fakeDeps()
+    );
+
+    expect(pollApproval).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('routes approvePairing to the engine with the message id and wraps the result', async () => {
+    const approvePairing = vi.fn().mockResolvedValue(true);
+    const engine = fakeControlSurface({ approvePairing });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'approvePairing', pairingRequestId: 'pairing-1' },
+      fakeDeps()
+    );
+
+    expect(approvePairing).toHaveBeenCalledWith('pairing-1');
+    expect(result).toEqual({ ok: true, kind: 'pairingApprove', approved: true });
+  });
+
+  it('rejects approvePairing with no pairingRequestId rather than forwarding it', async () => {
+    const approvePairing = vi.fn();
+    const engine = fakeControlSurface({ approvePairing });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'approvePairing' },
+      fakeDeps()
+    );
+
+    expect(approvePairing).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('routes denyPairing to the engine with the message id and answers ok', async () => {
+    const denyPairing = vi.fn().mockResolvedValue(undefined);
+    const engine = fakeControlSurface({ denyPairing });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'denyPairing', pairingRequestId: 'pairing-1' },
+      fakeDeps()
+    );
+
+    expect(denyPairing).toHaveBeenCalledWith('pairing-1');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('rejects denyPairing with no pairingRequestId rather than forwarding it', async () => {
+    const denyPairing = vi.fn();
+    const engine = fakeControlSurface({ denyPairing });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'denyPairing' },
+      fakeDeps()
+    );
+
+    expect(denyPairing).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('maps a thrown commitPairing to a serialisable failure, not a rejected promise', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const engine = fakeControlSurface({
+      commitPairing: vi.fn().mockRejectedValue(new Error('relay unreachable')),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'commitPairing', pairingRequestId: 'pairing-1' },
+      fakeDeps()
+    );
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: 'relay unreachable' });
   });
 });

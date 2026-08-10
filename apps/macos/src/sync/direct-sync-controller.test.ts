@@ -1,6 +1,6 @@
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
-import type { SyncEngineControlSurface, SyncStatus } from '@cuewise/sync-engine';
+import type { PendingPairing, SyncEngineControlSurface, SyncStatus } from '@cuewise/sync-engine';
 import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { FakeSyncServer } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
 import { fakeControlSurface } from '@cuewise/sync-engine/src/__fixtures__/fake-control-surface';
@@ -873,5 +873,185 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     const firstChallenge = new URL(calls[0]).searchParams.get('code_challenge');
     const secondChallenge = new URL(calls[1]).searchParams.get('code_challenge');
     expect(secondChallenge).not.toBe(firstChallenge);
+  });
+});
+
+// beginPairing/pollPairing/pollApproval are bare passthroughs (no local try/catch — they rely on
+// the engine's own never-throws contract, proven in sync-engine's engine.pairing.test.ts). The
+// other four (listPairingRequests/commitPairing/approvePairing/denyPairing) are NOT self-contained
+// on the engine side, so the controller wraps each in its own try/catch to keep its never-throws
+// contract — that wrapping, and its exact fallback value, is what these tests pin.
+describe('createDirectSyncController: pairing', () => {
+  const REQUEST: PendingPairing = {
+    id: 'pairing-1',
+    deviceName: 'phone',
+    requesterCommitment: 'commitment',
+    requesterPublicKey: null,
+    requesterNonce: null,
+    createdAt: 1,
+  };
+
+  it('beginPairing() forwards the engine result unchanged', async () => {
+    const engine = fakeControlSurface({
+      beginPairing: vi.fn().mockResolvedValue({ pairingId: 'pairing-1' }),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.beginPairing()).resolves.toEqual({ pairingId: 'pairing-1' });
+  });
+
+  it('pollPairing() forwards the engine result unchanged', async () => {
+    const engine = fakeControlSurface({
+      pollPairing: vi.fn().mockResolvedValue({ kind: 'confirm', sas: '123456' }),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.pollPairing()).resolves.toEqual({ kind: 'confirm', sas: '123456' });
+  });
+
+  it('pollApproval() forwards the id and row to the engine and its result unchanged', async () => {
+    const pollApproval = vi.fn().mockResolvedValue({ kind: 'waiting' });
+    const engine = fakeControlSurface({ pollApproval });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.pollApproval('pairing-1', REQUEST)).resolves.toEqual({
+      kind: 'waiting',
+    });
+    expect(pollApproval).toHaveBeenCalledWith('pairing-1', REQUEST);
+  });
+
+  it('listPairingRequests() forwards the engine result unchanged', async () => {
+    const engine = fakeControlSurface({
+      listPairingRequests: vi.fn().mockResolvedValue([REQUEST]),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.listPairingRequests()).resolves.toEqual([REQUEST]);
+  });
+
+  it('listPairingRequests() answers [] and logs, never throwing, when the engine rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const engine = fakeControlSurface({
+      listPairingRequests: vi.fn().mockRejectedValue(new Error('relay unreachable')),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.listPairingRequests()).resolves.toEqual([]);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('commitPairing() forwards the id and the engine result unchanged', async () => {
+    const commitPairing = vi.fn().mockResolvedValue({ pending: true });
+    const engine = fakeControlSurface({ commitPairing });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.commitPairing('pairing-1')).resolves.toEqual({ pending: true });
+    expect(commitPairing).toHaveBeenCalledWith('pairing-1');
+  });
+
+  it('commitPairing() answers null and logs, never throwing, when the engine rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const engine = fakeControlSurface({
+      commitPairing: vi.fn().mockRejectedValue(new Error('relay unreachable')),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.commitPairing('pairing-1')).resolves.toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('approvePairing() forwards the id and the engine result unchanged', async () => {
+    const approvePairing = vi.fn().mockResolvedValue(true);
+    const engine = fakeControlSurface({ approvePairing });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.approvePairing('pairing-1')).resolves.toBe(true);
+    expect(approvePairing).toHaveBeenCalledWith('pairing-1');
+  });
+
+  it('approvePairing() answers false and logs, never throwing, when the engine rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const engine = fakeControlSurface({
+      approvePairing: vi.fn().mockRejectedValue(new Error('relay unreachable')),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.approvePairing('pairing-1')).resolves.toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('denyPairing() forwards the id to the engine and resolves', async () => {
+    const denyPairing = vi.fn().mockResolvedValue(undefined);
+    const engine = fakeControlSurface({ denyPairing });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.denyPairing('pairing-1')).resolves.toBeUndefined();
+    expect(denyPairing).toHaveBeenCalledWith('pairing-1');
+  });
+
+  it('denyPairing() never throws and only logs when the engine rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const engine = fakeControlSurface({
+      denyPairing: vi.fn().mockRejectedValue(new Error('relay unreachable')),
+    });
+    const { controller } = buildDirectSyncController<SyncEngineControlSurface>({
+      baseUrl: BASE_URL,
+      keyStore: new FakeKvStore(),
+      oauthDriver: unusedDriver(),
+      buildEngine: () => engine,
+    });
+
+    await expect(controller.denyPairing('pairing-1')).resolves.toBeUndefined();
+    expect(errorSpy).toHaveBeenCalled();
   });
 });

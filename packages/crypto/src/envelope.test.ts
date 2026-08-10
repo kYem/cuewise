@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GOLDEN } from './__fixtures__/golden-envelope.fixtures';
+import { b64urlDecode, b64urlEncode } from './base64url';
 import { openRecord, sealRecord } from './envelope';
 import { DecryptError, EnvelopeParseError } from './errors';
 import { type DataKey, generateDataKey } from './keys';
-import { b64urlDecode, b64urlEncode, randomBytes } from './primitives';
+import { randomBytes } from './primitives';
 
 const GOAL_JSON = JSON.stringify({
   id: 'g1',
@@ -45,7 +46,7 @@ describe('record envelope', () => {
 
   it('AAD binding is enforced at open, not incidental: an envelope hand-built with empty AAD fails', async () => {
     // Proves openRecord supplies a non-empty AAD — the permanent form of the mutation check.
-    const { aesGcmSeal, b64urlEncode, randomBytes, utf8 } = await import('./primitives');
+    const { aesGcmSeal, utf8 } = await import('./primitives');
     const dk = generateDataKey();
     const iv = randomBytes(12);
     const ct = await aesGcmSeal(dk, iv, utf8(GOAL_JSON), utf8(''));

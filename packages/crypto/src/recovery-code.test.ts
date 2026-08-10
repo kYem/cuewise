@@ -4,9 +4,9 @@ import {
   GOLDEN_MK_B64URL,
   GOLDEN_SECRET,
 } from './__fixtures__/golden-recovery-code.fixtures';
+import { b64urlEncode } from './base64url';
 import { RecoveryCodeError } from './errors';
 import { deriveMasterKey } from './keys';
-import { b64urlEncode } from './primitives';
 import { generateRecoveryCode, parseRecoveryCode } from './recovery-code';
 
 describe('recovery code', () => {

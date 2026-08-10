@@ -3,6 +3,9 @@ import type { SyncEngine } from './engine';
 // Re-exported so hosts (macOS/extension DirectSyncController) can match enableSync's thrown-error
 // contract without taking a direct @cuewise/crypto dependency of their own.
 export { RecoveryCodeError, type RecoveryCodeErrorKind } from '@cuewise/crypto';
+// Re-exported so the approver UI (packages/app, which depends on sync-engine but not sync-client
+// directly) can type listPairingRequests()'s result.
+export type { PendingPairing } from '@cuewise/sync-client';
 export {
   type CollectionBinding,
   DEVICE_LOCAL_SETTINGS_KEYS,
@@ -23,6 +26,8 @@ export {
   type EngineApiClient,
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
+  type PairingApprovalResult,
+  type PairingPollResult,
   RECOVERY_ENVELOPE_KEY,
   type RecoveryEnvelopeState,
   SyncEngine,
@@ -36,6 +41,13 @@ export type SyncEngineControlSurface = Pick<
   SyncEngine,
   | 'enableSync'
   | 'resumeEnrollWithCode'
+  | 'beginPairing'
+  | 'pollPairing'
+  | 'listPairingRequests'
+  | 'commitPairing'
+  | 'pollApproval'
+  | 'approvePairing'
+  | 'denyPairing'
   | 'disableSync'
   | 'regenerateRecoveryCode'
   | 'syncNow'
@@ -57,6 +69,7 @@ export {
   type KeyLifecycleDeps,
   type KeyTransport,
   loadPersistedDataKey,
+  persistDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SYNC_DATA_KEY,

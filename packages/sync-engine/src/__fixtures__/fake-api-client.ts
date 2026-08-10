@@ -5,9 +5,33 @@ import type {
   SyncRecord,
   SyncSession,
 } from '@cuewise/shared';
-import { ApiError } from '@cuewise/sync-client';
+import {
+  ApiError,
+  type PairingCreated,
+  type PairingForRequester,
+  type PendingPairing,
+} from '@cuewise/sync-client';
 import { PULL_PAGE } from '../cycle';
 import type { EngineApiClient } from '../engine';
+
+/** The server's pairing TTL (apps/api's PAIRING_TTL_MS) — a row is unreachable after ten minutes. */
+export const PAIRING_TTL_MS = 10 * 60 * 1000;
+
+/** One relay row. `requesterSession`/`approverSession` stand in for the real tokens.id handles. */
+interface FakePairing {
+  id: string;
+  requesterSession: string;
+  requesterCommitment: string;
+  // Both null until the reveal, which is refused before a commit and again once one is stored.
+  requesterPublicKey: string | null;
+  requesterNonce: string | null;
+  deviceName: string;
+  approverSession: string | null;
+  approverPublicKey: string | null;
+  envelope: string | null;
+  createdAt: number;
+  expiresAt: number;
+}
 
 /**
  * Shared in-memory backend behind one or more FakeApiClient "devices" — mirrors the real
@@ -15,8 +39,13 @@ import type { EngineApiClient } from '../engine';
  */
 export class FakeSyncServer {
   private nextSeq = 0;
+  private nextSession = 0;
+  private nextPairing = 0;
   private recoveryEnvelope: string | null = null;
   private readonly records: SyncRecord[] = [];
+  // One server is one account, so every row here is already scoped the way the real store
+  // scopes by userId; what still has to be told apart is which session made the call.
+  private readonly pairings = new Map<string, FakePairing>();
 
   getRecoveryEnvelope(): KeyEnvelopeRecord | null {
     if (this.recoveryEnvelope === null) {
@@ -60,6 +89,165 @@ export class FakeSyncServer {
     return { records: page, cursor };
   }
 
+  /** A fresh session handle for a "device"; a re-exchange mints a new one, as a new token does. */
+  newSessionId(): string {
+    this.nextSession += 1;
+    return `fake-session-${this.nextSession}`;
+  }
+
+  // Device pairing (ENG-50), mirroring D1SyncStore: one live request per requester session,
+  // commit only while no approver holds it, reveal only after that commit and only once, and the
+  // envelope only from the session that committed, once the reveal is stored.
+  createPairing(
+    session: string,
+    deviceName: string,
+    commitment: string,
+    now: number
+  ): PairingCreated {
+    for (const [id, row] of this.pairings) {
+      if (row.requesterSession === session) {
+        this.pairings.delete(id);
+      }
+    }
+    this.nextPairing += 1;
+    const id = `fake-pairing-${this.nextPairing}`;
+    const expiresAt = now + PAIRING_TTL_MS;
+    this.pairings.set(id, {
+      id,
+      requesterSession: session,
+      requesterCommitment: commitment,
+      requesterPublicKey: null,
+      requesterNonce: null,
+      deviceName,
+      approverSession: null,
+      approverPublicKey: null,
+      envelope: null,
+      createdAt: now,
+      expiresAt,
+    });
+    return { id, expiresAt };
+  }
+
+  getPairingForRequester(id: string, now: number): PairingForRequester | null {
+    const row = this.livePairing(id, now);
+    if (row === undefined) {
+      return null;
+    }
+    return {
+      id: row.id,
+      approverPublicKey: row.approverPublicKey,
+      envelope: row.envelope,
+      expiresAt: row.expiresAt,
+    };
+  }
+
+  /** Excludes the caller's own request and anything already answered with an envelope. */
+  listPendingPairings(excludeSession: string, now: number): PendingPairing[] {
+    return (
+      [...this.pairings.values()]
+        .filter(
+          (row) =>
+            row.expiresAt > now && row.envelope === null && row.requesterSession !== excludeSession
+        )
+        // Oldest first, mirroring the real store's ORDER BY created_at ASC.
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((row) => ({
+          id: row.id,
+          deviceName: row.deviceName,
+          requesterCommitment: row.requesterCommitment,
+          requesterPublicKey: row.requesterPublicKey,
+          requesterNonce: row.requesterNonce,
+          createdAt: row.createdAt,
+        }))
+    );
+  }
+
+  commitPairing(
+    id: string,
+    session: string,
+    publicKey: string,
+    now: number
+  ): 'committed' | 'conflict' | 'not_found' {
+    const row = this.livePairing(id, now);
+    if (row === undefined) {
+      return 'not_found';
+    }
+    if (row.approverSession !== null) {
+      return 'conflict';
+    }
+    row.approverSession = session;
+    row.approverPublicKey = publicKey;
+    return 'committed';
+  }
+
+  revealPairing(
+    id: string,
+    session: string,
+    publicKey: string,
+    nonce: string,
+    now: number
+  ): 'revealed' | 'conflict' | 'not_found' {
+    const row = this.livePairing(id, now);
+    if (row === undefined) {
+      return 'not_found';
+    }
+    // Another session's reveal, one before any approver committed, and a second reveal all read
+    // back as conflict, exactly as the real UPDATE's WHERE does.
+    if (
+      row.requesterSession !== session ||
+      row.approverPublicKey === null ||
+      row.requesterPublicKey !== null
+    ) {
+      return 'conflict';
+    }
+    row.requesterPublicKey = publicKey;
+    row.requesterNonce = nonce;
+    return 'revealed';
+  }
+
+  putPairingEnvelope(
+    id: string,
+    session: string,
+    envelope: string,
+    now: number
+  ): 'stored' | 'conflict' | 'not_found' {
+    const row = this.livePairing(id, now);
+    if (row === undefined) {
+      return 'not_found';
+    }
+    // An uncommitted or unrevealed row reads back as a conflict too, exactly as the real
+    // UPDATE's WHERE does.
+    if (row.approverSession !== session || row.requesterPublicKey === null) {
+      return 'conflict';
+    }
+    row.envelope = envelope;
+    return 'stored';
+  }
+
+  deletePairing(id: string): boolean {
+    return this.pairings.delete(id);
+  }
+
+  private livePairing(id: string, now: number): FakePairing | undefined {
+    const row = this.pairings.get(id);
+    if (row === undefined || row.expiresAt <= now) {
+      return undefined;
+    }
+    return row;
+  }
+
+  /**
+   * Test-only: the malicious-relay case — swaps a stored reveal for a key the commitment the
+   * approver captured does not cover. Nothing a real server may do, and everything it might try.
+   */
+  substituteRevealedPublicKey(id: string, publicKey: string): void {
+    const row = this.pairings.get(id);
+    if (row === undefined || row.requesterPublicKey === null) {
+      throw new Error(`no revealed pairing to substitute a key on: ${id}`);
+    }
+    row.requesterPublicKey = publicKey;
+  }
+
   /** Test-only inspection of everything the server currently holds. */
   allRecords(): readonly SyncRecord[] {
     return this.records;
@@ -69,6 +257,13 @@ export class FakeSyncServer {
   reset(): void {
     this.records.length = 0;
   }
+}
+
+function pairingError(result: 'conflict' | 'not_found'): ApiError {
+  if (result === 'conflict') {
+    return new ApiError('pairing_conflict', 409);
+  }
+  return new ApiError('pairing_not_found', 404);
 }
 
 /**
@@ -101,11 +296,17 @@ export class FakeApiClient implements EngineApiClient {
   revokeOtherSessionsResult = 0;
   /** Total successful token exchanges — proves resumeEnrollWithCode doesn't re-exchange. */
   exchangeCount = 0;
+  /** This device's clock, which the server measures the pairing TTL against; move it to expire a row. */
+  now: () => number = Date.now;
   private tokenCounter = 0;
   private nextGetChangesError: Error | null = null;
   private nextPushChangesError: Error | null = null;
+  private sessionId: string;
+  private deviceName = 'Fake Device';
 
-  constructor(private readonly server: FakeSyncServer) {}
+  constructor(private readonly server: FakeSyncServer) {
+    this.sessionId = server.newSessionId();
+  }
 
   /** One-shot: fails the next getChanges as the server does on a discarded cursor. */
   rejectNextGetChangesWithResync(): void {
@@ -129,6 +330,10 @@ export class FakeApiClient implements EngineApiClient {
     }
     this.tokenCounter += 1;
     this.exchangeCount += 1;
+    // A new token is a new session row, and the device name a pairing is listed under is the
+    // one that token was minted with.
+    this.sessionId = this.server.newSessionId();
+    this.deviceName = req.deviceName;
     return { token: `fake-token-${this.tokenCounter}` };
   }
 
@@ -177,6 +382,53 @@ export class FakeApiClient implements EngineApiClient {
   async putRecoveryEnvelope(envelope: string, opts?: { ifAbsent?: boolean }): Promise<void> {
     this.assertAuthorized();
     this.server.putRecoveryEnvelope(envelope, opts?.ifAbsent === true);
+  }
+
+  async createPairing(commitment: string): Promise<PairingCreated> {
+    this.assertAuthorized();
+    return this.server.createPairing(this.sessionId, this.deviceName, commitment, this.now());
+  }
+
+  async listPairings(): Promise<PendingPairing[]> {
+    this.assertAuthorized();
+    return this.server.listPendingPairings(this.sessionId, this.now());
+  }
+
+  // Null, not a throw: the real client maps the 404 an expired or denied row answers with, since
+  // that is a poll state the requester loops on.
+  async getPairing(id: string): Promise<PairingForRequester | null> {
+    this.assertAuthorized();
+    return this.server.getPairingForRequester(id, this.now());
+  }
+
+  async commitPairing(id: string, publicKey: string): Promise<void> {
+    this.assertAuthorized();
+    const result = this.server.commitPairing(id, this.sessionId, publicKey, this.now());
+    if (result !== 'committed') {
+      throw pairingError(result);
+    }
+  }
+
+  async revealPairing(id: string, publicKey: string, nonce: string): Promise<void> {
+    this.assertAuthorized();
+    const result = this.server.revealPairing(id, this.sessionId, publicKey, nonce, this.now());
+    if (result !== 'revealed') {
+      throw pairingError(result);
+    }
+  }
+
+  async putPairingEnvelope(id: string, envelope: string): Promise<void> {
+    this.assertAuthorized();
+    const result = this.server.putPairingEnvelope(id, this.sessionId, envelope, this.now());
+    if (result !== 'stored') {
+      throw pairingError(result);
+    }
+  }
+
+  // 404-tolerant like the real client: denying a row that is already gone is done, not an error.
+  async deletePairing(id: string): Promise<void> {
+    this.assertAuthorized();
+    this.server.deletePairing(id);
   }
 
   async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {

@@ -1,14 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DecryptError, EnvelopeParseError } from './errors';
+import { b64urlEncode } from './base64url';
+import { DecryptError } from './errors';
 import {
   aesGcmOpen,
   aesGcmSeal,
-  b64urlDecode,
-  b64urlEncode,
+  generateX25519KeyPair,
   hkdfSha256,
   randomBytes,
   sha256,
   utf8,
+  x25519SharedSecret,
 } from './primitives';
 
 describe('primitives', () => {
@@ -79,32 +80,6 @@ describe('primitives', () => {
     await expect(aesGcmOpen(key, iv, sealed, utf8('aad'))).rejects.toThrow(DecryptError);
   });
 
-  it('b64url round-trips and rejects invalid input', () => {
-    const bytes = randomBytes(33);
-    expect(b64urlDecode(b64urlEncode(bytes))).toEqual(bytes);
-    expect(b64urlEncode(bytes)).not.toMatch(/[+/=]/);
-    expect(() => b64urlDecode('not!!valid')).toThrow(EnvelopeParseError);
-  });
-
-  it('b64urlDecode carries the atob failure as .cause on valid-alphabet, invalid-length input', () => {
-    // 'A' passes the alphabet check but pads to a length atob rejects.
-    expect(() => b64urlDecode('A')).toThrowError(
-      expect.objectContaining({ cause: expect.anything() })
-    );
-  });
-
-  it.each([
-    32767, 32768, 32769, 65536,
-  ])('b64urlEncode round-trips and matches Buffer.from(bytes).toString("base64url") at length %i (CHUNK_SIZE=0x8000 boundary)', (length) => {
-    const bytes = new Uint8Array(length);
-    for (let i = 0; i < length; i += 1) {
-      bytes[i] = i % 251;
-    }
-    const encoded = b64urlEncode(bytes);
-    expect(encoded).toBe(Buffer.from(bytes).toString('base64url'));
-    expect(b64urlDecode(encoded)).toEqual(bytes);
-  });
-
   it('caches the imported AES CryptoKey by object reference: same key object imports once, a different one re-imports', async () => {
     const importKeySpy = vi.spyOn(globalThis.crypto.subtle, 'importKey');
     const key = randomBytes(32);
@@ -143,5 +118,34 @@ describe('primitives', () => {
     } finally {
       Object.defineProperty(globalThis.crypto, 'subtle', { value: original, configurable: true });
     }
+  });
+});
+
+describe('x25519', () => {
+  it('two keypairs derive the same shared secret from opposite sides', async () => {
+    const a = await generateX25519KeyPair();
+    const b = await generateX25519KeyPair();
+
+    const ab = await x25519SharedSecret(a.privateKey, b.publicKey);
+    const ba = await x25519SharedSecret(b.privateKey, a.publicKey);
+
+    expect(ab).toEqual(ba);
+    expect(ab).toHaveLength(32);
+  });
+
+  it('a third keypair derives a different secret', async () => {
+    const a = await generateX25519KeyPair();
+    const b = await generateX25519KeyPair();
+    const c = await generateX25519KeyPair();
+
+    const ab = await x25519SharedSecret(a.privateKey, b.publicKey);
+    const cb = await x25519SharedSecret(c.privateKey, b.publicKey);
+
+    expect(ab).not.toEqual(cb);
+  });
+
+  it('exports a 32-byte raw public key', async () => {
+    const pair = await generateX25519KeyPair();
+    expect(pair.publicKey).toHaveLength(32);
   });
 });

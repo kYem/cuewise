@@ -1,5 +1,10 @@
 import { describeThrown, logger } from '@cuewise/shared';
-import type { SyncFailureReason, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PendingPairing,
+  SyncFailureReason,
+  SyncNowResult,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import { cn } from '@cuewise/ui';
 import { AlertTriangle, CloudUpload, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import type React from 'react';
@@ -15,6 +20,7 @@ import type {
   SyncUiStatus,
 } from '../../sync/sync-controller';
 import {
+  AUTH_CANCELLED_DETAIL,
   isCancelledEnable,
   LAST_CYCLE_UNAVAILABLE,
   useSyncController,
@@ -22,6 +28,8 @@ import {
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
+import { PairingPanel, POLL_INTERVAL_MS } from './PairingPanel';
+import { PairingRequestCard } from './PairingRequestCard';
 import { RecoveryCodeModal } from './RecoveryCodeModal';
 import { SessionList } from './SessionList';
 import { SettingRow, SettingSubgroup, Switch } from './SettingControls';
@@ -56,11 +64,13 @@ const GoogleGlyph: React.FC = () => (
   </svg>
 );
 
-/** What a status puts on screen. A pill and a reconnect prompt are alternatives, never both. */
+/** What a status puts on screen. A pill and a prompt are alternatives, never both. */
 type StatusPresentation =
   | { readonly kind: 'quiet' }
   | { readonly kind: 'pill'; readonly label: string }
-  | { readonly kind: 'reconnect'; readonly prompt: string };
+  | { readonly kind: 'reconnect'; readonly prompt: string }
+  /** Same explanation, but the fix is another device approving this one (ENG-50). */
+  | { readonly kind: 'pairing'; readonly prompt: string };
 
 const QUIET: StatusPresentation = { kind: 'quiet' };
 
@@ -73,11 +83,11 @@ const STATUS_PRESENTATION_BY_STATUS: Record<SyncUiStatus, StatusPresentation> = 
   active: { kind: 'pill', label: 'Active' },
   error: QUIET,
   needs_reauth: { kind: 'reconnect', prompt: 'Sign-in expired — reconnect to keep syncing.' },
-  // "can't read" rather than "is missing": a transient read failure reaches this status too.
+  // "can't read" rather than "is missing": a transient read failure reaches this status too. The
+  // panel below says what to do about it, so this line only names the state.
   needs_enroll: {
-    kind: 'reconnect',
-    prompt:
-      "This device can't read its encryption key, so nothing can sync. Reconnect with your recovery code to restore it.",
+    kind: 'pairing',
+    prompt: "This device can't read its encryption key, so nothing can sync.",
   },
 };
 
@@ -100,6 +110,14 @@ const FAILURE_MESSAGE: Record<SyncFailureReason, string> = {
 };
 
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
+
+// The modal's one quiet outcome — no error line, no toast (see isCancelledEnable). Returned when
+// a pairing has already enrolled the device, so the typed code's late answer is moot.
+const PAIRING_ALREADY_ENROLLED: EnableResult = {
+  ok: false,
+  reason: 'auth',
+  detail: AUTH_CANCELLED_DETAIL,
+};
 
 // Widened once: `reason` crosses an untrusted wire, so a skewed peer's unknown value must fall
 // back rather than paint an empty badge.
@@ -253,6 +271,14 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // Which flow opened EnrollCodeModal — reconnect reuses persisted creds; enable/google re-run
   // that same sign-in with the entered code (google re-auths for a fresh id token).
   const [enrollSource, setEnrollSource] = useState<'enable' | 'google' | 'reconnect'>('enable');
+  // Whether the modal opens on the code input: true only when the screen behind it already
+  // offered pairing, so the same offer is not made twice.
+  const [enrollCodeFirst, setEnrollCodeFirst] = useState(false);
+  // Bridges the gap between a pairing completing and status catching up — both hosts report status
+  // asynchronously (the extension's arrives over a storage broadcast) — until something ends it.
+  const [pairedEnroll, setPairedEnroll] = useState(false);
+  // Beside the state because a submission that resolves later reads it from a stale closure.
+  const pairedEnrollRef = useRef(false);
   const [confirmDisableOpen, setConfirmDisableOpen] = useState(false);
   const [unsavedCode, setUnsavedCode] = useState(false);
   // The error state's "Try again" retries the exact action that failed (enable / google /
@@ -278,6 +304,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const accountGenRef = useRef(0);
   const lastCycleGenRef = useRef(0);
   const lastCycleRequestedRef = useRef(false);
+  // The approver's card (ENG-50): requests this device can wrap its key to, polled only while
+  // active — every id here came from a GATED listPairingRequests, never cached across a status
+  // change (see PairingRequestCard's commitPairing note).
+  const [pairingRequests, setPairingRequests] = useState<PendingPairing[]>([]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -285,6 +315,51 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    // 'syncing' too: macOS emits it on routine cycles, and dropping the list there erases the
+    // digits mid-confirmation. Only a status that ends this device's ability to wrap the key does.
+    if (!controller || (status !== 'active' && status !== 'syncing')) {
+      setPairingRequests([]);
+      return undefined;
+    }
+    let cancelled = false;
+    let polling = false;
+    const poll = async () => {
+      // A slow poll must not have the next tick stack on top of it — same guard as PairingPanel's.
+      if (polling) {
+        return;
+      }
+      polling = true;
+      try {
+        const requests = await controller.listPairingRequests();
+        if (!cancelled) {
+          setPairingRequests(requests);
+        }
+      } catch (error) {
+        // Contracted never to reject; a host that breaks that degrades to the last list rather than
+        // taking the panel down.
+        logger.error(`Cloud sync pairing requests poll failed: ${describeThrown(error)}`, error);
+      } finally {
+        polling = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => {
+      void poll();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [controller, status]);
+
+  // Any status change ends the window — active/syncing means the enrol is visible now,
+  // off/needs_enroll that the device is keyless again — so it spans only the stretch before either.
+  useEffect(() => {
+    pairedEnrollRef.current = false;
+    setPairedEnroll(false);
+  }, [status]);
 
   useEffect(() => {
     if (!controller || detailsRequestedRef.current) {
@@ -420,6 +495,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
+  // One writer for both halves, so the ref a late submission reads can never disagree with the
+  // state the pairing panel's gate reads.
+  const latchPairedEnroll = (paired: boolean) => {
+    pairedEnrollRef.current = paired;
+    setPairedEnroll(paired);
+  };
+
   // Every path that lands on a new account: a reconnect can land on a DIFFERENT one, so an in-flight
   // click must stop being able to paint or toast for the previous one, and both shown facts re-read.
   const adoptNewAccount = async () => {
@@ -474,9 +556,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       return;
     }
     if (result.reason === 'needs-code') {
-      // Device #2 of an existing account: EnrollCodeModal collects the recovery code and re-runs
-      // this same sign-in method with it. A brand-new account (device #1) never needs a code.
+      // Device #2 of an existing account: EnrollCodeModal leads with pairing and collects the
+      // recovery code behind it, re-running this same sign-in method with what was typed. A
+      // brand-new account (device #1) never needs a code.
       setEnrollSource(source);
+      setEnrollCodeFirst(false);
+      // A new attempt: whatever a previous pairing did, this one's answers are its own.
+      latchPairedEnroll(false);
       setEnrollOpen(true);
       return;
     }
@@ -582,6 +668,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
       routeAbandonedEnable(result.recoveryCode);
     } else if (isCancelledEnable(result)) {
       logger.info('Cloud sync enroll sign-in was cancelled by the user');
+    } else if (pairedEnrollRef.current && result.recoveryCode === undefined) {
+      // Pairing won the race the revealed code input deliberately allows, so this answer is moot —
+      // but never when it carries a minted code, which only the branches above can surface.
+      logger.info('Cloud sync enroll answered after pairing had already enrolled this device');
+      return PAIRING_ALREADY_ENROLLED;
     } else {
       // The modal renders the message; this is the default-visible trace of what failed.
       logger.error(
@@ -698,6 +789,36 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     await handleEnable();
   };
 
+  // The keyless device's code path is the reconnect one without the code-less attempt that can
+  // only fail: reconnect(code) is where that flow already ended. Code-first, because this screen
+  // is the pairing offer — the modal must not repeat it.
+  const handleUseRecoveryCode = () => {
+    setEnrollSource('reconnect');
+    setEnrollCodeFirst(true);
+    latchPairedEnroll(false);
+    setEnrollOpen(true);
+  };
+
+  // An approval enrolled this device, so it ends where a typed code would have — minus the
+  // recovery code, which pairing never mints. The latch goes up first and synchronously: it is
+  // what keeps any surface from starting a fresh request while the status catches up.
+  const finishPairedEnroll = async () => {
+    latchPairedEnroll(true);
+    setEnrollOpen(false);
+    try {
+      await takeOverFromChromeSync();
+      await adoptNewAccount();
+      setEnabling(false);
+    } catch (error) {
+      logger.error('Cloud sync paired enroll failed', error);
+      useToastStore.getState().error('Something went wrong enabling sync — please try again.');
+    }
+  };
+
+  const handlePairingComplete = () => {
+    void finishPairedEnroll();
+  };
+
   const handleToggle = (checked: boolean) => {
     if (status === 'off') {
       setEnabling(checked);
@@ -745,6 +866,12 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     setUnsavedCode(true);
   };
 
+  // Only approved (envelope stored) or denied (row deleted) truly drop the request — a lost commit
+  // race leaves it pending, so this just beats POLL_INTERVAL_MS for the two cases that do drop.
+  const handlePairingRequestResolved = (id: string) => {
+    setPairingRequests((previous) => previous.filter((request) => request.id !== id));
+  };
+
   const switchChecked = status === 'off' ? enabling : true;
   // `?? QUIET` so a status this build does not know renders nothing, not an empty pill or prompt.
   const presentation = STATUS_PRESENTATION[status] ?? QUIET;
@@ -755,7 +882,11 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   // The badge outranks it: a carried-forward failure is the stronger claim. Only 'active' makes a
   // freshness claim worth qualifying — connecting and syncing have not made one yet.
   const showUnknownCycle = status === 'active' && cycle.kind === 'unknown' && badgeMessage === null;
-  const reconnectPrompt = presentation.kind === 'reconnect' ? presentation.prompt : null;
+  // Both prompts explain a device that has stopped syncing; only the fix offered below differs.
+  const stoppedPrompt =
+    presentation.kind === 'reconnect' || presentation.kind === 'pairing'
+      ? presentation.prompt
+      : null;
   // Only an explicit 'missing': 'unknown' means nothing has answered yet, and an older worker
   // answers details with the field absent entirely. Neither may claim an account has no code.
   // Gated on 'active' because that is the only status where Regenerate, the one fix, renders.
@@ -945,6 +1076,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
                 Regenerate recovery code
               </button>
             </div>
+            {pairingRequests.length > 0 && (
+              <PairingRequestCard
+                key={pairingRequests[0].id}
+                request={pairingRequests[0]}
+                onResolved={handlePairingRequestResolved}
+              />
+            )}
             <SessionList
               onRegenerateRecoveryCode={handleRegenerate}
               isRegeneratingRecoveryCode={isRegenerating}
@@ -953,21 +1091,29 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         </SettingSubgroup>
       )}
 
-      {reconnectPrompt !== null && (
+      {stoppedPrompt !== null && (
         <SettingSubgroup>
           <div className="flex flex-col gap-2 py-2">
             <p data-testid="sync-reconnect-prompt" className="text-xs text-tertiary">
-              {reconnectPrompt}
+              {stoppedPrompt}
             </p>
-            <button
-              type="button"
-              onClick={handleReconnect}
-              disabled={isReconnecting}
-              className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isReconnecting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isReconnecting ? 'Reconnecting…' : 'Reconnect'}
-            </button>
+            {presentation.kind === 'pairing' && !pairedEnroll && (
+              <PairingPanel
+                onUseRecoveryCode={handleUseRecoveryCode}
+                onComplete={handlePairingComplete}
+              />
+            )}
+            {presentation.kind === 'reconnect' && (
+              <button
+                type="button"
+                onClick={handleReconnect}
+                disabled={isReconnecting}
+                className="flex w-fit items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isReconnecting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isReconnecting ? 'Reconnecting…' : 'Reconnect'}
+              </button>
+            )}
           </div>
         </SettingSubgroup>
       )}
@@ -1010,6 +1156,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         isOpen={enrollOpen}
         onSubmit={handleEnrollSubmit}
         onClose={() => setEnrollOpen(false)}
+        onPaired={handlePairingComplete}
+        startWithCode={enrollCodeFirst}
       />
     </div>
   );

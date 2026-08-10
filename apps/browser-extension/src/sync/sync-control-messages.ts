@@ -1,6 +1,13 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSession } from '@cuewise/shared';
-import type { SyncNowResult, SyncOutcome, SyncSignInProvider } from '@cuewise/sync-engine';
+import type {
+  PairingApprovalResult,
+  PairingPollResult,
+  PendingPairing,
+  SyncNowResult,
+  SyncOutcome,
+  SyncSignInProvider,
+} from '@cuewise/sync-engine';
 import { z } from 'zod/mini';
 
 // One source of truth for the op list and its type, so the runtime guard can't desync from the union.
@@ -16,6 +23,13 @@ export const SYNC_CONTROL_OPS = [
   'revokeSession',
   'renameSession',
   'revokeOtherSessions',
+  'beginPairing',
+  'pollPairing',
+  'listPairingRequests',
+  'commitPairing',
+  'pollApproval',
+  'approvePairing',
+  'denyPairing',
 ] as const;
 export type SyncControlOp = (typeof SYNC_CONTROL_OPS)[number];
 
@@ -36,6 +50,11 @@ export interface SyncControlMessage {
   recoveryCode?: string;
   // revokeSession/renameSession-only: the opaque session handle from listSessions. Never a token.
   sessionId?: string;
+  // commitPairing/pollApproval/approvePairing/denyPairing-only: the request id from listPairingRequests.
+  pairingRequestId?: string;
+  // pollApproval-only: the row the section's list poll already fetched, so the worker's engine
+  // reuses it instead of re-listing the whole account against the shared rate bucket.
+  pairingRow?: PendingPairing;
   // details-only: also ask the server about the recovery envelope. Absent (a page realm predating
   // the flag, or a surface that only shows the identity) reports the last recorded answer instead.
   refreshRecoveryEnvelope?: boolean;
@@ -89,6 +108,48 @@ export interface SyncRevokedCountResponse {
   revoked: number;
 }
 
+/** Response to the 'beginPairing' op; `pairing` is null when this device cannot pair right now. */
+export interface SyncPairingStartedResponse {
+  ok: true;
+  kind: 'pairingStarted';
+  pairing: { pairingId: string } | null;
+}
+
+/** Response to the 'pollPairing' op — one poll of the request beginPairing started. */
+export interface SyncPairingPollResponse {
+  ok: true;
+  kind: 'pairingPoll';
+  result: PairingPollResult;
+}
+
+/** Response to the 'listPairingRequests' op — pending requests on this account, for the approver's card. */
+export interface SyncPairingRequestsResponse {
+  ok: true;
+  kind: 'pairingRequests';
+  requests: PendingPairing[];
+}
+
+/** Response to the 'commitPairing' op; null when the row is gone or another device already committed. */
+export interface SyncPairingCommitResponse {
+  ok: true;
+  kind: 'pairingCommit';
+  result: { pending: true } | null;
+}
+
+/** Response to the 'pollApproval' op — one poll of the request this device committed to. */
+export interface SyncPairingApprovalResponse {
+  ok: true;
+  kind: 'pairingApproval';
+  result: PairingApprovalResult;
+}
+
+/** Response to the 'approvePairing' op — whether this device had a matching commit to approve. */
+export interface SyncPairingApproveResponse {
+  ok: true;
+  kind: 'pairingApprove';
+  approved: boolean;
+}
+
 /**
  * Ties each op to the response shape its SW handler produces, so the bridge's send<O> can't
  * silently mis-assume one (adding an op without an entry here is a compile error at send).
@@ -109,6 +170,13 @@ export interface SyncOpResponse {
   revokeSession: SyncControlResponse;
   renameSession: SyncControlResponse;
   revokeOtherSessions: SyncRevokedCountResponse | Extract<SyncControlResponse, { ok: false }>;
+  beginPairing: SyncPairingStartedResponse | Extract<SyncControlResponse, { ok: false }>;
+  pollPairing: SyncPairingPollResponse | Extract<SyncControlResponse, { ok: false }>;
+  listPairingRequests: SyncPairingRequestsResponse | Extract<SyncControlResponse, { ok: false }>;
+  commitPairing: SyncPairingCommitResponse | Extract<SyncControlResponse, { ok: false }>;
+  pollApproval: SyncPairingApprovalResponse | Extract<SyncControlResponse, { ok: false }>;
+  approvePairing: SyncPairingApproveResponse | Extract<SyncControlResponse, { ok: false }>;
+  denyPairing: SyncControlResponse;
 }
 
 /** Any op's response — derived from the map so the two never drift. */

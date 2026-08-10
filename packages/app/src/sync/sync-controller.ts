@@ -1,5 +1,12 @@
 import type { SyncSession } from '@cuewise/shared';
-import type { RecoveryEnvelopeState, SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PairingApprovalResult,
+  PairingPollResult,
+  PendingPairing,
+  RecoveryEnvelopeState,
+  SyncNowResult,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
 /**
@@ -164,6 +171,43 @@ export interface SyncController {
    * crosses a realm boundary; macOS reads it synchronously from the engine and resolves.
    */
   getLastCycle(): Promise<LastCycleRead>;
+  /**
+   * Starts a device-pairing request (ENG-50) so a device that already holds the key can approve
+   * this one. Null when this device cannot pair right now — it already has a key, an enroll is
+   * mid-flight, or the session that would carry the request is gone.
+   */
+  beginPairing(): Promise<{ pairingId: string } | null>;
+  /**
+   * One poll of the request beginPairing started; the requester screen loops it while it is up.
+   * Never throws — a fault is answered as `failed`, and every `failed` is terminal.
+   */
+  pollPairing(): Promise<PairingPollResult>;
+  /**
+   * Pending requests on this account (ENG-50), for the approver's card. `[]` when this device
+   * cannot answer (not active/keyed) or the read failed — never throws.
+   */
+  listPairingRequests(): Promise<PendingPairing[]>;
+  /**
+   * Commits this device's key to a request. No digits yet — they cover the requester's key, which
+   * is still unrevealed at commit time; `pollApproval` earns them. Null when the request is gone,
+   * another device already committed, or the call failed — never throws.
+   */
+  commitPairing(id: string): Promise<{ pending: true } | null>;
+  /**
+   * One poll of the request this device committed to; the approver's card loops it while it is up.
+   * Never throws — `error` is a non-terminal transport fault (retry next tick); `failed` is not.
+   * The card passes the row its section's list poll already fetched, so the wait costs one poll
+   * stream against the shared rate bucket, not two.
+   */
+  pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult>;
+  /**
+   * Wraps and uploads the account's key to the request this device committed to. False until a
+   * verified reveal is held for that request (no matching commit, or the SAS isn't confirmed yet),
+   * or on failure — never throws.
+   */
+  approvePairing(id: string): Promise<boolean>;
+  /** Declines a pending request; never throws — a failure just leaves the row for the next poll. */
+  denyPairing(id: string): Promise<void>;
   /**
    * Aborts a pending enableWithGoogle flow (the pending result resolves as a quiet cancel).
    * Only hosts whose OAuth flow can be aborted implement it (macOS system-browser); the UI

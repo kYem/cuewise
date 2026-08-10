@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
-import type { SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import type { PendingPairing, SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
@@ -34,6 +34,17 @@ const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code
 const INCOMPLETE_MESSAGE = "Sync didn't complete — your data is safe on this device.";
 const DEVICE_FAILURE_MESSAGE =
   "Cloud Sync couldn't finish on this device. Your data is safe here and it will keep retrying.";
+const PAIRING_HEADING = 'Approve from another device';
+const PAIRING_BODY = 'On your other device, open Settings → Cloud Sync and approve this device.';
+const PAIRING_WAITING = 'Waiting for approval…';
+const PAIRING_FAILED = 'Not approved — try again, or use your recovery code.';
+const PAIRING_CODE_LINK = 'Enter your recovery code instead';
+const PAIRING_REQUEST_WAITING = 'Waiting for your other device…';
+const PAIRING_TAMPERED_MESSAGE =
+  "Pairing blocked: the request didn't verify. Try again on the new device.";
+const PAIRING_APPROVE_FAILED = "Couldn't approve this device — try again.";
+const PAIRING_DENY_FAILED = "Couldn't decline — try again.";
+const PAIRING_POLL_MS = 3000;
 
 function sectionProps(overrides: Partial<SettingsSectionProps> = {}): SettingsSectionProps {
   return {
@@ -62,6 +73,12 @@ function renderSection(
 }
 
 const cloudSyncSwitch = () => screen.getByRole('checkbox', { name: 'Cloud Sync' });
+
+/** The enrol modal leads with pairing; its code input sits behind the secondary link. */
+const openEnrollCodeInput = async (user: ReturnType<typeof userEvent.setup>) => {
+  const dialog = await screen.findByRole('dialog');
+  await user.click(within(dialog).getByRole('button', { name: PAIRING_CODE_LINK }));
+};
 
 const enterEnableStep = async (user: ReturnType<typeof userEvent.setup>, accountId: string) => {
   await user.click(cloudSyncSwitch());
@@ -285,12 +302,12 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
     expect(await screen.findByText('Save your recovery code')).toBeInTheDocument();
-    expect(screen.queryByText('Enter recovery code')).not.toBeInTheDocument();
+    expect(screen.queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
   });
 
   it('explains the modal it just opened, with one warning', async () => {
@@ -444,13 +461,13 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
     // Modal stays open for another attempt; a deliberate cancel shows no failure message.
     expect(await screen.findByRole('button', { name: 'Enroll' })).toBeEnabled();
-    expect(screen.getByText('Enter recovery code')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -573,7 +590,9 @@ describe('SyncSettingsSectionComponent', () => {
     await enterEnableStep(user, 'acct-1');
     await user.click(screen.getByRole('button', { name: 'Enable' }));
 
-    expect(await screen.findByText('Enter recovery code')).toBeInTheDocument();
+    // Pairing-first: the modal opens on the approval screen, with the code behind its link.
+    expect(await screen.findByRole('dialog')).toHaveTextContent(PAIRING_HEADING);
+    expect(screen.queryByLabelText('Recovery code')).not.toBeInTheDocument();
   });
 
   it('shows a toast error when enable fails with a bad-code reason', async () => {
@@ -586,7 +605,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Enable' }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText('Enter recovery code')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('shows a toast error when enable fails with an auth reason', async () => {
@@ -632,7 +651,7 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
 
-    expect(await screen.findByText('Enter recovery code')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog')).toHaveTextContent(PAIRING_HEADING);
   });
 
   it('routes the reconnect→needs-code enroll submit through reconnect(code), never enable', async () => {
@@ -643,7 +662,7 @@ describe('SyncSettingsSectionComponent', () => {
     act(() => controller.setStatus('needs_reauth'));
 
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -663,7 +682,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -689,7 +708,7 @@ describe('SyncSettingsSectionComponent', () => {
 
     await user.click(cloudSyncSwitch());
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -706,7 +725,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -730,7 +749,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(cloudSyncSwitch());
     const deviceName = (screen.getByLabelText('Device name') as HTMLInputElement).value;
     await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
@@ -1496,7 +1515,7 @@ describe('SyncSettingsSectionComponent', () => {
     await waitFor(() => expect(screen.queryByTestId('sync-failure-badge')).not.toBeInTheDocument());
   });
 
-  it('asks for the recovery code, not a re-auth, when this device has no key', async () => {
+  it('offers pairing and the recovery code, not a re-auth, when this device has no key', async () => {
     const controller = new FakeSyncController();
     renderSection(controller);
 
@@ -1505,7 +1524,9 @@ describe('SyncSettingsSectionComponent', () => {
     expect(await screen.findByTestId('sync-reconnect-prompt')).toHaveTextContent(
       /can't read its encryption key/i
     );
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: PAIRING_CODE_LINK })).toBeInTheDocument();
+    // A re-auth cannot restore a key, so this status must never offer one.
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
     // Both would fail without a key, so offering either offers a broken button.
     expect(screen.queryByRole('button', { name: 'Sync now' })).not.toBeInTheDocument();
     expect(
@@ -1621,7 +1642,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
     act(() => controller.setStatus('needs_reauth'));
     await user.click(screen.getByRole('button', { name: 'Reconnect' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
     await act(async () => {
@@ -2037,7 +2058,7 @@ describe('SyncSettingsSectionComponent', () => {
 
     await enterEnableStep(user, 'acct-2');
     await user.click(screen.getByRole('button', { name: 'Enable' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
     controller.scriptLastCycle({ kind: 'failed', reason: 'network', error: new Error('offline') });
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
@@ -2169,7 +2190,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.clear(deviceInput);
     await user.type(deviceInput, 'MyMac');
     await user.click(screen.getByRole('button', { name: 'Enable' }));
-    await screen.findByText('Enter recovery code');
+    await openEnrollCodeInput(user);
 
     await user.type(screen.getByLabelText(/recovery code/i), CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
@@ -2280,5 +2301,800 @@ describe('SyncSettingsSectionComponent', () => {
     const reconnectButton = await screen.findByRole('button', { name: 'Reconnect' });
     expect(reconnectButton).toBeEnabled();
     expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+  });
+
+  describe('pairing (requester)', () => {
+    /** Lets a settled controller promise reach the panel without advancing the fake clock. */
+    async function flush(): Promise<void> {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    /** One poll tick on the fake clock, with the state update it causes flushed. */
+    async function pollTick(): Promise<void> {
+      await act(async () => {
+        vi.advanceTimersByTime(PAIRING_POLL_MS);
+      });
+    }
+
+    /** Renders a keyless device's panel with its pairing request already begun. */
+    async function renderPairingScreen(controller: FakeSyncController): Promise<void> {
+      renderSection(controller);
+      act(() => controller.setStatus('needs_enroll'));
+      await flush();
+    }
+
+    const pollCount = (controller: FakeSyncController): number =>
+      controller.calls.filter((call) => call.method === 'pollPairing').length;
+
+    it('leads with pairing, not the recovery code, when this device has no key', async () => {
+      const controller = new FakeSyncController();
+      renderSection(controller);
+
+      act(() => controller.setStatus('needs_enroll'));
+
+      expect(await screen.findByText(PAIRING_HEADING)).toBeInTheDocument();
+      expect(screen.getByText(PAIRING_BODY)).toBeInTheDocument();
+      expect(screen.getByText(PAIRING_WAITING)).toBeInTheDocument();
+      expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(1);
+    });
+
+    it('shows the confirmation code, grouped, once the other device answers', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'waiting' }, { kind: 'confirm', sas: '391554' });
+      try {
+        await renderPairingScreen(controller);
+
+        await pollTick();
+        expect(screen.queryByText('391 554')).not.toBeInTheDocument();
+        await pollTick();
+
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+        expect(screen.queryByText(PAIRING_WAITING)).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the code on screen when a poll answers a non-terminal error', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls(
+        { kind: 'confirm', sas: '391554' },
+        { kind: 'error' },
+        { kind: 'complete' }
+      );
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+
+        await pollTick();
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-failed')).not.toBeInTheDocument();
+
+        // The request stood, so the tick after it still completes the enrol.
+        await pollTick();
+        await flush();
+        expect(screen.queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The recovery code stays reachable, and reaches exactly the call the old Reconnect flow ended at.
+    it('reveals the unchanged recovery-code flow behind the secondary link', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      await renderPairingScreen(controller);
+
+      await user.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+
+      // One click, not two: this screen already asked about pairing, so the modal opens on the code.
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByLabelText('Recovery code')).toBeInTheDocument();
+      expect(within(dialog).queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
+
+      await user.type(within(dialog).getByLabelText('Recovery code'), CODE);
+      await user.click(within(dialog).getByRole('button', { name: 'Enroll' }));
+
+      await waitFor(() =>
+        expect(controller.calls).toContainEqual({ method: 'reconnect', args: [CODE] })
+      );
+    });
+
+    it('offers a fresh request after the other device did not approve', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'failed', reason: 'expired_or_denied' });
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+        expect(screen.getByText(PAIRING_FAILED)).toBeInTheDocument();
+      } finally {
+        // Back on the real clock for the click: userEvent drives timers of its own.
+        vi.useRealTimers();
+      }
+      const user = userEvent.setup();
+
+      await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+      await waitFor(() =>
+        expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(2)
+      );
+      expect(screen.queryByText(PAIRING_FAILED)).not.toBeInTheDocument();
+    });
+
+    // A panel left polling after it is gone keeps asking the server on behalf of nobody.
+    it('stops polling once the panel is gone', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      try {
+        const { unmount } = renderSection(controller);
+        act(() => controller.setStatus('needs_enroll'));
+        await flush();
+        await pollTick();
+        await pollTick();
+        const polled = pollCount(controller);
+        expect(polled).toBe(2);
+
+        unmount();
+        await pollTick();
+        await pollTick();
+
+        expect(pollCount(controller)).toBe(polled);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The headline flow: a brand-new second device signing in for the first time.
+    it('leads with pairing on a fresh second device, before asking for the code', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      renderSection(controller);
+
+      await user.click(cloudSyncSwitch());
+      await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByText(PAIRING_BODY)).toBeInTheDocument();
+      expect(within(dialog).queryByLabelText('Recovery code')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(1)
+      );
+    });
+
+    // The tail a typed code would have run: Chrome sync handed off, and the modal gone.
+    // fireEvent, not userEvent: its clock is the fake one the poll below needs.
+    it('finishes the enrol when the approval lands while that modal is open', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      settingsMock.syncEnabled = true;
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        await pollTick();
+        await flush();
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(settingsMock.updateSettings).toHaveBeenCalledWith({ syncEnabled: false });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The reveal keeps both paths live on purpose, so the losing one must not report a failure
+    // for a device that is already enrolled.
+    it('stays quiet when pairing wins a race the typed code was still in', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      controller.deferNextEnrollWithCode();
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+        fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: 'wrong' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enroll' }));
+        await flush();
+
+        await pollTick();
+        await flush();
+        act(() => controller.resolveEnrollWithCode({ ok: false, reason: 'bad-code' }));
+        await flush();
+
+        expect(toastError).not.toHaveBeenCalled();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The quiet path covers one completion, not the rest of the mount: a later attempt's own
+    // failure is the user's only feedback that their code was wrong.
+    it('still reports a later attempt that genuinely fails after an earlier pairing', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      controller.scriptReconnect({ ok: false, reason: 'needs-code' });
+      controller.scriptReconnect({ ok: false, reason: 'bad-code', detail: 'checksum' });
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        await pollTick();
+        await flush();
+
+        act(() => controller.setStatus('needs_reauth'));
+        fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+        fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: 'wrong' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enroll' }));
+        await flush();
+
+        expect(screen.getByRole('alert')).toHaveTextContent("Code didn't check out");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The account the abandoned attempt created outlives it, and this code is the only way in.
+    it('never swallows a minted recovery code, whatever the latch says', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptEnableWithGoogle({ ok: false, reason: 'needs-code' });
+      controller.scriptPairingPolls({ kind: 'complete' });
+      controller.deferNextEnrollWithCode();
+      try {
+        renderSection(controller);
+        fireEvent.click(cloudSyncSwitch());
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+        fireEvent.change(screen.getByLabelText('Recovery code'), { target: { value: CODE } });
+        fireEvent.click(screen.getByRole('button', { name: 'Enroll' }));
+        await flush();
+
+        await pollTick();
+        await flush();
+        act(() =>
+          controller.resolveEnrollWithCode({ ok: false, reason: 'cancelled', recoveryCode: CODE })
+        );
+        await flush();
+
+        expect(screen.getByText('Save your recovery code')).toBeInTheDocument();
+        expect(toastWarning).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Models the extension, whose status arrives over a storage broadcast after the enrol tail:
+    // a second request here would answer null and flash "Not approved" over a success.
+    it('starts no fresh request while the host status still says this device has no key', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'complete' });
+      try {
+        renderSection(controller);
+        act(() => controller.setStatus('needs_enroll'));
+        await flush();
+
+        await pollTick();
+        await flush();
+
+        expect(controller.calls.filter((call) => call.method === 'beginPairing')).toHaveLength(1);
+        expect(screen.queryByText(PAIRING_FAILED)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-waiting')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shows the retry line when the pairing request itself fails', async () => {
+      const controller = new FakeSyncController();
+      controller.failNext('beginPairing');
+      await renderPairingScreen(controller);
+
+      expect(await screen.findByText(PAIRING_FAILED)).toBeInTheDocument();
+    });
+
+    // pollPairing is contracted never to reject; PairingPanel's poll() catches a broken host and
+    // ends the request like any other fault, exactly as a `{kind:'failed', reason:'error'}` answer
+    // would. Only reachable once the fixture's pollPairing calls maybeFail.
+    it('degrades to the retry line, not a crash, when a poll violates the never-throws contract', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.failNext('pollPairing');
+      try {
+        await renderPairingScreen(controller);
+
+        await pollTick();
+
+        expect(screen.getByText(PAIRING_FAILED)).toBeInTheDocument();
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Cloud sync pairing poll failed'),
+          expect.any(Error)
+        );
+      } finally {
+        vi.useRealTimers();
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('toasts when the paired-enroll tail throws', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'complete' });
+      settingsMock.syncEnabled = true;
+      settingsMock.updateSettings.mockRejectedValueOnce(new Error('storage boom'));
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+        await flush();
+        await flush();
+
+        expect(toastError).toHaveBeenCalledWith(
+          'Something went wrong enabling sync — please try again.'
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('pairing (approver)', () => {
+    async function flush(): Promise<void> {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    async function pollTick(): Promise<void> {
+      await act(async () => {
+        vi.advanceTimersByTime(PAIRING_POLL_MS);
+      });
+    }
+
+    const REQUEST: PendingPairing = {
+      id: 'pairing-1',
+      deviceName: "Alex's Phone",
+      requesterCommitment: 'requester-commitment-hash',
+      requesterPublicKey: null,
+      requesterNonce: null,
+      createdAt: Date.now(),
+    };
+
+    const showCode = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole('button', { name: 'Show code' }));
+    };
+
+    /** Renders the card, activates the section, and clicks Show code — the shared setup every
+     * wait-state/poll test below starts from. Assumes fake timers are already armed. */
+    async function renderAndShowCode(controller: FakeSyncController): Promise<void> {
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await flush();
+      fireEvent.click(screen.getByRole('button', { name: 'Show code' }));
+      await flush();
+    }
+
+    it('renders a card for a pending request once the section is active', async () => {
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+
+      expect(await screen.findByTestId('pairing-request-card')).toHaveTextContent(
+        `${REQUEST.deviceName} wants to join your sync`
+      );
+    });
+
+    it('logs and keeps the panel up when the pending-requests poll rejects', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const controller = new FakeSyncController();
+      controller.failNext('listPairingRequests');
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+
+      await waitFor(() =>
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('pairing requests poll'),
+          expect.any(Error)
+        )
+      );
+      // The rejected poll degraded rather than taking the panel down.
+      expect(screen.getByTestId('sync-status-pill')).toBeInTheDocument();
+      errorSpy.mockRestore();
+    });
+
+    it('shows the wait-state copy after Show code, before the other device replies', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      try {
+        await renderAndShowCode(controller);
+
+        expect(screen.getByText(PAIRING_REQUEST_WAITING)).toBeInTheDocument();
+        expect(controller.calls).toContainEqual({ method: 'commitPairing', args: [REQUEST.id] });
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Show code' })).toBeDisabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shows the code once pollApproval confirms the reveal', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(screen.getByText('Do the codes match?')).toBeInTheDocument();
+        expect(screen.queryByText(PAIRING_REQUEST_WAITING)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps waiting when pollApproval answers error, and retries next tick', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'error' }, { kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+        expect(screen.getByText(PAIRING_REQUEST_WAITING)).toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-request-sas')).not.toBeInTheDocument();
+
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // pollApproval is contracted never to reject; PairingRequestCard's poll() catches a broken
+    // host into `{kind:'error'}` and stays put, exactly as a scripted error answer would. Only
+    // reachable once the fixture's pollApproval calls maybeFail.
+    it('keeps waiting, and logs, when the approval poll violates the never-throws contract', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.failNext('pollApproval');
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+        expect(screen.getByText(PAIRING_REQUEST_WAITING)).toBeInTheDocument();
+        expect(screen.queryByTestId('pairing-request-sas')).not.toBeInTheDocument();
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Cloud sync pairing approval poll failed'),
+          expect.any(Error)
+        );
+
+        // The request stood past the fault, same as a scripted error answer would.
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+      } finally {
+        vi.useRealTimers();
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('removes the card silently when pollApproval answers failed/gone', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'failed', reason: 'gone' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+        expect(toastError).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('removes the card and toasts when pollApproval answers failed/tampered', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'failed', reason: 'tampered' });
+      try {
+        await renderAndShowCode(controller);
+
+        await pollTick();
+
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+        expect(toastError).toHaveBeenCalledWith(PAIRING_TAMPERED_MESSAGE);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops polling pollApproval once the card is unmounted', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      try {
+        const { unmount } = renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await flush();
+        fireEvent.click(screen.getByRole('button', { name: 'Show code' }));
+        await flush();
+        await pollTick();
+        const before = controller.calls.filter((call) => call.method === 'pollApproval').length;
+        expect(before).toBeGreaterThan(0);
+
+        unmount();
+        await pollTick();
+        await pollTick();
+
+        expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(
+          before
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The parent's existing status-gated poll (see 'stops polling for requests once the section is
+    // unmounted' below) already empties pairingRequests off-active, which unmounts this card too.
+    it('stops polling pollApproval once the status leaves active', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+        const before = controller.calls.filter((call) => call.method === 'pollApproval').length;
+        expect(before).toBeGreaterThan(0);
+
+        act(() => controller.setStatus('needs_reauth'));
+        await flush();
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+
+        await pollTick();
+        await pollTick();
+
+        expect(controller.calls.filter((call) => call.method === 'pollApproval')).toHaveLength(
+          before
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // macOS emits 'syncing' on routine cycles, and a tick mid-confirmation must not erase the SAS.
+    it('keeps the pending card through a syncing tick', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+
+        act(() => controller.setStatus('syncing'));
+        await flush();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+
+        act(() => controller.setStatus('active'));
+        await flush();
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the card for another try when approvePairing answers false', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      controller.scriptApprovePairing(false);
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await flush();
+
+        expect(toastError).toHaveBeenCalledWith(PAIRING_APPROVE_FAILED);
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the card for another try when approvePairing throws', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      controller.failNext('approvePairing');
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await flush();
+
+        expect(toastError).toHaveBeenCalledWith(PAIRING_APPROVE_FAILED);
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the card for another try when denyPairing throws', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.failNext('denyPairing');
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+
+      await user.click(screen.getByRole('button', { name: 'Deny' }));
+
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith(PAIRING_DENY_FAILED));
+      expect(screen.getByTestId('pairing-request-card')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Deny' })).toBeEnabled();
+    });
+
+    it('calls approvePairing with the id and removes the card', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller);
+        await pollTick();
+        expect(screen.getByTestId('pairing-request-sas')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+        await flush();
+
+        expect(controller.calls).toContainEqual({
+          method: 'approvePairing',
+          args: [REQUEST.id],
+        });
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('calls denyPairing and removes the card', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+
+      await user.click(screen.getByRole('button', { name: 'Deny' }));
+
+      await waitFor(() =>
+        expect(controller.calls).toContainEqual({ method: 'denyPairing', args: [REQUEST.id] })
+      );
+      expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument();
+    });
+
+    it('removes the card when commitPairing answers null (another device won or it expired)', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing(null);
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByTestId('pairing-request-card');
+
+      await showCode(user);
+
+      await waitFor(() =>
+        expect(screen.queryByTestId('pairing-request-card')).not.toBeInTheDocument()
+      );
+    });
+
+    // A section left polling after it is gone keeps asking the server on behalf of nobody.
+    it('stops polling for requests once the section is unmounted', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      try {
+        const { unmount } = renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await flush();
+        const before = controller.calls.filter(
+          (call) => call.method === 'listPairingRequests'
+        ).length;
+        expect(before).toBeGreaterThan(0);
+
+        unmount();
+        await pollTick();
+        await pollTick();
+
+        expect(
+          controller.calls.filter((call) => call.method === 'listPairingRequests')
+        ).toHaveLength(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // A slow listPairingRequests() must not have the next tick stack a second call on top of it.
+    it('does not stack a poll on top of one still in flight', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      const callCount = () =>
+        controller.calls.filter((call) => call.method === 'listPairingRequests').length;
+      try {
+        controller.deferNextListPairingRequests();
+        renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await flush();
+        expect(callCount()).toBe(1);
+
+        await pollTick();
+        await pollTick();
+        expect(callCount()).toBe(1);
+
+        act(() => controller.resolveListPairingRequests([]));
+        await flush();
+        await pollTick();
+        expect(callCount()).toBe(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

@@ -1,7 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
 import type { EnableResult } from '../../sync/sync-controller';
+import { SyncControllerContext } from '../../sync/sync-controller';
 import { EnrollCodeModal } from './EnrollCodeModal';
 
 const toastError = vi.fn();
@@ -17,9 +19,13 @@ beforeEach(() => {
 
 const CODE = 'CW1-MWWJH-3K3QQ-R4RNB-JW1PV-8TRQT-PC14A-R5G5V';
 
+const PAIRING_HEADING = 'Approve from another device';
+const PAIRING_CODE_LINK = 'Enter your recovery code instead';
+
 const handlers = (onSubmit: (code: string) => Promise<EnableResult>) => ({
   onSubmit: vi.fn(onSubmit),
   onClose: vi.fn(),
+  onPaired: vi.fn(),
 });
 
 // Deferred promise so tests can assert the pending/spinner state before resolving.
@@ -31,7 +37,16 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
+/** The modal leads with pairing; the code input is behind its secondary link. */
+const revealCodeInput = async (user: ReturnType<typeof userEvent.setup>) => {
+  const link = screen.queryByRole('button', { name: PAIRING_CODE_LINK });
+  if (link !== null) {
+    await user.click(link);
+  }
+};
+
 const typeCode = async (user: ReturnType<typeof userEvent.setup>, value: string) => {
+  await revealCodeInput(user);
   const input = screen.getByLabelText(/recovery code/i);
   await user.type(input, value);
 };
@@ -221,6 +236,7 @@ describe('EnrollCodeModal', () => {
     const user = userEvent.setup();
     const h = handlers(async () => ({ ok: true }));
     render(<EnrollCodeModal isOpen {...h} />);
+    await revealCodeInput(user);
 
     expect(screen.getByRole('button', { name: 'Enroll' })).toBeDisabled();
     await typeCode(user, CODE);
@@ -288,6 +304,7 @@ describe('EnrollCodeModal', () => {
 
     rerender(<EnrollCodeModal isOpen={false} {...h} />);
     rerender(<EnrollCodeModal isOpen {...h} />);
+    await revealCodeInput(user);
 
     expect(screen.queryByText("That doesn't look like a recovery code")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/recovery code/i)).toHaveValue('');
@@ -298,12 +315,109 @@ describe('EnrollCodeModal', () => {
     // two contradictory answers to one action.
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: false, reason: 'cancelled' });
-    render(<EnrollCodeModal isOpen onClose={vi.fn()} onSubmit={onSubmit} />);
+    render(<EnrollCodeModal isOpen onClose={vi.fn()} onPaired={vi.fn()} onSubmit={onSubmit} />);
 
-    await user.type(screen.getByLabelText(/recovery code/i), CODE);
+    await typeCode(user, CODE);
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(screen.queryByText(/couldn't enroll this device/i)).not.toBeInTheDocument();
+  });
+
+  describe('pairing first', () => {
+    const POLL_MS = 3000;
+
+    /** Renders the modal with a controller behind it, as the settings panel provides. */
+    function renderWithPairing(
+      controller: FakeSyncController,
+      props: ReturnType<typeof handlers>
+    ): void {
+      render(
+        <SyncControllerContext.Provider value={controller}>
+          <EnrollCodeModal isOpen {...props} />
+        </SyncControllerContext.Provider>
+      );
+    }
+
+    async function flush(): Promise<void> {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    async function pollTick(): Promise<void> {
+      await act(async () => {
+        vi.advanceTimersByTime(POLL_MS);
+      });
+    }
+
+    it('leads with pairing and keeps the code input hidden until it is asked for', () => {
+      const h = handlers(async () => ({ ok: true }));
+      render(<EnrollCodeModal isOpen {...h} />);
+
+      expect(screen.getByText(PAIRING_HEADING)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/recovery code/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Enroll' })).not.toBeInTheDocument();
+    });
+
+    // Opened from a screen that already offers pairing, so repeating the offer would ask twice.
+    it('opens on the code input, with no pairing lead, when the caller asked for it', () => {
+      const h = handlers(async () => ({ ok: true }));
+      render(<EnrollCodeModal isOpen startWithCode {...h} />);
+
+      expect(screen.getByLabelText(/recovery code/i)).toBeInTheDocument();
+      expect(screen.queryByText(PAIRING_HEADING)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: PAIRING_CODE_LINK })).not.toBeInTheDocument();
+    });
+
+    it('reveals the code input behind the link and submits it unchanged', async () => {
+      const user = userEvent.setup();
+      const h = handlers(async () => ({ ok: true }));
+      render(<EnrollCodeModal isOpen {...h} />);
+
+      await user.click(screen.getByRole('button', { name: PAIRING_CODE_LINK }));
+      await user.type(screen.getByLabelText(/recovery code/i), CODE);
+      await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+      expect(h.onSubmit).toHaveBeenCalledWith(CODE);
+      // The request keeps polling behind the input, so whichever path finishes first enrols.
+      expect(screen.getByText(PAIRING_HEADING)).toBeInTheDocument();
+    });
+
+    it('shows the confirmation code when the other device answers', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'confirm', sas: '391554' });
+      try {
+        renderWithPairing(
+          controller,
+          handlers(async () => ({ ok: true }))
+        );
+        await flush();
+
+        await pollTick();
+
+        expect(screen.getByText('391 554')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('hands a completed approval back to the panel', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'complete' });
+      const h = handlers(async () => ({ ok: true }));
+      try {
+        renderWithPairing(controller, h);
+        await flush();
+
+        await pollTick();
+
+        expect(h.onPaired).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

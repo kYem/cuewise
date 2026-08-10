@@ -1,5 +1,11 @@
 import type { SyncSession } from '@cuewise/shared';
-import type { SyncNowResult, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PairingApprovalResult,
+  PairingPollResult,
+  PendingPairing,
+  SyncNowResult,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import type {
   EnableResult,
   LastCycleRead,
@@ -17,6 +23,8 @@ interface RecordedCall {
 
 type FailableMethod =
   | 'enable'
+  | 'beginPairing'
+  | 'pollPairing'
   | 'enableWithGoogle'
   | 'enrollWithCode'
   | 'reconnect'
@@ -28,7 +36,12 @@ type FailableMethod =
   | 'listSessions'
   | 'revokeSession'
   | 'renameSession'
-  | 'revokeOtherSessions';
+  | 'revokeOtherSessions'
+  | 'listPairingRequests'
+  | 'commitPairing'
+  | 'pollApproval'
+  | 'approvePairing'
+  | 'denyPairing';
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
@@ -446,12 +459,35 @@ export class FakeSyncController implements SyncController {
     return this;
   }
 
+  private deferredEnrollWithCode = false;
+  private pendingEnrollWithCode: ((result: EnableResult) => void) | null = null;
+
+  /** Makes the next enrollWithCode() hang until resolveEnrollWithCode() — for asserting late answers. */
+  deferNextEnrollWithCode(): void {
+    this.deferredEnrollWithCode = true;
+  }
+
+  /** Releases an enrollWithCode() call armed via deferNextEnrollWithCode(). */
+  resolveEnrollWithCode(result: EnableResult): void {
+    if (this.pendingEnrollWithCode === null) {
+      throw new Error('FakeSyncController: no pending enrollWithCode() to resolve');
+    }
+    this.pendingEnrollWithCode(result);
+    this.pendingEnrollWithCode = null;
+  }
+
   enrollWithCode?: (deviceName: string, recoveryCode: string) => Promise<EnableResult> = async (
     deviceName,
     recoveryCode
   ) => {
     this.calls.push({ method: 'enrollWithCode', args: [deviceName, recoveryCode] });
     this.maybeFail('enrollWithCode');
+    if (this.deferredEnrollWithCode) {
+      this.deferredEnrollWithCode = false;
+      return new Promise((resolve) => {
+        this.pendingEnrollWithCode = resolve;
+      });
+    }
     const next = this.enrollWithCodeResults.shift();
     if (next !== undefined) {
       return next;
@@ -468,5 +504,119 @@ export class FakeSyncController implements SyncController {
   /** Queues the result the next `enrollWithCode()` call resolves to. */
   scriptEnrollWithCode(result: EnableResult): void {
     this.enrollWithCodeResults.push(result);
+  }
+
+  /** What `beginPairing()` answers; null models a device that cannot pair (keyed, mid-enroll, signed out). */
+  private pairingStart: { pairingId: string } | null = { pairingId: 'pairing-1' };
+  private readonly pairingPolls: PairingPollResult[] = [];
+
+  /** Sets what every `beginPairing()` call answers from now on. */
+  scriptBeginPairing(result: { pairingId: string } | null): void {
+    this.pairingStart = result;
+  }
+
+  /** Queues what the next `pollPairing()` calls answer; unqueued polls answer `waiting`. */
+  scriptPairingPolls(...results: PairingPollResult[]): void {
+    this.pairingPolls.push(...results);
+  }
+
+  async beginPairing(): Promise<{ pairingId: string } | null> {
+    this.calls.push({ method: 'beginPairing', args: [] });
+    this.maybeFail('beginPairing');
+    return this.pairingStart;
+  }
+
+  async pollPairing(): Promise<PairingPollResult> {
+    this.calls.push({ method: 'pollPairing', args: [] });
+    this.maybeFail('pollPairing');
+    const next = this.pairingPolls.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return { kind: 'waiting' };
+  }
+
+  /** What `listPairingRequests()` resolves to; test-settable, defaults to no pending requests. */
+  pairingRequests: PendingPairing[] = [];
+  private readonly commitPairingResults: ({ pending: true } | null)[] = [];
+  private readonly pollApprovalResults: PairingApprovalResult[] = [];
+  private readonly approvePairingResults: boolean[] = [];
+  private deferredPairingRequests = false;
+  private pendingPairingRequests: ((requests: PendingPairing[]) => void) | null = null;
+
+  /** Makes the next listPairingRequests() hang until resolveListPairingRequests() — for asserting the poll's overlap guard. */
+  deferNextListPairingRequests(): void {
+    this.deferredPairingRequests = true;
+  }
+
+  /** Releases a listPairingRequests() call armed via deferNextListPairingRequests(). */
+  resolveListPairingRequests(requests: PendingPairing[]): void {
+    if (this.pendingPairingRequests === null) {
+      throw new Error('FakeSyncController: no pending listPairingRequests() to resolve');
+    }
+    this.pendingPairingRequests(requests);
+    this.pendingPairingRequests = null;
+  }
+
+  /** Queues the result the next `commitPairing()` call resolves to. */
+  scriptCommitPairing(result: { pending: true } | null): void {
+    this.commitPairingResults.push(result);
+  }
+
+  /** Queues what the next `pollApproval()` calls answer; unqueued polls answer `waiting`. */
+  scriptPollApproval(...results: PairingApprovalResult[]): void {
+    this.pollApprovalResults.push(...results);
+  }
+
+  /** Queues the result the next `approvePairing()` call resolves to. */
+  scriptApprovePairing(result: boolean): void {
+    this.approvePairingResults.push(result);
+  }
+
+  async listPairingRequests(): Promise<PendingPairing[]> {
+    this.calls.push({ method: 'listPairingRequests', args: [] });
+    this.maybeFail('listPairingRequests');
+    if (this.deferredPairingRequests) {
+      this.deferredPairingRequests = false;
+      return new Promise((resolve) => {
+        this.pendingPairingRequests = resolve;
+      });
+    }
+    return this.pairingRequests;
+  }
+
+  async commitPairing(id: string): Promise<{ pending: true } | null> {
+    this.calls.push({ method: 'commitPairing', args: [id] });
+    this.maybeFail('commitPairing');
+    const next = this.commitPairingResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return { pending: true };
+  }
+
+  async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
+    this.calls.push({ method: 'pollApproval', args: [id, row] });
+    this.maybeFail('pollApproval');
+    const next = this.pollApprovalResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return { kind: 'waiting' };
+  }
+
+  async approvePairing(id: string): Promise<boolean> {
+    this.calls.push({ method: 'approvePairing', args: [id] });
+    this.maybeFail('approvePairing');
+    const next = this.approvePairingResults.shift();
+    if (next !== undefined) {
+      return next;
+    }
+    return true;
+  }
+
+  async denyPairing(id: string): Promise<void> {
+    this.calls.push({ method: 'denyPairing', args: [id] });
+    this.maybeFail('denyPairing');
   }
 }

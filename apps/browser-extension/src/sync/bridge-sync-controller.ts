@@ -10,6 +10,9 @@ import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
+  type PairingApprovalResult,
+  type PairingPollResult,
+  type PendingPairing,
   type SyncNowResult,
   type SyncSignInProvider,
 } from '@cuewise/sync-engine';
@@ -495,6 +498,159 @@ export class BridgeSyncController implements SyncController {
     } catch (error) {
       logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);
       return LAST_CYCLE_UNAVAILABLE;
+    }
+  }
+
+  // beginPairing answers rather than throws, like the informational reads: a dead worker or a
+  // skewed response means this device cannot pair right now, which is what the screen already
+  // renders, and the offer to retry is the user's way out.
+  async beginPairing(): Promise<{ pairingId: string } | null> {
+    try {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'beginPairing' });
+      if (response?.ok && response.kind === 'pairingStarted') {
+        return response.pairing;
+      }
+      logger.error(
+        `Cloud sync pairing request unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return null;
+    } catch (error) {
+      logger.error(`Cloud sync pairing request failed: ${describeThrown(error)}`, error);
+      return null;
+    }
+  }
+
+  // Non-terminal `error`, never a terminal `failed`, on a dead worker or skewed response — matching
+  // the engine's own pollPairing contract, so a background hiccup retries next tick instead of
+  // ending a live request the requester screen is still driving.
+  async pollPairing(): Promise<PairingPollResult> {
+    try {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'pollPairing' });
+      if (response?.ok && response.kind === 'pairingPoll') {
+        return response.result;
+      }
+      logger.error(
+        `Cloud sync pairing poll unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return { kind: 'error' };
+    } catch (error) {
+      logger.error(`Cloud sync pairing poll failed: ${describeThrown(error)}`, error);
+      return { kind: 'error' };
+    }
+  }
+
+  // The five ops below answer rather than throw, like beginPairing/pollPairing: a dead worker or a
+  // skewed response never surfaces here as an unhandled rejection.
+  async listPairingRequests(): Promise<PendingPairing[]> {
+    try {
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'listPairingRequests',
+      });
+      if (response?.ok && response.kind === 'pairingRequests') {
+        return response.requests;
+      }
+      logger.error(
+        `Cloud sync pairing requests unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return [];
+    } catch (error) {
+      logger.error(`Cloud sync pairing requests failed: ${describeThrown(error)}`, error);
+      return [];
+    }
+  }
+
+  async commitPairing(id: string): Promise<{ pending: true } | null> {
+    try {
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'commitPairing',
+        pairingRequestId: id,
+      });
+      if (response?.ok && response.kind === 'pairingCommit') {
+        return response.result;
+      }
+      logger.error(
+        `Cloud sync pairing commit unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return null;
+    } catch (error) {
+      logger.error(`Cloud sync pairing commit failed: ${describeThrown(error)}`, error);
+      return null;
+    }
+  }
+
+  async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
+    try {
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'pollApproval',
+        pairingRequestId: id,
+        // The row the section's list poll already fetched, so the worker's engine reuses it instead
+        // of re-listing the whole account against the shared rate bucket.
+        pairingRow: row,
+      });
+      if (response?.ok && response.kind === 'pairingApproval') {
+        return response.result;
+      }
+      logger.error(
+        `Cloud sync pairing approval poll unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return { kind: 'error' };
+    } catch (error) {
+      logger.error(`Cloud sync pairing approval poll failed: ${describeThrown(error)}`, error);
+      return { kind: 'error' };
+    }
+  }
+
+  async approvePairing(id: string): Promise<boolean> {
+    try {
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'approvePairing',
+        pairingRequestId: id,
+      });
+      if (response?.ok && response.kind === 'pairingApprove') {
+        return response.approved;
+      }
+      logger.error(
+        `Cloud sync pairing approve unavailable: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return false;
+    } catch (error) {
+      logger.error(`Cloud sync pairing approve failed: ${describeThrown(error)}`, error);
+      return false;
+    }
+  }
+
+  async denyPairing(id: string): Promise<void> {
+    try {
+      const response = await this.send({
+        kind: 'cuewise-sync-control',
+        op: 'denyPairing',
+        pairingRequestId: id,
+      });
+      if (!response?.ok) {
+        logger.error(
+          `Cloud sync pairing deny unavailable: ${BridgeSyncController.describeActionFailure(
+            response?.ok === false ? response : undefined
+          )}`
+        );
+      }
+    } catch (error) {
+      logger.error(`Cloud sync pairing deny failed: ${describeThrown(error)}`, error);
     }
   }
 

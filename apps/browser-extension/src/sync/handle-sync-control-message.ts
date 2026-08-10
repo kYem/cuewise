@@ -14,6 +14,12 @@ import type {
   SyncDetailsResponse,
   SyncLastCycleResponse,
   SyncOutcomeResponse,
+  SyncPairingApprovalResponse,
+  SyncPairingApproveResponse,
+  SyncPairingCommitResponse,
+  SyncPairingPollResponse,
+  SyncPairingRequestsResponse,
+  SyncPairingStartedResponse,
   SyncRevokedCountResponse,
   SyncSessionsResponse,
 } from './sync-control-messages';
@@ -127,7 +133,17 @@ async function runOp(
     op: Exclude<SyncControlMessage['op'], 'details' | 'getLastCycle' | 'listSessions'>;
   },
   deps: SyncControlDeps
-): Promise<SyncControlResponse | SyncOutcomeResponse | SyncRevokedCountResponse> {
+): Promise<
+  | SyncControlResponse
+  | SyncOutcomeResponse
+  | SyncRevokedCountResponse
+  | SyncPairingStartedResponse
+  | SyncPairingPollResponse
+  | SyncPairingRequestsResponse
+  | SyncPairingCommitResponse
+  | SyncPairingApprovalResponse
+  | SyncPairingApproveResponse
+> {
   if (msg.op === 'enable') {
     // Runtime guard (the wire is untyped): reject an unknown provider or an empty credential/
     // device name, not just `undefined`. Log so a caller regression isn't a bare, detail-less error.
@@ -180,6 +196,54 @@ async function runOp(
         return { ok: true };
       case 'revokeOtherSessions':
         return { ok: true, kind: 'revokedCount', revoked: await engine.revokeOtherSessions() };
+      // Serialized with the enroll ops, not bypassed like the read-only ones: a poll can adopt a
+      // peer-wrapped key and activate, which must never interleave with an enable doing the same.
+      case 'beginPairing':
+        return { ok: true, kind: 'pairingStarted', pairing: await engine.beginPairing() };
+      case 'pollPairing':
+        return { ok: true, kind: 'pairingPoll', result: await engine.pollPairing() };
+      // Serialized with the enroll/pairing ops above, not bypassed like the read-only ones: this
+      // account's pending-request list and the commit/poll/approve/deny below all touch the same
+      // approver-side handshake state, which must not interleave with an enrol adopting a key.
+      case 'listPairingRequests':
+        return { ok: true, kind: 'pairingRequests', requests: await engine.listPairingRequests() };
+      case 'commitPairing':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing commit rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        return {
+          ok: true,
+          kind: 'pairingCommit',
+          result: await engine.commitPairing(msg.pairingRequestId),
+        };
+      case 'pollApproval':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing approval poll rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        return {
+          ok: true,
+          kind: 'pairingApproval',
+          result: await engine.pollApproval(msg.pairingRequestId, msg.pairingRow),
+        };
+      case 'approvePairing':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing approve rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        return {
+          ok: true,
+          kind: 'pairingApprove',
+          approved: await engine.approvePairing(msg.pairingRequestId),
+        };
+      case 'denyPairing':
+        if (!msg.pairingRequestId) {
+          logger.error('Cloud sync pairing deny rejected: malformed control message');
+          return { ok: false, reason: 'error' };
+        }
+        await engine.denyPairing(msg.pairingRequestId);
+        return { ok: true };
       default: {
         // Exhaustiveness: a new SYNC_CONTROL_OPS entry is a compile error here — never a
         // silent fallthrough into some other operation.

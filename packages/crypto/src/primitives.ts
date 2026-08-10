@@ -1,5 +1,6 @@
 // Every WebCrypto touch lives here as a swappable backend seam. All current targets have
 // crypto.subtle (probed in the bundled Tauri app: tauri://localhost is a secure context).
+import { b64urlDecode } from './base64url';
 import { DecryptError, EnvelopeParseError } from './errors';
 
 // Lazy so a runtime without WebCrypto fails at first use with a clear message (not at import,
@@ -116,36 +117,6 @@ export async function aesGcmOpen(
   }
 }
 
-const CHUNK_SIZE = 0x8000;
-
-export function b64urlEncode(bytes: Uint8Array): string {
-  // Chunked: spreading a large typed array into String.fromCharCode blows the call-stack limit.
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
-  }
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-}
-
-export function b64urlDecode(s: string): Uint8Array {
-  if (!/^[A-Za-z0-9_-]*$/.test(s)) {
-    throw new EnvelopeParseError('invalid base64url characters');
-  }
-  const base64 = s.replaceAll('-', '+').replaceAll('_', '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-  let binary: string;
-  try {
-    binary = atob(padded);
-  } catch (err) {
-    throw new EnvelopeParseError('invalid base64url payload', { cause: err });
-  }
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 export function isValidKeyId(keyId: string): boolean {
   return KEY_ID_RE.test(keyId);
 }
@@ -173,4 +144,34 @@ export function splitEnvelope(value: string): { keyId: string; iv: Uint8Array; c
     throw new EnvelopeParseError('ciphertext too short');
   }
   return { keyId, iv, ct };
+}
+
+export interface X25519KeyPair {
+  publicKey: Uint8Array;
+  privateKey: CryptoKey;
+}
+
+// Private key stays a non-extractable CryptoKey: nothing in this codebase ever needs its bytes,
+// and non-extractable means a bug cannot leak them.
+export async function generateX25519KeyPair(): Promise<X25519KeyPair> {
+  const pair = (await getSubtle().generateKey({ name: 'X25519' }, false, [
+    'deriveBits',
+  ])) as CryptoKeyPair;
+  const raw = await getSubtle().exportKey('raw', pair.publicKey);
+  return { publicKey: new Uint8Array(raw), privateKey: pair.privateKey };
+}
+
+export async function x25519SharedSecret(
+  privateKey: CryptoKey,
+  peerPublicKey: Uint8Array
+): Promise<Uint8Array> {
+  const peer = await getSubtle().importKey(
+    'raw',
+    asBufferSource(peerPublicKey),
+    { name: 'X25519' },
+    false,
+    []
+  );
+  const bits = await getSubtle().deriveBits({ name: 'X25519', public: peer }, privateKey, 256);
+  return new Uint8Array(bits);
 }

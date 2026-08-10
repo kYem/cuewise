@@ -20,5 +20,12 @@ export default {
       logger.error('scheduled tombstone purge failed', err);
       throw err;
     }
+    try {
+      const purged = await new D1SyncStore(env.DB).purgeExpiredPairings(Date.now());
+      logger.info(`scheduled purge removed ${purged} expired pairing requests`);
+    } catch (err) {
+      logger.error('scheduled pairing purge failed', err);
+      throw err;
+    }
   },
 } satisfies ExportedHandler<Env>;

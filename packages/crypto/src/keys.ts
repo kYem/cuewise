@@ -1,8 +1,8 @@
+import { b64urlEncode } from './base64url';
 import { EnvelopeParseError } from './errors';
 import {
   aesGcmOpen,
   aesGcmSeal,
-  b64urlEncode,
   hkdfSha256,
   isValidKeyId,
   randomBytes,
