@@ -38,6 +38,8 @@ function readsBackWrites(): void {
 }
 
 // Mock storage functions
+const { onLockGranted } = vi.hoisted(() => ({ onLockGranted: new Map<string, () => void>() }));
+
 vi.mock('@cuewise/storage', () => ({
   getQuotes: vi.fn(),
   setQuotes: vi.fn(),
@@ -47,13 +49,20 @@ vi.mock('@cuewise/storage', () => ({
   getCollections: vi.fn(),
   setCollections: vi.fn(),
   getSettings: vi.fn(),
-  // Faithful, not a stub: reading inside the write is the property under test, so a mock that
-  // took the caller's list would let a read hoisted back out of the lock pass.
-  updateCollections: vi.fn(async (mutate: (list: QuoteCollection[]) => QuoteCollection[]) => {
-    const collections = mutate((await storage.getCollections()) ?? []);
-    return { result: await storage.setCollections(collections), collections };
+  // Routed through the mocked withCollectionLock, exactly as the real one is: a writer that
+  // reimplements read-merge-write inline would otherwise be indistinguishable here.
+  updateCollections: vi.fn(async (mutate: (list: QuoteCollection[]) => QuoteCollection[]) =>
+    storage.withCollectionLock('collections', async () => {
+      const collections = mutate((await storage.getCollections()) ?? []);
+      return { result: await storage.setCollections(collections), collections };
+    })
+  ),
+  // Fires whatever a test registered for this name at the instant the lock is granted, so a read
+  // hoisted out of the section observes the pre-race value and is observably wrong.
+  withCollectionLock: vi.fn(<T>(lock: string, apply: () => Promise<T>) => {
+    onLockGranted.get(lock)?.();
+    return apply();
   }),
-  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
 }));
 
 // Mock the settings store — filter persistence routes through its serialized updateSettings.
@@ -829,6 +838,7 @@ describe('collection writers read storage, not their own snapshot', () => {
   beforeEach(() => {
     useQuoteStore.setState(EMPTY_STORE_STATE);
     vi.clearAllMocks();
+    onLockGranted.clear();
     vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
     vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
@@ -838,6 +848,68 @@ describe('collection writers read storage, not their own snapshot', () => {
     id: 'pulled',
     name: 'From another device',
     createdAt: new Date().toISOString(),
+  });
+
+  // A read hoisted out of the lock sees the pre-race list, so these pin enclosure, not just that
+  // the lock was called with the right name.
+  it('createCollection reads the collections after the lock is granted', async () => {
+    const late = { ...pulled(), id: 'late' };
+    useQuoteStore.setState({ collections: [] });
+    vi.mocked(storage.getCollections).mockResolvedValue([]);
+    onLockGranted.set('collections', () => {
+      vi.mocked(storage.getCollections).mockResolvedValue([late]);
+    });
+
+    await useQuoteStore.getState().createCollection('Mine');
+
+    const written = vi.mocked(storage.setCollections).mock.calls[0][0];
+    expect(written.map((c) => c.id)).toEqual([late.id, expect.any(String)]);
+  });
+
+  it('deleteCollection reads the quotes after the lock is granted', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    onLockGranted.set('quotes', () => {
+      vi.mocked(storage.getQuotes).mockResolvedValue([
+        quoteFactory.build({ id: 'late', collectionIds: ['mine'] }),
+      ]);
+    });
+
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
+    expect(written.map((q) => q.id)).toEqual(['late']);
+    expect(written[0].collectionIds).toEqual([]);
+  });
+
+  // A writer reimplementing read-merge-write inline would skip the lock entirely.
+  it('every collection writer goes through the locked helper', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+
+    await useQuoteStore.getState().createCollection('A');
+    await useQuoteStore.getState().updateCollection('mine', { name: 'B' });
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    const locked = vi
+      .mocked(storage.withCollectionLock)
+      .mock.calls.filter(([lock]) => lock === 'collections');
+    expect(locked).toHaveLength(3);
+  });
+
+  it('deleteCollection leaves the quote list alone when it could not be read', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    const held = quoteFactory.build({ id: 'held' });
+    useQuoteStore.setState({ collections: [mine], quotes: [held] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockRejectedValue(new Error('unreadable'));
+
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    expect(useQuoteStore.getState().quotes).toEqual([held]);
   });
 
   it('createCollection keeps a collection only storage knows about', async () => {
@@ -868,7 +940,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getCollections).mockResolvedValue([]);
 
     await expect(useQuoteStore.getState().updateCollection('gone', { name: 'x' })).resolves.toBe(
-      false
+      'gone'
     );
   });
 
@@ -882,7 +954,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     });
 
     await expect(useQuoteStore.getState().updateCollection('mine', { name: 'x' })).resolves.toBe(
-      false
+      'failed'
     );
   });
 
@@ -1072,9 +1144,9 @@ describe('sync sink wiring', () => {
       collections: [{ id: 'c1', name: 'Before', createdAt: new Date().toISOString() }],
     });
 
-    const ok = await useQuoteStore.getState().updateCollection('c1', { name: 'After' });
+    const outcome = await useQuoteStore.getState().updateCollection('c1', { name: 'After' });
 
-    expect(ok).toBe(true);
+    expect(outcome).toBe('saved');
     expect(useQuoteStore.getState().collections[0].name).toBe('After');
     expect(markMutated).toHaveBeenCalledWith('collections', 'c1');
   });

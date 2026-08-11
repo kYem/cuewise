@@ -56,7 +56,8 @@ function arrayBinding<T extends HasId>(
     },
     async writeOne(entityId, entity) {
       // Reads inside the lock: the service worker runs this while the page writes the same array
-      // from its own read, and whoever lands second carries the whole array with them.
+      // from its own read, and whoever lands second carries the whole array with them. Quotes are
+      // the one binding whose page-side writers do not take this lock yet.
       return withCollectionLock(name, async (): Promise<StorageResult> => {
         let items: T[];
         try {

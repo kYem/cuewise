@@ -137,10 +137,11 @@ interface QuoteStore {
 
   // Collection operations
   createCollection: (name: string, description?: string) => Promise<boolean>;
+  /** 'gone' when a pull deleted it first — the store has already told the user, so do not retry. */
   updateCollection: (
     id: string,
     updates: Partial<Pick<QuoteCollection, 'name' | 'description'>>
-  ) => Promise<boolean>;
+  ) => Promise<'saved' | 'gone' | 'failed'>;
   deleteCollection: (id: string) => Promise<boolean>;
   addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
   removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
@@ -798,26 +799,26 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         const errorMessage = 'Failed to update collection. Please try again.';
         set({ error: errorMessage });
         useToastStore.getState().error(errorMessage);
-        return false;
+        return 'failed';
       }
       // Announcing a write that found nothing marks a gone id dirty, and the next push seals a
       // tombstone this device never authored.
       if (!applied.found) {
         logger.warn(`updateCollection: collection ${id} was gone before the write`);
         useToastStore.getState().warning('This collection no longer exists');
-        return false;
+        return 'gone';
       }
       set({ collections: updatedCollections, error: null });
       notifyMutated('collections', id);
 
       useToastStore.getState().success('Collection updated');
-      return true;
+      return 'saved';
     } catch (error) {
       logger.error('Error updating collection', error);
       const errorMessage = 'Failed to update collection. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
-      return false;
+      return 'failed';
     }
   },
 

@@ -32,18 +32,19 @@ export const CollectionForm: React.FC<CollectionFormProps> = ({ collection, onCl
     setError(null);
 
     try {
-      let success: boolean;
-
       if (isEditing) {
-        success = await updateCollection(collection.id, {
+        const outcome = await updateCollection(collection.id, {
           name: trimmedName,
           description: description.trim() || undefined,
         });
-      } else {
-        success = await createCollection(trimmedName, description.trim() || undefined);
-      }
-
-      if (success) {
+        // 'gone' is not retryable and the store has already said so — offering "try again" here
+        // would send the user at a collection that no longer exists.
+        if (outcome === 'failed') {
+          setError('Failed to save collection. Please try again.');
+        } else {
+          onClose();
+        }
+      } else if (await createCollection(trimmedName, description.trim() || undefined)) {
         onClose();
       } else {
         setError('Failed to save collection. Please try again.');
