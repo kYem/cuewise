@@ -1,7 +1,6 @@
 import type { SyncEngine } from './engine';
 
-// Re-exported so hosts can match enableSync's thrown-error contract, and so their tests can build
-// a PendingPairing literal, without a direct @cuewise/crypto dependency either way.
+// Re-exported so consumers can name these without a direct @cuewise/crypto dependency.
 export {
   type PairingCommitment,
   RecoveryCodeError,

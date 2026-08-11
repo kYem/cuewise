@@ -503,7 +503,7 @@ export class SyncEngine {
 
   /**
    * The requester's mirror of denyTamperedReveal: an approver key that is not one usable X25519
-   * key can only have been substituted, so the row goes with it.
+   * key can only have been substituted; the request is dropped and the row best-effort deleted.
    */
   private async failSubstitutedApprover(
     pairing: PairingRequest,
