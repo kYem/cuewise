@@ -53,7 +53,7 @@ vi.mock('@cuewise/storage', () => ({
   // reimplements read-merge-write inline would otherwise be indistinguishable here.
   updateCollections: vi.fn(async (mutate: (list: QuoteCollection[]) => QuoteCollection[]) =>
     storage.withCollectionLock('collections', async () => {
-      const collections = mutate((await storage.getCollections()) ?? []);
+      const collections = mutate(await storage.getCollections());
       return { result: await storage.setCollections(collections), collections };
     })
   ),
@@ -884,20 +884,56 @@ describe('collection writers read storage, not their own snapshot', () => {
     expect(written[0].collectionIds).toEqual([]);
   });
 
-  // A writer reimplementing read-merge-write inline would skip the lock entirely.
+  it('updateCollection reads the collections after the lock is granted', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    const late = { ...pulled(), id: 'late' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    onLockGranted.set('collections', () => {
+      vi.mocked(storage.getCollections).mockResolvedValue([mine, late]);
+    });
+
+    await useQuoteStore.getState().updateCollection('mine', { name: 'B' });
+
+    const written = vi.mocked(storage.setCollections).mock.calls[0][0];
+    expect(written.map((c) => c.id)).toEqual(['mine', 'late']);
+  });
+
+  it('deleteCollection reads the collections after the lock is granted', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    const late = { ...pulled(), id: 'late' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    onLockGranted.set('collections', () => {
+      vi.mocked(storage.getCollections).mockResolvedValue([mine, late]);
+    });
+
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    const written = vi.mocked(storage.setCollections).mock.calls[0][0];
+    expect(written.map((c) => c.id)).toEqual(['late']);
+  });
+
+  // Per writer, not a pooled total: one writer skipping the lock while another takes it twice
+  // leaves the total unchanged.
   it('every collection writer goes through the locked helper', async () => {
     const mine = { ...pulled(), id: 'mine', name: 'Mine' };
     useQuoteStore.setState({ collections: [mine] });
     vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    const locksTaken = (): number =>
+      vi.mocked(storage.withCollectionLock).mock.calls.filter(([lock]) => lock === 'collections')
+        .length;
 
+    const start = locksTaken();
     await useQuoteStore.getState().createCollection('A');
+    const afterCreate = locksTaken();
     await useQuoteStore.getState().updateCollection('mine', { name: 'B' });
+    const afterUpdate = locksTaken();
     await useQuoteStore.getState().deleteCollection('mine');
 
-    const locked = vi
-      .mocked(storage.withCollectionLock)
-      .mock.calls.filter(([lock]) => lock === 'collections');
-    expect(locked).toHaveLength(3);
+    expect([afterCreate - start, afterUpdate - afterCreate, locksTaken() - afterUpdate]).toEqual([
+      1, 1, 1,
+    ]);
   });
 
   it('deleteCollection leaves the quote list alone when it could not be read', async () => {
