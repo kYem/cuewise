@@ -1,11 +1,7 @@
 import type { SyncEngine } from './engine';
 
 // Re-exported so consumers can name these without a direct @cuewise/crypto dependency.
-export {
-  type PairingCommitment,
-  RecoveryCodeError,
-  type RecoveryCodeErrorKind,
-} from '@cuewise/crypto';
+export { type PairingCommitment, RecoveryCodeError } from '@cuewise/crypto';
 // Re-exported so the approver UI (packages/app, which depends on sync-engine but not sync-client
 // directly) can type listPairingRequests()'s result.
 export type { PendingPairing } from '@cuewise/sync-client';

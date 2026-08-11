@@ -9,7 +9,6 @@ import {
   derivePairingSas,
   generatePairingKeypair,
   makePairingCommitment,
-  PAIRING_PUBLIC_KEY_BYTES,
   unwrapDataKeyFromPeer,
   verifyPairingCommitment,
   wrapDataKeyToPeer,
@@ -126,7 +125,7 @@ describe('decodePairingPublicKey', () => {
   it('accepts exactly one X25519 key', () => {
     const decoded = decodePairingPublicKey(GOLDEN_PAIRING.pubB64url);
 
-    expect(decoded).toHaveLength(PAIRING_PUBLIC_KEY_BYTES);
+    expect(decoded).toHaveLength(32);
   });
 
   it('refuses a key shorter than one X25519 key', () => {

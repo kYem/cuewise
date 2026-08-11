@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { problemResponse, stubFetch } from './__fixtures__/fetch.fixtures';
+import { wire } from './__fixtures__/pairing.fixtures';
 import { ApiClient } from './api-client';
 import type { PushRecord } from './types';
 
 const BASE_URL = 'https://api.cuewise.app';
 const TOKEN = 'session-token-123';
-
-/** Stand-in key material: these tests assert placement on the wire, not that it is real base64url. */
-function wire<T extends string>(value: string): T {
-  return value as T;
-}
 
 const pushRecordFixture: PushRecord = {
   collection: 'quotes',
