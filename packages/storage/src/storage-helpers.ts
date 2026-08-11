@@ -386,6 +386,16 @@ export async function setCollections(collections: QuoteCollection[]): Promise<St
   );
 }
 
+/** Changes the collection list, reading inside the lock. See `updateGoals` for why. */
+export async function updateCollections(
+  mutate: (collections: QuoteCollection[]) => QuoteCollection[]
+): Promise<{ result: StorageResult; collections: QuoteCollection[] }> {
+  return withCollectionLock('collections', async () => {
+    const collections = mutate(await getCollections());
+    return { result: await setCollections(collections), collections };
+  });
+}
+
 // Quick Links (pinned shortcut tiles on the new tab)
 export async function getQuickLinks(): Promise<QuickLink[]> {
   const area = await getStorageArea();

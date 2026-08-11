@@ -21,6 +21,7 @@ import {
   clearCustomBackground,
   clearSettings,
   ensureSettingsMigrated,
+  getCollections,
   getCustomBackground,
   getGoals,
   getReminders,
@@ -34,12 +35,14 @@ import {
   readSettings,
   resetSettingsMigration,
   SETTINGS_KEYS,
+  setCollections,
   setCustomBackground,
   setGoals,
   setReminders,
   setSettingsPatch,
   setSettingsPatchRaw,
   settingsStorageKey,
+  updateCollections,
   updateGoals,
   updateReminders,
 } from './storage-helpers';
@@ -241,6 +244,23 @@ describe('updateReminders', () => {
 
     const stored = await getReminders();
     expect(stored.map((reminder) => reminder.id).sort()).toEqual([first.id, second.id].sort());
+  });
+});
+
+describe('updateCollections', () => {
+  it('lets two concurrent writers both land', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const first = { id: 'c1', name: 'One', createdAt: new Date().toISOString() };
+    const second = { id: 'c2', name: 'Two', createdAt: new Date().toISOString() };
+    await setCollections([]);
+
+    await Promise.all([
+      updateCollections((current) => [...current, first]),
+      updateCollections((current) => [...current, second]),
+    ]);
+
+    const stored = await getCollections();
+    expect(stored.map((c) => c.id).sort()).toEqual(['c1', 'c2']);
   });
 });
 
