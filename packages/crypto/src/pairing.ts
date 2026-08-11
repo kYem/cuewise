@@ -56,7 +56,8 @@ export function decodePairingPublicKey(b64: string): PairingPublicKey {
 }
 
 // No length check: the commitment is the check. What must not move is the 32 bytes above — it is
-// the fixed split that keeps the unframed `pub‖nonce` transcript unambiguous.
+// the fixed split keeping both unframed transcripts (`pub‖nonce`, and the SAS's
+// `requesterPub‖approverPub‖id`) unambiguous.
 export function decodePairingNonce(b64: string): PairingNonce {
   return b64urlDecode(b64) as PairingNonce;
 }

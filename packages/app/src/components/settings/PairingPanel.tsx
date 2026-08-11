@@ -9,8 +9,8 @@ const HEADING = 'Approve from another device';
 const BODY = 'On your other device, open Settings → Cloud Sync and approve this device.';
 const WAITING = 'Waiting for approval…';
 const NOT_APPROVED = 'Not approved — try again, or use your recovery code.';
-// Shaped like the approver's TAMPERED_MESSAGE. This screen is on the device with no key yet,
-// so naming the other device's key is unambiguous here.
+// Shaped like the approver's TAMPERED_MESSAGE, but this side names the key: the only `tampered`
+// it can see is an approver key its own decode refused.
 const BLOCKED =
   "Pairing blocked: the other device's key didn't verify. Try again, or use your recovery code.";
 const USE_RECOVERY_CODE = 'Enter your recovery code instead';
