@@ -11,14 +11,11 @@ import {
   sha256,
   splitEnvelope,
   utf8,
-  type X25519KeyPair,
   x25519SharedSecret,
 } from './primitives';
 
 const WRAP_INFO = 'cuewise-pairing-wrap-v1';
 const SAS_INFO = 'cuewise-pairing-sas-v1';
-
-export type { X25519KeyPair };
 
 /** Byte length of a raw X25519 public key — every pairing key, on both sides. */
 export const PAIRING_PUBLIC_KEY_BYTES = 32;
@@ -28,7 +25,7 @@ export const PAIRING_PUBLIC_KEY_BYTES = 32;
 export type PairingPublicKey = Uint8Array & { readonly __brand: 'PairingPublicKey' };
 export type PairingNonce = Uint8Array & { readonly __brand: 'PairingNonce' };
 
-/** The keypair one device brings to a pairing; `publicKey` is branded, the private key never leaves. */
+/** The keypair one device brings to a pairing; the private key is non-extractable. */
 export interface PairingKeyPair {
   publicKey: PairingPublicKey;
   privateKey: CryptoKey;
@@ -41,8 +38,6 @@ export type PairingPublicKeyB64 = string & { readonly __brand: 'PairingPublicKey
 export type PairingNonceB64 = string & { readonly __brand: 'PairingNonceB64' };
 export type PeerWrappedEnvelope = string & { readonly __brand: 'PeerWrappedEnvelope' };
 
-// The only supported way onto the wire: taking branded bytes is what makes a swapped argument a
-// compile error rather than a correctly-branded string carrying the other value's bytes.
 export function encodePairingPublicKey(pub: PairingPublicKey): PairingPublicKeyB64 {
   return b64urlEncode(pub) as PairingPublicKeyB64;
 }
@@ -51,7 +46,7 @@ export function encodePairingNonce(nonce: PairingNonce): PairingNonceB64 {
   return b64urlEncode(nonce) as PairingNonceB64;
 }
 
-/** A peer's public key from the wire: 32 bytes, or it is not a key any handshake could use. */
+/** A peer's public key from the wire. The length is load-bearing — see decodePairingNonce. */
 export function decodePairingPublicKey(b64: string): PairingPublicKey {
   const bytes = b64urlDecode(b64);
   if (bytes.length !== PAIRING_PUBLIC_KEY_BYTES) {
@@ -60,6 +55,8 @@ export function decodePairingPublicKey(b64: string): PairingPublicKey {
   return bytes as PairingPublicKey;
 }
 
+// No length check: the commitment is the check. What must not move is the 32 bytes above — it is
+// the fixed split that keeps the unframed `pub‖nonce` transcript unambiguous.
 export function decodePairingNonce(b64: string): PairingNonce {
   return b64urlDecode(b64) as PairingNonce;
 }

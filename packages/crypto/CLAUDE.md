@@ -24,7 +24,7 @@ The pairing SAS transcript, commitment, and `v1|pairing|…` wrap AAD (`pairing.
 
 ## Consumers
 
-`@cuewise/sync-engine` calls the key, recovery-code and pairing functions; `@cuewise/sync-client` and `apps/api` import the pairing brands as **types only**, so this package stays a zero-runtime-dependency leaf on both. Import directly from `@cuewise/crypto` — no consumer re-exports it, apart from the one brand `@cuewise/sync-engine` passes through for hosts that need to name a `PendingPairing` field.
+`@cuewise/sync-engine` calls the key, recovery-code and pairing functions; `@cuewise/sync-client` and `apps/api` import the pairing brands **type-only**, so nothing from here is emitted into either bundle (both still declare it as a workspace dependency). Import directly from `@cuewise/crypto`, with one exception: `@cuewise/sync-engine` re-exports `RecoveryCodeError`/`RecoveryCodeErrorKind` — which hosts `instanceof`-check to match `enableSync`'s thrown-error contract — plus `PairingCommitment`, so the extension and macOS apps need no crypto dependency of their own.
 
 ## Tests
 
