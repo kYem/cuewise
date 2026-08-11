@@ -1023,6 +1023,8 @@ describe('collection writers read storage, not their own snapshot', () => {
     await expect(useQuoteStore.getState().updateCollection('gone', { name: 'x' })).resolves.toBe(
       'gone'
     );
+    // CollectionForm closes on 'gone', so this warning is how the user learns the rename no-opped.
+    expect(mockToastWarning).toHaveBeenCalledWith('This collection no longer exists');
   });
 
   it('updateCollection reports failure when the write did not persist', async () => {
@@ -1037,6 +1039,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     await expect(useQuoteStore.getState().updateCollection('mine', { name: 'x' })).resolves.toBe(
       'failed'
     );
+    expect(mockToastError).toHaveBeenCalledWith('Failed to update collection. Please try again.');
   });
 
   it('createCollection reports failure when the write did not persist', async () => {
@@ -1048,6 +1051,8 @@ describe('collection writers read storage, not their own snapshot', () => {
     });
 
     await expect(useQuoteStore.getState().createCollection('Mine')).resolves.toBe(false);
+    // CollectionPicker shows nothing of its own on failure, so the toast is the only signal.
+    expect(mockToastError).toHaveBeenCalledWith('Failed to create collection. Please try again.');
   });
 
   // The steps after the collection write can throw; a tombstone that never pushes lets a peer
@@ -1099,6 +1104,8 @@ describe('collection writers read storage, not their own snapshot', () => {
     });
 
     await expect(useQuoteStore.getState().deleteCollection('mine')).resolves.toBe(false);
+    // CollectionList closes its dialog either way, so the toast is the only signal.
+    expect(mockToastError).toHaveBeenCalledWith('Failed to delete collection. Please try again.');
   });
 
   // The user can toggle a filter chip while this waits on the locks, and nothing converges
