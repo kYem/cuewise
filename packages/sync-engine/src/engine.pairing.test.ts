@@ -1087,15 +1087,14 @@ describe('SyncEngine approver pairing methods', () => {
     // Nothing accused, nothing deleted: the real reveal can still land on this row.
     expect(await flow.approver.engine.listPairingRequests()).toHaveLength(1);
   });
-});
 
-describe('SyncEngine.pollApproval given a row it did not ask for', () => {
   it('ignores a prefetched row for another pairing instead of denying the one it polls', async () => {
     const flow = await approverFlow();
     const mine = await beginPairing(flow.requester.engine);
     await commitPairing(flow.approver.engine, mine);
 
-    // A second device's request on the same account, revealed through a session of its own.
+    // A second device's request on the same account, revealed through a session of its own —
+    // commitAsApprover cannot build it, since this engine's single approving slot holds `mine`.
     const other = createDevice(flow.server);
     await expect(other.engine.enableSync('dev', 'cred-c', 'Device C')).rejects.toThrow(
       RecoveryCodeRequiredError
@@ -1115,8 +1114,8 @@ describe('SyncEngine.pollApproval given a row it did not ask for', () => {
     expect(await flow.approver.engine.pollApproval(mine, theirRow)).toEqual({ kind: 'waiting' });
 
     // Their reveal cannot match this slot's commitment, so without the guard it reads as a
-    // substitution and deletes the request actually being polled.
-    expect(await pendingRow(flow.approver.engine, mine)).toMatchObject({ id: mine });
+    // substitution and deletes the request actually being polled — pendingRow throws if it did.
+    await expect(pendingRow(flow.approver.engine, mine)).resolves.toBeDefined();
   });
 });
 
