@@ -18,7 +18,7 @@ const WRAP_INFO = 'cuewise-pairing-wrap-v1';
 const SAS_INFO = 'cuewise-pairing-sas-v1';
 
 /** Byte length of a raw X25519 public key — every pairing key, on both sides. */
-export const PAIRING_PUBLIC_KEY_BYTES = 32;
+const PAIRING_PUBLIC_KEY_BYTES = 32;
 
 // A public key and a nonce are both 32 opaque bytes revealed together, so only the compiler can
 // keep them apart: unbranded, `encodePairingPublicKey(nonce)` returns a correctly-branded string.
