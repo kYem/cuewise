@@ -893,10 +893,15 @@ describe('collection writers read storage, not their own snapshot', () => {
     const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
     configurePlatform({ syncSink: sink });
 
-    await useQuoteStore.getState().deleteCollection('mine');
+    const ok = await useQuoteStore.getState().deleteCollection('mine');
     configurePlatform({ syncSink: null });
 
     expect(sink.markDeleted).toHaveBeenCalledWith('collections', 'mine');
+    // The delete landed and pushed; calling it a failure would send the user to retry an
+    // irreversible, fleet-wide operation.
+    expect(ok).toBe(true);
+    expect(mockToastError).not.toHaveBeenCalled();
+    expect(useQuoteStore.getState().collections).toEqual([]);
   });
 
   it('deleteCollection says so when the quotes could not be unlinked', async () => {
@@ -929,7 +934,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     await expect(useQuoteStore.getState().deleteCollection('mine')).resolves.toBe(false);
   });
 
-  // Another realm may change the filters while this waits on the locks, and nothing converges
+  // The user can toggle a filter chip while this waits on the locks, and nothing converges
   // activeCollectionIds afterwards.
   it('deleteCollection drops the filter from the list as it stands after the locks', async () => {
     const mine = { ...pulled(), id: 'mine', name: 'Mine' };

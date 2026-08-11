@@ -840,32 +840,44 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       // Remove collection ID from all quotes that had it. Locked and re-read for its own sake:
       // losing this leaves quotes pointing at a collection that no longer exists.
-      const unlink = await withCollectionLock('quotes', async () => {
-        const current = await getQuotes();
-        const next = current.map((q) => {
-          if (q.collectionIds?.includes(id)) {
-            return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== id) };
+      const unlink = await withCollectionLock<{ quotes: Quote[] | null; unlinked: boolean }>(
+        'quotes',
+        async () => {
+          // Caught here, not by the outer catch: the collection is already deleted and tombstoned
+          // by this point, so an unreadable quote read is not a failed delete.
+          let current: Quote[];
+          try {
+            current = await getQuotes();
+          } catch (error) {
+            logger.error('Deleted the collection but could not read its quotes to unlink', error);
+            return { quotes: null, unlinked: false };
           }
-          return q;
-        });
-        const quotesResult = await setQuotes(next);
-        if (!quotesResult.success) {
-          logger.error(
-            'Deleted the collection but could not unlink its quotes',
-            quotesResult.error
-          );
-          return { quotes: current, unlinked: false };
+          const next = current.map((q) => {
+            if (q.collectionIds?.includes(id)) {
+              return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== id) };
+            }
+            return q;
+          });
+          const quotesResult = await setQuotes(next);
+          if (!quotesResult.success) {
+            logger.error(
+              'Deleted the collection but could not unlink its quotes',
+              quotesResult.error
+            );
+            return { quotes: current, unlinked: false };
+          }
+          return { quotes: next, unlinked: true };
         }
-        return { quotes: next, unlinked: true };
-      });
+      );
 
-      // Read at use time, not before the locks: another realm may have changed the filters while
-      // this waited, and nothing converges this field afterwards.
+      // Read at use time: the user can toggle a collection filter while this waits on the locks,
+      // and nothing converges this field afterwards.
       const newActiveIds = get().activeCollectionIds.filter((cId) => cId !== id);
 
       set({
         collections: updatedCollections,
-        quotes: unlink.quotes,
+        // Omitted when the read failed: there is no fresher list to commit than what is already here.
+        ...(unlink.quotes !== null && { quotes: unlink.quotes }),
         activeCollectionIds: newActiveIds,
         error: null,
       });
