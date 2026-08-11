@@ -872,6 +872,20 @@ describe('collection writers read storage, not their own snapshot', () => {
     );
   });
 
+  it('updateCollection reports failure when the write did not persist', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.setCollections).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(useQuoteStore.getState().updateCollection('mine', { name: 'x' })).resolves.toBe(
+      false
+    );
+  });
+
   it('createCollection reports failure when the write did not persist', async () => {
     useQuoteStore.setState({ collections: [] });
     vi.mocked(storage.getCollections).mockResolvedValue([]);
@@ -963,6 +977,9 @@ describe('collection writers read storage, not their own snapshot', () => {
 
     const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
     expect(written[0].collectionIds).toEqual([]);
+    // The re-read alone is not the fix: unlocked, the pull it re-read past can still land between
+    // that read and this write.
+    expect(storage.withCollectionLock).toHaveBeenCalledWith('quotes', expect.any(Function));
   });
 });
 
