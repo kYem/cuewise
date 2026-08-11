@@ -30,6 +30,8 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `putPairingEnvelope(id, envelope)` | `PUT /v1/pairings/:id/envelope` | Yes |
 | `deletePairing(id)` | `DELETE /v1/pairings/:id` | Yes |
 
+**Pairing key material is branded** (ENG-101). `commitment`/`publicKey`/`nonce`/`envelope` are look-alike base64url strings passed positionally, so the four pairing calls take `PairingCommitment` / `PairingPublicKeyB64` / `PairingNonceB64` / `PeerWrappedEnvelope` from `@cuewise/crypto` rather than `string` — a swapped `revealPairing(id, nonce, publicKey)` would otherwise compile, clear the server's length checks, and surface on the approver as a key substitution the user gets accused of. This is why the package takes a **type-only** `@cuewise/crypto` dependency; it still imports no crypto function and re-exports none. Values only enter the brand through `encodePairingPublicKey`/`encodePairingNonce`/`makePairingCommitment`/`wrapDataKeyToPeer`, or as an assertion at a trust boundary (`parseSuccessBody`'s generic on a server response).
+
 **Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried a `retryAfter` (problem+json body) or a numeric `Retry-After` header, which takes priority. Any other 4xx throws immediately, no retry.
 
 **The 404 exception**: `getRecoveryEnvelope` resolves to `null` on a 404 instead of throwing — "signed in but E2E keys never initialized" is a valid state callers branch on, not an error. Every other non-2xx still throws `ApiError` as usual.
@@ -59,7 +61,7 @@ Out of scope for this package (belongs to ENG-45 unless noted):
 - The mapping between Zustand store shapes (`goals`, `quotes`, ...) and individual `PushRecord`s.
 - LWW (last-write-wins) conflict resolution.
 - The fresh-device migration/merge state machine.
-- Encryption — the ENG-44 crypto lives in its own leaf package `@cuewise/crypto` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), **not re-exported here**. `ciphertext` is an opaque string to this package's transport functions; ENG-45 wires stores through `@cuewise/crypto` directly. This package is the transport, not the cipher.
+- Encryption — the ENG-44 crypto lives in its own leaf package `@cuewise/crypto` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), **not re-exported here**. The dependency this package declares on it is types only (the pairing brands above). `ciphertext` is an opaque string to this package's transport functions; ENG-45 wires stores through `@cuewise/crypto` directly. This package is the transport, not the cipher.
 
 ## Testing
 

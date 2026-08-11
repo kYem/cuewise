@@ -618,6 +618,9 @@ importers:
 
   packages/sync-client:
     dependencies:
+      '@cuewise/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@cuewise/shared':
         specifier: workspace:*
         version: link:../shared

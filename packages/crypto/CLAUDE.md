@@ -13,6 +13,7 @@ Exports `base64url`, `envelope`, `errors`, `keys`, `pairing`, `recovery-code`. *
 - `generateRecoveryCode()` / `parseRecoveryCode()` → the `CW1-…` code (150-bit machine entropy + 25-bit checksum); `secret` is a branded `RecoverySecret`.
 - `deriveMasterKey(secret)` → branded `MasterKey`; `generateDataKey()` → branded `DataKey`. The brands make a swapped `mk`/`dk` (or code-for-secret) a compile error, not a silent wrong-key derivation.
 - `wrapDataKey` / `unwrapDataKey` → the opaque recovery blob stored server-side.
+- Pairing key material is branded too — `PairingCommitment` / `PairingPublicKeyB64` / `PairingNonceB64` / `PeerWrappedEnvelope`, minted by `makePairingCommitment` / `encodePairingPublicKey` / `encodePairingNonce` / `wrapDataKeyToPeer`. All four are look-alike base64url carried positionally across the pairing endpoints, so the brands are what stop a swap compiling. `@cuewise/sync-client` and `apps/api` import them (types only) rather than redeclaring.
 - `sealRecord` / `openRecord` → per-record AES-256-GCM envelope `v1.<keyId>.<iv>.<ct>`, AAD `v1|collection|entityId` (components reject `|`).
 
 ## Frozen formats

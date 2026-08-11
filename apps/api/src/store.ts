@@ -1,4 +1,10 @@
 import type {
+  PairingCommitment,
+  PairingNonceB64,
+  PairingPublicKeyB64,
+  PeerWrappedEnvelope,
+} from '@cuewise/crypto';
+import type {
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
@@ -33,17 +39,17 @@ export const PAIRING_TTL_MS = 10 * 60 * 1000;
 export interface PendingPairing {
   id: string;
   deviceName: string;
-  requesterCommitment: string;
+  requesterCommitment: PairingCommitment;
   // Null until the requester reveals, which the server refuses before the approver has committed.
-  requesterPublicKey: string | null;
-  requesterNonce: string | null;
+  requesterPublicKey: PairingPublicKeyB64 | null;
+  requesterNonce: PairingNonceB64 | null;
   createdAt: number;
 }
 
 export interface PairingForRequester {
   id: string;
-  approverPublicKey: string | null;
-  envelope: string | null;
+  approverPublicKey: PairingPublicKeyB64 | null;
+  envelope: PeerWrappedEnvelope | null;
   expiresAt: number;
 }
 
@@ -105,7 +111,7 @@ export interface SyncStore {
   createPairing(
     userId: string,
     requesterTokenHash: SessionTokenHash,
-    commitment: string,
+    commitment: PairingCommitment,
     now: number
   ): Promise<{ id: string; expiresAt: number }>;
   // null covers both an unknown id and an expired row — the caller can't distinguish, by design.
@@ -123,7 +129,7 @@ export interface SyncStore {
     userId: string,
     id: string,
     approverTokenHash: SessionTokenHash,
-    publicKey: string,
+    publicKey: PairingPublicKeyB64,
     now: number
   ): Promise<'committed' | 'conflict' | 'not_found'>;
   // Only the requester session that created the row may reveal, refused until the approver has
@@ -132,15 +138,15 @@ export interface SyncStore {
     userId: string,
     id: string,
     requesterTokenHash: SessionTokenHash,
-    publicKey: string,
-    nonce: string,
+    publicKey: PairingPublicKeyB64,
+    nonce: PairingNonceB64,
     now: number
   ): Promise<'revealed' | 'conflict' | 'not_found'>;
   putPairingEnvelope(
     userId: string,
     id: string,
     approverTokenHash: SessionTokenHash,
-    envelope: string,
+    envelope: PeerWrappedEnvelope,
     now: number
   ): Promise<'stored' | 'conflict' | 'not_found'>;
   deletePairing(userId: string, id: string): Promise<boolean>;

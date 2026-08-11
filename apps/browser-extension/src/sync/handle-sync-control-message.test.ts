@@ -1,6 +1,7 @@
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
+  type PairingCommitment,
   type PendingPairing,
   RecoveryCodeError,
   RecoveryCodeRequiredError,
@@ -830,7 +831,7 @@ describe('handleSyncControlMessage: pairing', () => {
   const REQUEST: PendingPairing = {
     id: 'pairing-1',
     deviceName: 'phone',
-    requesterCommitment: 'commitment',
+    requesterCommitment: 'commitment' as PairingCommitment,
     requesterPublicKey: null,
     requesterNonce: null,
     createdAt: 1,

@@ -20,6 +20,25 @@ const SAS_INFO = 'cuewise-pairing-sas-v1';
 
 export type { X25519KeyPair };
 
+// The four pairing wire strings are look-alike base64url carried positionally through
+// createPairing/commitPairing/revealPairing/putPairingEnvelope. Branded so a swap cannot compile:
+// it would otherwise pass the server's length checks and surface as a key substitution the user is
+// told about. Same pattern as DataKey/MasterKey in keys.ts.
+export type PairingCommitment = string & { readonly __brand: 'PairingCommitment' };
+export type PairingPublicKeyB64 = string & { readonly __brand: 'PairingPublicKeyB64' };
+export type PairingNonceB64 = string & { readonly __brand: 'PairingNonceB64' };
+export type PeerWrappedEnvelope = string & { readonly __brand: 'PeerWrappedEnvelope' };
+
+// The only supported way to put either key-material value on the wire, so the brand is applied
+// where the bytes are encoded rather than at a call site that could brand the wrong one.
+export function encodePairingPublicKey(pub: Uint8Array): PairingPublicKeyB64 {
+  return b64urlEncode(pub) as PairingPublicKeyB64;
+}
+
+export function encodePairingNonce(nonce: Uint8Array): PairingNonceB64 {
+  return b64urlEncode(nonce) as PairingNonceB64;
+}
+
 export function generatePairingKeypair(): Promise<X25519KeyPair> {
   return generateX25519KeyPair();
 }
@@ -54,20 +73,20 @@ export async function wrapDataKeyToPeer(
   dk: DataKey,
   keyId: string,
   pairingId: string
-): Promise<string> {
+): Promise<PeerWrappedEnvelope> {
   if (!isValidKeyId(keyId)) {
     throw new EnvelopeParseError('invalid keyId');
   }
   const key = await pairingWrapKey(priv, peerPub);
   const iv = randomBytes(12);
   const ct = await aesGcmSeal(key, iv, dk, pairingAad(pairingId, keyId));
-  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}`;
+  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}` as PeerWrappedEnvelope;
 }
 
 export async function unwrapDataKeyFromPeer(
   priv: CryptoKey,
   peerPub: Uint8Array,
-  envelope: string,
+  envelope: PeerWrappedEnvelope,
   pairingId: string
 ): Promise<{ dk: DataKey; keyId: string }> {
   const { keyId, iv, ct } = splitEnvelope(envelope);
@@ -78,18 +97,18 @@ export async function unwrapDataKeyFromPeer(
 
 export async function makePairingCommitment(
   pub: Uint8Array
-): Promise<{ commitment: string; nonce: Uint8Array }> {
+): Promise<{ commitment: PairingCommitment; nonce: Uint8Array }> {
   const nonce = randomBytes(32);
   const transcript = new Uint8Array(pub.length + nonce.length);
   transcript.set(pub, 0);
   transcript.set(nonce, pub.length);
   const hash = await sha256(transcript);
-  const commitment = b64urlEncode(hash);
+  const commitment = b64urlEncode(hash) as PairingCommitment;
   return { commitment, nonce };
 }
 
 export async function verifyPairingCommitment(
-  commitment: string,
+  commitment: PairingCommitment,
   pub: Uint8Array,
   nonce: Uint8Array
 ): Promise<boolean> {

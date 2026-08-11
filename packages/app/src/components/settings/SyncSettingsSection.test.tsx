@@ -1,5 +1,10 @@
 import { logger } from '@cuewise/shared';
-import type { PendingPairing, SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PairingCommitment,
+  PendingPairing,
+  SyncFailureReason,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -2677,7 +2682,7 @@ describe('SyncSettingsSectionComponent', () => {
     const REQUEST: PendingPairing = {
       id: 'pairing-1',
       deviceName: "Alex's Phone",
-      requesterCommitment: 'requester-commitment-hash',
+      requesterCommitment: 'requester-commitment-hash' as PairingCommitment,
       requesterPublicKey: null,
       requesterNonce: null,
       createdAt: Date.now(),

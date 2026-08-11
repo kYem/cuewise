@@ -1,3 +1,9 @@
+import type {
+  PairingCommitment,
+  PairingNonceB64,
+  PairingPublicKeyB64,
+  PeerWrappedEnvelope,
+} from '@cuewise/crypto';
 import { ApiError } from './api-error';
 import type {
   ExchangeTokenRequest,
@@ -162,7 +168,7 @@ export class ApiClient {
 
   // Device pairing (ENG-50): a requester creates the row with only a commitment to its key, an
   // approver commits its own, and the requester then reveals. `id` is the server's row handle.
-  async createPairing(commitment: string): Promise<PairingCreated> {
+  async createPairing(commitment: PairingCommitment): Promise<PairingCreated> {
     const res = await this.request(
       '/v1/pairings',
       {
@@ -198,7 +204,7 @@ export class ApiClient {
     }
   }
 
-  async commitPairing(id: string, publicKey: string): Promise<void> {
+  async commitPairing(id: string, publicKey: PairingPublicKeyB64): Promise<void> {
     await this.request(
       `/v1/pairings/${encodeURIComponent(id)}/commit`,
       {
@@ -211,7 +217,11 @@ export class ApiClient {
   }
 
   // 409 `pairing_conflict` before an approver has committed, or once a reveal is already stored.
-  async revealPairing(id: string, publicKey: string, nonce: string): Promise<void> {
+  async revealPairing(
+    id: string,
+    publicKey: PairingPublicKeyB64,
+    nonce: PairingNonceB64
+  ): Promise<void> {
     await this.request(
       `/v1/pairings/${encodeURIComponent(id)}/reveal`,
       {
@@ -223,7 +233,7 @@ export class ApiClient {
     );
   }
 
-  async putPairingEnvelope(id: string, envelope: string): Promise<void> {
+  async putPairingEnvelope(id: string, envelope: PeerWrappedEnvelope): Promise<void> {
     await this.request(
       `/v1/pairings/${encodeURIComponent(id)}/envelope`,
       {

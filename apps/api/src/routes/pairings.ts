@@ -1,3 +1,9 @@
+import type {
+  PairingCommitment,
+  PairingNonceB64,
+  PairingPublicKeyB64,
+  PeerWrappedEnvelope,
+} from '@cuewise/crypto';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
@@ -10,6 +16,8 @@ const MAX_KEY_MATERIAL_BYTES = 64;
 const MAX_ENVELOPE_BYTES = 1024; // same bound as /v1/keys/recovery
 const NO_SUCH_PAIRING = 'No such pairing request for this account.';
 
+// Each key-material brand below is asserted here and nowhere else: this is where an untrusted wire
+// string becomes typed material, and the validator beside it is all the server ever knows about it.
 export function registerPairingsRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
   deps: AppDepsResolved
@@ -33,7 +41,7 @@ export function registerPairingsRoutes(
     const created = await store.createPairing(
       c.get('userId'),
       c.get('tokenHash'),
-      commitment,
+      commitment as PairingCommitment,
       Date.now()
     );
     return c.json(created);
@@ -81,7 +89,7 @@ export function registerPairingsRoutes(
       c.get('userId'),
       c.req.param('id'),
       c.get('tokenHash'),
-      publicKey,
+      publicKey as PairingPublicKeyB64,
       Date.now()
     );
     if (result === 'not_found') {
@@ -114,8 +122,8 @@ export function registerPairingsRoutes(
       c.get('userId'),
       c.req.param('id'),
       c.get('tokenHash'),
-      publicKey,
-      nonce,
+      publicKey as PairingPublicKeyB64,
+      nonce as PairingNonceB64,
       Date.now()
     );
     if (result === 'not_found') {
@@ -146,7 +154,7 @@ export function registerPairingsRoutes(
       c.get('userId'),
       c.req.param('id'),
       c.get('tokenHash'),
-      envelope,
+      envelope as PeerWrappedEnvelope,
       Date.now()
     );
     if (result === 'not_found') {

@@ -1,5 +1,9 @@
 import { logger } from '@cuewise/shared';
-import { CLOUD_SYNC_ENABLED_KEY, type PendingPairing } from '@cuewise/sync-engine';
+import {
+  CLOUD_SYNC_ENABLED_KEY,
+  type PairingCommitment,
+  type PendingPairing,
+} from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BridgeSyncController } from './bridge-sync-controller';
@@ -940,7 +944,7 @@ describe('BridgeSyncController: pairing polls', () => {
   const REQUEST: PendingPairing = {
     id: 'pairing-1',
     deviceName: 'phone',
-    requesterCommitment: 'commitment',
+    requesterCommitment: 'commitment' as PairingCommitment,
     requesterPublicKey: null,
     requesterNonce: null,
     createdAt: 1,
@@ -1024,7 +1028,7 @@ describe('BridgeSyncController: pairing round trips', () => {
     const REQUEST: PendingPairing = {
       id: 'pairing-1',
       deviceName: 'phone',
-      requesterCommitment: 'commitment',
+      requesterCommitment: 'commitment' as PairingCommitment,
       requesterPublicKey: null,
       requesterNonce: null,
       createdAt: 1,

@@ -4,6 +4,7 @@ import {
   generateDataKey,
   generatePairingKeypair,
   makePairingCommitment,
+  type PeerWrappedEnvelope,
   unwrapDataKeyFromPeer,
   wrapDataKeyToPeer,
 } from '@cuewise/crypto';
@@ -15,7 +16,11 @@ import app from '../index';
 import { PAIRING_TTL_MS } from '../store';
 
 type CreateBody = { id: string; expiresAt: number };
-type PairingBody = { id: string; approverPublicKey: string | null; envelope: string | null };
+type PairingBody = {
+  id: string;
+  approverPublicKey: string | null;
+  envelope: PeerWrappedEnvelope | null;
+};
 type ListBody = {
   pairings: {
     id: string;
@@ -481,7 +486,7 @@ describe('/v1/pairings', () => {
     const opened = await unwrapDataKeyFromPeer(
       requester.privateKey,
       approver.publicKey,
-      requesterView.envelope as string,
+      requesterView.envelope as PeerWrappedEnvelope,
       id
     );
     expect(opened.dk).toEqual(dk);

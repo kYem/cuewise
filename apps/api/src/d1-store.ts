@@ -1,3 +1,9 @@
+import type {
+  PairingCommitment,
+  PairingNonceB64,
+  PairingPublicKeyB64,
+  PeerWrappedEnvelope,
+} from '@cuewise/crypto';
 import { DAY_IN_MS, logger } from '@cuewise/shared';
 import {
   hashSessionToken,
@@ -538,8 +544,8 @@ export class D1SyncStore implements SyncStore {
       .bind(id, userId, now)
       .first<{
         id: string;
-        approver_public_key: string | null;
-        envelope: string | null;
+        approver_public_key: PairingPublicKeyB64 | null;
+        envelope: PeerWrappedEnvelope | null;
         expires_at: number;
       }>();
     if (row === null) {
@@ -569,9 +575,9 @@ export class D1SyncStore implements SyncStore {
       .bind(userId, now, excludeTokenHash)
       .all<{
         id: string;
-        requester_commitment: string;
-        requester_public_key: string | null;
-        requester_nonce: string | null;
+        requester_commitment: PairingCommitment;
+        requester_public_key: PairingPublicKeyB64 | null;
+        requester_nonce: PairingNonceB64 | null;
         created_at: number;
         device_name: string;
       }>();

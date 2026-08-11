@@ -1,12 +1,15 @@
 import {
   b64urlDecode,
-  b64urlEncode,
   type DataKey,
   deriveMasterKey,
   derivePairingSas,
+  encodePairingNonce,
+  encodePairingPublicKey,
   generatePairingKeypair,
   generateRecoveryCode,
   makePairingCommitment,
+  type PairingCommitment,
+  type PeerWrappedEnvelope,
   RecoveryCodeError,
   unwrapDataKeyFromPeer,
   verifyPairingCommitment,
@@ -202,7 +205,7 @@ interface PairingRequest {
 interface PairingApproval {
   id: string;
   keypair: X25519KeyPair;
-  commitment: string;
+  commitment: PairingCommitment;
   /** Null until a reveal verifies against `commitment` AND its digits derive; both land together,
    *  so a rejected derive can never leave a key to wrap with no digits ever shown. */
   verified: { requesterPub: Uint8Array; sas: string } | null;
@@ -513,8 +516,8 @@ export class SyncEngine {
     try {
       await this.deps.apiClient.revealPairing(
         pairing.id,
-        b64urlEncode(pairing.keypair.publicKey),
-        b64urlEncode(pairing.nonce)
+        encodePairingPublicKey(pairing.keypair.publicKey),
+        encodePairingNonce(pairing.nonce)
       );
       return 'revealed';
     } catch (err) {
@@ -532,7 +535,7 @@ export class SyncEngine {
   private async adoptPairedKey(
     pairing: PairingRequest,
     approverPub: Uint8Array,
-    envelope: string,
+    envelope: PeerWrappedEnvelope,
     epoch: number
   ): Promise<PairingPollResult> {
     // Claimed before the first await, so the caller's identity check and this claim are one
@@ -616,7 +619,7 @@ export class SyncEngine {
     }
     const keypair = await generatePairingKeypair();
     try {
-      await this.deps.apiClient.commitPairing(id, b64urlEncode(keypair.publicKey));
+      await this.deps.apiClient.commitPairing(id, encodePairingPublicKey(keypair.publicKey));
     } catch (err) {
       if (
         err instanceof ApiError &&

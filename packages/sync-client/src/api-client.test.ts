@@ -6,6 +6,14 @@ import type { PushRecord } from './types';
 const BASE_URL = 'https://api.cuewise.app';
 const TOKEN = 'session-token-123';
 
+/**
+ * Stand-in key material. These tests assert only that a value reaches the right field on the
+ * wire, so nothing here has to be real base64url — but the transport still takes it branded.
+ */
+function wire<T extends string>(value: string): T {
+  return value as T;
+}
+
 const pushRecordFixture: PushRecord = {
   collection: 'quotes',
   entityId: 'q1',
@@ -572,7 +580,7 @@ describe('ApiClient', () => {
       const { fetchFn, calls } = stubFetch([{ status: 200, body: pairingCreatedFixture }]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      const result = await client.createPairing('requester-commitment');
+      const result = await client.createPairing(wire('requester-commitment'));
 
       expect(result).toEqual(pairingCreatedFixture);
       expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings`);
@@ -588,7 +596,7 @@ describe('ApiClient', () => {
       const { fetchFn, calls } = stubFetch([{ status: 200, body: pairingCreatedFixture }]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      await client.createPairing('requester-commitment');
+      await client.createPairing(wire('requester-commitment'));
 
       expect(Object.keys(JSON.parse(calls[0].init.body as string))).toEqual(['commitment']);
     });
@@ -633,7 +641,7 @@ describe('ApiClient', () => {
       const { fetchFn, calls } = stubFetch([{ status: 204 }]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      await expect(client.commitPairing('p1', 'approver-pubkey')).resolves.toBeUndefined();
+      await expect(client.commitPairing('p1', wire('approver-pubkey'))).resolves.toBeUndefined();
 
       expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1/commit`);
       expect(calls[0].init.method).toBe('POST');
@@ -644,7 +652,7 @@ describe('ApiClient', () => {
       const { fetchFn, calls } = stubFetch([problemResponse('pairing_conflict', 409)]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      await expect(client.commitPairing('p1', 'approver-pubkey')).rejects.toMatchObject({
+      await expect(client.commitPairing('p1', wire('approver-pubkey'))).rejects.toMatchObject({
         code: 'pairing_conflict',
         status: 409,
         retryable: false,
@@ -656,7 +664,7 @@ describe('ApiClient', () => {
       const { fetchFn } = stubFetch([problemResponse('pairing_not_found', 404)]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      await expect(client.commitPairing('gone', 'approver-pubkey')).rejects.toMatchObject({
+      await expect(client.commitPairing('gone', wire('approver-pubkey'))).rejects.toMatchObject({
         code: 'pairing_not_found',
         status: 404,
         retryable: false,
@@ -668,7 +676,7 @@ describe('ApiClient', () => {
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
       await expect(
-        client.revealPairing('p1', 'requester-pubkey', 'requester-nonce')
+        client.revealPairing('p1', wire('requester-pubkey'), wire('requester-nonce'))
       ).resolves.toBeUndefined();
 
       expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1/reveal`);
@@ -685,7 +693,7 @@ describe('ApiClient', () => {
       const { fetchFn, calls } = stubFetch([problemResponse('pairing_conflict', 409)]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      await expect(client.revealPairing('p1', 'pub', 'nonce')).rejects.toMatchObject({
+      await expect(client.revealPairing('p1', wire('pub'), wire('nonce'))).rejects.toMatchObject({
         code: 'pairing_conflict',
         status: 409,
         retryable: false,
@@ -697,7 +705,7 @@ describe('ApiClient', () => {
       const { fetchFn, calls } = stubFetch([{ status: 204 }]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
-      await expect(client.putPairingEnvelope('p1', 'v1.dk-1.a.b')).resolves.toBeUndefined();
+      await expect(client.putPairingEnvelope('p1', wire('v1.dk-1.a.b'))).resolves.toBeUndefined();
 
       expect(calls[0].url).toBe(`${BASE_URL}/v1/pairings/p1/envelope`);
       expect(calls[0].init.method).toBe('PUT');
