@@ -514,11 +514,15 @@ pnpm --filter @cuewise/browser-extension dev
 
 ### Working on Linear Tickets
 
-When picking up a Linear ticket (ENG-x), make the work traceable before writing code:
+Several agents work this board at once, so a ticket must be **claimed** before any code is written — otherwise two sessions silently build the same branch.
 
-1. Move the ticket to **In Progress** and add a comment identifying who has it (e.g. "Claude Code session on <machine/branch>") — ad-hoc sessions are invisible to Linear otherwise
-2. Prefer the ticket's suggested branch name (`gitBranchName` from the Linear API, e.g. `kes/eng-77-...`); if using a `claude/...` branch, the PR description must include the issue ID (e.g. `Fixes ENG-77`) so the PR links back to the ticket
-3. On opening the PR, attach it to the ticket if the GitHub integration hasn't done so automatically
+**Claiming.** Add the `in-flight` label, move the ticket to **In Progress**, and comment naming the branch (e.g. "Claude Code session on `kes/eng-101-...`"). Linear has no field for a local session, so the label is the claim and the comment says who holds it. `in-flight` is a standalone label on purpose — the `Pickup` group (`human-only` / `agent-with-review` / `agent-ready`) is single-select, so nesting it there would strip the pickup label. Pass the full label set when applying it: `save_issue.labels` replaces rather than appends.
+
+**Before claiming**, check nobody else holds it: an existing `in-flight`, or In Progress with no branch, means another session owns it — pick something else. A claim whose branch has no commits and no live session is stale; verify with `git branch -a` before taking it over.
+
+**Releasing.** Drop `in-flight` when the PR opens (the PR becomes the link) or when the work is abandoned. Never leave it set on a ticket you are no longer driving.
+
+Branch from the ticket's own `gitBranchName` (e.g. `kes/eng-101-...`); on a `claude/...` branch the PR description must say `Fixes ENG-101` so it links back. On opening the PR, attach it to the ticket if the GitHub integration hasn't.
 
 ## Additional Resources
 
