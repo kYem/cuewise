@@ -823,8 +823,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   deleteCollection: async (id: string) => {
     try {
-      const { activeCollectionIds } = get();
-
       // Remove collection
       const { result, collections: updatedCollections } = await updateCollections((current) =>
         current.filter((c) => c.id !== id)
@@ -836,10 +834,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         useToastStore.getState().error(errorMessage);
         return false;
       }
+      // Straight after the write, with nothing fallible in between: the steps below can throw, and
+      // a tombstone that never pushes lets a peer still holding the collection resurrect it.
+      notifyDeleted('collections', id);
 
       // Remove collection ID from all quotes that had it. Locked and re-read for its own sake:
       // losing this leaves quotes pointing at a collection that no longer exists.
-      const updatedQuotes = await withCollectionLock('quotes', async () => {
+      const unlink = await withCollectionLock('quotes', async () => {
         const current = await getQuotes();
         const next = current.map((q) => {
           if (q.collectionIds?.includes(id)) {
@@ -853,25 +854,29 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             'Deleted the collection but could not unlink its quotes',
             quotesResult.error
           );
-          return current;
+          return { quotes: current, unlinked: false };
         }
-        return next;
+        return { quotes: next, unlinked: true };
       });
 
-      // Remove deleted collection from active filters
-      const newActiveIds = activeCollectionIds.filter((cId) => cId !== id);
+      // Read at use time, not before the locks: another realm may have changed the filters while
+      // this waited, and nothing converges this field afterwards.
+      const newActiveIds = get().activeCollectionIds.filter((cId) => cId !== id);
 
       set({
         collections: updatedCollections,
-        quotes: updatedQuotes,
+        quotes: unlink.quotes,
         activeCollectionIds: newActiveIds,
         error: null,
       });
 
       // Persist updated filter settings (collection removed from active filters)
       await persistFilterSettings(get());
-      notifyDeleted('collections', id);
 
+      if (!unlink.unlinked) {
+        useToastStore.getState().warning('Collection deleted, but its quotes still reference it');
+        return true;
+      }
       useToastStore.getState().success('Collection deleted');
       return true;
     } catch (error) {

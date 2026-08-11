@@ -883,6 +883,68 @@ describe('collection writers read storage, not their own snapshot', () => {
     await expect(useQuoteStore.getState().createCollection('Mine')).resolves.toBe(false);
   });
 
+  // The steps after the collection write can throw; a tombstone that never pushes lets a peer
+  // still holding the collection resurrect it.
+  it('deleteCollection announces the tombstone even when unlinking blows up', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockRejectedValue(new Error('unreadable'));
+    const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+    configurePlatform({ syncSink: sink });
+
+    await useQuoteStore.getState().deleteCollection('mine');
+    configurePlatform({ syncSink: null });
+
+    expect(sink.markDeleted).toHaveBeenCalledWith('collections', 'mine');
+  });
+
+  it('deleteCollection says so when the quotes could not be unlinked', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockResolvedValue([
+      quoteFactory.build({ id: 'q1', collectionIds: ['mine'] }),
+    ]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      'Collection deleted, but its quotes still reference it'
+    );
+  });
+
+  it('deleteCollection reports failure when the write did not persist', async () => {
+    useQuoteStore.setState({ collections: [{ ...pulled(), id: 'mine' }] });
+    vi.mocked(storage.getCollections).mockResolvedValue([{ ...pulled(), id: 'mine' }]);
+    vi.mocked(storage.setCollections).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(useQuoteStore.getState().deleteCollection('mine')).resolves.toBe(false);
+  });
+
+  // Another realm may change the filters while this waits on the locks, and nothing converges
+  // activeCollectionIds afterwards.
+  it('deleteCollection drops the filter from the list as it stands after the locks', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine], activeCollectionIds: ['mine', 'other'] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockImplementation(async () => {
+      useQuoteStore.setState({ activeCollectionIds: [] });
+      return [];
+    });
+
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    expect(useQuoteStore.getState().activeCollectionIds).toEqual([]);
+  });
+
   // Losing this unlink leaves quotes pointing at a collection that no longer exists.
   it('deleteCollection unlinks quotes it only sees in storage', async () => {
     const mine = { ...pulled(), id: 'mine', name: 'Mine' };
@@ -966,6 +1028,33 @@ describe('sync sink wiring', () => {
 
     const created = useQuoteStore.getState().collections[0];
     expect(markMutated).toHaveBeenCalledWith('collections', created.id);
+  });
+
+  // The guard exists for exactly this: a gone id marked dirty seals a tombstone on the next push
+  // that this device never authored, and other devices apply it as a delete.
+  it('does not mark a collection dirty when the pull deleted it before the write', async () => {
+    vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
+    useQuoteStore.setState({
+      collections: [{ id: 'gone', name: 'Gone', createdAt: new Date().toISOString() }],
+    });
+    vi.mocked(storage.getCollections).mockResolvedValue([]);
+
+    await useQuoteStore.getState().updateCollection('gone', { name: 'Renamed' });
+
+    expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifies markMutated after updateCollection persists a rename', async () => {
+    vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
+    useQuoteStore.setState({
+      collections: [{ id: 'c1', name: 'Before', createdAt: new Date().toISOString() }],
+    });
+
+    const ok = await useQuoteStore.getState().updateCollection('c1', { name: 'After' });
+
+    expect(ok).toBe(true);
+    expect(useQuoteStore.getState().collections[0].name).toBe('After');
+    expect(markMutated).toHaveBeenCalledWith('collections', 'c1');
   });
 
   it('notifies markMutated when hiding a custom quote', async () => {
