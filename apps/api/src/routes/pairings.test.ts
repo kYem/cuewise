@@ -9,7 +9,7 @@ import {
   wrapDataKeyToPeer,
 } from '@cuewise/crypto';
 import { describe, expect, it } from 'vitest';
-import { clockedStore, signedInToken } from '../__fixtures__/api-test-helpers.fixtures';
+import { clockedStore, signedInToken, wire } from '../__fixtures__/api-test-helpers.fixtures';
 import { hashSessionToken } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import app from '../index';
@@ -350,7 +350,7 @@ describe('/v1/pairings', () => {
     const { id } = await store.createPairing(
       userId,
       requesterHash,
-      'commitment',
+      wire('commitment'),
       Date.now() - PAIRING_TTL_MS - 1_000
     );
 
@@ -376,7 +376,7 @@ describe('/v1/pairings', () => {
     const { id } = await store.createPairing(
       userId,
       requesterHash,
-      'commitment',
+      wire('commitment'),
       Date.now() - PAIRING_TTL_MS - 1_000
     );
 

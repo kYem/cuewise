@@ -1,13 +1,11 @@
 import type { SyncEngine } from './engine';
 
 // Re-exported so hosts (macOS/extension DirectSyncController) can match enableSync's thrown-error
-// contract, and the approver UI can name the key material on a pairing row, without taking a
-// direct @cuewise/crypto dependency of their own.
+// contract, and so a caller can build a PendingPairing, without taking a direct @cuewise/crypto
+// dependency of their own. The other three pairing brands have no consumer out here; add one when
+// something outside this package needs to name it.
 export {
   type PairingCommitment,
-  type PairingNonceB64,
-  type PairingPublicKeyB64,
-  type PeerWrappedEnvelope,
   RecoveryCodeError,
   type RecoveryCodeErrorKind,
 } from '@cuewise/crypto';

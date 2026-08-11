@@ -80,3 +80,8 @@ export async function putRecovery(app: App, token: string, body: unknown): Promi
     env
   );
 }
+
+/** Stand-in pairing key material: the store relays these opaquely, so any string stands in. */
+export function wire<T extends string>(value: string): T {
+  return value as T;
+}

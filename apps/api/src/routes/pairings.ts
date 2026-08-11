@@ -16,8 +16,9 @@ const MAX_KEY_MATERIAL_BYTES = 64;
 const MAX_ENVELOPE_BYTES = 1024; // same bound as /v1/keys/recovery
 const NO_SUCH_PAIRING = 'No such pairing request for this account.';
 
-// Each key-material brand below is asserted here and nowhere else: this is where an untrusted wire
-// string becomes typed material, and the validator beside it is all the server ever knows about it.
+// Each brand below is asserted beside the validator that bounds it — that check is all the server
+// ever knows about a value it only relays. (d1-store's row types assert the same brands on the way
+// back out of D1.)
 export function registerPairingsRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
   deps: AppDepsResolved

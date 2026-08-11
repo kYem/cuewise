@@ -6,10 +6,7 @@ import type { PushRecord } from './types';
 const BASE_URL = 'https://api.cuewise.app';
 const TOKEN = 'session-token-123';
 
-/**
- * Stand-in key material. These tests assert only that a value reaches the right field on the
- * wire, so nothing here has to be real base64url — but the transport still takes it branded.
- */
+/** Stand-in key material: these tests assert placement on the wire, not that it is real base64url. */
 function wire<T extends string>(value: string): T {
   return value as T;
 }

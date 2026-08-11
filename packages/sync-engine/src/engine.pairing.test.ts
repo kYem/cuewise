@@ -1,13 +1,14 @@
 import * as cryptoModule from '@cuewise/crypto';
 import {
-  b64urlDecode,
   type DataKey,
   DecryptError,
+  decodePairingPublicKey,
   derivePairingSas,
   encodePairingPublicKey,
   generatePairingKeypair,
+  type PairingKeyPair,
+  type PairingPublicKey,
   wrapDataKeyToPeer,
-  type X25519KeyPair,
 } from '@cuewise/crypto';
 import { configurePlatform, logger } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
@@ -127,7 +128,7 @@ interface PairingFlow {
 /** The approver's half after it has committed: the row it answered, and the key it answered with. */
 interface ApproverSide {
   id: string;
-  keypair: X25519KeyPair;
+  keypair: PairingKeyPair;
 }
 
 /**
@@ -166,10 +167,7 @@ async function pairingFlow(): Promise<PairingFlow> {
   };
 }
 
-/**
- * Wire key material a test plants by hand — a hostile relay's substitution, or a wrong-session
- * caller's. Never produced by this device, so it carries the brand no encoder would give it.
- */
+/** Wire key material a test plants by hand: a hostile relay's, or a wrong-session caller's. */
 function planted<T extends string>(value: string): T {
   return value as T;
 }
@@ -196,12 +194,12 @@ async function commitAsApprover(flow: PairingFlow): Promise<ApproverSide> {
 }
 
 /** The key the requester published once a poll revealed it — a loud failure before that. */
-async function revealedPub(flow: PairingFlow, id: string): Promise<Uint8Array> {
+async function revealedPub(flow: PairingFlow, id: string): Promise<PairingPublicKey> {
   const row = (await flow.approver.listPairings()).find((candidate) => candidate.id === id);
   if (row === undefined || row.requesterPublicKey === null) {
     throw new Error(`the request has revealed no key to answer: ${id}`);
   }
-  return b64urlDecode(row.requesterPublicKey);
+  return decodePairingPublicKey(row.requesterPublicKey);
 }
 
 /** The approver's confirm: the account's data key, wrapped to the key the requester revealed. */
@@ -1096,6 +1094,7 @@ describe('SyncEngine.pollPairing against a hostile relay', () => {
     const flow = await approverFlow();
     const id = await beginPairing(flow.requester.engine);
     await commitPairing(flow.approver.engine, id);
+    const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
     // The mirror of the approver's case: bytes that are not even base64url, aimed the other way.
     flow.server.substituteApproverPublicKey(id, planted('!!!not-base64url!!!'));
 
@@ -1106,8 +1105,25 @@ describe('SyncEngine.pollPairing against a hostile relay', () => {
 
     // Terminal, not a poll that loops until the TTL: the request is forgotten.
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
-    // And the one-shot reveal was never spent on a peer whose key will not parse.
-    const row = await pendingRow(flow.approver.engine, id);
-    expect(row.requesterPublicKey).toBeNull();
+    // The one-shot reveal was never spent on a peer whose key will not parse...
+    expect(reveals).not.toHaveBeenCalled();
+    // ...and the row is gone, so the approver stops waiting instead of aging out at the TTL.
+    expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
+  });
+
+  it('refuses an approver key that decodes to the wrong length, before spending its reveal', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
+    // Valid base64url, but three bytes: no X25519 handshake could ever use it.
+    flow.server.substituteApproverPublicKey(id, planted('AAAA'));
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'tampered',
+    });
+
+    expect(reveals).not.toHaveBeenCalled();
   });
 });

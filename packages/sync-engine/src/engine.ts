@@ -1,6 +1,7 @@
 import {
-  b64urlDecode,
   type DataKey,
+  decodePairingNonce,
+  decodePairingPublicKey,
   deriveMasterKey,
   derivePairingSas,
   encodePairingNonce,
@@ -9,13 +10,15 @@ import {
   generateRecoveryCode,
   makePairingCommitment,
   type PairingCommitment,
+  type PairingKeyPair,
+  type PairingNonce,
+  type PairingPublicKey,
   type PeerWrappedEnvelope,
   RecoveryCodeError,
   unwrapDataKeyFromPeer,
   verifyPairingCommitment,
   wrapDataKey,
   wrapDataKeyToPeer,
-  type X25519KeyPair,
 } from '@cuewise/crypto';
 import {
   describeThrown,
@@ -189,12 +192,12 @@ const PAIRING_BLOCKED_STATUSES: readonly SyncStatus[] = [
 /** The request this device is polling: its keypair, and what the approver has answered so far. */
 interface PairingRequest {
   id: string;
-  keypair: X25519KeyPair;
+  keypair: PairingKeyPair;
   /** Opens the commitment the create posted; useless to anyone but this device until revealed. */
-  nonce: Uint8Array;
+  nonce: PairingNonce;
   revealed: boolean;
   sas: string | null;
-  approverPub: Uint8Array | null;
+  approverPub: PairingPublicKey | null;
 }
 
 /**
@@ -204,11 +207,11 @@ interface PairingRequest {
  */
 interface PairingApproval {
   id: string;
-  keypair: X25519KeyPair;
+  keypair: PairingKeyPair;
   commitment: PairingCommitment;
   /** Null until a reveal verifies against `commitment` AND its digits derive; both land together,
    *  so a rejected derive can never leave a key to wrap with no digits ever shown. */
-  verified: { requesterPub: Uint8Array; sas: string } | null;
+  verified: { requesterPub: PairingPublicKey; sas: string } | null;
 }
 
 export interface SyncEngineDeps {
@@ -451,17 +454,13 @@ export class SyncEngine {
         return { kind: 'failed', reason: 'expired_or_denied' };
       }
       if (found.approverPublicKey !== null && pairing.approverPub === null) {
-        let approverPub: Uint8Array;
+        let approverPub: PairingPublicKey;
         try {
-          // Decoded before the reveal, not after: untrusted relay data that will not even parse is
-          // a substitution, and the one-shot reveal must not be spent on it.
-          approverPub = b64urlDecode(found.approverPublicKey);
-        } catch {
-          this.pairing = null;
-          logger.error(
-            'Cloud sync refused a pairing approver: the other device published a key that will not decode'
-          );
-          return { kind: 'failed', reason: 'tampered' };
+          // Decoded before the reveal: relay data that is not one usable key is a substitution, and
+          // the one-shot reveal must not be spent on it.
+          approverPub = decodePairingPublicKey(found.approverPublicKey);
+        } catch (err) {
+          return await this.failSubstitutedApprover(pairing, err);
         }
         if ((await this.revealOnce(pairing)) === 'conflict') {
           // Someone else's key is on the row, or a reveal outlived the slot holding the only
@@ -503,6 +502,27 @@ export class SyncEngine {
   }
 
   /**
+   * The requester's mirror of denyTamperedReveal: an approver key that is not one usable X25519
+   * key can only have been substituted. The row is deleted rather than left standing, since the
+   * approver is still polling it and would otherwise wait out the full TTL for a dead handshake.
+   */
+  private async failSubstitutedApprover(
+    pairing: PairingRequest,
+    err: unknown
+  ): Promise<PairingPollResult> {
+    this.pairing = null;
+    logger.error(
+      `Cloud sync refused a pairing approver: the key published for ${pairing.id} is not one this device can use: ${describeThrown(err)}`,
+      err
+    );
+    await this.bestEffort(
+      () => this.deps.apiClient.deletePairing(pairing.id),
+      'substituted pairing approver cleanup'
+    );
+    return { kind: 'failed', reason: 'tampered' };
+  }
+
+  /**
    * Publishes the key the create only committed to, at most once — the server refuses a second
    * reveal, and every extra one would be another chance to substitute a key under the same digits.
    */
@@ -534,7 +554,7 @@ export class SyncEngine {
   /** Opens the peer-wrapped key and adopts it through the same tail an enroll ends with. */
   private async adoptPairedKey(
     pairing: PairingRequest,
-    approverPub: Uint8Array,
+    approverPub: PairingPublicKey,
     envelope: PeerWrappedEnvelope,
     epoch: number
   ): Promise<PairingPollResult> {
@@ -687,16 +707,25 @@ export class SyncEngine {
       this.approving = null;
       return { kind: 'failed', reason: 'gone' };
     }
-    // Presence, not `!== null`: a malformed page-realm message carries these absent rather than
-    // null, and anything but a string reaching the decode below reads back as a key substitution.
-    if (typeof row.requesterPublicKey !== 'string' || typeof row.requesterNonce !== 'string') {
+    if (row.id !== id) {
+      // A page-realm message may carry any row; acting on one would deny a pairing nobody named.
+      logger.error(`Cloud sync ignored a pairing row for ${row.id} while polling ${id}`);
       return { kind: 'waiting' };
     }
-    let requesterPub: Uint8Array;
-    let requesterNonce: Uint8Array;
+    if (row.requesterPublicKey === null || row.requesterNonce === null) {
+      return { kind: 'waiting' };
+    }
+    // A string, not just non-null: only a malformed page-realm message reaches here, and anything
+    // else fed to the decode below would read back as a key substitution the peer gets blamed for.
+    if (typeof row.requesterPublicKey !== 'string' || typeof row.requesterNonce !== 'string') {
+      logger.error(`Cloud sync ignored a malformed pairing row for ${id}`);
+      return { kind: 'waiting' };
+    }
+    let requesterPub: PairingPublicKey;
+    let requesterNonce: PairingNonce;
     try {
-      requesterPub = b64urlDecode(row.requesterPublicKey);
-      requesterNonce = b64urlDecode(row.requesterNonce);
+      requesterPub = decodePairingPublicKey(row.requesterPublicKey);
+      requesterNonce = decodePairingNonce(row.requesterNonce);
     } catch {
       // Untrusted relay data that will not even decode is a substitution, not a transport fault.
       return await this.denyTamperedReveal(id, approving);

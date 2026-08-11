@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GOLDEN_PAIRING } from './__fixtures__/golden-pairing.fixtures';
-import { b64urlDecode } from './base64url';
+import { b64urlEncode } from './base64url';
 import { DecryptError } from './errors';
 import { generateDataKey } from './keys';
 import {
+  decodePairingNonce,
+  decodePairingPublicKey,
   derivePairingSas,
   generatePairingKeypair,
   makePairingCommitment,
@@ -142,7 +144,7 @@ describe('makePairingCommitment / verifyPairingCommitment', () => {
   it('wrong nonce fails verification', async () => {
     const requester = await generatePairingKeypair();
     const { commitment } = await makePairingCommitment(requester.publicKey);
-    const wrongNonce = new Uint8Array(32);
+    const wrongNonce = decodePairingNonce(b64urlEncode(new Uint8Array(32)));
 
     const verified = await verifyPairingCommitment(commitment, requester.publicKey, wrongNonce);
 
@@ -164,9 +166,9 @@ describe('makePairingCommitment / verifyPairingCommitment', () => {
 // byte layout (pub‖nonce, requester‖approver‖id) against values computed once and committed.
 describe('golden vectors: commitment + SAS framing', () => {
   it('a fixed pub + nonce produce the frozen commitment', async () => {
-    const nonce = b64urlDecode(GOLDEN_PAIRING.nonceB64url);
+    const nonce = decodePairingNonce(GOLDEN_PAIRING.nonceB64url);
     vi.spyOn(primitives, 'randomBytes').mockReturnValue(nonce);
-    const pub = b64urlDecode(GOLDEN_PAIRING.pubB64url);
+    const pub = decodePairingPublicKey(GOLDEN_PAIRING.pubB64url);
 
     const { commitment, nonce: returnedNonce } = await makePairingCommitment(pub);
 
@@ -175,8 +177,8 @@ describe('golden vectors: commitment + SAS framing', () => {
   });
 
   it('verifyPairingCommitment accepts the frozen commitment against the same fixed pub + nonce', async () => {
-    const pub = b64urlDecode(GOLDEN_PAIRING.pubB64url);
-    const nonce = b64urlDecode(GOLDEN_PAIRING.nonceB64url);
+    const pub = decodePairingPublicKey(GOLDEN_PAIRING.pubB64url);
+    const nonce = decodePairingNonce(GOLDEN_PAIRING.nonceB64url);
 
     const verified = await verifyPairingCommitment(GOLDEN_PAIRING.commitment, pub, nonce);
 
@@ -184,8 +186,8 @@ describe('golden vectors: commitment + SAS framing', () => {
   });
 
   it('fixed requester + approver pubs and pairing id produce the frozen 6-digit SAS', async () => {
-    const requesterPub = b64urlDecode(GOLDEN_PAIRING.requesterPubB64url);
-    const approverPub = b64urlDecode(GOLDEN_PAIRING.approverPubB64url);
+    const requesterPub = decodePairingPublicKey(GOLDEN_PAIRING.requesterPubB64url);
+    const approverPub = decodePairingPublicKey(GOLDEN_PAIRING.approverPubB64url);
 
     const sas = await derivePairingSas(requesterPub, approverPub, GOLDEN_PAIRING.pairingId);
 

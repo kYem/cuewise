@@ -1,4 +1,4 @@
-import { b64urlEncode } from './base64url';
+import { b64urlDecode, b64urlEncode } from './base64url';
 import { EnvelopeParseError } from './errors';
 import type { DataKey } from './keys';
 import {
@@ -20,27 +20,57 @@ const SAS_INFO = 'cuewise-pairing-sas-v1';
 
 export type { X25519KeyPair };
 
-// The four pairing wire strings are look-alike base64url carried positionally through
-// createPairing/commitPairing/revealPairing/putPairingEnvelope. Branded so a swap cannot compile:
-// it would otherwise pass the server's length checks and surface as a key substitution the user is
-// told about. Same pattern as DataKey/MasterKey in keys.ts.
+/** A raw X25519 public key. Every pairing key is exactly this long, on both sides. */
+export const PAIRING_PUBLIC_KEY_BYTES = 32;
+
+// A public key and a nonce are both 32 opaque bytes, and both are encoded and revealed together —
+// branded so `encodePairingPublicKey(nonce)` cannot compile. Without this the swap survives as a
+// correctly-branded string, and the approver reads it as a substituted key.
+export type PairingPublicKey = Uint8Array & { readonly __brand: 'PairingPublicKey' };
+export type PairingNonce = Uint8Array & { readonly __brand: 'PairingNonce' };
+
+/** The keypair one device brings to a pairing; `publicKey` is branded, the private key never leaves. */
+export interface PairingKeyPair {
+  publicKey: PairingPublicKey;
+  privateKey: CryptoKey;
+}
+
+// The wire forms. Positional identity only: a brand says which role a value plays, never that it is
+// valid base64url, so every decode of one stays guarded. Same pattern as DataKey/MasterKey.
 export type PairingCommitment = string & { readonly __brand: 'PairingCommitment' };
 export type PairingPublicKeyB64 = string & { readonly __brand: 'PairingPublicKeyB64' };
 export type PairingNonceB64 = string & { readonly __brand: 'PairingNonceB64' };
 export type PeerWrappedEnvelope = string & { readonly __brand: 'PeerWrappedEnvelope' };
 
-// The only supported way to put either key-material value on the wire, so the brand is applied
-// where the bytes are encoded rather than at a call site that could brand the wrong one.
-export function encodePairingPublicKey(pub: Uint8Array): PairingPublicKeyB64 {
+// The only supported way onto the wire: taking branded bytes is what makes a swapped argument a
+// compile error rather than a correctly-branded string carrying the other value's bytes.
+export function encodePairingPublicKey(pub: PairingPublicKey): PairingPublicKeyB64 {
   return b64urlEncode(pub) as PairingPublicKeyB64;
 }
 
-export function encodePairingNonce(nonce: Uint8Array): PairingNonceB64 {
+export function encodePairingNonce(nonce: PairingNonce): PairingNonceB64 {
   return b64urlEncode(nonce) as PairingNonceB64;
 }
 
-export function generatePairingKeypair(): Promise<X25519KeyPair> {
-  return generateX25519KeyPair();
+/**
+ * A peer's public key, decoded from the wire. Rejects anything that is not exactly one X25519 key,
+ * so a relay cannot spend this device's one-shot reveal on bytes no handshake could ever use.
+ */
+export function decodePairingPublicKey(b64: string): PairingPublicKey {
+  const bytes = b64urlDecode(b64);
+  if (bytes.length !== PAIRING_PUBLIC_KEY_BYTES) {
+    throw new EnvelopeParseError('invalid pairing public key length');
+  }
+  return bytes as PairingPublicKey;
+}
+
+export function decodePairingNonce(b64: string): PairingNonce {
+  return b64urlDecode(b64) as PairingNonce;
+}
+
+export async function generatePairingKeypair(): Promise<PairingKeyPair> {
+  const pair = await generateX25519KeyPair();
+  return { publicKey: pair.publicKey as PairingPublicKey, privateKey: pair.privateKey };
 }
 
 function pairingAad(pairingId: string, keyId: string): Uint8Array {
@@ -49,8 +79,8 @@ function pairingAad(pairingId: string, keyId: string): Uint8Array {
 
 // Requester key first on both sides, so the two screens hash the same transcript.
 export async function derivePairingSas(
-  requesterPub: Uint8Array,
-  approverPub: Uint8Array,
+  requesterPub: PairingPublicKey,
+  approverPub: PairingPublicKey,
   pairingId: string
 ): Promise<string> {
   const id = utf8(pairingId);
@@ -63,13 +93,13 @@ export async function derivePairingSas(
   return String(n).padStart(6, '0');
 }
 
-async function pairingWrapKey(priv: CryptoKey, peerPub: Uint8Array): Promise<Uint8Array> {
+async function pairingWrapKey(priv: CryptoKey, peerPub: PairingPublicKey): Promise<Uint8Array> {
   return hkdfSha256(await x25519SharedSecret(priv, peerPub), WRAP_INFO, 256);
 }
 
 export async function wrapDataKeyToPeer(
   priv: CryptoKey,
-  peerPub: Uint8Array,
+  peerPub: PairingPublicKey,
   dk: DataKey,
   keyId: string,
   pairingId: string
@@ -85,7 +115,7 @@ export async function wrapDataKeyToPeer(
 
 export async function unwrapDataKeyFromPeer(
   priv: CryptoKey,
-  peerPub: Uint8Array,
+  peerPub: PairingPublicKey,
   envelope: PeerWrappedEnvelope,
   pairingId: string
 ): Promise<{ dk: DataKey; keyId: string }> {
@@ -96,9 +126,9 @@ export async function unwrapDataKeyFromPeer(
 }
 
 export async function makePairingCommitment(
-  pub: Uint8Array
-): Promise<{ commitment: PairingCommitment; nonce: Uint8Array }> {
-  const nonce = randomBytes(32);
+  pub: PairingPublicKey
+): Promise<{ commitment: PairingCommitment; nonce: PairingNonce }> {
+  const nonce = randomBytes(32) as PairingNonce;
   const transcript = new Uint8Array(pub.length + nonce.length);
   transcript.set(pub, 0);
   transcript.set(nonce, pub.length);
@@ -109,8 +139,8 @@ export async function makePairingCommitment(
 
 export async function verifyPairingCommitment(
   commitment: PairingCommitment,
-  pub: Uint8Array,
-  nonce: Uint8Array
+  pub: PairingPublicKey,
+  nonce: PairingNonce
 ): Promise<boolean> {
   const transcript = new Uint8Array(pub.length + nonce.length);
   transcript.set(pub, 0);

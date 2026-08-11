@@ -507,7 +507,7 @@ export class D1SyncStore implements SyncStore {
   async createPairing(
     userId: string,
     requesterTokenHash: SessionTokenHash,
-    commitment: string,
+    commitment: PairingCommitment,
     now: number
   ): Promise<{ id: string; expiresAt: number }> {
     const expiresAt = now + PAIRING_TTL_MS;
@@ -597,7 +597,7 @@ export class D1SyncStore implements SyncStore {
     userId: string,
     id: string,
     approverTokenHash: SessionTokenHash,
-    publicKey: string,
+    publicKey: PairingPublicKeyB64,
     now: number
   ): Promise<'committed' | 'conflict' | 'not_found'> {
     const res = await this.db
@@ -623,8 +623,8 @@ export class D1SyncStore implements SyncStore {
     userId: string,
     id: string,
     requesterTokenHash: SessionTokenHash,
-    publicKey: string,
-    nonce: string,
+    publicKey: PairingPublicKeyB64,
+    nonce: PairingNonceB64,
     now: number
   ): Promise<'revealed' | 'conflict' | 'not_found'> {
     const res = await this.db
@@ -653,7 +653,7 @@ export class D1SyncStore implements SyncStore {
     userId: string,
     id: string,
     approverTokenHash: SessionTokenHash,
-    envelope: string,
+    envelope: PeerWrappedEnvelope,
     now: number
   ): Promise<'stored' | 'conflict' | 'not_found'> {
     const res = await this.db

@@ -179,6 +179,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@cuewise/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@cuewise/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -198,9 +201,6 @@ importers:
       '@cloudflare/workers-types':
         specifier: 'catalog:'
         version: 4.20260627.1
-      '@cuewise/crypto':
-        specifier: workspace:*
-        version: link:../../packages/crypto
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
