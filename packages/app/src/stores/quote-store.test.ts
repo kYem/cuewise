@@ -869,6 +869,9 @@ describe('collection writers read storage, not their own snapshot', () => {
 
     const written = vi.mocked(storage.setCollections).mock.calls[0][0];
     expect(written.map((c) => c.id)).toEqual([late.id, expect.any(String)]);
+    // Committing a locally-recomputed list instead of what the lock returned would hide the
+    // pulled collection until the observer happens to fire.
+    expect(useQuoteStore.getState().collections.map((c) => c.id)).toEqual(written.map((c) => c.id));
   });
 
   it('deleteCollection reads the quotes after the lock is granted', async () => {
@@ -887,6 +890,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
     expect(written.map((q) => q.id)).toEqual(['late']);
     expect(written[0].collectionIds).toEqual([]);
+    expect(useQuoteStore.getState().quotes.map((q) => q.id)).toEqual(['late']);
   });
 
   it('updateCollection reads the collections after the lock is granted', async () => {
@@ -902,6 +906,7 @@ describe('collection writers read storage, not their own snapshot', () => {
 
     const written = vi.mocked(storage.setCollections).mock.calls[0][0];
     expect(written.map((c) => c.id)).toEqual(['mine', 'late']);
+    expect(useQuoteStore.getState().collections.map((c) => c.id)).toEqual(['mine', 'late']);
   });
 
   it('deleteCollection reads the collections after the lock is granted', async () => {
@@ -917,6 +922,7 @@ describe('collection writers read storage, not their own snapshot', () => {
 
     const written = vi.mocked(storage.setCollections).mock.calls[0][0];
     expect(written.map((c) => c.id)).toEqual(['late']);
+    expect(useQuoteStore.getState().collections.map((c) => c.id)).toEqual(['late']);
   });
 
   // The read probes above prove freshness; these prove the write has not slipped out past the
