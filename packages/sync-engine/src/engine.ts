@@ -503,8 +503,7 @@ export class SyncEngine {
 
   /**
    * The requester's mirror of denyTamperedReveal: an approver key that is not one usable X25519
-   * key can only have been substituted. The row is deleted rather than left standing, since the
-   * approver is still polling it and would otherwise wait out the full TTL for a dead handshake.
+   * key can only have been substituted, so the row goes with it.
    */
   private async failSubstitutedApprover(
     pairing: PairingRequest,

@@ -20,8 +20,7 @@ export const POLL_INTERVAL_MS = 3000;
 
 /**
  * What the requester's screen shows for the one request it is running. Every `failed` poll reason
- * is terminal with the same two offers, so only the message differs — and `tampered` has to say
- * the key was refused rather than report a caught substitution as an ordinary decline.
+ * is terminal with the same two offers, so only the message differs.
  */
 type PairingState =
   | { readonly kind: 'starting' }
