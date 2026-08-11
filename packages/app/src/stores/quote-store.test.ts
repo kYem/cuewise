@@ -38,7 +38,10 @@ function readsBackWrites(): void {
 }
 
 // Mock storage functions
-const { onLockGranted } = vi.hoisted(() => ({ onLockGranted: new Map<string, () => void>() }));
+const { onLockGranted, heldLocks } = vi.hoisted(() => ({
+  onLockGranted: new Map<string, () => void>(),
+  heldLocks: new Set<string>(),
+}));
 
 vi.mock('@cuewise/storage', () => ({
   getQuotes: vi.fn(),
@@ -60,8 +63,9 @@ vi.mock('@cuewise/storage', () => ({
   // Fires whatever a test registered for this name at the instant the lock is granted, so a read
   // hoisted out of the section observes the pre-race value and is observably wrong.
   withCollectionLock: vi.fn(<T>(lock: string, apply: () => Promise<T>) => {
+    heldLocks.add(lock);
     onLockGranted.get(lock)?.();
-    return apply();
+    return apply().finally(() => heldLocks.delete(lock));
   }),
 }));
 
@@ -839,6 +843,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     useQuoteStore.setState(EMPTY_STORE_STATE);
     vi.clearAllMocks();
     onLockGranted.clear();
+    heldLocks.clear();
     vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
     vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
@@ -912,6 +917,40 @@ describe('collection writers read storage, not their own snapshot', () => {
 
     const written = vi.mocked(storage.setCollections).mock.calls[0][0];
     expect(written.map((c) => c.id)).toEqual(['late']);
+  });
+
+  // The read probes above prove freshness; these prove the write has not slipped out past the
+  // lock's release, which leaves the same window open on the other side.
+  it('deleteCollection writes the quotes inside the lock', async () => {
+    const mine = { ...pulled(), id: 'mine', name: 'Mine' };
+    useQuoteStore.setState({ collections: [mine] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockResolvedValue([
+      quoteFactory.build({ id: 'q1', collectionIds: ['mine'] }),
+    ]);
+    let heldAtWrite = false;
+    vi.mocked(storage.setQuotes).mockImplementation(async () => {
+      heldAtWrite = heldLocks.has('quotes');
+      return { success: true };
+    });
+
+    await useQuoteStore.getState().deleteCollection('mine');
+
+    expect(heldAtWrite).toBe(true);
+  });
+
+  it('createCollection writes the collections inside the lock', async () => {
+    useQuoteStore.setState({ collections: [] });
+    vi.mocked(storage.getCollections).mockResolvedValue([]);
+    let heldAtWrite = false;
+    vi.mocked(storage.setCollections).mockImplementation(async () => {
+      heldAtWrite = heldLocks.has('collections');
+      return { success: true };
+    });
+
+    await useQuoteStore.getState().createCollection('Mine');
+
+    expect(heldAtWrite).toBe(true);
   });
 
   // Per writer, not a pooled total: one writer skipping the lock while another takes it twice
