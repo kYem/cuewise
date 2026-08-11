@@ -708,15 +708,16 @@ export class SyncEngine {
       return { kind: 'failed', reason: 'gone' };
     }
     if (row.id !== id) {
-      // A page-realm message may carry any row; acting on one would deny a pairing nobody named.
+      // A page-realm message may carry any row; verifying one here would refuse the request
+      // this slot is actually polling, on evidence nobody vouched for.
       logger.error(`Cloud sync ignored a pairing row for ${row.id} while polling ${id}`);
       return { kind: 'waiting' };
     }
     if (row.requesterPublicKey === null || row.requesterNonce === null) {
       return { kind: 'waiting' };
     }
-    // A string, not just non-null: only a malformed page-realm message reaches here, and anything
-    // else fed to the decode below would read back as a key substitution the peer gets blamed for.
+    // A string, not just non-null: neither the relay's JSON nor a page-realm message is validated,
+    // and a non-string fed to the decode below reads back as the peer substituting a key.
     if (typeof row.requesterPublicKey !== 'string' || typeof row.requesterNonce !== 'string') {
       logger.error(`Cloud sync ignored a malformed pairing row for ${id}`);
       return { kind: 'waiting' };
@@ -727,7 +728,7 @@ export class SyncEngine {
       requesterPub = decodePairingPublicKey(row.requesterPublicKey);
       requesterNonce = decodePairingNonce(row.requesterNonce);
     } catch {
-      // Untrusted relay data that will not even decode is a substitution, not a transport fault.
+      // Relay data that will not decode to one usable key is a substitution, not a transport fault.
       return await this.denyTamperedReveal(id, approving);
     }
     const matches = await verifyPairingCommitment(

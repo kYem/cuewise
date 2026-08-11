@@ -20,12 +20,11 @@ const SAS_INFO = 'cuewise-pairing-sas-v1';
 
 export type { X25519KeyPair };
 
-/** A raw X25519 public key. Every pairing key is exactly this long, on both sides. */
+/** Byte length of a raw X25519 public key — every pairing key, on both sides. */
 export const PAIRING_PUBLIC_KEY_BYTES = 32;
 
-// A public key and a nonce are both 32 opaque bytes, and both are encoded and revealed together —
-// branded so `encodePairingPublicKey(nonce)` cannot compile. Without this the swap survives as a
-// correctly-branded string, and the approver reads it as a substituted key.
+// A public key and a nonce are both 32 opaque bytes revealed together, so only the compiler can
+// keep them apart: unbranded, `encodePairingPublicKey(nonce)` returns a correctly-branded string.
 export type PairingPublicKey = Uint8Array & { readonly __brand: 'PairingPublicKey' };
 export type PairingNonce = Uint8Array & { readonly __brand: 'PairingNonce' };
 
@@ -52,10 +51,7 @@ export function encodePairingNonce(nonce: PairingNonce): PairingNonceB64 {
   return b64urlEncode(nonce) as PairingNonceB64;
 }
 
-/**
- * A peer's public key, decoded from the wire. Rejects anything that is not exactly one X25519 key,
- * so a relay cannot spend this device's one-shot reveal on bytes no handshake could ever use.
- */
+/** A peer's public key from the wire: 32 bytes, or it is not a key any handshake could use. */
 export function decodePairingPublicKey(b64: string): PairingPublicKey {
   const bytes = b64urlDecode(b64);
   if (bytes.length !== PAIRING_PUBLIC_KEY_BYTES) {

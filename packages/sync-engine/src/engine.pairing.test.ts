@@ -1089,13 +1089,43 @@ describe('SyncEngine approver pairing methods', () => {
   });
 });
 
+describe('SyncEngine.pollApproval given a row it did not ask for', () => {
+  it('ignores a prefetched row for another pairing instead of denying the one it polls', async () => {
+    const flow = await approverFlow();
+    const mine = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, mine);
+
+    // A second device's request on the same account, revealed through a session of its own.
+    const other = createDevice(flow.server);
+    await expect(other.engine.enableSync('dev', 'cred-c', 'Device C')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+    const theirs = await beginPairing(other.engine);
+    const otherApprover = new FakeApiClient(flow.server);
+    await otherApprover.exchangeToken({
+      provider: 'dev',
+      credential: 'cred-d',
+      deviceName: 'Device D',
+    });
+    const keypair = await generatePairingKeypair();
+    await otherApprover.commitPairing(theirs, encodePairingPublicKey(keypair.publicKey));
+    await other.engine.pollPairing();
+    const theirRow = await pendingRow(flow.approver.engine, theirs);
+
+    expect(await flow.approver.engine.pollApproval(mine, theirRow)).toEqual({ kind: 'waiting' });
+
+    // Their reveal cannot match this slot's commitment, so without the guard it reads as a
+    // substitution and deletes the request actually being polled.
+    expect(await pendingRow(flow.approver.engine, mine)).toMatchObject({ id: mine });
+  });
+});
+
 describe('SyncEngine.pollPairing against a hostile relay', () => {
   it('treats an approver key that will not decode as tampered, sparing its own reveal', async () => {
     const flow = await approverFlow();
     const id = await beginPairing(flow.requester.engine);
     await commitPairing(flow.approver.engine, id);
     const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
-    // The mirror of the approver's case: bytes that are not even base64url, aimed the other way.
     flow.server.substituteApproverPublicKey(id, planted('!!!not-base64url!!!'));
 
     expect(await flow.requester.engine.pollPairing()).toEqual({
@@ -1105,9 +1135,8 @@ describe('SyncEngine.pollPairing against a hostile relay', () => {
 
     // Terminal, not a poll that loops until the TTL: the request is forgotten.
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
-    // The one-shot reveal was never spent on a peer whose key will not parse...
     expect(reveals).not.toHaveBeenCalled();
-    // ...and the row is gone, so the approver stops waiting instead of aging out at the TTL.
+    // The row is gone, so the approver stops waiting instead of aging out at the TTL.
     expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
   });
 

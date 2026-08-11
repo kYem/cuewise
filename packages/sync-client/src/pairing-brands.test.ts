@@ -7,9 +7,8 @@ import type {
 import { describe, expect, it } from 'vitest';
 import type { ApiClient } from './api-client';
 
-// Compile-time guard: if the pairing wire brands collapsed back to plain string, the directives
-// below would go unused and `tsc` would fail the build. All four clear the server's length checks,
-// so only the compiler can tell them apart.
+// Compile-time guard: collapse a brand back to plain string and the directives below go unused,
+// which fails `tsc`. Commitment, publicKey and nonce all clear the server's one length check.
 describe('pairing wire brands', () => {
   it('keeps the four look-alike base64url values unassignable to each other', () => {
     function _guard(

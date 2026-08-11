@@ -24,7 +24,7 @@ The pairing SAS transcript, commitment, and `v1|pairing|…` wrap AAD (`pairing.
 
 ## Consumers
 
-Nothing calls this yet — ENG-45 wires the extension/macOS stores through `sealRecord`/`openRecord` and the enable/enroll flows through the key + recovery-code functions. Import directly from `@cuewise/crypto`; it is **not** re-exported by `@cuewise/sync-client` (crypto is the leaf; the sync client is the transport that will depend on it).
+`@cuewise/sync-engine` calls the key, recovery-code and pairing functions; `@cuewise/sync-client` and `apps/api` import the pairing brands as **types only**, so this package stays a zero-runtime-dependency leaf on both. Import directly from `@cuewise/crypto` — no consumer re-exports it, apart from the one brand `@cuewise/sync-engine` passes through for hosts that need to name a `PendingPairing` field.
 
 ## Tests
 

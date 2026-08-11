@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GOLDEN_PAIRING } from './__fixtures__/golden-pairing.fixtures';
 import { b64urlEncode } from './base64url';
-import { DecryptError } from './errors';
+import { DecryptError, EnvelopeParseError } from './errors';
 import { generateDataKey } from './keys';
 import {
   decodePairingNonce,
@@ -9,6 +9,7 @@ import {
   derivePairingSas,
   generatePairingKeypair,
   makePairingCommitment,
+  PAIRING_PUBLIC_KEY_BYTES,
   unwrapDataKeyFromPeer,
   verifyPairingCommitment,
   wrapDataKeyToPeer,
@@ -118,6 +119,29 @@ describe('wrapDataKeyToPeer / unwrapDataKeyFromPeer', () => {
     await expect(
       unwrapDataKeyFromPeer(eavesdropper.privateKey, approver.publicKey, envelope, 'p-1')
     ).rejects.toThrow(DecryptError);
+  });
+});
+
+describe('decodePairingPublicKey', () => {
+  it('accepts exactly one X25519 key', () => {
+    const decoded = decodePairingPublicKey(GOLDEN_PAIRING.pubB64url);
+
+    expect(decoded).toHaveLength(PAIRING_PUBLIC_KEY_BYTES);
+  });
+
+  it('refuses a key shorter than one X25519 key', () => {
+    expect(() => decodePairingPublicKey('AAAA')).toThrow(EnvelopeParseError);
+  });
+
+  // 64 b64url chars is 48 bytes: inside the server's MAX_KEY_MATERIAL_BYTES, so only this rejects it.
+  it('refuses a key longer than one X25519 key', () => {
+    const tooLong = b64urlEncode(new Uint8Array(48));
+
+    expect(() => decodePairingPublicKey(tooLong)).toThrow(EnvelopeParseError);
+  });
+
+  it('refuses bytes that are not base64url at all', () => {
+    expect(() => decodePairingPublicKey('!!!not-base64url!!!')).toThrow(EnvelopeParseError);
   });
 });
 

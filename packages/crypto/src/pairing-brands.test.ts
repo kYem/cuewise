@@ -8,9 +8,8 @@ import {
   verifyPairingCommitment,
 } from './pairing';
 
-// Compile-time guard: if the pairing brands collapsed back to plain Uint8Array/string, the
-// directives below would go unused and `tsc` would fail the build. A public key and a nonce are
-// both 32 opaque bytes revealed together, so this is the swap that must not compile.
+// Compile-time guard: collapse a brand back to plain Uint8Array/string and the directives below go
+// unused, which fails `tsc`. A public key and a nonce are the pair nothing else can tell apart.
 describe('pairing key material brands', () => {
   it('keeps a public key and a nonce unassignable to each other', () => {
     function _guard(pub: PairingPublicKey, nonce: PairingNonce): void {
