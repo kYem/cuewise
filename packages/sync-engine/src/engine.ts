@@ -150,14 +150,14 @@ export type EngineApiClient = Pick<
  * What one poll of a pairing request found (ENG-50). `confirm` carries the digits both screens
  * show; only a matching pair may be approved. `error` is NON-terminal, like the approver's: the
  * request still stands and the next tick may answer it. Every `failed` IS terminal — the caller
- * stops polling and starts a new request.
+ * stops polling and starts a new request. `tampered` mirrors the approver's: a caught substitution.
  */
 export type PairingPollResult =
   | { kind: 'waiting' }
   | { kind: 'confirm'; sas: string }
   | { kind: 'complete' }
   | { kind: 'error' }
-  | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' };
+  | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' | 'tampered' };
 
 /**
  * What one poll of a request this device COMMITTED to found. The digits cannot exist at commit
@@ -448,6 +448,18 @@ export class SyncEngine {
         return { kind: 'failed', reason: 'expired_or_denied' };
       }
       if (found.approverPublicKey !== null && pairing.approverPub === null) {
+        let approverPub: Uint8Array;
+        try {
+          // Decoded before the reveal, not after: untrusted relay data that will not even parse is
+          // a substitution, and the one-shot reveal must not be spent on it.
+          approverPub = b64urlDecode(found.approverPublicKey);
+        } catch {
+          this.pairing = null;
+          logger.error(
+            'Cloud sync refused a pairing approver: the other device published a key that will not decode'
+          );
+          return { kind: 'failed', reason: 'tampered' };
+        }
         if ((await this.revealOnce(pairing)) === 'conflict') {
           // Someone else's key is on the row, or a reveal outlived the slot holding the only
           // private key that could open what it earns: nothing here can finish this request.
@@ -457,7 +469,7 @@ export class SyncEngine {
         if (this.pairing !== pairing) {
           return { kind: 'failed', reason: 'error' };
         }
-        pairing.approverPub = b64urlDecode(found.approverPublicKey);
+        pairing.approverPub = approverPub;
         pairing.sas = await derivePairingSas(
           pairing.keypair.publicKey,
           pairing.approverPub,
@@ -672,7 +684,9 @@ export class SyncEngine {
       this.approving = null;
       return { kind: 'failed', reason: 'gone' };
     }
-    if (row.requesterPublicKey === null || row.requesterNonce === null) {
+    // Presence, not `!== null`: a malformed page-realm message carries these absent rather than
+    // null, and anything but a string reaching the decode below reads back as a key substitution.
+    if (typeof row.requesterPublicKey !== 'string' || typeof row.requesterNonce !== 'string') {
       return { kind: 'waiting' };
     }
     let requesterPub: Uint8Array;

@@ -248,6 +248,15 @@ export class FakeSyncServer {
     row.requesterPublicKey = publicKey;
   }
 
+  /** Test-only: the same malicious relay, aimed at the requester — a committed key it cannot use. */
+  substituteApproverPublicKey(id: string, publicKey: string): void {
+    const row = this.pairings.get(id);
+    if (row === undefined || row.approverPublicKey === null) {
+      throw new Error(`no committed pairing to substitute a key on: ${id}`);
+    }
+    row.approverPublicKey = publicKey;
+  }
+
   /** Test-only inspection of everything the server currently holds. */
   allRecords(): readonly SyncRecord[] {
     return this.records;

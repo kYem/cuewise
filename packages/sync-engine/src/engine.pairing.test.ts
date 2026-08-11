@@ -11,7 +11,12 @@ import {
 } from '@cuewise/crypto';
 import { configurePlatform, logger } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
-import { ApiError, SessionManager, SYNC_SESSION_KEY } from '@cuewise/sync-client';
+import {
+  ApiError,
+  type PendingPairing,
+  SessionManager,
+  SYNC_SESSION_KEY,
+} from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer, PAIRING_TTL_MS } from './__fixtures__/fake-api-client';
@@ -734,6 +739,16 @@ async function commitPairing(engine: SyncEngine, id: string): Promise<void> {
   }
 }
 
+/** The pending row for this id, or a loud failure — narrows without a non-null assertion. */
+async function pendingRow(engine: SyncEngine, id: string): Promise<PendingPairing> {
+  const rows = await engine.listPairingRequests();
+  const row = rows.find((candidate) => candidate.id === id);
+  if (row === undefined) {
+    throw new Error(`no pending pairing row for ${id}`);
+  }
+  return row;
+}
+
 /** pollApproval's digits, or a loud failure — narrows without a non-null assertion. */
 async function approvalSas(engine: SyncEngine, id: string): Promise<string> {
   const polled = await engine.pollApproval(id);
@@ -1036,5 +1051,42 @@ describe('SyncEngine approver pairing methods', () => {
       kind: 'failed',
       reason: 'expired_or_denied',
     });
+  });
+
+  it('waits, rather than crying tamper, when a prefetched row carries no revealed key', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    const row = await pendingRow(flow.approver.engine, id);
+    // A malformed page-realm message: the reveal fields are absent, not explicitly null.
+    const malformed = { ...row, requesterPublicKey: undefined, requesterNonce: undefined };
+
+    expect(
+      await flow.approver.engine.pollApproval(id, malformed as unknown as PendingPairing)
+    ).toEqual({ kind: 'waiting' });
+
+    // Nothing accused, nothing deleted: the real reveal can still land on this row.
+    expect(await flow.approver.engine.listPairingRequests()).toHaveLength(1);
+  });
+});
+
+describe('SyncEngine.pollPairing against a hostile relay', () => {
+  it('treats an approver key that will not decode as tampered, sparing its own reveal', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    // The mirror of the approver's case: bytes that are not even base64url, aimed the other way.
+    flow.server.substituteApproverPublicKey(id, '!!!not-base64url!!!');
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'tampered',
+    });
+
+    // Terminal, not a poll that loops until the TTL: the request is forgotten.
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
+    // And the one-shot reveal was never spent on a peer whose key will not parse.
+    const row = await pendingRow(flow.approver.engine, id);
+    expect(row.requesterPublicKey).toBeNull();
   });
 });
