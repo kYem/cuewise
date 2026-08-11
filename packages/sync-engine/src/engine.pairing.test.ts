@@ -1094,7 +1094,7 @@ describe('SyncEngine approver pairing methods', () => {
     await commitPairing(flow.approver.engine, mine);
 
     // A second device's request on the same account, revealed through a session of its own —
-    // commitAsApprover cannot build it, since this engine's single approving slot holds `mine`.
+    // commitPairing cannot build it, since this engine's one approving slot holds `mine`.
     const other = createDevice(flow.server);
     await expect(other.engine.enableSync('dev', 'cred-c', 'Device C')).rejects.toThrow(
       RecoveryCodeRequiredError
