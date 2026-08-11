@@ -133,7 +133,8 @@ describe('decodePairingPublicKey', () => {
     expect(() => decodePairingPublicKey('AAAA')).toThrow(EnvelopeParseError);
   });
 
-  // 64 b64url chars is 48 bytes: inside the server's MAX_KEY_MATERIAL_BYTES, so only this rejects it.
+  // 64 b64url chars is exactly the server's MAX_KEY_MATERIAL_BYTES, so only this decode rejects
+  // the 48 bytes behind them.
   it('refuses a key longer than one X25519 key', () => {
     const tooLong = b64urlEncode(new Uint8Array(48));
 

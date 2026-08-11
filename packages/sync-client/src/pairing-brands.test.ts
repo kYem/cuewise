@@ -25,6 +25,9 @@ describe('pairing wire brands', () => {
       void client.putPairingEnvelope(id, envelope);
       // @ts-expect-error reveal's publicKey and nonce must not be interchangeable
       void client.revealPairing(id, nonce, publicKey);
+      // Argument 2 alone carries the swap above, so the nonce slot needs its own probe.
+      // @ts-expect-error a public key must not satisfy the nonce parameter
+      void client.revealPairing(id, publicKey, publicKey);
       // @ts-expect-error a commitment must not satisfy a public-key parameter
       void client.commitPairing(id, commitment);
       // @ts-expect-error an envelope must not satisfy a commitment parameter
