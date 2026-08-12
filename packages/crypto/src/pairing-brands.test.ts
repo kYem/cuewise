@@ -13,14 +13,14 @@ import {
 describe('pairing key material brands', () => {
   it('keeps a public key and a nonce unassignable to each other', () => {
     function _guard(pub: PairingPublicKey, nonce: PairingNonce): void {
-      void encodePairingPublicKey(pub);
-      void encodePairingNonce(nonce);
+      encodePairingPublicKey(pub);
+      encodePairingNonce(nonce);
       // @ts-expect-error a nonce must not satisfy a public-key parameter
-      void encodePairingPublicKey(nonce);
+      encodePairingPublicKey(nonce);
       // @ts-expect-error a public key must not satisfy a nonce parameter
-      void encodePairingNonce(pub);
+      encodePairingNonce(pub);
       // @ts-expect-error raw bytes must not satisfy a branded public-key parameter
-      void encodePairingPublicKey(new Uint8Array(32));
+      encodePairingPublicKey(new Uint8Array(32));
     }
     expect(typeof _guard).toBe('function');
   });
@@ -28,11 +28,11 @@ describe('pairing key material brands', () => {
   it('keeps the commitment inputs in their declared order', async () => {
     async function _guard(pub: PairingPublicKey, nonce: PairingNonce): Promise<void> {
       const { commitment } = await makePairingCommitment(pub);
-      void verifyPairingCommitment(commitment, pub, nonce);
+      verifyPairingCommitment(commitment, pub, nonce);
       // @ts-expect-error the pub and nonce arguments must not be interchangeable
-      void verifyPairingCommitment(commitment, nonce, pub);
+      verifyPairingCommitment(commitment, nonce, pub);
       // @ts-expect-error a bare string must not satisfy a PairingCommitment parameter
-      void verifyPairingCommitment('not-a-commitment', pub, nonce);
+      verifyPairingCommitment('not-a-commitment', pub, nonce);
     }
     expect(typeof _guard).toBe('function');
   });

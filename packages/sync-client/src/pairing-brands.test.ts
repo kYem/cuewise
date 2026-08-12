@@ -19,21 +19,21 @@ describe('pairing wire brands', () => {
       nonce: PairingNonceB64,
       envelope: PeerWrappedEnvelope
     ): void {
-      void client.createPairing(commitment);
-      void client.commitPairing(id, publicKey);
-      void client.revealPairing(id, publicKey, nonce);
-      void client.putPairingEnvelope(id, envelope);
+      client.createPairing(commitment);
+      client.commitPairing(id, publicKey);
+      client.revealPairing(id, publicKey, nonce);
+      client.putPairingEnvelope(id, envelope);
       // @ts-expect-error reveal's publicKey and nonce must not be interchangeable
-      void client.revealPairing(id, nonce, publicKey);
+      client.revealPairing(id, nonce, publicKey);
       // Argument 2 alone carries the swap above, so the nonce slot needs its own probe.
       // @ts-expect-error a public key must not satisfy the nonce parameter
-      void client.revealPairing(id, publicKey, publicKey);
+      client.revealPairing(id, publicKey, publicKey);
       // @ts-expect-error a commitment must not satisfy a public-key parameter
-      void client.commitPairing(id, commitment);
+      client.commitPairing(id, commitment);
       // @ts-expect-error an envelope must not satisfy a commitment parameter
-      void client.createPairing(envelope);
+      client.createPairing(envelope);
       // @ts-expect-error a bare string must not satisfy any of them
-      void client.putPairingEnvelope(id, 'v1.dk-1.a.b');
+      client.putPairingEnvelope(id, 'v1.dk-1.a.b');
     }
     expect(typeof _guard).toBe('function');
   });
