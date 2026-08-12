@@ -76,6 +76,7 @@ export {
   setSettingsPatchRaw,
   settingsStorageKey,
   setWeatherState,
+  updateCollections,
   updateGoals,
   updateReminders,
   updateVideoProgress,

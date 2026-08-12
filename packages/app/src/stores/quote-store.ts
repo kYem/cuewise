@@ -19,10 +19,11 @@ import {
   getCurrentQuote,
   getQuotes,
   getSettings,
-  setCollections,
   setCurrentQuote,
   setQuotes,
   setQuotesRaw,
+  updateCollections,
+  withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { SEED_QUOTES } from '../data/seed-quotes';
@@ -136,10 +137,11 @@ interface QuoteStore {
 
   // Collection operations
   createCollection: (name: string, description?: string) => Promise<boolean>;
+  /** 'gone' when a pull deleted it first — the store has already told the user, so do not retry. */
   updateCollection: (
     id: string,
     updates: Partial<Pick<QuoteCollection, 'name' | 'description'>>
-  ) => Promise<boolean>;
+  ) => Promise<'saved' | 'gone' | 'failed'>;
   deleteCollection: (id: string) => Promise<boolean>;
   addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
   removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
@@ -742,7 +744,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   // Collection operations
   createCollection: async (name: string, description?: string) => {
     try {
-      const { collections } = get();
       const now = new Date().toISOString();
 
       const newCollection: QuoteCollection = {
@@ -752,8 +753,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         createdAt: now,
       };
 
-      const updatedCollections = [...collections, newCollection];
-      await setCollections(updatedCollections);
+      const { result, collections: updatedCollections } = await updateCollections((current) => [
+        ...current,
+        newCollection,
+      ]);
+      // setCollections resolves {success:false} on quota rather than throwing, so the catch below
+      // never sees it and the collection would look created until the next read.
+      if (!result.success) {
+        logger.error('Failed to persist the new collection', result.error);
+        const errorMessage = 'Failed to create collection. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return false;
+      }
       set({ collections: updatedCollections, error: null });
       notifyMutated('collections', newCollection.id);
 
@@ -770,62 +782,114 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   updateCollection: async (id: string, updates) => {
     try {
-      const { collections } = get();
       const now = new Date().toISOString();
+      const applied = { found: false };
 
-      const updatedCollections = collections.map((c) =>
-        c.id === id ? { ...c, ...updates, updatedAt: now } : c
+      const { result, collections: updatedCollections } = await updateCollections((current) =>
+        current.map((c) => {
+          if (c.id !== id) {
+            return c;
+          }
+          applied.found = true;
+          return { ...c, ...updates, updatedAt: now };
+        })
       );
-
-      await setCollections(updatedCollections);
+      if (!result.success) {
+        logger.error('Failed to persist the collection update', result.error);
+        const errorMessage = 'Failed to update collection. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return 'failed';
+      }
+      // Announcing a write that found nothing marks a gone id dirty, and the next push seals a
+      // tombstone this device never authored.
+      if (!applied.found) {
+        logger.warn(`updateCollection: collection ${id} was gone before the write`);
+        useToastStore.getState().warning('This collection no longer exists');
+        return 'gone';
+      }
       set({ collections: updatedCollections, error: null });
       notifyMutated('collections', id);
 
       useToastStore.getState().success('Collection updated');
-      return true;
+      return 'saved';
     } catch (error) {
       logger.error('Error updating collection', error);
       const errorMessage = 'Failed to update collection. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
-      return false;
+      return 'failed';
     }
   },
 
   deleteCollection: async (id: string) => {
     try {
-      const { collections, quotes, activeCollectionIds } = get();
-
       // Remove collection
-      const updatedCollections = collections.filter((c) => c.id !== id);
-      await setCollections(updatedCollections);
+      const { result, collections: updatedCollections } = await updateCollections((current) =>
+        current.filter((c) => c.id !== id)
+      );
+      if (!result.success) {
+        logger.error('Failed to persist the collection deletion', result.error);
+        const errorMessage = 'Failed to delete collection. Please try again.';
+        set({ error: errorMessage });
+        useToastStore.getState().error(errorMessage);
+        return false;
+      }
+      // Straight after the write, with nothing fallible in between: the steps below can throw, and
+      // a tombstone that never pushes lets a peer still holding the collection resurrect it.
+      notifyDeleted('collections', id);
 
-      // Remove collection ID from all quotes that had it
-      const updatedQuotes = quotes.map((q) => {
-        if (q.collectionIds?.includes(id)) {
-          return {
-            ...q,
-            collectionIds: q.collectionIds.filter((cId) => cId !== id),
-          };
+      // Remove collection ID from all quotes that had it. Locked and re-read for its own sake:
+      // losing this leaves quotes pointing at a collection that no longer exists.
+      const unlink = await withCollectionLock<{ quotes: Quote[] | null; unlinked: boolean }>(
+        'quotes',
+        async () => {
+          // Caught here, not by the outer catch: the collection is already deleted and tombstoned
+          // by this point, so an unreadable quote read is not a failed delete.
+          let current: Quote[];
+          try {
+            current = await getQuotes();
+          } catch (error) {
+            logger.error('Deleted the collection but could not read its quotes to unlink', error);
+            return { quotes: null, unlinked: false };
+          }
+          const next = current.map((q) => {
+            if (q.collectionIds?.includes(id)) {
+              return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== id) };
+            }
+            return q;
+          });
+          const quotesResult = await setQuotes(next);
+          if (!quotesResult.success) {
+            logger.error(
+              'Deleted the collection but could not unlink its quotes',
+              quotesResult.error
+            );
+            return { quotes: current, unlinked: false };
+          }
+          return { quotes: next, unlinked: true };
         }
-        return q;
-      });
-      await setQuotes(updatedQuotes);
+      );
 
-      // Remove deleted collection from active filters
-      const newActiveIds = activeCollectionIds.filter((cId) => cId !== id);
+      // Read at use time: the user can toggle a collection filter while this waits on the locks,
+      // and nothing converges this field afterwards.
+      const newActiveIds = get().activeCollectionIds.filter((cId) => cId !== id);
 
       set({
         collections: updatedCollections,
-        quotes: updatedQuotes,
+        // Omitted when the read failed: there is no fresher list to commit than what is already here.
+        ...(unlink.quotes !== null && { quotes: unlink.quotes }),
         activeCollectionIds: newActiveIds,
         error: null,
       });
 
       // Persist updated filter settings (collection removed from active filters)
       await persistFilterSettings(get());
-      notifyDeleted('collections', id);
 
+      if (!unlink.unlinked) {
+        useToastStore.getState().warning('Collection deleted, but its quotes still reference it');
+        return true;
+      }
       useToastStore.getState().success('Collection deleted');
       return true;
     } catch (error) {
