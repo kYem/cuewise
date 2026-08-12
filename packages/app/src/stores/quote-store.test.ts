@@ -1147,6 +1147,9 @@ describe('writers read storage, not their own snapshot', () => {
 
     // The whole quote, not its id: every mutation but the deletes leaves the id in place.
     expect(useQuoteStore.getState().quotes).toEqual([mine]);
+    // Not `error`: QuoteDisplay and QuoteManagementPage both replace the page with a
+    // "Failed to load quotes" panel when it is set, and nothing failed to load.
+    expect(useQuoteStore.getState().error).toBeNull();
     if (message === null) {
       expect(mockToastError).not.toHaveBeenCalled();
     } else {
