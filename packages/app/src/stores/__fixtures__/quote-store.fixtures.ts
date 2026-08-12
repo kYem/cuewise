@@ -1,6 +1,6 @@
-import type { Quote, QuoteCategory } from '@cuewise/shared';
+import type { Quote, QuoteCategory, SyncMutationSink } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
-import type { Mock } from 'vitest';
+import { type Mock, vi } from 'vitest';
 
 /**
  * Common test fixtures for quote store tests
@@ -236,4 +236,14 @@ export function createCategoryFavoritesScenario() {
     favoriteInspiration,
     currentQuote: nonFavoriteInspiration,
   };
+}
+
+export type MockSyncSink = SyncMutationSink & {
+  markMutated: Mock;
+  markDeleted: Mock;
+  markMutatedBulk: Mock;
+};
+
+export function createSyncSink(): MockSyncSink {
+  return { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
 }
