@@ -1482,6 +1482,62 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().currentQuote?.id).toBe('live');
   });
 
+  // The four writers whose failure guard has its own shape, so the shared table misses them.
+  it('initialize surfaces a seed write that did not persist', async () => {
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().initialize();
+
+    expect(useQuoteStore.getState().error).toBe('Failed to load quotes. Please refresh the page.');
+    expect(useQuoteStore.getState().quotes).toEqual([]);
+  });
+
+  it('restoreMissingQuotes does not adopt a write that did not persist', async () => {
+    useQuoteStore.setState({ quotes: [] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(useQuoteStore.getState().restoreMissingQuotes()).rejects.toThrow();
+    expect(useQuoteStore.getState().quotes).toEqual([]);
+    expect(mockToastError).toHaveBeenCalledWith('Failed to restore quotes. Please try again.');
+  });
+
+  it('resetAllQuotes does not adopt a write that did not persist', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.setQuotesRaw).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(useQuoteStore.getState().resetAllQuotes()).rejects.toThrow();
+    expect(useQuoteStore.getState().quotes).toEqual([mine]);
+    expect(mockToastError).toHaveBeenCalledWith('Failed to reset quotes. Please try again.');
+  });
+
+  it('bulkAddQuotes does not adopt a write that did not persist', async () => {
+    useQuoteStore.setState({ quotes: [] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore
+      .getState()
+      .bulkAddQuotes([{ text: 'Imported', author: 'Author', category: 'inspiration' }]);
+
+    expect(useQuoteStore.getState().quotes).toEqual([]);
+  });
+
   it('createCollection reads the collections after the lock is granted', async () => {
     const late = { ...pulled(), id: 'late' };
     useQuoteStore.setState({ collections: [] });
@@ -2027,8 +2083,8 @@ describe('converging on quotes written elsewhere', () => {
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: fakeSink });
-    // A fresh array per read, as a real parse gives: mockResolvedValue hands back one reference,
-    // which would satisfy the no-op guard's identity assertions whether or not the guard exists.
+    // A fresh array per read, as a real parse gives. The guard compares by value, but the test
+    // below asserts reference identity, and one shared array satisfies that with or without it.
     vi.mocked(storage.getQuotes).mockImplementation(async () => [mine]);
     vi.mocked(storage.getCollections).mockImplementation(async () => []);
     vi.mocked(storage.getCurrentQuote).mockResolvedValue(mine);
