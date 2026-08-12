@@ -868,6 +868,11 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
     vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    // clearAllMocks keeps implementations but not values, so an unset getter answers undefined
+    // and the writer fails on a shape error rather than on what the test is pinning.
+    vi.mocked(storage.getCollections).mockResolvedValue([]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue({ success: true });
   });
 
   const pulled = (): QuoteCollection => ({
@@ -1139,6 +1144,97 @@ describe('writers read storage, not their own snapshot', () => {
     await useQuoteStore.getState().resetAllQuotes();
 
     expect(heldAtWrite).toBe(true);
+  });
+
+  // No observer converges currentQuote, and the write no longer resurrects the quote, so
+  // without this the card renders a deleted quote across reloads.
+  it.each([
+    ['toggleFavorite', () => useQuoteStore.getState().toggleFavorite('gone')],
+    ['editQuote', () => useQuoteStore.getState().editQuote('gone', { text: 'x' })],
+  ])('%s moves the card off a quote the pull deleted', async (_label, act) => {
+    const gone = quoteFactory.build({ id: 'gone', isCustom: true });
+    const other = quoteFactory.build({ id: 'other' });
+    useQuoteStore.setState({ quotes: [other], currentQuote: gone });
+    vi.mocked(storage.getQuotes).mockResolvedValue([other]);
+
+    await act();
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
+  });
+
+  it('bulkToggleFavorite persists the current quote from the locked write', async () => {
+    const stale = quoteFactory.build({ id: 'q1', text: 'stale', isFavorite: false });
+    const pulled = { ...stale, text: 'pulled by another device' };
+    useQuoteStore.setState({ quotes: [stale], currentQuote: stale });
+    vi.mocked(storage.getQuotes).mockResolvedValue([pulled]);
+
+    await useQuoteStore.getState().bulkToggleFavorite(['q1'], true);
+
+    expect(vi.mocked(storage.setCurrentQuote).mock.calls[0][0]).toMatchObject({
+      text: 'pulled by another device',
+      isFavorite: true,
+    });
+  });
+
+  // A count is a claim about the user's data, and for a delete it is a claim about destruction.
+  it.each([
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['kept', 'gone']), 'Deleted 1 quotes'],
+    [
+      'bulkToggleFavorite',
+      () => useQuoteStore.getState().bulkToggleFavorite(['kept', 'gone'], true),
+      '1 quotes added to favorites',
+    ],
+    [
+      'bulkToggleHidden',
+      () => useQuoteStore.getState().bulkToggleHidden(['kept', 'gone'], true),
+      '1 quotes hidden',
+    ],
+  ])('%s counts what the locked read matched, not what was asked', async (_label, act, message) => {
+    const kept = quoteFactory.build({ id: 'kept', isCustom: true });
+    useQuoteStore.setState({ quotes: [kept, quoteFactory.build({ id: 'gone', isCustom: true })] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
+
+    await act();
+
+    expect(mockToastSuccess).toHaveBeenCalledWith(message);
+  });
+
+  it('addQuotesToCollection counts only the quotes it moved', async () => {
+    const fresh = quoteFactory.build({ id: 'fresh', isCustom: true, collectionIds: [] });
+    const already = quoteFactory.build({ id: 'already', isCustom: true, collectionIds: ['c1'] });
+    useQuoteStore.setState({
+      quotes: [fresh, already],
+      collections: [{ id: 'c1', name: 'Mine', createdAt: new Date().toISOString() }],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([fresh, already]);
+
+    await useQuoteStore.getState().addQuotesToCollection(['fresh', 'already'], 'c1');
+
+    expect(mockToastSuccess).toHaveBeenCalledWith('1 quotes added to "Mine"');
+  });
+
+  // The seed is skipped entirely, so a write failure cannot fail a load that had nothing to seed.
+  it('initialize does not rewrite the list when a pull beat the seed', async () => {
+    const pulledQuote = quoteFactory.build({ id: 'pulled', isCustom: true });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+    onLockGranted.set('quotes', () => {
+      vi.mocked(storage.getQuotes).mockResolvedValue([pulledQuote]);
+    });
+
+    await useQuoteStore.getState().initialize();
+
+    const seedWrites = vi
+      .mocked(storage.setQuotes)
+      .mock.calls.filter(([written]) => written.length === SEED_QUOTES.length);
+    expect(seedWrites).toHaveLength(0);
+    expect(useQuoteStore.getState().error).toBeNull();
+    expect(useQuoteStore.getState().quotes.map((q) => q.id)).toEqual(['pulled']);
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {

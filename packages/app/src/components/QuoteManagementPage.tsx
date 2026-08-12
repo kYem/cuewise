@@ -275,9 +275,7 @@ export const QuoteManagementPage: React.FC = () => {
       source?: string;
       notes?: string;
     }
-  ) => {
-    await editQuote(quoteId, updates);
-  };
+  ) => editQuote(quoteId, updates);
 
   if (isLoading) {
     return (
