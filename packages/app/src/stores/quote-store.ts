@@ -207,7 +207,9 @@ async function clearCurrentQuoteIfGone(quoteId: string, get: () => QuoteStore): 
 /** The locked read no longer holds it: a pull deleted it between the user's click and the write. */
 function reportQuoteGone(action: string, quoteId: string): void {
   logger.warn(`${action}: quote ${quoteId} was gone before the write`);
-  useToastStore.getState().warning('This quote no longer exists');
+  // Collapsed: AddQuotesToCollectionModal applies its pending changes one quote at a time, so a
+  // pull that removed the selection would otherwise stack one identical toast per quote.
+  useToastStore.getState().warning('This quote no longer exists', { collapseRepeats: true });
 }
 
 const STALE_QUOTES_MESSAGE =
@@ -292,9 +294,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         settings?.quoteFilterActiveCollectionIds ?? DEFAULT_SETTINGS.quoteFilterActiveCollectionIds
       ).filter((id) => collectionIds.has(id));
 
-      // Get current quote or select a random one
+      // Membership too: nothing clears the stored key, so a quote deleted elsewhere would
+      // come back on the next tab.
       let currentQuote = await getCurrentQuote();
-      if (!currentQuote || currentQuote.isHidden) {
+      const stored = currentQuote;
+      if (!stored || stored.isHidden || !quotes.some((q) => q.id === stored.id)) {
         currentQuote = getRandomQuote(quotes);
         if (currentQuote) {
           await setCurrentQuote(currentQuote);
@@ -753,6 +757,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         if (persisted) {
           await setCurrentQuote(persisted);
           set({ currentQuote: persisted });
+        } else {
+          await clearCurrentQuoteIfGone(currentQuote.id, get);
         }
       }
 
@@ -799,9 +805,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
-      // If hiding current quote, refresh to a new one
-      if (setHidden && currentQuote && quoteIdSet.has(currentQuote.id)) {
-        await get().refreshQuote();
+      if (currentQuote && quoteIdSet.has(currentQuote.id)) {
+        if (setHidden) {
+          await get().refreshQuote();
+        } else {
+          await clearCurrentQuoteIfGone(currentQuote.id, get);
+        }
       }
 
       if (matched === 0) {
@@ -1169,7 +1178,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const quoteIdSet = new Set(quoteIds);
       // Only the ones this write actually moved: membership lives on the quote itself.
       const affectedCustomIds: string[] = [];
-      // Excludes both the ones a pull removed and the ones already in the collection.
+      // Separately from `added`: zero of both is a pull deleting them, zero added alone is
+      // membership they already had.
+      let matched = 0;
       let added = 0;
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) =>
@@ -1177,6 +1188,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           if (!quoteIdSet.has(q.id)) {
             return q;
           }
+          matched += 1;
           const currentIds = q.collectionIds ?? [];
           if (currentIds.includes(collectionId)) {
             return q;
@@ -1196,6 +1208,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return false;
+      }
       if (added === 0) {
         useToastStore.getState().info(`Those quotes are already in "${collectionName}"`);
         return true;
