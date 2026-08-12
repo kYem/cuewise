@@ -110,6 +110,7 @@ interface QuoteStore {
     source?: string,
     notes?: string
   ) => Promise<void>;
+  /** 'gone' when a pull deleted it first, 'failed' when the write did not persist. */
   editQuote: (
     quoteId: string,
     updates: {
@@ -119,7 +120,7 @@ interface QuoteStore {
       source?: string;
       notes?: string;
     }
-  ) => Promise<void>;
+  ) => Promise<'saved' | 'gone' | 'failed'>;
   deleteQuote: (quoteId: string) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
   setEnabledCategories: (categories: QuoteCategory[]) => Promise<void>;
@@ -172,7 +173,8 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
 
 /**
  * Change one quote inside the lock. `target` is null when the locked read no longer held the id —
- * announcing that write would mark a gone id dirty, which pushes as a tombstone.
+ * announcing that write would mark a gone id dirty, which pushes as a tombstone. `change` must
+ * return a quote: it reads `target` back out of the written list, so a removal reads as gone.
  */
 async function persistOneQuote(
   quoteId: string,
@@ -190,6 +192,16 @@ async function persistOneQuote(
  */
 function syncsLocalEdits(quote: Quote | null): boolean {
   return quote?.isCustom === true;
+}
+
+/**
+ * The card renders `currentQuote`, which no observer converges — before this write stopped
+ * resurrecting the quote, its own stale-snapshot rewrite is what kept the two agreeing.
+ */
+async function clearCurrentQuoteIfGone(quoteId: string, get: () => QuoteStore): Promise<void> {
+  if (get().currentQuote?.id === quoteId) {
+    await get().refreshQuote();
+  }
 }
 
 /** The locked read no longer holds it: a pull deleted it between the user's click and the write. */
@@ -249,14 +261,18 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (quotes.length === 0) {
         // Re-checked inside the lock: a pull landing between that read and this write would
         // otherwise be replaced wholesale by the seed set.
-        const seeded = await updateQuotes((current) =>
-          current.length === 0 ? SEED_QUOTES : current
-        );
-        if (!seeded.result.success) {
-          logger.error('Failed to seed the default quotes', seeded.result.error);
-          throw new Error(seeded.result.error.message);
-        }
-        quotes = seeded.quotes;
+        quotes = await withCollectionLock('quotes', async () => {
+          const current = await getQuotes();
+          if (current.length > 0) {
+            return current;
+          }
+          const result = await setQuotes(SEED_QUOTES);
+          if (!result.success) {
+            logger.error('Failed to seed the default quotes', result.error);
+            throw new Error(result.error.message);
+          }
+          return SEED_QUOTES;
+        });
       }
 
       // Get collections from storage
@@ -403,6 +419,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('toggleFavorite', quoteId);
+        await clearCurrentQuoteIfGone(quoteId, get);
         return;
       }
       if (syncsLocalEdits(target)) {
@@ -440,6 +457,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
+      // No early return: the refresh below is what the user asked for either way.
       if (target === null) {
         reportQuoteGone('hideQuote', quoteId);
       }
@@ -530,6 +548,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('unhideQuote', quoteId);
+        await clearCurrentQuoteIfGone(quoteId, get);
         return;
       }
       if (syncsLocalEdits(target)) {
@@ -558,11 +577,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes });
-      // QuoteForm closes on the toast, so reporting success for a write that found nothing
-      // loses the edit.
       if (target === null) {
         reportQuoteGone('editQuote', quoteId);
-        return;
+        await clearCurrentQuoteIfGone(quoteId, get);
+        return 'gone';
       }
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -575,11 +593,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
 
       useToastStore.getState().success('Quote updated successfully');
+      return 'saved';
     } catch (error) {
       logger.error('Error editing quote', error);
       const errorMessage = 'Failed to update quote. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
+      return 'failed';
     }
   },
 
@@ -661,10 +681,16 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Collected from the locked read: a pull may have removed some of these, and a tombstone
       // for one this write never deleted is authorship we do not have.
       const deletedCustomIds: string[] = [];
+      // Not deletedCustomIds.length: seed quotes are deletable too, they are just not announced.
+      let matched = 0;
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
         for (const q of current) {
-          if (quoteIdSet.has(q.id) && syncsLocalEdits(q)) {
+          if (!quoteIdSet.has(q.id)) {
+            continue;
+          }
+          matched += 1;
+          if (syncsLocalEdits(q)) {
             deletedCustomIds.push(q.id);
           }
         }
@@ -683,7 +709,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await get().refreshQuote();
       }
 
-      useToastStore.getState().success(`Deleted ${quoteIds.length} quotes`);
+      useToastStore.getState().success(`Deleted ${matched} quotes`);
     } catch (error) {
       logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
       const errorMessage = 'Failed to delete quotes. Please try again.';
@@ -697,10 +723,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
       const affectedCustomIds: string[] = [];
+      let matched = 0;
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
         for (const q of current) {
-          if (quoteIdSet.has(q.id) && syncsLocalEdits(q)) {
+          if (!quoteIdSet.has(q.id)) {
+            continue;
+          }
+          matched += 1;
+          if (syncsLocalEdits(q)) {
             affectedCustomIds.push(q.id);
           }
         }
@@ -712,15 +743,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
-      // Update current quote if it was in the selection
+      // The persisted value: a pull may have changed this quote while the write held the lock.
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
-        const updatedCurrentQuote = { ...currentQuote, isFavorite: setFavorite };
-        await setCurrentQuote(updatedCurrentQuote);
-        set({ currentQuote: updatedCurrentQuote });
+        const persisted = updatedQuotes.find((q) => q.id === currentQuote.id);
+        if (persisted) {
+          await setCurrentQuote(persisted);
+          set({ currentQuote: persisted });
+        }
       }
 
       const action = setFavorite ? 'added to favorites' : 'removed from favorites';
-      useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
+      useToastStore.getState().success(`${matched} quotes ${action}`);
     } catch (error) {
       logger.error('Error bulk toggling favorites', error, {
         quoteIds,
@@ -738,10 +771,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
       const affectedCustomIds: string[] = [];
+      let matched = 0;
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
         for (const q of current) {
-          if (quoteIdSet.has(q.id) && syncsLocalEdits(q)) {
+          if (!quoteIdSet.has(q.id)) {
+            continue;
+          }
+          matched += 1;
+          if (syncsLocalEdits(q)) {
             affectedCustomIds.push(q.id);
           }
         }
@@ -759,7 +797,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
 
       const action = setHidden ? 'hidden' : 'unhidden';
-      useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
+      useToastStore.getState().success(`${matched} quotes ${action}`);
     } catch (error) {
       logger.error('Error bulk toggling hidden', error, {
         quoteIds,
@@ -1038,6 +1076,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes, error: null });
       if (target === null) {
         reportQuoteGone('addQuoteToCollection', quoteId);
+        await clearCurrentQuoteIfGone(quoteId, get);
         return false;
       }
       if (changed.added && syncsLocalEdits(target)) {
@@ -1086,6 +1125,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes, error: null });
       if (target === null) {
         reportQuoteGone('removeQuoteFromCollection', quoteId);
+        await clearCurrentQuoteIfGone(quoteId, get);
         return false;
       }
       if (changed.removed && syncsLocalEdits(target)) {
@@ -1117,6 +1157,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const quoteIdSet = new Set(quoteIds);
       // Only the ones this write actually moved: membership lives on the quote itself.
       const affectedCustomIds: string[] = [];
+      // Excludes both the ones a pull removed and the ones already in the collection.
+      let added = 0;
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) =>
         current.map((q) => {
@@ -1125,8 +1167,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           }
           const currentIds = q.collectionIds ?? [];
           if (currentIds.includes(collectionId)) {
-            return q; // Already in collection
+            return q;
           }
+          added += 1;
           if (syncsLocalEdits(q)) {
             affectedCustomIds.push(q.id);
           }
@@ -1141,7 +1184,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
-      useToastStore.getState().success(`${quoteIds.length} quotes added to "${collectionName}"`);
+      useToastStore.getState().success(`${added} quotes added to "${collectionName}"`);
 
       return true;
     } catch (error) {
