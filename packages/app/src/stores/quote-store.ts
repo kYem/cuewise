@@ -72,9 +72,9 @@ async function navigateHistory(
     }
   } catch (error) {
     logger.error(`Error going ${direction} in history`, error);
-    const errorMessage = `Failed to navigate ${direction}. Please try again.`;
-    set({ error: errorMessage });
-    useToastStore.getState().error(errorMessage);
+    // Not `error` state: both renderers read that as "the load failed" and replace the page.
+    // A single action that failed has its toast.
+    useToastStore.getState().error(`Failed to navigate ${direction}. Please try again.`);
   }
 }
 
@@ -447,7 +447,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error toggling favorite', error);
       const errorMessage = 'Failed to update favorite. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -482,7 +481,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error hiding quote', error);
       const errorMessage = 'Failed to hide quote. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -520,7 +518,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding custom quote', error);
       const errorMessage = 'Failed to add custom quote. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -570,7 +567,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error unhiding quote', error);
       const errorMessage = 'Failed to unhide quote. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -609,7 +605,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error editing quote', error);
       const errorMessage = 'Failed to update quote. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return 'failed';
     }
@@ -651,7 +646,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error deleting quote', error);
       const errorMessage = 'Failed to delete quote. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -729,7 +723,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
       const errorMessage = 'Failed to delete quotes. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -783,7 +776,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         count: quoteIds.length,
       });
       const errorMessage = 'Failed to update favorites. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -838,7 +830,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         count: quoteIds.length,
       });
       const errorMessage = 'Failed to update quotes. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
     }
   },
@@ -873,7 +864,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error restoring missing quotes', error);
       const errorMessage = 'Failed to restore quotes. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       throw error;
     }
@@ -914,7 +904,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error resetting quotes', error);
       const errorMessage = 'Failed to reset quotes. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       throw error;
     }
@@ -945,7 +934,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the new collection', result.error);
         const errorMessage = 'Failed to create collection. Please try again.';
-        set({ error: errorMessage });
         useToastStore.getState().error(errorMessage);
         return false;
       }
@@ -957,7 +945,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error creating collection', error);
       const errorMessage = 'Failed to create collection. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;
     }
@@ -980,7 +967,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the collection update', result.error);
         const errorMessage = 'Failed to update collection. Please try again.';
-        set({ error: errorMessage });
         useToastStore.getState().error(errorMessage);
         return 'failed';
       }
@@ -999,7 +985,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error updating collection', error);
       const errorMessage = 'Failed to update collection. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return 'failed';
     }
@@ -1014,7 +999,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the collection deletion', result.error);
         const errorMessage = 'Failed to delete collection. Please try again.';
-        set({ error: errorMessage });
         useToastStore.getState().error(errorMessage);
         return false;
       }
@@ -1078,7 +1062,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error deleting collection', error);
       const errorMessage = 'Failed to delete collection. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;
     }
@@ -1129,7 +1112,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding quote to collection', error);
       const errorMessage = 'Failed to add quote to collection. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;
     }
@@ -1178,7 +1160,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error removing quote from collection', error);
       const errorMessage = 'Failed to remove quote from collection. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;
     }
@@ -1238,7 +1219,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding quotes to collection', error);
       const errorMessage = 'Failed to add quotes to collection. Please try again.';
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;
     }
@@ -1321,7 +1301,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       logger.error('Error bulk adding quotes', error);
       const errorMessage = 'Failed to import quotes. Please try again.';
       result.errors.push(errorMessage);
-      set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return result;
     }
