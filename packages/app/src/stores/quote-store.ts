@@ -195,11 +195,19 @@ function syncsLocalEdits(quote: Quote | null): boolean {
 }
 
 /**
- * The card renders `currentQuote`, which no observer converges — before this write stopped
- * resurrecting the quote, its own stale-snapshot rewrite is what kept the two agreeing.
+ * The card renders `currentQuote`, which no observer converges — before these writes stopped
+ * resurrecting the quote, their stale-snapshot rewrite is what kept the two agreeing.
+ *
+ * Checked against `written` rather than trusted from the call site: a caller that reaches here
+ * with the quote still present would otherwise reroll the card for no reason.
  */
-async function clearCurrentQuoteIfGone(quoteId: string, get: () => QuoteStore): Promise<void> {
-  if (get().currentQuote?.id === quoteId) {
+async function refreshCardIfQuoteGone(
+  quoteId: string,
+  written: Quote[],
+  get: () => QuoteStore
+): Promise<void> {
+  const isGone = !written.some((q) => q.id === quoteId);
+  if (isGone && get().currentQuote?.id === quoteId) {
     await get().refreshQuote();
   }
 }
@@ -423,7 +431,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('toggleFavorite', quoteId);
-        await clearCurrentQuoteIfGone(quoteId, get);
+        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
         return;
       }
       if (syncsLocalEdits(target)) {
@@ -552,7 +560,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('unhideQuote', quoteId);
-        await clearCurrentQuoteIfGone(quoteId, get);
+        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
         return;
       }
       if (syncsLocalEdits(target)) {
@@ -583,7 +591,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('editQuote', quoteId);
-        await clearCurrentQuoteIfGone(quoteId, get);
+        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
         return 'gone';
       }
       if (syncsLocalEdits(target)) {
@@ -758,7 +766,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           await setCurrentQuote(persisted);
           set({ currentQuote: persisted });
         } else {
-          await clearCurrentQuoteIfGone(currentQuote.id, get);
+          await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
         }
       }
 
@@ -806,10 +814,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       notifyMutatedBulk('quotes', affectedCustomIds);
 
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
-        if (setHidden) {
+        const persisted = updatedQuotes.find((q) => q.id === currentQuote.id);
+        if (!persisted) {
+          await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
+        } else if (setHidden) {
           await get().refreshQuote();
         } else {
-          await clearCurrentQuoteIfGone(currentQuote.id, get);
+          await setCurrentQuote(persisted);
+          set({ currentQuote: persisted });
         }
       }
 
@@ -1097,7 +1109,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes, error: null });
       if (target === null) {
         reportQuoteGone('addQuoteToCollection', quoteId);
-        await clearCurrentQuoteIfGone(quoteId, get);
+        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
         return false;
       }
       if (changed.added && syncsLocalEdits(target)) {
@@ -1146,7 +1158,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       set({ quotes: updatedQuotes, error: null });
       if (target === null) {
         reportQuoteGone('removeQuoteFromCollection', quoteId);
-        await clearCurrentQuoteIfGone(quoteId, get);
+        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
         return false;
       }
       if (changed.removed && syncsLocalEdits(target)) {
@@ -1174,7 +1186,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   addQuotesToCollection: async (quoteIds: string[], collectionId: string) => {
     try {
-      const { collections } = get();
+      const { collections, currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
       // Only the ones this write actually moved: membership lives on the quote itself.
       const affectedCustomIds: string[] = [];
@@ -1208,6 +1220,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
+      if (currentQuote && quoteIdSet.has(currentQuote.id)) {
+        await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
+      }
+
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
         return false;
