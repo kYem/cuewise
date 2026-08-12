@@ -868,6 +868,10 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.setCurrentQuote).mockResolvedValue({ success: true });
   });
 
+  afterEach(() => {
+    configurePlatform({ syncSink: null });
+  });
+
   const pulled = (): QuoteCollection => ({
     id: 'pulled',
     name: 'From another device',
@@ -942,28 +946,13 @@ describe('writers read storage, not their own snapshot', () => {
     useQuoteStore.setState({ quotes: [mine] });
     vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
     await useQuoteStore.getState().toggleFavorite('gone');
-    configurePlatform({ syncSink: null });
 
     // The second call proves the silence came from the gone check, not from throwing earlier.
     expect(sink.markMutated.mock.calls).toEqual([['quotes', 'gone']]);
   });
 
-  it('bulkToggleFavorite announces only the quotes the locked read still holds', async () => {
-    const kept = quoteFactory.build({ id: 'kept', isCustom: true });
-    const gone = quoteFactory.build({ id: 'gone', isCustom: true });
-    useQuoteStore.setState({ quotes: [kept, gone] });
-    vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
-    const sink = createSyncSink();
-    configurePlatform({ syncSink: sink });
-
-    await useQuoteStore.getState().bulkToggleFavorite(['kept', 'gone'], true);
-    configurePlatform({ syncSink: null });
-
-    expect(sink.markMutatedBulk).toHaveBeenCalledWith('quotes', ['kept']);
-  });
-
-  // QuoteForm and the collection modals close on success, so the toast is the only signal the
-  // user gets that a pull removed the quote between the click and the write.
+  // EditQuoteModal closes on anything but 'failed' and the row actions have no UI of their own,
+  // so the toast is the only signal that a pull removed the quote before the write.
   it.each([
     ['editQuote', () => useQuoteStore.getState().editQuote('gone', { text: 'edited' })],
     ['unhideQuote', () => useQuoteStore.getState().unhideQuote('gone')],
@@ -1005,7 +994,6 @@ describe('writers read storage, not their own snapshot', () => {
     configurePlatform({ syncSink: sink });
 
     await useQuoteStore.getState().deleteQuote('gone');
-    configurePlatform({ syncSink: null });
 
     expect(sink.markDeleted).not.toHaveBeenCalled();
   });
@@ -1038,16 +1026,20 @@ describe('writers read storage, not their own snapshot', () => {
 
     await useQuoteStore.getState().initialize();
 
-    const seeded = vi.mocked(storage.setQuotes).mock.calls[0][0];
-    expect(seeded.map((q) => q.id)).toEqual(['pulled']);
+    expect(storage.setQuotes).not.toHaveBeenCalledWith(SEED_QUOTES);
+    expect(useQuoteStore.getState().quotes.map((q) => q.id)).toEqual(['pulled']);
   });
 
   it.each([
-    ['hideQuote', (id: string) => useQuoteStore.getState().hideQuote(id)],
-    ['unhideQuote', (id: string) => useQuoteStore.getState().unhideQuote(id)],
-    ['deleteQuote', (id: string) => useQuoteStore.getState().deleteQuote(id)],
-    ['editQuote', (id: string) => useQuoteStore.getState().editQuote(id, { text: 'edited' })],
-  ])('%s reads the quotes after the lock is granted', async (_label, act) => {
+    ['hideQuote', (id: string) => useQuoteStore.getState().hideQuote(id), ['mine', 'late']],
+    ['unhideQuote', (id: string) => useQuoteStore.getState().unhideQuote(id), ['mine', 'late']],
+    ['deleteQuote', (id: string) => useQuoteStore.getState().deleteQuote(id), ['late']],
+    [
+      'editQuote',
+      (id: string) => useQuoteStore.getState().editQuote(id, { text: 'edited' }),
+      ['mine', 'late'],
+    ],
+  ])('%s reads the quotes after the lock is granted', async (_label, act, expected) => {
     const mine = quoteFactory.build({ id: 'mine' });
     const late = quoteFactory.build({ id: 'late' });
     useQuoteStore.setState({ quotes: [mine] });
@@ -1059,7 +1051,7 @@ describe('writers read storage, not their own snapshot', () => {
     await act('mine');
 
     const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
-    expect(written.map((q) => q.id)).toContain('late');
+    expect(written.map((q) => q.id)).toEqual(expected);
   });
 
   // Before the lock these writers ignored the result entirely, so a full disk lost the edit
@@ -1165,6 +1157,11 @@ describe('writers read storage, not their own snapshot', () => {
   it.each([
     ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['kept', 'gone']), deletedChannel],
     [
+      'bulkToggleFavorite',
+      () => useQuoteStore.getState().bulkToggleFavorite(['kept', 'gone'], true),
+      bulkChannel,
+    ],
+    [
       'bulkToggleHidden',
       () => useQuoteStore.getState().bulkToggleHidden(['kept', 'gone'], true),
       bulkChannel,
@@ -1183,7 +1180,6 @@ describe('writers read storage, not their own snapshot', () => {
     configurePlatform({ syncSink: sink });
 
     await act();
-    configurePlatform({ syncSink: null });
 
     // Every channel, not just the expected one: an id leaking through another still seals a
     // tombstone this device never authored.
@@ -1210,7 +1206,6 @@ describe('writers read storage, not their own snapshot', () => {
   });
 
   it('resetAllQuotes replaces the list under the lock', async () => {
-    vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
     let heldAtWrite = false;
     vi.mocked(storage.setQuotesRaw).mockImplementation(async () => {
       heldAtWrite = heldLocks.has('quotes');
@@ -1376,7 +1371,7 @@ describe('writers read storage, not their own snapshot', () => {
     await act();
 
     const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
-    expect(written.map((q) => q.id)).toContain('late');
+    expect(written.map((q) => q.id)).toEqual(['mine', 'late']);
   });
 
   // hideQuote alone does not early-return: the refresh is what the user asked for either way.
