@@ -1538,6 +1538,45 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().quotes).toEqual([]);
   });
 
+  // The card is only rerolled when the quote is actually gone: unhiding one that survived must
+  // leave it on screen.
+  it.each([
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['shown'], false)],
+    ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['shown'], true)],
+    [
+      'addQuotesToCollection',
+      () => useQuoteStore.getState().addQuotesToCollection(['shown'], 'c1'),
+    ],
+  ])('%s leaves the card alone when the quote survived', async (_label, act) => {
+    const shown = quoteFactory.build({ id: 'shown', isHidden: true, collectionIds: [] });
+    const other = quoteFactory.build({ id: 'other' });
+    useQuoteStore.setState({
+      quotes: [shown, other],
+      currentQuote: shown,
+      collections: [{ id: 'c1', name: 'Mine', createdAt: new Date().toISOString() }],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([shown, other]);
+
+    await act();
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('shown');
+  });
+
+  it('addQuotesToCollection moves the card off a quote the pull deleted', async () => {
+    const gone = quoteFactory.build({ id: 'gone', isCustom: true, collectionIds: [] });
+    const other = quoteFactory.build({ id: 'other', collectionIds: [] });
+    useQuoteStore.setState({
+      quotes: [other],
+      currentQuote: gone,
+      collections: [{ id: 'c1', name: 'Mine', createdAt: new Date().toISOString() }],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([other]);
+
+    await useQuoteStore.getState().addQuotesToCollection(['gone', 'other'], 'c1');
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
+  });
+
   it('createCollection reads the collections after the lock is granted', async () => {
     const late = { ...pulled(), id: 'late' };
     useQuoteStore.setState({ collections: [] });
