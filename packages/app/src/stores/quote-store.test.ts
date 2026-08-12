@@ -11,7 +11,7 @@ import {
 import * as storage from '@cuewise/storage';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { SEED_QUOTES } from '../data/seed-quotes';
 import {
   createAtBeginningState,
@@ -89,6 +89,7 @@ vi.mock('./settings-store', () => ({
 const mockToastError = vi.fn();
 const mockToastWarning = vi.fn();
 const mockToastSuccess = vi.fn();
+const mockToastInfo = vi.fn();
 
 vi.mock('./toast-store', () => ({
   useToastStore: {
@@ -96,9 +97,18 @@ vi.mock('./toast-store', () => ({
       error: mockToastError,
       warning: mockToastWarning,
       success: mockToastSuccess,
+      info: mockToastInfo,
     }),
   },
 }));
+
+function createSyncSink(): SyncMutationSink & {
+  markMutated: Mock;
+  markDeleted: Mock;
+  markMutatedBulk: Mock;
+} {
+  return { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+}
 
 describe('Quote Store', () => {
   beforeEach(() => {
@@ -849,7 +859,7 @@ describe('Quote Store', () => {
 
 // Storage holds collections the store has not seen — a pull that landed while this action waited
 // on the lock. Every writer must merge into that list, not the one it can see.
-describe('collection writers read storage, not their own snapshot', () => {
+describe('writers read storage, not their own snapshot', () => {
   beforeEach(() => {
     useQuoteStore.setState(EMPTY_STORE_STATE);
     vi.clearAllMocks();
@@ -923,13 +933,17 @@ describe('collection writers read storage, not their own snapshot', () => {
     const mine = quoteFactory.build({ id: 'gone', isCustom: true });
     useQuoteStore.setState({ quotes: [mine] });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
-    const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+    const sink = createSyncSink();
     configurePlatform({ syncSink: sink });
 
     await useQuoteStore.getState().toggleFavorite('gone');
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    await useQuoteStore.getState().toggleFavorite('gone');
     configurePlatform({ syncSink: null });
 
-    expect(sink.markMutated).not.toHaveBeenCalled();
+    // The second call proves the silence came from the gone check, not from throwing earlier.
+    expect(sink.markMutated.mock.calls).toEqual([['quotes', 'gone']]);
   });
 
   it('bulkToggleFavorite announces only the quotes the locked read still holds', async () => {
@@ -937,7 +951,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     const gone = quoteFactory.build({ id: 'gone', isCustom: true });
     useQuoteStore.setState({ quotes: [kept, gone] });
     vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
-    const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+    const sink = createSyncSink();
     configurePlatform({ syncSink: sink });
 
     await useQuoteStore.getState().bulkToggleFavorite(['kept', 'gone'], true);
@@ -975,7 +989,7 @@ describe('collection writers read storage, not their own snapshot', () => {
   it('does not announce a delete the pull already made', async () => {
     useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
-    const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+    const sink = createSyncSink();
     configurePlatform({ syncSink: sink });
 
     await useQuoteStore.getState().deleteQuote('gone');
@@ -997,6 +1011,134 @@ describe('collection writers read storage, not their own snapshot', () => {
       text: 'pulled by another device',
       isFavorite: true,
     });
+  });
+
+  // Seeding over a pull that landed while this waited on the lock wipes every custom quote,
+  // which is why the emptiness test is repeated inside it.
+  it('initialize does not seed over a pull that landed while it waited for the lock', async () => {
+    const pulledQuote = quoteFactory.build({ id: 'pulled', isCustom: true });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+    onLockGranted.set('quotes', () => {
+      vi.mocked(storage.getQuotes).mockResolvedValue([pulledQuote]);
+    });
+
+    await useQuoteStore.getState().initialize();
+
+    const seeded = vi.mocked(storage.setQuotes).mock.calls[0][0];
+    expect(seeded.map((q) => q.id)).toEqual(['pulled']);
+  });
+
+  it.each([
+    ['hideQuote', (id: string) => useQuoteStore.getState().hideQuote(id)],
+    ['unhideQuote', (id: string) => useQuoteStore.getState().unhideQuote(id)],
+    ['deleteQuote', (id: string) => useQuoteStore.getState().deleteQuote(id)],
+    ['editQuote', (id: string) => useQuoteStore.getState().editQuote(id, { text: 'edited' })],
+  ])('%s reads the quotes after the lock is granted', async (_label, act) => {
+    const mine = quoteFactory.build({ id: 'mine' });
+    const late = quoteFactory.build({ id: 'late' });
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    onLockGranted.set('quotes', () => {
+      vi.mocked(storage.getQuotes).mockResolvedValue([mine, late]);
+    });
+
+    await act('mine');
+
+    const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
+    expect(written.map((q) => q.id)).toContain('late');
+  });
+
+  // Before the lock these writers ignored the result entirely, so a full disk lost the edit
+  // with no signal at all.
+  it.each([
+    ['toggleFavorite', () => useQuoteStore.getState().toggleFavorite('mine'), 'favorite'],
+    ['hideQuote', () => useQuoteStore.getState().hideQuote('mine'), 'hide quote'],
+    ['unhideQuote', () => useQuoteStore.getState().unhideQuote('mine'), 'unhide quote'],
+    ['deleteQuote', () => useQuoteStore.getState().deleteQuote('mine'), 'delete quote'],
+    ['editQuote', () => useQuoteStore.getState().editQuote('mine', { text: 'x' }), 'update quote'],
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['mine']), 'delete quotes'],
+    [
+      'bulkToggleFavorite',
+      () => useQuoteStore.getState().bulkToggleFavorite(['mine'], true),
+      'update favorites',
+    ],
+    [
+      'bulkToggleHidden',
+      () => useQuoteStore.getState().bulkToggleHidden(['mine'], true),
+      'update quotes',
+    ],
+  ])('%s reports a write that did not persist', async (_label, act, phrase) => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await act();
+
+    expect(mockToastError).toHaveBeenCalledWith(expect.stringContaining(phrase));
+    expect(useQuoteStore.getState().quotes.map((q) => q.id)).toEqual(['mine']);
+  });
+
+  // A tombstone for one this write never touched is authorship this device does not have.
+  it.each([
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['kept', 'gone']), 'markDeleted'],
+    [
+      'bulkToggleHidden',
+      () => useQuoteStore.getState().bulkToggleHidden(['kept', 'gone'], true),
+      'markMutatedBulk',
+    ],
+    [
+      'addQuotesToCollection',
+      () => useQuoteStore.getState().addQuotesToCollection(['kept', 'gone'], 'c1'),
+      'markMutatedBulk',
+    ],
+  ])('%s announces only the quotes the locked read still holds', async (_label, act, method) => {
+    const kept = quoteFactory.build({ id: 'kept', isCustom: true, collectionIds: [] });
+    const gone = quoteFactory.build({ id: 'gone', isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({ quotes: [kept, gone] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
+    const sink = createSyncSink();
+    configurePlatform({ syncSink: sink });
+
+    await act();
+    configurePlatform({ syncSink: null });
+
+    const announced = method === 'markDeleted' ? sink.markDeleted : sink.markMutatedBulk;
+    expect(announced.mock.calls.flat(2)).not.toContain('gone');
+    expect(announced.mock.calls.flat(2)).toContain('kept');
+  });
+
+  it('restoreMissingQuotes re-checks what is missing inside the lock', async () => {
+    const seedSample = SEED_QUOTES[0];
+    useQuoteStore.setState({ quotes: [] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    onLockGranted.set('quotes', () => {
+      vi.mocked(storage.getQuotes).mockResolvedValue(SEED_QUOTES);
+    });
+
+    await useQuoteStore.getState().restoreMissingQuotes();
+
+    const written = vi.mocked(storage.setQuotes).mock.calls[0][0];
+    expect(written.filter((q) => q.id === seedSample.id)).toHaveLength(1);
+    expect(mockToastInfo).toHaveBeenCalledWith('All default quotes are already present');
+  });
+
+  it('resetAllQuotes replaces the list under the lock', async () => {
+    vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+    let heldAtWrite = false;
+    vi.mocked(storage.setQuotesRaw).mockImplementation(async () => {
+      heldAtWrite = heldLocks.has('quotes');
+      return { success: true };
+    });
+
+    await useQuoteStore.getState().resetAllQuotes();
+
+    expect(heldAtWrite).toBe(true);
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {
@@ -1204,7 +1346,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     useQuoteStore.setState({ collections: [mine] });
     vi.mocked(storage.getCollections).mockResolvedValue([mine]);
     vi.mocked(storage.getQuotes).mockRejectedValue(new Error('unreadable'));
-    const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+    const sink = createSyncSink();
     configurePlatform({ syncSink: sink });
 
     const ok = await useQuoteStore.getState().deleteCollection('mine');
@@ -1302,6 +1444,9 @@ describe('sync sink wiring', () => {
       async () => useQuoteStore.getState().collections
     );
     vi.mocked(storage.getQuotes).mockImplementation(async () => useQuoteStore.getState().quotes);
+    vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
+    vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+    vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
     configurePlatform({ syncSink: fakeSink });
   });
 

@@ -297,6 +297,7 @@ describe('updateQuotes', () => {
 
     const stored = await getQuotes();
     expect(stored.map((quote) => quote.id).sort()).toEqual(['custom-1', 'seed-1']);
+    expect(stored.find((quote) => quote.id === 'seed-1')?.isFavorite).toBe(true);
   });
 });
 
