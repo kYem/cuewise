@@ -379,17 +379,19 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
 
       // Import quotes (mark as custom to distinguish from seed quotes)
       if (options.importQuotes === true && data.quotes.length > 0) {
-        const existingQuotes = await getQuotesRaw();
         // Mark all imported quotes as custom to ensure they are included in future exports
         const quotesToProcess = data.quotes.map((q) => ({ ...q, isCustom: true }));
-        const { merged, importedCount, skippedCount } = mergeImport(
-          existingQuotes,
-          quotesToProcess,
-          options.skipDuplicates === true
-        );
-        if (importedCount > 0) {
-          assertPersisted(await setQuotesRaw(merged));
-        }
+        const { importedCount, skippedCount } = await withCollectionLock('quotes', async () => {
+          const counts = mergeImport(
+            await getQuotesRaw(),
+            quotesToProcess,
+            options.skipDuplicates === true
+          );
+          if (counts.importedCount > 0) {
+            assertPersisted(await setQuotesRaw(counts.merged));
+          }
+          return counts;
+        });
         result.imported.quotes = importedCount;
         result.skipped.quotes = skippedCount;
       }

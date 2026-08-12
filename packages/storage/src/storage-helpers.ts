@@ -244,6 +244,20 @@ export async function getQuotes(): Promise<Quote[]> {
   ];
 }
 
+/**
+ * Changes the quote list, reading inside the lock. See `updateGoals` for why. Note the write is
+ * two keys (seed and custom) and not atomic between them — the lock keeps other writers out, it
+ * does not make the pair a transaction.
+ */
+export async function updateQuotes(
+  mutate: (quotes: Quote[]) => Quote[]
+): Promise<{ result: StorageResult; quotes: Quote[] }> {
+  return withCollectionLock('quotes', async () => {
+    const quotes = mutate(await getQuotes());
+    return { result: await setQuotes(quotes), quotes };
+  });
+}
+
 export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
   try {
     // Split into seed and custom quotes
