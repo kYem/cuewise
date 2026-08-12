@@ -171,8 +171,8 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
 }
 
 /**
- * Change one quote inside the lock. `target` is the written entity, or null when a pull removed it
- * first — announcing that write would mark a gone id dirty.
+ * Change one quote inside the lock. `target` is null when the locked read no longer held the id —
+ * announcing that write would mark a gone id dirty, which pushes as a tombstone.
  */
 async function persistOneQuote(
   quoteId: string,
@@ -182,6 +182,20 @@ async function persistOneQuote(
     current.map((q) => (q.id === quoteId ? change(q) : q))
   );
   return { result, quotes, target: quotes.find((q) => q.id === quoteId) ?? null };
+}
+
+/**
+ * Seed quotes do reach the account — the enroll backfill claims every stored id — but only a
+ * custom quote's edit is announced from here, so a seed edit stays on this device.
+ */
+function syncsLocalEdits(quote: Quote | null): boolean {
+  return quote?.isCustom === true;
+}
+
+/** The locked read no longer holds it: a pull deleted it between the user's click and the write. */
+function reportQuoteGone(action: string, quoteId: string): void {
+  logger.warn(`${action}: quote ${quoteId} was gone before the write`);
+  useToastStore.getState().warning('This quote no longer exists');
 }
 
 const STALE_QUOTES_MESSAGE =
@@ -224,8 +238,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   activeCollectionIds: [],
 
   initialize: async () => {
-    // Before the read: a pull landing during it is otherwise announced to nobody, and the seed
-    // and view-count writes below would persist the pre-pull snapshot over it.
+    // Before the read: a pull landing during it is otherwise announced to nobody.
     quotesObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
@@ -388,17 +401,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (target === null) {
+        reportQuoteGone('toggleFavorite', quoteId);
+        return;
+      }
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
-      // Update current quote if it's the one being favorited
+      // The persisted value, not a re-toggle of the snapshot: a pull may have flipped the flag.
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        const updatedCurrentQuote = { ...currentQuote, isFavorite: !currentQuote.isFavorite };
-        await setCurrentQuote(updatedCurrentQuote);
-        set({ currentQuote: updatedCurrentQuote });
+        await setCurrentQuote(target);
+        set({ currentQuote: target });
       }
     } catch (error) {
       logger.error('Error toggling favorite', error);
@@ -422,9 +437,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
+      }
+      if (target === null) {
+        reportQuoteGone('hideQuote', quoteId);
       }
 
       // If hiding current quote, get a new one
@@ -485,8 +502,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         viewCount: q.viewCount + 1,
         lastViewed: new Date().toISOString(),
       }));
-      // No toast: this is background telemetry the user did not initiate, and the next view
-      // retries it.
+      // No toast: background telemetry the user did not initiate. A failed increment is dropped,
+      // not retried — the next view counts up from whatever last persisted.
       if (!result.success) {
         logger.error('Could not persist the view count', result.error);
         return;
@@ -511,8 +528,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (target === null) {
+        reportQuoteGone('unhideQuote', quoteId);
+        return;
+      }
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
       useToastStore.getState().success('Quote unhidden successfully');
@@ -538,17 +558,20 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      // QuoteForm closes on the toast, so reporting success for a write that found nothing
+      // loses the edit.
+      if (target === null) {
+        reportQuoteGone('editQuote', quoteId);
+        return;
+      }
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
-      // Update current quote if it's the one being edited
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        const updatedCurrentQuote = { ...currentQuote, ...updates };
-        await setCurrentQuote(updatedCurrentQuote);
-        set({ currentQuote: updatedCurrentQuote });
+        await setCurrentQuote(target);
+        set({ currentQuote: target });
       }
 
       useToastStore.getState().success('Quote updated successfully');
@@ -562,16 +585,23 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   deleteQuote: async (quoteId: string) => {
     try {
-      const target = get().quotes.find((q) => q.id === quoteId);
+      // Captured inside the mutator: a tombstone for one this write never deleted is
+      // authorship we do not have.
+      const deleted: { target: Quote | null } = { target: null };
       const { result, quotes: updatedQuotes } = await updateQuotes((current) =>
-        current.filter((q) => q.id !== quoteId)
+        current.filter((q) => {
+          if (q.id !== quoteId) {
+            return true;
+          }
+          deleted.target = q;
+          return false;
+        })
       );
       if (!result.success) {
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (syncsLocalEdits(deleted.target)) {
         notifyDeleted('quotes', quoteId);
       }
 
@@ -581,6 +611,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await get().refreshQuote();
       }
 
+      if (deleted.target === null) {
+        reportQuoteGone('deleteQuote', quoteId);
+        return;
+      }
       useToastStore.getState().success('Quote deleted successfully');
     } catch (error) {
       logger.error('Error deleting quote', error);
@@ -630,7 +664,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
         for (const q of current) {
-          if (quoteIdSet.has(q.id) && q.isCustom) {
+          if (quoteIdSet.has(q.id) && syncsLocalEdits(q)) {
             deletedCustomIds.push(q.id);
           }
         }
@@ -662,12 +696,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Only custom quotes sync, and only the ones the locked read still holds.
       const affectedCustomIds: string[] = [];
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
         for (const q of current) {
-          if (quoteIdSet.has(q.id) && q.isCustom) {
+          if (quoteIdSet.has(q.id) && syncsLocalEdits(q)) {
             affectedCustomIds.push(q.id);
           }
         }
@@ -704,12 +737,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Only custom quotes sync, and only the ones the locked read still holds.
       const affectedCustomIds: string[] = [];
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
         for (const q of current) {
-          if (quoteIdSet.has(q.id) && q.isCustom) {
+          if (quoteIdSet.has(q.id) && syncsLocalEdits(q)) {
             affectedCustomIds.push(q.id);
           }
         }
@@ -787,11 +819,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         lastViewed: undefined,
       }));
 
-      // Raw, like `resetToDefaults`: a reset means every stored quote, including one this
-      // build cannot parse. The preserving setter would carry those through and they would
-      // reappear on the next build that can read them.
-      // Locked but deliberately not re-read: replacing the list wholesale is the point, and the
-      // lock is what stops a concurrent pull's read-modify-write resurrecting what this clears.
+      // Raw, like `resetToDefaults`: a reset means every stored quote, including one this build
+      // cannot parse — the preserving setter would carry those through. Locked but deliberately
+      // not re-read: replacing the list wholesale is the point.
       const resetResult = await withCollectionLock('quotes', () => setQuotesRaw(freshQuotes));
       if (!resetResult.success) {
         throw new Error(resetResult.error.message);
@@ -997,7 +1027,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       } = await persistOneQuote(quoteId, (q) => {
         const currentIds = q.collectionIds ?? [];
         if (currentIds.includes(collectionId)) {
-          return q; // Already in collection
+          return q;
         }
         changed.added = true;
         return { ...q, collectionIds: [...currentIds, collectionId] };
@@ -1006,8 +1036,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes, error: null });
-      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
-      if (changed.added && target?.isCustom) {
+      if (target === null) {
+        reportQuoteGone('addQuoteToCollection', quoteId);
+        return false;
+      }
+      if (changed.added && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
@@ -1051,8 +1084,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         throw new Error(result.error.message);
       }
       set({ quotes: updatedQuotes, error: null });
-      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
-      if (changed.removed && target?.isCustom) {
+      if (target === null) {
+        reportQuoteGone('removeQuoteFromCollection', quoteId);
+        return false;
+      }
+      if (changed.removed && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
@@ -1079,8 +1115,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     try {
       const { collections } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope),
-      // and only the ones this write actually moved.
+      // Only the ones this write actually moved: membership lives on the quote itself.
       const affectedCustomIds: string[] = [];
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) =>
@@ -1092,7 +1127,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           if (currentIds.includes(collectionId)) {
             return q; // Already in collection
           }
-          if (q.isCustom) {
+          if (syncsLocalEdits(q)) {
             affectedCustomIds.push(q.id);
           }
           return { ...q, collectionIds: [...currentIds, collectionId] };

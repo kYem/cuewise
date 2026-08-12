@@ -53,7 +53,6 @@ vi.mock('@cuewise/storage', () => ({
   getCollections: vi.fn(),
   setCollections: vi.fn(),
   getSettings: vi.fn(),
-  // Same routing as updateCollections below, for the same reason.
   updateQuotes: vi.fn(async (mutate: (list: Quote[]) => Quote[]) =>
     storage.withCollectionLock('quotes', async () => {
       const quotes = mutate(await storage.getQuotes());
@@ -900,8 +899,7 @@ describe('collection writers read storage, not their own snapshot', () => {
     expect(heldAtWrite).toBe(true);
   });
 
-  // A writer reimplementing read-merge-write inline would skip the lock entirely.
-  it('every quote writer goes through the locked helper', async () => {
+  it('takes the quotes lock exactly once for a favourite, a hide and a delete', async () => {
     const mine = quoteFactory.build({ id: 'mine', isCustom: true });
     useQuoteStore.setState({ quotes: [mine] });
     vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
@@ -946,6 +944,59 @@ describe('collection writers read storage, not their own snapshot', () => {
     configurePlatform({ syncSink: null });
 
     expect(sink.markMutatedBulk).toHaveBeenCalledWith('quotes', ['kept']);
+  });
+
+  // QuoteForm and the collection modals close on success, so the toast is the only signal the
+  // user gets that a pull removed the quote between the click and the write.
+  it.each([
+    ['editQuote', () => useQuoteStore.getState().editQuote('gone', { text: 'edited' })],
+    ['unhideQuote', () => useQuoteStore.getState().unhideQuote('gone')],
+    ['deleteQuote', () => useQuoteStore.getState().deleteQuote('gone')],
+    ['toggleFavorite', () => useQuoteStore.getState().toggleFavorite('gone')],
+  ])('%s warns instead of reporting success when the locked read lost the quote', async (_label, act) => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+
+    await act();
+
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists');
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('addQuoteToCollection returns false when the locked read lost the quote', async () => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+
+    await expect(useQuoteStore.getState().addQuoteToCollection('gone', 'c1')).resolves.toBe(false);
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists');
+  });
+
+  // A tombstone for a delete this write never made outranks every peer still holding the quote.
+  it('does not announce a delete the pull already made', async () => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    const sink = { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
+    configurePlatform({ syncSink: sink });
+
+    await useQuoteStore.getState().deleteQuote('gone');
+    configurePlatform({ syncSink: null });
+
+    expect(sink.markDeleted).not.toHaveBeenCalled();
+  });
+
+  // The list came from storage and the current quote from state; a pull can put them at odds.
+  it('persists the current quote from the locked write, not the stale snapshot', async () => {
+    const stale = quoteFactory.build({ id: 'q1', isFavorite: false, text: 'stale' });
+    const pulled = { ...stale, text: 'pulled by another device' };
+    useQuoteStore.setState({ quotes: [stale], currentQuote: stale });
+    vi.mocked(storage.getQuotes).mockResolvedValue([pulled]);
+
+    await useQuoteStore.getState().toggleFavorite('q1');
+
+    expect(vi.mocked(storage.setCurrentQuote).mock.calls[0][0]).toMatchObject({
+      text: 'pulled by another device',
+      isFavorite: true,
+    });
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {

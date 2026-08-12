@@ -245,9 +245,8 @@ export async function getQuotes(): Promise<Quote[]> {
 }
 
 /**
- * Changes the quote list, reading inside the lock. See `updateGoals` for why. Note the write is
- * two keys (seed and custom) and not atomic between them — the lock keeps other writers out, it
- * does not make the pair a transaction.
+ * Changes the quote list, reading inside the lock. See `updateGoals` for why. Calls `mutate`
+ * exactly once, so callers may collect ids from inside it.
  */
 export async function updateQuotes(
   mutate: (quotes: Quote[]) => Quote[]
@@ -258,6 +257,7 @@ export async function updateQuotes(
   });
 }
 
+/** Two keys, written in sequence: a failure on the second leaves the first one's write standing. */
 export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
   try {
     // Split into seed and custom quotes
