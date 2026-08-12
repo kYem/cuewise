@@ -979,7 +979,9 @@ describe('writers read storage, not their own snapshot', () => {
 
     await act();
 
-    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists');
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
+      collapseRepeats: true,
+    });
     expect(mockToastSuccess).not.toHaveBeenCalled();
     // A gone quote is not a failure, and reporting both would send the user at a retry.
     expect(mockToastError).not.toHaveBeenCalled();
@@ -990,7 +992,9 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
 
     await expect(useQuoteStore.getState().addQuoteToCollection('gone', 'c1')).resolves.toBe(false);
-    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists');
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
+      collapseRepeats: true,
+    });
   });
 
   // A tombstone for a delete this write never made outranks every peer still holding the quote.
@@ -1381,7 +1385,9 @@ describe('writers read storage, not their own snapshot', () => {
 
     await useQuoteStore.getState().hideQuote('gone');
 
-    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists');
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
+      collapseRepeats: true,
+    });
     expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
   });
 
@@ -1430,6 +1436,50 @@ describe('writers read storage, not their own snapshot', () => {
 
     expect(mockToastInfo).toHaveBeenCalledWith('Those quotes are already in "Mine"');
     expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  // The singular writers got clearCurrentQuoteIfGone; the bulk siblings kept rendering the quote.
+  it.each([
+    ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['gone'], true)],
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['gone'], false)],
+  ])('%s moves the card off a quote the pull deleted', async (_label, act) => {
+    const gone = quoteFactory.build({ id: 'gone', isCustom: true });
+    const other = quoteFactory.build({ id: 'other' });
+    useQuoteStore.setState({ quotes: [other], currentQuote: gone });
+    vi.mocked(storage.getQuotes).mockResolvedValue([other]);
+
+    await act();
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
+  });
+
+  // Zero added means either outcome, and telling the user the wrong one is worse than silence.
+  it('addQuotesToCollection separates a deleted selection from one already in the collection', async () => {
+    const gone = quoteFactory.build({ id: 'gone', isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({
+      quotes: [gone],
+      collections: [{ id: 'c1', name: 'Mine', createdAt: new Date().toISOString() }],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+
+    await expect(useQuoteStore.getState().addQuotesToCollection(['gone'], 'c1')).resolves.toBe(
+      false
+    );
+    expect(mockToastWarning).toHaveBeenCalledWith('Those quotes no longer exist');
+    expect(mockToastInfo).not.toHaveBeenCalled();
+  });
+
+  // Nothing clears the stored key, so without this the card comes back on the next tab.
+  it('initialize drops a stored current quote the list no longer holds', async () => {
+    const live = quoteFactory.build({ id: 'live' });
+    const deletedElsewhere = quoteFactory.build({ id: 'deleted', isHidden: false });
+    vi.mocked(storage.getQuotes).mockResolvedValue([live]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(deletedElsewhere);
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+
+    await useQuoteStore.getState().initialize();
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('live');
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {
