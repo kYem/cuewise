@@ -78,6 +78,7 @@ export {
   setWeatherState,
   updateCollections,
   updateGoals,
+  updateQuotes,
   updateReminders,
   updateVideoProgress,
   withCollectionLock,

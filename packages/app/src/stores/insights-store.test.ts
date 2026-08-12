@@ -201,6 +201,23 @@ describe('Insights Store - Import Methods', () => {
       expect(heldWhenRead).toEqual([true]);
     });
 
+    it('reads the quotes it merges into from inside the lock', async () => {
+      const heldWhenRead: boolean[] = [];
+      vi.mocked(storage.getQuotesRaw).mockImplementation(async () => {
+        heldWhenRead.push(heldLocks.has('quotes'));
+        return [];
+      });
+      useInsightsStore.setState({
+        importValidation: createValidImportValidation({
+          quotes: [quoteFactory.build({ id: 'new-q' })],
+        }),
+      });
+
+      await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+
+      expect(heldWhenRead).toEqual([true]);
+    });
+
     // The backup's whole contract is faithfulness, and it was only ever mocked, never run.
     it('exports every stored item, including the ones this build cannot render', async () => {
       mockStorageWithData({ goals: [goalFactory.build({ id: 'g1' })] });
