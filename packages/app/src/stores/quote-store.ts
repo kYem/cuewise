@@ -709,6 +709,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await get().refreshQuote();
       }
 
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return;
+      }
       useToastStore.getState().success(`Deleted ${matched} quotes`);
     } catch (error) {
       logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
@@ -752,6 +756,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
       }
 
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return;
+      }
       const action = setFavorite ? 'added to favorites' : 'removed from favorites';
       useToastStore.getState().success(`${matched} quotes ${action}`);
     } catch (error) {
@@ -796,6 +804,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await get().refreshQuote();
       }
 
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return;
+      }
       const action = setHidden ? 'hidden' : 'unhidden';
       useToastStore.getState().success(`${matched} quotes ${action}`);
     } catch (error) {
@@ -1184,6 +1196,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
+      if (added === 0) {
+        useToastStore.getState().info(`Those quotes are already in "${collectionName}"`);
+        return true;
+      }
       useToastStore.getState().success(`${added} quotes added to "${collectionName}"`);
 
       return true;

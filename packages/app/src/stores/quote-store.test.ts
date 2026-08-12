@@ -1403,6 +1403,35 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
   });
 
+  // The bulk form of the gone report the single-quote writers already make.
+  it.each([
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['gone'])],
+    ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['gone'], true)],
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['gone'], true)],
+  ])('%s does not claim a zero-count success', async (_label, act) => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+
+    await act();
+
+    expect(mockToastWarning).toHaveBeenCalledWith('Those quotes no longer exist');
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('addQuotesToCollection says nothing moved when they were already there', async () => {
+    const already = quoteFactory.build({ id: 'already', isCustom: true, collectionIds: ['c1'] });
+    useQuoteStore.setState({
+      quotes: [already],
+      collections: [{ id: 'c1', name: 'Mine', createdAt: new Date().toISOString() }],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([already]);
+
+    await useQuoteStore.getState().addQuotesToCollection(['already'], 'c1');
+
+    expect(mockToastInfo).toHaveBeenCalledWith('Those quotes are already in "Mine"');
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
   it('createCollection reads the collections after the lock is granted', async () => {
     const late = { ...pulled(), id: 'late' };
     useQuoteStore.setState({ collections: [] });
