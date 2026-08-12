@@ -7,12 +7,12 @@ import type { SyncStore } from './store';
 describe('session token brands', () => {
   it('keeps raw tokens and hashes unassignable to each other on the SyncStore surface', () => {
     function _guard(store: SyncStore, raw: RawSessionToken, hash: SessionTokenHash): void {
-      void store.revokeSession(raw);
-      void store.bumpRateWindow(hash, 1000);
+      store.revokeSession(raw);
+      store.bumpRateWindow(hash, 1000);
       // @ts-expect-error a SessionTokenHash must not satisfy a RawSessionToken parameter
-      void store.revokeSession(hash);
+      store.revokeSession(hash);
       // @ts-expect-error a RawSessionToken must not satisfy a SessionTokenHash parameter
-      void store.bumpRateWindow(raw, 1000);
+      store.bumpRateWindow(raw, 1000);
     }
     expect(typeof _guard).toBe('function');
   });

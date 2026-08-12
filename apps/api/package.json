@@ -15,6 +15,7 @@
     "clean": "rm -rf dist .wrangler"
   },
   "dependencies": {
+    "@cuewise/crypto": "workspace:*",
     "@cuewise/shared": "workspace:*",
     "hono": "catalog:",
     "jose": "catalog:",
@@ -23,7 +24,6 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
-    "@cuewise/crypto": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:"

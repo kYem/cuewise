@@ -30,6 +30,8 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `putPairingEnvelope(id, envelope)` | `PUT /v1/pairings/:id/envelope` | Yes |
 | `deletePairing(id)` | `DELETE /v1/pairings/:id` | Yes |
 
+**Pairing key material is branded** (ENG-101). `createPairing`/`commitPairing`/`revealPairing`/`putPairingEnvelope` take `PairingCommitment` / `PairingPublicKeyB64` / `PairingNonceB64` / `PeerWrappedEnvelope` from `@cuewise/crypto` rather than `string`, and `getPairing`/`listPairings` return the same brands on `PairingForRequester`/`PendingPairing`: a swapped `revealPairing(id, nonce, publicKey)` would otherwise compile, clear the server's length checks, and be read by the approver as a substituted key. That is why the package depends on `@cuewise/crypto` at all — it imports the brands **type-only**, and still calls no crypto function and re-exports none. The brands carry positional identity only, never a validity claim, so a decode of one still needs its own guard. `pairing-brands.test.ts` fails the build if they collapse back to `string`.
+
 **Retry policy**: up to `MAX_RETRIES = 3` retries after the initial attempt — 4 attempts total. Retries on network failure (a rejected `fetch`, e.g. offline/DNS — folded into the same path as a synthetic status-0 error), `429`, and `5xx`. Backoff is `2^attempt * 500ms`, unless the response carried a `retryAfter` (problem+json body) or a numeric `Retry-After` header, which takes priority. Any other 4xx throws immediately, no retry.
 
 **The 404 exception**: `getRecoveryEnvelope` resolves to `null` on a 404 instead of throwing — "signed in but E2E keys never initialized" is a valid state callers branch on, not an error. Every other non-2xx still throws `ApiError` as usual.
@@ -59,13 +61,14 @@ Out of scope for this package (belongs to ENG-45 unless noted):
 - The mapping between Zustand store shapes (`goals`, `quotes`, ...) and individual `PushRecord`s.
 - LWW (last-write-wins) conflict resolution.
 - The fresh-device migration/merge state machine.
-- Encryption — the ENG-44 crypto lives in its own leaf package `@cuewise/crypto` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), **not re-exported here**. `ciphertext` is an opaque string to this package's transport functions; ENG-45 wires stores through `@cuewise/crypto` directly. This package is the transport, not the cipher.
+- Encryption — the ENG-44 crypto lives in its own leaf package `@cuewise/crypto` (recovery codes, key wrap/unwrap, record `sealRecord`/`openRecord`), **not re-exported here**. This package imports only types from it (the pairing brands above). `ciphertext` is an opaque string to this package's transport functions; ENG-45 wires stores through `@cuewise/crypto` directly. This package is the transport, not the cipher.
 
 ## Testing
 
 Co-located: `api-client.test.ts` next to `api-client.ts`, `session-manager.test.ts` next to `session-manager.ts`. Fixtures in `src/__fixtures__/`:
 - `fetch.fixtures.ts` — `stubFetch` queues canned `Response`s (or a rejection) for a fake `fetchFn`; `problemResponse` builds a spec-shaped problem+json stub.
 - `ports.fixtures.ts` — `createInMemoryKeyValueStore` and `createRecordingScheduler`, in-memory stand-ins for the two platform ports this package depends on.
+- `pairing.fixtures.ts` — `wire()`, which brands a plain string for tests that assert wire placement rather than encoding.
 
 ```bash
 pnpm --filter @cuewise/sync-client test

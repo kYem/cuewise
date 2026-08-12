@@ -514,11 +514,13 @@ pnpm --filter @cuewise/browser-extension dev
 
 ### Working on Linear Tickets
 
-When picking up a Linear ticket (ENG-x), make the work traceable before writing code:
+Several agents work this board at once, so **claim** a ticket before writing code — otherwise two sessions silently build the same branch. Claiming is the `in-flight` label plus **In Progress** plus a comment naming the branch; Linear has no field for a local session, so the label is the claim and the comment says who holds it. Drop the label when the PR opens or the work is abandoned.
 
-1. Move the ticket to **In Progress** and add a comment identifying who has it (e.g. "Claude Code session on <machine/branch>") — ad-hoc sessions are invisible to Linear otherwise
-2. Prefer the ticket's suggested branch name (`gitBranchName` from the Linear API, e.g. `kes/eng-77-...`); if using a `claude/...` branch, the PR description must include the issue ID (e.g. `Fixes ENG-77`) so the PR links back to the ticket
-3. On opening the PR, attach it to the ticket if the GitHub integration hasn't done so automatically
+Two traps: `in-flight` is deliberately outside the `Pickup` group, because a Linear label group is single-select and nesting it there would strip `agent-with-review`. And `save_issue.labels` replaces rather than appends, so pass the full set.
+
+Before claiming, check nobody else holds it — an existing `in-flight`, or In Progress with no branch, means another session owns it. A claim whose branch has no commits is stale; check `git branch -a` before taking it over.
+
+Branch from the ticket's own `gitBranchName` (e.g. `kes/eng-101-...`); on a `claude/...` branch the PR description must say `Fixes ENG-101` so it links back. On opening the PR, attach it to the ticket if the GitHub integration hasn't.
 
 ## Additional Resources
 
@@ -533,4 +535,4 @@ When picking up a Linear ticket (ENG-x), make the work traceable before writing 
 
 ---
 
-**Last Updated**: 2026-07-11
+**Last Updated**: 2026-08-11

@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { clockedStore, newUser } from './__fixtures__/api-test-helpers.fixtures';
+import { clockedStore, newUser, wire } from './__fixtures__/api-test-helpers.fixtures';
 import { hashSessionToken } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
 import { PAIRING_TTL_MS } from './store';
@@ -12,12 +12,12 @@ describe('D1SyncStore pairings', () => {
     const requesterToken = await store.createSession(userId, 'phone');
     const requesterHash = await hashSessionToken(requesterToken);
 
-    const first = await store.createPairing(userId, requesterHash, 'commitment-1', 1_000);
+    const first = await store.createPairing(userId, requesterHash, wire('commitment-1'), 1_000);
     expect(first.id.length).toBeGreaterThan(0);
     expect(first.expiresAt).toBe(1_000 + PAIRING_TTL_MS);
 
     tick(10);
-    const second = await store.createPairing(userId, requesterHash, 'commitment-2', 1_010);
+    const second = await store.createPairing(userId, requesterHash, wire('commitment-2'), 1_010);
 
     const rows = await env.DB.prepare(
       'SELECT id, requester_commitment FROM pairings WHERE user_id = ?'
@@ -36,7 +36,7 @@ describe('D1SyncStore pairings', () => {
     const requesterToken = await store.createSession(userA, 'phone');
     const requesterHash = await hashSessionToken(requesterToken);
 
-    const { id } = await store.createPairing(userA, requesterHash, 'commitment', 1_000);
+    const { id } = await store.createPairing(userA, requesterHash, wire('commitment'), 1_000);
 
     await expect(store.getPairingForRequester(userA, 'unknown-id', 1_000)).resolves.toBeNull();
     await expect(store.getPairingForRequester(userB, id, 1_000)).resolves.toBeNull();
@@ -61,7 +61,7 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'commitment-1', 1_000);
+    const { id } = await store.createPairing(userId, requesterHash, wire('commitment-1'), 1_000);
 
     const beforeReveal = await store.listPendingPairings(userId, approverHash, 1_000);
     expect(beforeReveal).toEqual([
@@ -78,8 +78,15 @@ describe('D1SyncStore pairings', () => {
     const fromRequester = await store.listPendingPairings(userId, requesterHash, 1_000);
     expect(fromRequester).toEqual([]);
 
-    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
-    await store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce', 1_000);
+    await store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000);
+    await store.revealPairing(
+      userId,
+      id,
+      requesterHash,
+      wire('requester-pubkey'),
+      wire('nonce'),
+      1_000
+    );
 
     const afterReveal = await store.listPendingPairings(userId, approverHash, 1_000);
     expect(afterReveal).toEqual([
@@ -105,8 +112,8 @@ describe('D1SyncStore pairings', () => {
     const approverHash = await hashSessionToken(approverToken);
 
     // Inserted newest-first, so only an explicit ORDER BY created_at can put the older one first.
-    const { id: newerId } = await store.createPairing(userId, newerHash, 'c-newer', 2_000);
-    const { id: olderId } = await store.createPairing(userId, olderHash, 'c-older', 1_000);
+    const { id: newerId } = await store.createPairing(userId, newerHash, wire('c-newer'), 2_000);
+    const { id: olderId } = await store.createPairing(userId, olderHash, wire('c-older'), 1_000);
 
     const pending = await store.listPendingPairings(userId, approverHash, 2_001);
 
@@ -123,17 +130,22 @@ describe('D1SyncStore pairings', () => {
     const otherApproverToken = await store.createSession(userId, 'desktop');
     const otherApproverHash = await hashSessionToken(otherApproverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
 
     await expect(
-      store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000)
+      store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000)
     ).resolves.toBe('committed');
 
     const committed = await store.getPairingForRequester(userId, id, 1_000);
     expect(committed?.approverPublicKey).toBe('approver-pubkey');
 
     await expect(
-      store.commitPairing(userId, id, otherApproverHash, 'second-pubkey', 1_000)
+      store.commitPairing(userId, id, otherApproverHash, wire('second-pubkey'), 1_000)
     ).resolves.toBe('conflict');
   });
 
@@ -145,13 +157,18 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
 
     await expect(
-      store.commitPairing(userId, 'unknown-id', approverHash, 'pubkey', 1_000)
+      store.commitPairing(userId, 'unknown-id', approverHash, wire('pubkey'), 1_000)
     ).resolves.toBe('not_found');
     await expect(
-      store.commitPairing(userId, id, approverHash, 'pubkey', 1_000 + PAIRING_TTL_MS + 1)
+      store.commitPairing(userId, id, approverHash, wire('pubkey'), 1_000 + PAIRING_TTL_MS + 1)
     ).resolves.toBe('not_found');
   });
 
@@ -161,10 +178,15 @@ describe('D1SyncStore pairings', () => {
     const requesterToken = await store.createSession(userId, 'phone');
     const requesterHash = await hashSessionToken(requesterToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
 
     await expect(
-      store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce', 1_000)
+      store.revealPairing(userId, id, requesterHash, wire('requester-pubkey'), wire('nonce'), 1_000)
     ).resolves.toBe('conflict');
   });
 
@@ -176,12 +198,17 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
-    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
+    await store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000);
 
     // The approver's own session cannot reveal on the requester's behalf.
     await expect(
-      store.revealPairing(userId, id, approverHash, 'requester-pubkey', 'nonce', 1_000)
+      store.revealPairing(userId, id, approverHash, wire('requester-pubkey'), wire('nonce'), 1_000)
     ).resolves.toBe('conflict');
   });
 
@@ -193,15 +220,34 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
-    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
+    await store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000);
 
     await expect(
-      store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce-1', 1_000)
+      store.revealPairing(
+        userId,
+        id,
+        requesterHash,
+        wire('requester-pubkey'),
+        wire('nonce-1'),
+        1_000
+      )
     ).resolves.toBe('revealed');
 
     await expect(
-      store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce-2', 1_000)
+      store.revealPairing(
+        userId,
+        id,
+        requesterHash,
+        wire('requester-pubkey'),
+        wire('nonce-2'),
+        1_000
+      )
     ).resolves.toBe('conflict');
   });
 
@@ -213,14 +259,26 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
-    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
+    await store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000);
 
     await expect(
-      store.revealPairing(userId, 'unknown-id', requesterHash, 'pubkey', 'nonce', 1_000)
+      store.revealPairing(userId, 'unknown-id', requesterHash, wire('pubkey'), wire('nonce'), 1_000)
     ).resolves.toBe('not_found');
     await expect(
-      store.revealPairing(userId, id, requesterHash, 'pubkey', 'nonce', 1_000 + PAIRING_TTL_MS + 1)
+      store.revealPairing(
+        userId,
+        id,
+        requesterHash,
+        wire('pubkey'),
+        wire('nonce'),
+        1_000 + PAIRING_TTL_MS + 1
+      )
     ).resolves.toBe('not_found');
   });
 
@@ -234,22 +292,34 @@ describe('D1SyncStore pairings', () => {
     const otherToken = await store.createSession(userId, 'desktop');
     const otherHash = await hashSessionToken(otherToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
-    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
+    await store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000);
 
     // Envelope refused until the reveal lands, even from the committing session.
     await expect(
-      store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000)
+      store.putPairingEnvelope(userId, id, approverHash, wire('envelope-blob'), 1_000)
     ).resolves.toBe('conflict');
 
-    await store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce', 1_000);
+    await store.revealPairing(
+      userId,
+      id,
+      requesterHash,
+      wire('requester-pubkey'),
+      wire('nonce'),
+      1_000
+    );
 
     await expect(
-      store.putPairingEnvelope(userId, id, otherHash, 'envelope-blob', 1_000)
+      store.putPairingEnvelope(userId, id, otherHash, wire('envelope-blob'), 1_000)
     ).resolves.toBe('conflict');
 
     await expect(
-      store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000)
+      store.putPairingEnvelope(userId, id, approverHash, wire('envelope-blob'), 1_000)
     ).resolves.toBe('stored');
 
     const stored = await store.getPairingForRequester(userId, id, 1_000);
@@ -264,10 +334,15 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
 
     await expect(
-      store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000)
+      store.putPairingEnvelope(userId, id, approverHash, wire('envelope-blob'), 1_000)
     ).resolves.toBe('conflict');
   });
 
@@ -278,7 +353,7 @@ describe('D1SyncStore pairings', () => {
     const requesterToken = await store.createSession(userA, 'phone');
     const requesterHash = await hashSessionToken(requesterToken);
 
-    const { id } = await store.createPairing(userA, requesterHash, 'commitment', 1_000);
+    const { id } = await store.createPairing(userA, requesterHash, wire('commitment'), 1_000);
 
     await expect(store.deletePairing(userB, id)).resolves.toBe(false);
     await expect(store.getPairingForRequester(userA, id, 1_000)).resolves.not.toBeNull();
@@ -292,7 +367,7 @@ describe('D1SyncStore pairings', () => {
     const userId = await newUser(store, `u-${crypto.randomUUID()}`);
     const staleToken = await store.createSession(userId, 'old-phone');
     const staleHash = await hashSessionToken(staleToken);
-    await store.createPairing(userId, staleHash, 'stale-commitment', 1_000);
+    await store.createPairing(userId, staleHash, wire('stale-commitment'), 1_000);
 
     tick(PAIRING_TTL_MS + 1);
     const freshToken = await store.createSession(userId, 'new-phone');
@@ -300,7 +375,7 @@ describe('D1SyncStore pairings', () => {
     const { id: freshId } = await store.createPairing(
       userId,
       freshHash,
-      'fresh-commitment',
+      wire('fresh-commitment'),
       1_000 + PAIRING_TTL_MS + 1
     );
 
@@ -319,15 +394,20 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
     await expect(
-      store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000)
+      store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000)
     ).resolves.toBe('committed');
     await expect(
-      store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce', 1_000)
+      store.revealPairing(userId, id, requesterHash, wire('requester-pubkey'), wire('nonce'), 1_000)
     ).resolves.toBe('revealed');
     await expect(
-      store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000)
+      store.putPairingEnvelope(userId, id, approverHash, wire('envelope-blob'), 1_000)
     ).resolves.toBe('stored');
 
     const requesterView = await store.getPairingForRequester(userId, id, 1_000);
@@ -347,16 +427,28 @@ describe('D1SyncStore pairings', () => {
     const approverToken = await store.createSession(userId, 'laptop');
     const approverHash = await hashSessionToken(approverToken);
 
-    const { id } = await store.createPairing(userId, requesterHash, 'requester-commitment', 1_000);
-    await store.commitPairing(userId, id, approverHash, 'approver-pubkey', 1_000);
-    await store.revealPairing(userId, id, requesterHash, 'requester-pubkey', 'nonce', 1_000);
+    const { id } = await store.createPairing(
+      userId,
+      requesterHash,
+      wire('requester-commitment'),
+      1_000
+    );
+    await store.commitPairing(userId, id, approverHash, wire('approver-pubkey'), 1_000);
+    await store.revealPairing(
+      userId,
+      id,
+      requesterHash,
+      wire('requester-pubkey'),
+      wire('nonce'),
+      1_000
+    );
 
     // Revealed but not yet enveloped: still pending, the state d1-store's other pairing tests
     // already cover.
     const beforeEnvelope = await store.listPendingPairings(userId, approverHash, 1_000);
     expect(beforeEnvelope.map((row) => row.id)).toEqual([id]);
 
-    await store.putPairingEnvelope(userId, id, approverHash, 'envelope-blob', 1_000);
+    await store.putPairingEnvelope(userId, id, approverHash, wire('envelope-blob'), 1_000);
 
     const afterEnvelope = await store.listPendingPairings(userId, approverHash, 1_000);
     expect(afterEnvelope).toEqual([]);

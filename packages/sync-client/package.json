@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@cuewise/crypto": "workspace:*",
     "@cuewise/shared": "workspace:*"
   },
   "devDependencies": {

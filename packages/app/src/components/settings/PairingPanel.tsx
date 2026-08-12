@@ -9,6 +9,10 @@ const HEADING = 'Approve from another device';
 const BODY = 'On your other device, open Settings → Cloud Sync and approve this device.';
 const WAITING = 'Waiting for approval…';
 const NOT_APPROVED = 'Not approved — try again, or use your recovery code.';
+// Shaped like the approver's TAMPERED_MESSAGE, but this side names the key: the only `tampered`
+// it can see is an approver key its own decode refused.
+const BLOCKED =
+  "Pairing blocked: the other device's key didn't verify. Try again, or use your recovery code.";
 const USE_RECOVERY_CODE = 'Enter your recovery code instead';
 const RETRY = 'Try again';
 
@@ -16,17 +20,18 @@ export const POLL_INTERVAL_MS = 3000;
 
 /**
  * What the requester's screen shows for the one request it is running. Every `failed` poll reason
- * lands on `failed`: the request is terminal either way, and the way out is the same two offers.
+ * is terminal with the same two offers, so only the message differs.
  */
 type PairingState =
   | { readonly kind: 'starting' }
   | { readonly kind: 'waiting' }
   | { readonly kind: 'confirm'; readonly sas: string }
-  | { readonly kind: 'failed' };
+  | { readonly kind: 'failed'; readonly message: string };
 
 const STARTING: PairingState = { kind: 'starting' };
 const WAITING_STATE: PairingState = { kind: 'waiting' };
-const FAILED: PairingState = { kind: 'failed' };
+const FAILED: PairingState = { kind: 'failed', message: NOT_APPROVED };
+const BLOCKED_STATE: PairingState = { kind: 'failed', message: BLOCKED };
 
 /** `391554` → `391 554`: two groups is what someone can read aloud without losing their place. */
 export function formatSas(sas: string): string {
@@ -100,7 +105,7 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode, o
       }
       if (result.kind === 'failed') {
         stopPolling();
-        setState(FAILED);
+        setState(result.reason === 'tampered' ? BLOCKED_STATE : FAILED);
         return;
       }
       if (result.kind === 'confirm') {
@@ -168,7 +173,7 @@ export const PairingPanel: React.FC<PairingPanelProps> = ({ onUseRecoveryCode, o
       {state.kind === 'failed' && (
         <div className="flex flex-col gap-2">
           <p data-testid="pairing-failed" className="text-xs text-warning">
-            {NOT_APPROVED}
+            {state.message}
           </p>
           <button
             type="button"

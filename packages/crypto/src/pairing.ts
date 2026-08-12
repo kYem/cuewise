@@ -1,4 +1,4 @@
-import { b64urlEncode } from './base64url';
+import { b64urlDecode, b64urlEncode } from './base64url';
 import { EnvelopeParseError } from './errors';
 import type { DataKey } from './keys';
 import {
@@ -11,17 +11,59 @@ import {
   sha256,
   splitEnvelope,
   utf8,
-  type X25519KeyPair,
   x25519SharedSecret,
 } from './primitives';
 
 const WRAP_INFO = 'cuewise-pairing-wrap-v1';
 const SAS_INFO = 'cuewise-pairing-sas-v1';
 
-export type { X25519KeyPair };
+/** Byte length of a raw X25519 public key — every pairing key, on both sides. */
+const PAIRING_PUBLIC_KEY_BYTES = 32;
 
-export function generatePairingKeypair(): Promise<X25519KeyPair> {
-  return generateX25519KeyPair();
+// A public key and a nonce are both 32 opaque bytes revealed together, so only the compiler can
+// keep them apart: unbranded, `encodePairingPublicKey(nonce)` returns a correctly-branded string.
+export type PairingPublicKey = Uint8Array & { readonly __brand: 'PairingPublicKey' };
+export type PairingNonce = Uint8Array & { readonly __brand: 'PairingNonce' };
+
+/** The keypair one device brings to a pairing; the private key is non-extractable. */
+export interface PairingKeyPair {
+  publicKey: PairingPublicKey;
+  privateKey: CryptoKey;
+}
+
+// The wire forms. Positional identity only: a brand says which role a value plays, never that it is
+// valid base64url, so every decode of one stays guarded. Same pattern as DataKey/MasterKey.
+export type PairingCommitment = string & { readonly __brand: 'PairingCommitment' };
+export type PairingPublicKeyB64 = string & { readonly __brand: 'PairingPublicKeyB64' };
+export type PairingNonceB64 = string & { readonly __brand: 'PairingNonceB64' };
+export type PeerWrappedEnvelope = string & { readonly __brand: 'PeerWrappedEnvelope' };
+
+export function encodePairingPublicKey(pub: PairingPublicKey): PairingPublicKeyB64 {
+  return b64urlEncode(pub) as PairingPublicKeyB64;
+}
+
+export function encodePairingNonce(nonce: PairingNonce): PairingNonceB64 {
+  return b64urlEncode(nonce) as PairingNonceB64;
+}
+
+/** A peer's public key from the wire. The length is load-bearing — see decodePairingNonce. */
+export function decodePairingPublicKey(b64: string): PairingPublicKey {
+  const bytes = b64urlDecode(b64);
+  if (bytes.length !== PAIRING_PUBLIC_KEY_BYTES) {
+    throw new EnvelopeParseError('invalid pairing public key length');
+  }
+  return bytes as PairingPublicKey;
+}
+
+// No length check: the commitment is the check. The 32 bytes above must not move: it is the fixed
+// split keeping the unframed `pub‖nonce` and `requesterPub‖approverPub‖id` transcripts unambiguous.
+export function decodePairingNonce(b64: string): PairingNonce {
+  return b64urlDecode(b64) as PairingNonce;
+}
+
+export async function generatePairingKeypair(): Promise<PairingKeyPair> {
+  const pair = await generateX25519KeyPair();
+  return { publicKey: pair.publicKey as PairingPublicKey, privateKey: pair.privateKey };
 }
 
 function pairingAad(pairingId: string, keyId: string): Uint8Array {
@@ -30,8 +72,8 @@ function pairingAad(pairingId: string, keyId: string): Uint8Array {
 
 // Requester key first on both sides, so the two screens hash the same transcript.
 export async function derivePairingSas(
-  requesterPub: Uint8Array,
-  approverPub: Uint8Array,
+  requesterPub: PairingPublicKey,
+  approverPub: PairingPublicKey,
   pairingId: string
 ): Promise<string> {
   const id = utf8(pairingId);
@@ -44,30 +86,30 @@ export async function derivePairingSas(
   return String(n).padStart(6, '0');
 }
 
-async function pairingWrapKey(priv: CryptoKey, peerPub: Uint8Array): Promise<Uint8Array> {
+async function pairingWrapKey(priv: CryptoKey, peerPub: PairingPublicKey): Promise<Uint8Array> {
   return hkdfSha256(await x25519SharedSecret(priv, peerPub), WRAP_INFO, 256);
 }
 
 export async function wrapDataKeyToPeer(
   priv: CryptoKey,
-  peerPub: Uint8Array,
+  peerPub: PairingPublicKey,
   dk: DataKey,
   keyId: string,
   pairingId: string
-): Promise<string> {
+): Promise<PeerWrappedEnvelope> {
   if (!isValidKeyId(keyId)) {
     throw new EnvelopeParseError('invalid keyId');
   }
   const key = await pairingWrapKey(priv, peerPub);
   const iv = randomBytes(12);
   const ct = await aesGcmSeal(key, iv, dk, pairingAad(pairingId, keyId));
-  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}`;
+  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}` as PeerWrappedEnvelope;
 }
 
 export async function unwrapDataKeyFromPeer(
   priv: CryptoKey,
-  peerPub: Uint8Array,
-  envelope: string,
+  peerPub: PairingPublicKey,
+  envelope: PeerWrappedEnvelope,
   pairingId: string
 ): Promise<{ dk: DataKey; keyId: string }> {
   const { keyId, iv, ct } = splitEnvelope(envelope);
@@ -77,21 +119,21 @@ export async function unwrapDataKeyFromPeer(
 }
 
 export async function makePairingCommitment(
-  pub: Uint8Array
-): Promise<{ commitment: string; nonce: Uint8Array }> {
-  const nonce = randomBytes(32);
+  pub: PairingPublicKey
+): Promise<{ commitment: PairingCommitment; nonce: PairingNonce }> {
+  const nonce = randomBytes(32) as PairingNonce;
   const transcript = new Uint8Array(pub.length + nonce.length);
   transcript.set(pub, 0);
   transcript.set(nonce, pub.length);
   const hash = await sha256(transcript);
-  const commitment = b64urlEncode(hash);
+  const commitment = b64urlEncode(hash) as PairingCommitment;
   return { commitment, nonce };
 }
 
 export async function verifyPairingCommitment(
-  commitment: string,
-  pub: Uint8Array,
-  nonce: Uint8Array
+  commitment: PairingCommitment,
+  pub: PairingPublicKey,
+  nonce: PairingNonce
 ): Promise<boolean> {
   const transcript = new Uint8Array(pub.length + nonce.length);
   transcript.set(pub, 0);

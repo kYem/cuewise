@@ -1,4 +1,10 @@
 import type {
+  PairingCommitment,
+  PairingNonceB64,
+  PairingPublicKeyB64,
+  PeerWrappedEnvelope,
+} from '@cuewise/crypto';
+import type {
   ExchangeTokenRequest,
   KeyEnvelopeRecord,
   PushRecord,
@@ -21,14 +27,14 @@ export const PAIRING_TTL_MS = 10 * 60 * 1000;
 interface FakePairing {
   id: string;
   requesterSession: string;
-  requesterCommitment: string;
+  requesterCommitment: PairingCommitment;
   // Both null until the reveal, which is refused before a commit and again once one is stored.
-  requesterPublicKey: string | null;
-  requesterNonce: string | null;
+  requesterPublicKey: PairingPublicKeyB64 | null;
+  requesterNonce: PairingNonceB64 | null;
   deviceName: string;
   approverSession: string | null;
-  approverPublicKey: string | null;
-  envelope: string | null;
+  approverPublicKey: PairingPublicKeyB64 | null;
+  envelope: PeerWrappedEnvelope | null;
   createdAt: number;
   expiresAt: number;
 }
@@ -101,7 +107,7 @@ export class FakeSyncServer {
   createPairing(
     session: string,
     deviceName: string,
-    commitment: string,
+    commitment: PairingCommitment,
     now: number
   ): PairingCreated {
     for (const [id, row] of this.pairings) {
@@ -165,7 +171,7 @@ export class FakeSyncServer {
   commitPairing(
     id: string,
     session: string,
-    publicKey: string,
+    publicKey: PairingPublicKeyB64,
     now: number
   ): 'committed' | 'conflict' | 'not_found' {
     const row = this.livePairing(id, now);
@@ -183,8 +189,8 @@ export class FakeSyncServer {
   revealPairing(
     id: string,
     session: string,
-    publicKey: string,
-    nonce: string,
+    publicKey: PairingPublicKeyB64,
+    nonce: PairingNonceB64,
     now: number
   ): 'revealed' | 'conflict' | 'not_found' {
     const row = this.livePairing(id, now);
@@ -208,7 +214,7 @@ export class FakeSyncServer {
   putPairingEnvelope(
     id: string,
     session: string,
-    envelope: string,
+    envelope: PeerWrappedEnvelope,
     now: number
   ): 'stored' | 'conflict' | 'not_found' {
     const row = this.livePairing(id, now);
@@ -240,12 +246,21 @@ export class FakeSyncServer {
    * Test-only: the malicious-relay case — swaps a stored reveal for a key the commitment the
    * approver captured does not cover. Nothing a real server may do, and everything it might try.
    */
-  substituteRevealedPublicKey(id: string, publicKey: string): void {
+  substituteRevealedPublicKey(id: string, publicKey: PairingPublicKeyB64): void {
     const row = this.pairings.get(id);
     if (row === undefined || row.requesterPublicKey === null) {
       throw new Error(`no revealed pairing to substitute a key on: ${id}`);
     }
     row.requesterPublicKey = publicKey;
+  }
+
+  /** Test-only: the same malicious relay, aimed at the requester — a committed key it cannot use. */
+  substituteApproverPublicKey(id: string, publicKey: PairingPublicKeyB64): void {
+    const row = this.pairings.get(id);
+    if (row === undefined || row.approverPublicKey === null) {
+      throw new Error(`no committed pairing to substitute a key on: ${id}`);
+    }
+    row.approverPublicKey = publicKey;
   }
 
   /** Test-only inspection of everything the server currently holds. */
@@ -384,7 +399,7 @@ export class FakeApiClient implements EngineApiClient {
     this.server.putRecoveryEnvelope(envelope, opts?.ifAbsent === true);
   }
 
-  async createPairing(commitment: string): Promise<PairingCreated> {
+  async createPairing(commitment: PairingCommitment): Promise<PairingCreated> {
     this.assertAuthorized();
     return this.server.createPairing(this.sessionId, this.deviceName, commitment, this.now());
   }
@@ -401,7 +416,7 @@ export class FakeApiClient implements EngineApiClient {
     return this.server.getPairingForRequester(id, this.now());
   }
 
-  async commitPairing(id: string, publicKey: string): Promise<void> {
+  async commitPairing(id: string, publicKey: PairingPublicKeyB64): Promise<void> {
     this.assertAuthorized();
     const result = this.server.commitPairing(id, this.sessionId, publicKey, this.now());
     if (result !== 'committed') {
@@ -409,7 +424,11 @@ export class FakeApiClient implements EngineApiClient {
     }
   }
 
-  async revealPairing(id: string, publicKey: string, nonce: string): Promise<void> {
+  async revealPairing(
+    id: string,
+    publicKey: PairingPublicKeyB64,
+    nonce: PairingNonceB64
+  ): Promise<void> {
     this.assertAuthorized();
     const result = this.server.revealPairing(id, this.sessionId, publicKey, nonce, this.now());
     if (result !== 'revealed') {
@@ -417,7 +436,7 @@ export class FakeApiClient implements EngineApiClient {
     }
   }
 
-  async putPairingEnvelope(id: string, envelope: string): Promise<void> {
+  async putPairingEnvelope(id: string, envelope: PeerWrappedEnvelope): Promise<void> {
     this.assertAuthorized();
     const result = this.server.putPairingEnvelope(id, this.sessionId, envelope, this.now());
     if (result !== 'stored') {

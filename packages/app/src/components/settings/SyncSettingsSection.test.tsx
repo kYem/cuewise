@@ -1,5 +1,10 @@
 import { logger } from '@cuewise/shared';
-import type { PendingPairing, SyncFailureReason, SyncOutcome } from '@cuewise/sync-engine';
+import type {
+  PairingCommitment,
+  PendingPairing,
+  SyncFailureReason,
+  SyncOutcome,
+} from '@cuewise/sync-engine';
 import { defaultSettings } from '@cuewise/test-utils';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -38,6 +43,8 @@ const PAIRING_HEADING = 'Approve from another device';
 const PAIRING_BODY = 'On your other device, open Settings → Cloud Sync and approve this device.';
 const PAIRING_WAITING = 'Waiting for approval…';
 const PAIRING_FAILED = 'Not approved — try again, or use your recovery code.';
+const PAIRING_BLOCKED =
+  "Pairing blocked: the other device's key didn't verify. Try again, or use your recovery code.";
 const PAIRING_CODE_LINK = 'Enter your recovery code instead';
 const PAIRING_REQUEST_WAITING = 'Waiting for your other device…';
 const PAIRING_TAMPERED_MESSAGE =
@@ -2427,6 +2434,21 @@ describe('SyncSettingsSectionComponent', () => {
       expect(screen.queryByText(PAIRING_FAILED)).not.toBeInTheDocument();
     });
 
+    it('says the key was refused, not that nobody approved, when a poll answers tampered', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.scriptPairingPolls({ kind: 'failed', reason: 'tampered' });
+      try {
+        await renderPairingScreen(controller);
+        await pollTick();
+
+        expect(screen.getByText(PAIRING_BLOCKED)).toBeInTheDocument();
+        expect(screen.queryByText(PAIRING_FAILED)).not.toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     // A panel left polling after it is gone keeps asking the server on behalf of nobody.
     it('stops polling once the panel is gone', async () => {
       vi.useFakeTimers();
@@ -2677,7 +2699,7 @@ describe('SyncSettingsSectionComponent', () => {
     const REQUEST: PendingPairing = {
       id: 'pairing-1',
       deviceName: "Alex's Phone",
-      requesterCommitment: 'requester-commitment-hash',
+      requesterCommitment: 'requester-commitment-hash' as PairingCommitment,
       requesterPublicKey: null,
       requesterNonce: null,
       createdAt: Date.now(),

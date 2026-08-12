@@ -1,6 +1,11 @@
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
-import type { PendingPairing, SyncEngineControlSurface, SyncStatus } from '@cuewise/sync-engine';
+import type {
+  PairingCommitment,
+  PendingPairing,
+  SyncEngineControlSurface,
+  SyncStatus,
+} from '@cuewise/sync-engine';
 import { CLOUD_SYNC_ENABLED_KEY } from '@cuewise/sync-engine';
 import { FakeSyncServer } from '@cuewise/sync-engine/src/__fixtures__/fake-api-client';
 import { fakeControlSurface } from '@cuewise/sync-engine/src/__fixtures__/fake-control-surface';
@@ -885,7 +890,7 @@ describe('createDirectSyncController: pairing', () => {
   const REQUEST: PendingPairing = {
     id: 'pairing-1',
     deviceName: 'phone',
-    requesterCommitment: 'commitment',
+    requesterCommitment: 'commitment' as PairingCommitment,
     requesterPublicKey: null,
     requesterNonce: null,
     createdAt: 1,

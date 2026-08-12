@@ -1,4 +1,10 @@
 import type {
+  PairingCommitment,
+  PairingNonceB64,
+  PairingPublicKeyB64,
+  PeerWrappedEnvelope,
+} from '@cuewise/crypto';
+import type {
   ExchangeTokenRequest,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
@@ -33,17 +39,17 @@ export interface PairingCreated {
 
 export interface PairingForRequester {
   id: string;
-  approverPublicKey: string | null;
-  envelope: string | null;
+  approverPublicKey: PairingPublicKeyB64 | null;
+  envelope: PeerWrappedEnvelope | null;
   expiresAt: number;
 }
 
 export interface PendingPairing {
   id: string;
   deviceName: string;
-  requesterCommitment: string;
+  requesterCommitment: PairingCommitment;
   // Both null until the requester reveals, which the server refuses before an approver has committed.
-  requesterPublicKey: string | null;
-  requesterNonce: string | null;
+  requesterPublicKey: PairingPublicKeyB64 | null;
+  requesterNonce: PairingNonceB64 | null;
   createdAt: number;
 }

@@ -13,6 +13,7 @@ Exports `base64url`, `envelope`, `errors`, `keys`, `pairing`, `recovery-code`. *
 - `generateRecoveryCode()` / `parseRecoveryCode()` → the `CW1-…` code (150-bit machine entropy + 25-bit checksum); `secret` is a branded `RecoverySecret`.
 - `deriveMasterKey(secret)` → branded `MasterKey`; `generateDataKey()` → branded `DataKey`. The brands make a swapped `mk`/`dk` (or code-for-secret) a compile error, not a silent wrong-key derivation.
 - `wrapDataKey` / `unwrapDataKey` → the opaque recovery blob stored server-side.
+- Pairing key material is branded too — `PairingCommitment` / `PairingPublicKeyB64` / `PairingNonceB64` / `PeerWrappedEnvelope`, minted by `makePairingCommitment` / `encodePairingPublicKey` / `encodePairingNonce` / `wrapDataKeyToPeer`. `PairingPublicKey`/`PairingNonce` brand the 32-byte forms too, which is what stops `encodePairingPublicKey(nonce)` compiling — the swap that would otherwise survive as a correctly-branded string. Brands carry positional identity only, never a validity claim, so `decodePairingPublicKey` is what enforces the 32-byte length. `@cuewise/sync-client` and `apps/api` import them (types only) rather than redeclaring.
 - `sealRecord` / `openRecord` → per-record AES-256-GCM envelope `v1.<keyId>.<iv>.<ct>`, AAD `v1|collection|entityId` (components reject `|`).
 
 ## Frozen formats
@@ -23,7 +24,7 @@ The pairing SAS transcript, commitment, and `v1|pairing|…` wrap AAD (`pairing.
 
 ## Consumers
 
-Nothing calls this yet — ENG-45 wires the extension/macOS stores through `sealRecord`/`openRecord` and the enable/enroll flows through the key + recovery-code functions. Import directly from `@cuewise/crypto`; it is **not** re-exported by `@cuewise/sync-client` (crypto is the leaf; the sync client is the transport that will depend on it).
+`@cuewise/sync-engine` calls the key, recovery-code, record-sealing and pairing functions; `@cuewise/sync-client` and `apps/api` import the pairing brands **type-only**, so nothing from here is emitted into either bundle (both still declare it as a workspace dependency). Import directly from `@cuewise/crypto`, with one exception: `@cuewise/sync-engine` re-exports `RecoveryCodeError`, which hosts `instanceof`-check to match `enableSync`'s thrown-error contract, plus `PairingCommitment`, which their tests use to build a `PendingPairing` — so `apps/browser-extension`, `apps/macos` and `packages/app` need no crypto dependency of their own.
 
 ## Tests
 

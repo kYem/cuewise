@@ -4,18 +4,23 @@ import {
   generateDataKey,
   generatePairingKeypair,
   makePairingCommitment,
+  type PeerWrappedEnvelope,
   unwrapDataKeyFromPeer,
   wrapDataKeyToPeer,
 } from '@cuewise/crypto';
 import { describe, expect, it } from 'vitest';
-import { clockedStore, signedInToken } from '../__fixtures__/api-test-helpers.fixtures';
+import { clockedStore, signedInToken, wire } from '../__fixtures__/api-test-helpers.fixtures';
 import { hashSessionToken } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import app from '../index';
 import { PAIRING_TTL_MS } from '../store';
 
 type CreateBody = { id: string; expiresAt: number };
-type PairingBody = { id: string; approverPublicKey: string | null; envelope: string | null };
+type PairingBody = {
+  id: string;
+  approverPublicKey: string | null;
+  envelope: PeerWrappedEnvelope | null;
+};
 type ListBody = {
   pairings: {
     id: string;
@@ -345,7 +350,7 @@ describe('/v1/pairings', () => {
     const { id } = await store.createPairing(
       userId,
       requesterHash,
-      'commitment',
+      wire('commitment'),
       Date.now() - PAIRING_TTL_MS - 1_000
     );
 
@@ -371,7 +376,7 @@ describe('/v1/pairings', () => {
     const { id } = await store.createPairing(
       userId,
       requesterHash,
-      'commitment',
+      wire('commitment'),
       Date.now() - PAIRING_TTL_MS - 1_000
     );
 
@@ -481,7 +486,7 @@ describe('/v1/pairings', () => {
     const opened = await unwrapDataKeyFromPeer(
       requester.privateKey,
       approver.publicKey,
-      requesterView.envelope as string,
+      requesterView.envelope as PeerWrappedEnvelope,
       id
     );
     expect(opened.dk).toEqual(dk);

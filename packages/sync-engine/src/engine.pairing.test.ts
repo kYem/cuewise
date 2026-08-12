@@ -1,17 +1,23 @@
 import * as cryptoModule from '@cuewise/crypto';
 import {
-  b64urlDecode,
-  b64urlEncode,
   type DataKey,
   DecryptError,
+  decodePairingPublicKey,
   derivePairingSas,
+  encodePairingPublicKey,
   generatePairingKeypair,
+  type PairingKeyPair,
+  type PairingPublicKey,
   wrapDataKeyToPeer,
-  type X25519KeyPair,
 } from '@cuewise/crypto';
 import { configurePlatform, logger } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
-import { ApiError, SessionManager, SYNC_SESSION_KEY } from '@cuewise/sync-client';
+import {
+  ApiError,
+  type PendingPairing,
+  SessionManager,
+  SYNC_SESSION_KEY,
+} from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer, PAIRING_TTL_MS } from './__fixtures__/fake-api-client';
@@ -122,7 +128,7 @@ interface PairingFlow {
 /** The approver's half after it has committed: the row it answered, and the key it answered with. */
 interface ApproverSide {
   id: string;
-  keypair: X25519KeyPair;
+  keypair: PairingKeyPair;
 }
 
 /**
@@ -161,6 +167,11 @@ async function pairingFlow(): Promise<PairingFlow> {
   };
 }
 
+/** Wire key material a test plants by hand: a hostile relay's, or a wrong-session caller's. */
+function planted<T extends string>(value: string): T {
+  return value as T;
+}
+
 /** beginPairing's id, or a loud failure — narrows without a non-null assertion. */
 async function beginPairing(engine: SyncEngine): Promise<string> {
   const started = await engine.beginPairing();
@@ -178,17 +189,17 @@ async function commitAsApprover(flow: PairingFlow): Promise<ApproverSide> {
   }
   const row = pending[0];
   const keypair = await generatePairingKeypair();
-  await flow.approver.commitPairing(row.id, b64urlEncode(keypair.publicKey));
+  await flow.approver.commitPairing(row.id, encodePairingPublicKey(keypair.publicKey));
   return { id: row.id, keypair };
 }
 
 /** The key the requester published once a poll revealed it — a loud failure before that. */
-async function revealedPub(flow: PairingFlow, id: string): Promise<Uint8Array> {
+async function revealedPub(flow: PairingFlow, id: string): Promise<PairingPublicKey> {
   const row = (await flow.approver.listPairings()).find((candidate) => candidate.id === id);
   if (row === undefined || row.requesterPublicKey === null) {
     throw new Error(`the request has revealed no key to answer: ${id}`);
   }
-  return b64urlDecode(row.requesterPublicKey);
+  return decodePairingPublicKey(row.requesterPublicKey);
 }
 
 /** The approver's confirm: the account's data key, wrapped to the key the requester revealed. */
@@ -371,7 +382,11 @@ describe('SyncEngine.pollPairing', () => {
     await commitAsApprover(flow);
     // A reveal from a slot this engine no longer holds — a previous process's, gone along with
     // the one private key that could have opened what it earns.
-    await flow.requester.apiClient.revealPairing(id, 'another-public-key', 'another-nonce');
+    await flow.requester.apiClient.revealPairing(
+      id,
+      planted('another-public-key'),
+      planted('another-nonce')
+    );
 
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
 
@@ -654,15 +669,15 @@ describe('the fake pairing relay', () => {
     const other = new FakeApiClient(flow.server);
     await other.exchangeToken({ provider: 'dev', credential: 'cred-c', deviceName: 'Device C' });
 
-    await expect(other.commitPairing(id, 'another-public-key')).rejects.toMatchObject({
+    await expect(other.commitPairing(id, planted('another-public-key'))).rejects.toMatchObject({
       code: 'pairing_conflict',
       status: 409,
     });
-    await expect(other.putPairingEnvelope(id, 'v1.dk-1.aaaa.bbbb')).rejects.toMatchObject({
+    await expect(other.putPairingEnvelope(id, planted('v1.dk-1.aaaa.bbbb'))).rejects.toMatchObject({
       code: 'pairing_conflict',
       status: 409,
     });
-    await expect(other.commitPairing('no-such-row', 'k')).rejects.toMatchObject({
+    await expect(other.commitPairing('no-such-row', planted('k'))).rejects.toMatchObject({
       code: 'pairing_not_found',
       status: 404,
     });
@@ -672,14 +687,18 @@ describe('the fake pairing relay', () => {
     const flow = await pairingFlow();
     const id = await beginPairing(flow.requester.engine);
 
-    await expect(flow.requester.apiClient.revealPairing(id, 'pub', 'nonce')).rejects.toMatchObject({
+    await expect(
+      flow.requester.apiClient.revealPairing(id, planted('pub'), planted('nonce'))
+    ).rejects.toMatchObject({
       code: 'pairing_conflict',
       status: 409,
     });
 
     await commitAsApprover(flow);
     await flow.requester.engine.pollPairing();
-    await expect(flow.requester.apiClient.revealPairing(id, 'pub', 'nonce')).rejects.toMatchObject({
+    await expect(
+      flow.requester.apiClient.revealPairing(id, planted('pub'), planted('nonce'))
+    ).rejects.toMatchObject({
       code: 'pairing_conflict',
       status: 409,
     });
@@ -690,7 +709,9 @@ describe('the fake pairing relay', () => {
     const id = await beginPairing(flow.requester.engine);
     const side = await commitAsApprover(flow);
 
-    await expect(flow.approver.putPairingEnvelope(id, 'v1.dk-1.aaaa.bbbb')).rejects.toMatchObject({
+    await expect(
+      flow.approver.putPairingEnvelope(id, planted('v1.dk-1.aaaa.bbbb'))
+    ).rejects.toMatchObject({
       code: 'pairing_conflict',
       status: 409,
     });
@@ -732,6 +753,16 @@ async function commitPairing(engine: SyncEngine, id: string): Promise<void> {
   if (committed === null) {
     throw new Error('commitPairing answered null for a pending request');
   }
+}
+
+/** The pending row for this id, or a loud failure — narrows without a non-null assertion. */
+async function pendingRow(engine: SyncEngine, id: string): Promise<PendingPairing> {
+  const rows = await engine.listPairingRequests();
+  const row = rows.find((candidate) => candidate.id === id);
+  if (row === undefined) {
+    throw new Error(`no pending pairing row for ${id}`);
+  }
+  return row;
 }
 
 /** pollApproval's digits, or a loud failure — narrows without a non-null assertion. */
@@ -846,7 +877,7 @@ describe('SyncEngine approver pairing methods', () => {
     // The relay swaps the revealed key for one it holds the private half of — the substitution
     // the commitment exists to catch, and the only way it could force matching digits.
     const substituted = await generatePairingKeypair();
-    flow.server.substituteRevealedPublicKey(id, b64urlEncode(substituted.publicKey));
+    flow.server.substituteRevealedPublicKey(id, encodePairingPublicKey(substituted.publicKey));
 
     // Its own reason: the user has to be told a key was swapped, not shown "it expired".
     expect(await flow.approver.engine.pollApproval(id)).toEqual({
@@ -869,7 +900,7 @@ describe('SyncEngine approver pairing methods', () => {
     const rival = new FakeApiClient(flow.server);
     await rival.exchangeToken({ provider: 'dev', credential: 'cred-c', deviceName: 'Device C' });
     const rivalKeypair = await generatePairingKeypair();
-    await rival.commitPairing(id, b64urlEncode(rivalKeypair.publicKey));
+    await rival.commitPairing(id, encodePairingPublicKey(rivalKeypair.publicKey));
 
     expect(await flow.approver.engine.commitPairing(id)).toBeNull();
   });
@@ -896,7 +927,10 @@ describe('SyncEngine approver pairing methods', () => {
     // worker's dead slot and from another approver's live one, so neither may be assumed.
     const previous = new FakeApiClient(flow.server);
     await previous.exchangeToken({ provider: 'dev', credential: 'cred-a', deviceName: 'Device A' });
-    await previous.commitPairing(id, b64urlEncode((await generatePairingKeypair()).publicKey));
+    await previous.commitPairing(
+      id,
+      encodePairingPublicKey((await generatePairingKeypair()).publicKey)
+    );
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const deleteSpy = vi.spyOn(flow.approver.apiClient, 'deletePairing');
 
@@ -1023,7 +1057,7 @@ describe('SyncEngine approver pairing methods', () => {
     await commitPairing(flow.approver.engine, id);
     await flow.requester.engine.pollPairing();
     // A hostile relay swaps the revealed key for bytes that are not even base64url.
-    flow.server.substituteRevealedPublicKey(id, '!!!not-base64url!!!');
+    flow.server.substituteRevealedPublicKey(id, planted('!!!not-base64url!!!'));
 
     expect(await flow.approver.engine.pollApproval(id)).toEqual({
       kind: 'failed',
@@ -1036,5 +1070,88 @@ describe('SyncEngine approver pairing methods', () => {
       kind: 'failed',
       reason: 'expired_or_denied',
     });
+  });
+
+  it('waits, rather than crying tamper, when a prefetched row carries no revealed key', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    const row = await pendingRow(flow.approver.engine, id);
+    // A malformed page-realm message: the reveal fields are absent, not explicitly null.
+    const malformed = { ...row, requesterPublicKey: undefined, requesterNonce: undefined };
+
+    expect(
+      await flow.approver.engine.pollApproval(id, malformed as unknown as PendingPairing)
+    ).toEqual({ kind: 'waiting' });
+
+    // Nothing accused, nothing deleted: the real reveal can still land on this row.
+    expect(await flow.approver.engine.listPairingRequests()).toHaveLength(1);
+  });
+
+  it('ignores a prefetched row for another pairing instead of denying the one it polls', async () => {
+    const flow = await approverFlow();
+    const mine = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, mine);
+
+    // A second device's request on the same account, revealed through a session of its own —
+    // commitPairing cannot build it, since this engine's one approving slot holds `mine`.
+    const other = createDevice(flow.server);
+    await expect(other.engine.enableSync('dev', 'cred-c', 'Device C')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+    const theirs = await beginPairing(other.engine);
+    const otherApprover = new FakeApiClient(flow.server);
+    await otherApprover.exchangeToken({
+      provider: 'dev',
+      credential: 'cred-d',
+      deviceName: 'Device D',
+    });
+    const keypair = await generatePairingKeypair();
+    await otherApprover.commitPairing(theirs, encodePairingPublicKey(keypair.publicKey));
+    await other.engine.pollPairing();
+    const theirRow = await pendingRow(flow.approver.engine, theirs);
+
+    expect(await flow.approver.engine.pollApproval(mine, theirRow)).toEqual({ kind: 'waiting' });
+
+    // Their reveal cannot match this slot's commitment, so without the guard it reads as a
+    // substitution and deletes the request actually being polled — pendingRow throws if it did.
+    await expect(pendingRow(flow.approver.engine, mine)).resolves.toBeDefined();
+  });
+});
+
+describe('SyncEngine.pollPairing against a hostile relay', () => {
+  it('treats an approver key that will not decode as tampered, sparing its own reveal', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
+    flow.server.substituteApproverPublicKey(id, planted('!!!not-base64url!!!'));
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'tampered',
+    });
+
+    // Terminal, not a poll that loops until the TTL: the request is forgotten.
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
+    expect(reveals).not.toHaveBeenCalled();
+    // The row is gone, so the approver stops waiting instead of aging out at the TTL.
+    expect(await flow.approver.engine.listPairingRequests()).toEqual([]);
+  });
+
+  it('refuses an approver key that decodes to the wrong length, before spending its reveal', async () => {
+    const flow = await approverFlow();
+    const id = await beginPairing(flow.requester.engine);
+    await commitPairing(flow.approver.engine, id);
+    const reveals = vi.spyOn(flow.requester.apiClient, 'revealPairing');
+    // Valid base64url, but three bytes: no X25519 handshake could ever use it.
+    flow.server.substituteApproverPublicKey(id, planted('AAAA'));
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({
+      kind: 'failed',
+      reason: 'tampered',
+    });
+
+    expect(reveals).not.toHaveBeenCalled();
   });
 });

@@ -1,18 +1,24 @@
 import {
-  b64urlDecode,
-  b64urlEncode,
   type DataKey,
+  decodePairingNonce,
+  decodePairingPublicKey,
   deriveMasterKey,
   derivePairingSas,
+  encodePairingNonce,
+  encodePairingPublicKey,
   generatePairingKeypair,
   generateRecoveryCode,
   makePairingCommitment,
+  type PairingCommitment,
+  type PairingKeyPair,
+  type PairingNonce,
+  type PairingPublicKey,
+  type PeerWrappedEnvelope,
   RecoveryCodeError,
   unwrapDataKeyFromPeer,
   verifyPairingCommitment,
   wrapDataKey,
   wrapDataKeyToPeer,
-  type X25519KeyPair,
 } from '@cuewise/crypto';
 import {
   describeThrown,
@@ -150,14 +156,14 @@ export type EngineApiClient = Pick<
  * What one poll of a pairing request found (ENG-50). `confirm` carries the digits both screens
  * show; only a matching pair may be approved. `error` is NON-terminal, like the approver's: the
  * request still stands and the next tick may answer it. Every `failed` IS terminal — the caller
- * stops polling and starts a new request.
+ * stops polling and starts a new request. `tampered` mirrors the approver's: a caught substitution.
  */
 export type PairingPollResult =
   | { kind: 'waiting' }
   | { kind: 'confirm'; sas: string }
   | { kind: 'complete' }
   | { kind: 'error' }
-  | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' };
+  | { kind: 'failed'; reason: 'expired_or_denied' | 'signed_out' | 'error' | 'tampered' };
 
 /**
  * What one poll of a request this device COMMITTED to found. The digits cannot exist at commit
@@ -186,12 +192,12 @@ const PAIRING_BLOCKED_STATUSES: readonly SyncStatus[] = [
 /** The request this device is polling: its keypair, and what the approver has answered so far. */
 interface PairingRequest {
   id: string;
-  keypair: X25519KeyPair;
+  keypair: PairingKeyPair;
   /** Opens the commitment the create posted; useless to anyone but this device until revealed. */
-  nonce: Uint8Array;
+  nonce: PairingNonce;
   revealed: boolean;
   sas: string | null;
-  approverPub: Uint8Array | null;
+  approverPub: PairingPublicKey | null;
 }
 
 /**
@@ -201,11 +207,11 @@ interface PairingRequest {
  */
 interface PairingApproval {
   id: string;
-  keypair: X25519KeyPair;
-  commitment: string;
+  keypair: PairingKeyPair;
+  commitment: PairingCommitment;
   /** Null until a reveal verifies against `commitment` AND its digits derive; both land together,
    *  so a rejected derive can never leave a key to wrap with no digits ever shown. */
-  verified: { requesterPub: Uint8Array; sas: string } | null;
+  verified: { requesterPub: PairingPublicKey; sas: string } | null;
 }
 
 export interface SyncEngineDeps {
@@ -448,6 +454,14 @@ export class SyncEngine {
         return { kind: 'failed', reason: 'expired_or_denied' };
       }
       if (found.approverPublicKey !== null && pairing.approverPub === null) {
+        let approverPub: PairingPublicKey;
+        try {
+          // Decoded before the reveal: relay data that is not one usable key is a substitution, and
+          // the one-shot reveal must not be spent on it.
+          approverPub = decodePairingPublicKey(found.approverPublicKey);
+        } catch (err) {
+          return await this.failSubstitutedApprover(pairing, err);
+        }
         if ((await this.revealOnce(pairing)) === 'conflict') {
           // Someone else's key is on the row, or a reveal outlived the slot holding the only
           // private key that could open what it earns: nothing here can finish this request.
@@ -457,7 +471,7 @@ export class SyncEngine {
         if (this.pairing !== pairing) {
           return { kind: 'failed', reason: 'error' };
         }
-        pairing.approverPub = b64urlDecode(found.approverPublicKey);
+        pairing.approverPub = approverPub;
         pairing.sas = await derivePairingSas(
           pairing.keypair.publicKey,
           pairing.approverPub,
@@ -488,6 +502,26 @@ export class SyncEngine {
   }
 
   /**
+   * The requester's mirror of denyTamperedReveal: an approver key that is not one usable X25519
+   * key can only have been substituted; the request is dropped and the row best-effort deleted.
+   */
+  private async failSubstitutedApprover(
+    pairing: PairingRequest,
+    err: unknown
+  ): Promise<PairingPollResult> {
+    this.pairing = null;
+    logger.error(
+      `Cloud sync refused a pairing approver: the key published for ${pairing.id} is not one this device can use: ${describeThrown(err)}`,
+      err
+    );
+    await this.bestEffort(
+      () => this.deps.apiClient.deletePairing(pairing.id),
+      'substituted pairing approver cleanup'
+    );
+    return { kind: 'failed', reason: 'tampered' };
+  }
+
+  /**
    * Publishes the key the create only committed to, at most once — the server refuses a second
    * reveal, and every extra one would be another chance to substitute a key under the same digits.
    */
@@ -501,8 +535,8 @@ export class SyncEngine {
     try {
       await this.deps.apiClient.revealPairing(
         pairing.id,
-        b64urlEncode(pairing.keypair.publicKey),
-        b64urlEncode(pairing.nonce)
+        encodePairingPublicKey(pairing.keypair.publicKey),
+        encodePairingNonce(pairing.nonce)
       );
       return 'revealed';
     } catch (err) {
@@ -519,8 +553,8 @@ export class SyncEngine {
   /** Opens the peer-wrapped key and adopts it through the same tail an enroll ends with. */
   private async adoptPairedKey(
     pairing: PairingRequest,
-    approverPub: Uint8Array,
-    envelope: string,
+    approverPub: PairingPublicKey,
+    envelope: PeerWrappedEnvelope,
     epoch: number
   ): Promise<PairingPollResult> {
     // Claimed before the first await, so the caller's identity check and this claim are one
@@ -604,7 +638,7 @@ export class SyncEngine {
     }
     const keypair = await generatePairingKeypair();
     try {
-      await this.deps.apiClient.commitPairing(id, b64urlEncode(keypair.publicKey));
+      await this.deps.apiClient.commitPairing(id, encodePairingPublicKey(keypair.publicKey));
     } catch (err) {
       if (
         err instanceof ApiError &&
@@ -672,16 +706,28 @@ export class SyncEngine {
       this.approving = null;
       return { kind: 'failed', reason: 'gone' };
     }
+    if (row.id !== id) {
+      // A page-realm message may carry any row; verifying one here would refuse the request
+      // this slot is actually polling, on evidence nobody vouched for.
+      logger.error(`Cloud sync ignored a pairing row for ${row.id} while polling ${id}`);
+      return { kind: 'waiting' };
+    }
     if (row.requesterPublicKey === null || row.requesterNonce === null) {
       return { kind: 'waiting' };
     }
-    let requesterPub: Uint8Array;
-    let requesterNonce: Uint8Array;
+    // A string, not just non-null: neither the relay's JSON nor a page-realm message is validated,
+    // and a non-string fed to the decode below reads back as the peer substituting a key.
+    if (typeof row.requesterPublicKey !== 'string' || typeof row.requesterNonce !== 'string') {
+      logger.error(`Cloud sync ignored a malformed pairing row for ${id}`);
+      return { kind: 'waiting' };
+    }
+    let requesterPub: PairingPublicKey;
+    let requesterNonce: PairingNonce;
     try {
-      requesterPub = b64urlDecode(row.requesterPublicKey);
-      requesterNonce = b64urlDecode(row.requesterNonce);
+      requesterPub = decodePairingPublicKey(row.requesterPublicKey);
+      requesterNonce = decodePairingNonce(row.requesterNonce);
     } catch {
-      // Untrusted relay data that will not even decode is a substitution, not a transport fault.
+      // Relay data that will not decode to one usable key is a substitution, not a transport fault.
       return await this.denyTamperedReveal(id, approving);
     }
     const matches = await verifyPairingCommitment(
