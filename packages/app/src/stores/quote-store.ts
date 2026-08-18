@@ -20,6 +20,7 @@ import {
   getCollections,
   getCurrentQuote,
   getQuotes,
+  getQuotesRaw,
   getSettings,
   type StorageResult,
   setCurrentQuote,
@@ -123,7 +124,7 @@ interface QuoteStore {
       source?: string;
       notes?: string;
     }
-  ) => Promise<'saved' | 'gone' | 'failed'>;
+  ) => Promise<QuoteWriteOutcome>;
   deleteQuote: (quoteId: string) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
   setEnabledCategories: (categories: QuoteCategory[]) => Promise<void>;
@@ -148,10 +149,11 @@ interface QuoteStore {
   updateCollection: (
     id: string,
     updates: Partial<Pick<QuoteCollection, 'name' | 'description'>>
-  ) => Promise<'saved' | 'gone' | 'failed'>;
+  ) => Promise<QuoteWriteOutcome>;
   deleteCollection: (id: string) => Promise<boolean>;
-  addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
-  removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
+  /** 'gone' when a pull deleted the quote first, 'failed' when the write did not persist. */
+  addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<QuoteWriteOutcome>;
+  removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<QuoteWriteOutcome>;
   addQuotesToCollection: (quoteIds: string[], collectionId: string) => Promise<boolean>;
   toggleCollection: (collectionId: string) => Promise<void>;
   setActiveCollectionIds: (collectionIds: string[]) => Promise<void>;
@@ -207,6 +209,9 @@ async function persistOneQuote(
 function syncsLocalEdits(quote: Quote | null): boolean {
   return quote?.isCustom === true;
 }
+
+/** A write aimed at one entity: 'gone' is not a failure, and a retry cannot fix it. */
+type QuoteWriteOutcome = 'saved' | 'gone' | 'failed';
 
 /**
  * The card renders `currentQuote`, which no observer converges — before these writes stopped
@@ -293,8 +298,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           const result = await setQuotes(SEED_QUOTES);
           if (!result.success) {
             logger.error('Failed to seed the default quotes', result.error);
-            throw new Error(result.error.message);
           }
+          assertPersisted(result);
           return SEED_QUOTES;
         });
       }
@@ -348,9 +353,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
     } catch (error) {
       logger.error('Error initializing quote store', error);
-      const errorMessage = 'Failed to load quotes. Please refresh the page.';
+      // One message for both: the panel and the toast disagreeing about the same failure is
+      // worse than either wording.
+      const errorMessage = storageWriteErrorMessage(
+        error,
+        'Failed to load quotes. Please refresh the page.'
+      );
       set({ error: errorMessage, isLoading: false });
-      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
+      useToastStore.getState().error(errorMessage);
     }
     // Awaited, last, and outside the try so a failed load still reconciles: it re-reads storage,
     // so it has to see everything this load wrote (the seed, the view-count bump).
@@ -888,14 +898,20 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }));
 
       // Raw, like `resetToDefaults`: a reset means every stored quote, including one this build
-      // cannot parse — the preserving setter would carry those through. The list is replaced
-      // wholesale either way; the read is only to know which ids this reset destroys.
+      // cannot parse — the preserving setter would carry those through.
       const wiped: string[] = [];
       const resetResult = await withCollectionLock('quotes', async () => {
-        for (const quote of await getQuotes()) {
-          if (syncsLocalEdits(quote)) {
-            wiped.push(quote.id);
+        // Raw, to match the raw write: the validating read drops rows this build cannot parse,
+        // and the write destroys them anyway — their ids need tombstones too. Failing to read
+        // must not block the reset, which is the escape hatch for unreadable storage.
+        try {
+          for (const quote of await getQuotesRaw()) {
+            if (syncsLocalEdits(quote)) {
+              wiped.push(quote.id);
+            }
           }
+        } catch (error) {
+          logger.error('Resetting quotes without tombstones: could not read what is stored', error);
         }
         return setQuotesRaw(freshQuotes);
       });
@@ -1114,7 +1130,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (target === null) {
         reportQuoteGone('addQuoteToCollection', quoteId);
         await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
-        return false;
+        return 'gone';
       }
       if (changed.added && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -1129,12 +1145,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
       }
 
-      return true;
+      return 'saved';
     } catch (error) {
       logger.error('Error adding quote to collection', error);
       const errorMessage = 'Failed to add quote to collection. Please try again.';
       useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
-      return false;
+      return 'failed';
     }
   },
 
@@ -1160,7 +1176,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (target === null) {
         reportQuoteGone('removeQuoteFromCollection', quoteId);
         await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
-        return false;
+        return 'gone';
       }
       if (changed.removed && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -1175,12 +1191,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
       }
 
-      return true;
+      return 'saved';
     } catch (error) {
       logger.error('Error removing quote from collection', error);
       const errorMessage = 'Failed to remove quote from collection. Please try again.';
       useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
-      return false;
+      return 'failed';
     }
   },
 

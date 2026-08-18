@@ -8,7 +8,7 @@ export function storageFailure(message: string): StorageResult {
 // Adapters resolve {success: false} instead of rejecting — normalize to a throw
 // for callers whose catch is the failure path. The StorageError rides as cause.
 export function assertPersisted(result: StorageResult): void {
-  if (result?.success === false) {
+  if (result?.success !== true) {
     throw new Error(result.error.message, { cause: result.error });
   }
 }
@@ -23,7 +23,7 @@ export function storageWriteErrorMessage(error: unknown, fallback: string): stri
   const candidate = error instanceof Error ? error.cause : error;
   const type = (candidate as StorageError | undefined)?.type;
   if (type === 'quota_exceeded' || type === 'per_item_quota_exceeded') {
-    return 'Storage is full. Remove some quotes or free up space to continue.';
+    return 'Storage is full. Free up some space to continue.';
   }
   return fallback;
 }

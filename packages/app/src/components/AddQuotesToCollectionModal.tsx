@@ -81,18 +81,18 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
 
     setIsSubmitting(true);
     try {
-      let allApplied = true;
+      let anyRetryable = false;
       for (const [quoteId, shouldBeIn] of Object.entries(pendingChanges)) {
-        const applied = shouldBeIn
+        const outcome = shouldBeIn
           ? await addQuoteToCollection(quoteId, collection.id)
           : await removeQuoteFromCollection(quoteId, collection.id);
-        if (!applied) {
-          allApplied = false;
+        if (outcome === 'failed') {
+          anyRetryable = true;
         }
       }
-      // Closing on a partial apply would drop the changes that did not land, with nothing
-      // on screen saying which ones those were.
-      if (allApplied) {
+      // Only a retryable failure holds the modal open. Staying open on 'gone' would loop
+      // forever: the quote is deleted, so applying again can only fail the same way.
+      if (!anyRetryable) {
         onClose();
       }
     } finally {
