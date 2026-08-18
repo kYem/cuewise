@@ -1,5 +1,6 @@
 import {
   ALL_QUOTE_CATEGORIES,
+  assertPersisted,
   type BulkImportResult,
   type CSVQuoteRow,
   DEFAULT_SETTINGS,
@@ -13,6 +14,7 @@ import {
   type QuoteCategory,
   type QuoteCollection,
   STORAGE_KEYS,
+  storageWriteErrorMessage,
 } from '@cuewise/shared';
 import {
   getCollections,
@@ -182,10 +184,20 @@ async function persistOneQuote(
   quoteId: string,
   change: (quote: Quote) => Quote
 ): Promise<{ result: StorageResult; quotes: Quote[]; target: Quote | null }> {
-  const { result, quotes } = await updateQuotes((current) =>
-    current.map((q) => (q.id === quoteId ? change(q) : q))
-  );
-  return { result, quotes, target: quotes.find((q) => q.id === quoteId) ?? null };
+  // Its own lock rather than updateQuotes, so a gone id skips the write entirely: rewriting an
+  // identical list can still fail, and the caller would report that instead of the gone.
+  return withCollectionLock('quotes', async () => {
+    const current = await getQuotes();
+    if (!current.some((q) => q.id === quoteId)) {
+      return { result: { success: true } as StorageResult, quotes: current, target: null };
+    }
+    const quotes = current.map((q) => (q.id === quoteId ? change(q) : q));
+    return {
+      result: await setQuotes(quotes),
+      quotes,
+      target: quotes.find((q) => q.id === quoteId) ?? null,
+    };
+  });
 }
 
 /**
@@ -338,7 +350,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       logger.error('Error initializing quote store', error);
       const errorMessage = 'Failed to load quotes. Please refresh the page.';
       set({ error: errorMessage, isLoading: false });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
     // Awaited, last, and outside the try so a failed load still reconciles: it re-reads storage,
     // so it has to see everything this load wrote (the seed, the view-count bump).
@@ -428,9 +440,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...q,
         isFavorite: !q.isFavorite,
       }));
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('toggleFavorite', quoteId);
@@ -450,7 +460,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error toggling favorite', error);
       const errorMessage = 'Failed to update favorite. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
@@ -464,9 +474,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...q,
         isHidden: true,
       }));
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -484,7 +492,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error hiding quote', error);
       const errorMessage = 'Failed to hide quote. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
@@ -513,15 +521,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...current,
         newQuote,
       ]);
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       notifyMutated('quotes', newQuote.id);
       return true;
     } catch (error) {
       logger.error('Error adding custom quote', error);
-      useToastStore.getState().error('Failed to add custom quote. Please try again.');
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to add custom quote. Please try again.'));
       return false;
     }
   },
@@ -555,9 +563,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...q,
         isHidden: false,
       }));
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('unhideQuote', quoteId);
@@ -571,7 +577,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error unhiding quote', error);
       const errorMessage = 'Failed to unhide quote. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
@@ -585,9 +591,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...q,
         ...updates,
       }));
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       if (target === null) {
         reportQuoteGone('editQuote', quoteId);
@@ -609,7 +613,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error editing quote', error);
       const errorMessage = 'Failed to update quote. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return 'failed';
     }
   },
@@ -628,9 +632,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           return false;
         })
       );
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       if (syncsLocalEdits(deleted.target)) {
         notifyDeleted('quotes', quoteId);
@@ -650,7 +652,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error deleting quote', error);
       const errorMessage = 'Failed to delete quote. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
@@ -706,9 +708,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
         return current.filter((q) => !quoteIdSet.has(q.id));
       });
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       for (const id of deletedCustomIds) {
         notifyDeleted('quotes', id);
@@ -727,7 +727,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       return true;
     } catch (error) {
       logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
-      useToastStore.getState().error('Failed to delete quotes. Please try again.');
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to delete quotes. Please try again.'));
       return false;
     }
   },
@@ -751,9 +753,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
         return current.map((q) => (quoteIdSet.has(q.id) ? { ...q, isFavorite: setFavorite } : q));
       });
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
@@ -781,7 +781,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         setFavorite,
         count: quoteIds.length,
       });
-      useToastStore.getState().error('Failed to update favorites. Please try again.');
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to update favorites. Please try again.'));
       return false;
     }
   },
@@ -805,9 +807,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         }
         return current.map((q) => (quoteIdSet.has(q.id) ? { ...q, isHidden: setHidden } : q));
       });
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
@@ -836,7 +836,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         setHidden,
         count: quoteIds.length,
       });
-      useToastStore.getState().error('Failed to update quotes. Please try again.');
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to update quotes. Please try again.'));
       return false;
     }
   },
@@ -857,9 +859,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         restored = missing.length;
         return [...current, ...missing];
       });
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
 
       if (restored === 0) {
@@ -871,7 +871,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error restoring missing quotes', error);
       const errorMessage = 'Failed to restore quotes. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       throw error;
     }
   },
@@ -888,13 +888,23 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }));
 
       // Raw, like `resetToDefaults`: a reset means every stored quote, including one this build
-      // cannot parse — the preserving setter would carry those through. Locked but deliberately
-      // not re-read: replacing the list wholesale is the point.
-      const resetResult = await withCollectionLock('quotes', () => setQuotesRaw(freshQuotes));
-      if (!resetResult.success) {
-        throw new Error(resetResult.error.message);
-      }
+      // cannot parse — the preserving setter would carry those through. The list is replaced
+      // wholesale either way; the read is only to know which ids this reset destroys.
+      const wiped: string[] = [];
+      const resetResult = await withCollectionLock('quotes', async () => {
+        for (const quote of await getQuotes()) {
+          if (syncsLocalEdits(quote)) {
+            wiped.push(quote.id);
+          }
+        }
+        return setQuotesRaw(freshQuotes);
+      });
+      assertPersisted(resetResult);
       set({ quotes: freshQuotes, error: null });
+      // Without these the reset is local only: every peer still holding these pushes them back.
+      for (const id of wiped) {
+        notifyDeleted('quotes', id);
+      }
 
       // Reset current quote to a random one
       const newCurrent = getRandomQuote(freshQuotes);
@@ -911,7 +921,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error resetting quotes', error);
       const errorMessage = 'Failed to reset quotes. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       throw error;
     }
   },
@@ -941,7 +951,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the new collection', result.error);
         const errorMessage = 'Failed to create collection. Please try again.';
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(storageWriteErrorMessage(result.error, errorMessage));
         return false;
       }
       set({ collections: updatedCollections, error: null });
@@ -952,7 +962,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error creating collection', error);
       const errorMessage = 'Failed to create collection. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -974,7 +984,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the collection update', result.error);
         const errorMessage = 'Failed to update collection. Please try again.';
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(storageWriteErrorMessage(result.error, errorMessage));
         return 'failed';
       }
       // Announcing a write that found nothing marks a gone id dirty, and the next push seals a
@@ -992,7 +1002,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error updating collection', error);
       const errorMessage = 'Failed to update collection. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return 'failed';
     }
   },
@@ -1006,7 +1016,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the collection deletion', result.error);
         const errorMessage = 'Failed to delete collection. Please try again.';
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(storageWriteErrorMessage(result.error, errorMessage));
         return false;
       }
       // Straight after the write, with nothing fallible in between: the steps below can throw, and
@@ -1027,8 +1037,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             logger.error('Deleted the collection but could not read its quotes to unlink', error);
             return { quotes: null, unlinked: false };
           }
+          const unlinkedCustomIds: string[] = [];
           const next = current.map((q) => {
             if (q.collectionIds?.includes(id)) {
+              if (syncsLocalEdits(q)) {
+                unlinkedCustomIds.push(q.id);
+              }
               return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== id) };
             }
             return q;
@@ -1041,6 +1055,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             );
             return { quotes: current, unlinked: false };
           }
+          // Membership lives on the quote, so an unannounced unlink is undone by the next pull.
+          notifyMutatedBulk('quotes', unlinkedCustomIds);
           return { quotes: next, unlinked: true };
         }
       );
@@ -1069,7 +1085,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error deleting collection', error);
       const errorMessage = 'Failed to delete collection. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -1093,9 +1109,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         changed.added = true;
         return { ...q, collectionIds: [...currentIds, collectionId] };
       });
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       if (target === null) {
         reportQuoteGone('addQuoteToCollection', quoteId);
@@ -1119,7 +1133,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding quote to collection', error);
       const errorMessage = 'Failed to add quote to collection. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -1141,9 +1155,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         changed.removed = true;
         return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== collectionId) };
       });
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       if (target === null) {
         reportQuoteGone('removeQuoteFromCollection', quoteId);
@@ -1167,7 +1179,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error removing quote from collection', error);
       const errorMessage = 'Failed to remove quote from collection. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -1200,9 +1212,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           return { ...q, collectionIds: [...currentIds, collectionId] };
         })
       );
-      if (!result.success) {
-        throw new Error(result.error.message);
-      }
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
@@ -1226,7 +1236,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding quotes to collection', error);
       const errorMessage = 'Failed to add quotes to collection. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -1288,9 +1298,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...current,
         ...newQuotes,
       ]);
-      if (!writeResult.success) {
-        throw new Error(writeResult.error.message);
-      }
+      assertPersisted(writeResult);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk(
         'quotes',
@@ -1308,7 +1316,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       logger.error('Error bulk adding quotes', error);
       const errorMessage = 'Failed to import quotes. Please try again.';
       result.errors.push(errorMessage);
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return result;
     }
   },
