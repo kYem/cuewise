@@ -81,14 +81,20 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
 
     setIsSubmitting(true);
     try {
+      let allApplied = true;
       for (const [quoteId, shouldBeIn] of Object.entries(pendingChanges)) {
-        if (shouldBeIn) {
-          await addQuoteToCollection(quoteId, collection.id);
-        } else {
-          await removeQuoteFromCollection(quoteId, collection.id);
+        const applied = shouldBeIn
+          ? await addQuoteToCollection(quoteId, collection.id)
+          : await removeQuoteFromCollection(quoteId, collection.id);
+        if (!applied) {
+          allApplied = false;
         }
       }
-      onClose();
+      // Closing on a partial apply would drop the changes that did not land, with nothing
+      // on screen saying which ones those were.
+      if (allApplied) {
+        onClose();
+      }
     } finally {
       setIsSubmitting(false);
     }
