@@ -152,8 +152,11 @@ export const QuoteManagementPage: React.FC = () => {
   const handleBulkDelete = async () => {
     setIsBulkLoading(true);
     try {
-      await bulkDelete(Array.from(selectedQuoteIds));
-      clearSelection();
+      // Keep the selection when the write failed: clearing it reads as a completed delete
+      // and leaves the user re-picking every quote to retry.
+      if (await bulkDelete(Array.from(selectedQuoteIds))) {
+        clearSelection();
+      }
       setShowBulkDeleteConfirm(false);
     } catch (err) {
       logger.error('Bulk delete operation failed', err);
@@ -188,8 +191,9 @@ export const QuoteManagementPage: React.FC = () => {
   const handleBulkHide = async () => {
     setIsBulkLoading(true);
     try {
-      await bulkToggleHidden(Array.from(selectedQuoteIds), true);
-      clearSelection();
+      if (await bulkToggleHidden(Array.from(selectedQuoteIds), true)) {
+        clearSelection();
+      }
     } catch (err) {
       logger.error('Bulk hide operation failed', err);
     } finally {

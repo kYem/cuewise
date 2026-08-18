@@ -238,12 +238,10 @@ export function createCategoryFavoritesScenario() {
   };
 }
 
-export type MockSyncSink = SyncMutationSink & {
+export function createSyncSink(): SyncMutationSink & {
   markMutated: Mock;
   markDeleted: Mock;
   markMutatedBulk: Mock;
-};
-
-export function createSyncSink(): MockSyncSink {
+} {
   return { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
 }

@@ -103,13 +103,14 @@ interface QuoteStore {
   toggleFavorite: (quoteId: string) => Promise<void>;
   hideQuote: (quoteId: string) => Promise<void>;
   unhideQuote: (quoteId: string) => Promise<void>;
+  /** False when the write did not persist, so the form can keep what the user typed. */
   addCustomQuote: (
     text: string,
     author: string,
     category: QuoteCategory,
     source?: string,
     notes?: string
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** 'gone' when a pull deleted it first, 'failed' when the write did not persist. */
   editQuote: (
     quoteId: string,
@@ -129,9 +130,10 @@ interface QuoteStore {
   toggleFavoritesOnly: () => Promise<void>;
 
   // Bulk operations
-  bulkDelete: (quoteIds: string[]) => Promise<void>;
-  bulkToggleFavorite: (quoteIds: string[], setFavorite: boolean) => Promise<void>;
-  bulkToggleHidden: (quoteIds: string[], setHidden: boolean) => Promise<void>;
+  /** False when the write did not persist, so the caller can keep the user's selection. */
+  bulkDelete: (quoteIds: string[]) => Promise<boolean>;
+  bulkToggleFavorite: (quoteIds: string[], setFavorite: boolean) => Promise<boolean>;
+  bulkToggleHidden: (quoteIds: string[], setHidden: boolean) => Promise<boolean>;
 
   // Restoration operations
   restoreMissingQuotes: () => Promise<{ restored: number }>;
@@ -390,7 +392,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error refreshing quote', error);
       const errorMessage = 'Failed to refresh quote. Please try again.';
-      set({ error: errorMessage });
+      // No `error` state: the new-tab interval calls this unprompted, and latching it would
+      // replace the card with a load-failure panel for a write the user never asked for.
       // The new-tab interval calls this on every tick, so a persistent failure would otherwise
       // stack one identical toast per tick.
       useToastStore.getState().error(errorMessage, { collapseRepeats: true });
@@ -515,10 +518,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
       set({ quotes: updatedQuotes });
       notifyMutated('quotes', newQuote.id);
+      return true;
     } catch (error) {
       logger.error('Error adding custom quote', error);
-      const errorMessage = 'Failed to add custom quote. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error('Failed to add custom quote. Please try again.');
+      return false;
     }
   },
 
@@ -717,13 +721,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
-        return;
+        return true;
       }
       useToastStore.getState().success(`Deleted ${matched} quotes`);
+      return true;
     } catch (error) {
       logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
-      const errorMessage = 'Failed to delete quotes. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error('Failed to delete quotes. Please try again.');
+      return false;
     }
   },
 
@@ -765,18 +770,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
-        return;
+        return true;
       }
       const action = setFavorite ? 'added to favorites' : 'removed from favorites';
       useToastStore.getState().success(`${matched} quotes ${action}`);
+      return true;
     } catch (error) {
       logger.error('Error bulk toggling favorites', error, {
         quoteIds,
         setFavorite,
         count: quoteIds.length,
       });
-      const errorMessage = 'Failed to update favorites. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error('Failed to update favorites. Please try again.');
+      return false;
     }
   },
 
@@ -819,18 +825,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
-        return;
+        return true;
       }
       const action = setHidden ? 'hidden' : 'unhidden';
       useToastStore.getState().success(`${matched} quotes ${action}`);
+      return true;
     } catch (error) {
       logger.error('Error bulk toggling hidden', error, {
         quoteIds,
         setHidden,
         count: quoteIds.length,
       });
-      const errorMessage = 'Failed to update quotes. Please try again.';
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error('Failed to update quotes. Please try again.');
+      return false;
     }
   },
 

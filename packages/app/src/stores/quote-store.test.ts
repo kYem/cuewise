@@ -852,6 +852,11 @@ describe('Quote Store', () => {
 
 // Storage holds collections the store has not seen — a pull that landed while this action waited
 // on the lock. Every writer must merge into that list, not the one it can see.
+afterEach(() => {
+  onLockGranted.clear();
+  configurePlatform({ syncSink: null });
+});
+
 describe('writers read storage, not their own snapshot', () => {
   beforeEach(() => {
     useQuoteStore.setState(EMPTY_STORE_STATE);
@@ -861,15 +866,11 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.setCollections).mockResolvedValue({ success: true });
     vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
-    // No earlier block stubs these, so without them a writer fails on a shape error rather
-    // than on what the test is pinning.
+    // Its own getters: borrowed from the block above, this reads as green in a full run and
+    // fails on a shape error under `-t`, which is how anyone debugging it runs it.
     vi.mocked(storage.getCollections).mockResolvedValue([]);
     vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
     vi.mocked(storage.setCurrentQuote).mockResolvedValue({ success: true });
-  });
-
-  afterEach(() => {
-    configurePlatform({ syncSink: null });
   });
 
   const pulled = (): QuoteCollection => ({
@@ -1054,8 +1055,7 @@ describe('writers read storage, not their own snapshot', () => {
     expect(written.map((q) => q.id)).toEqual(expected);
   });
 
-  // Before the lock these writers ignored the result entirely, so a full disk lost the edit
-  // with no signal at all.
+  // A write that did not persist must leave the list untouched and say so.
   it.each([
     [
       'toggleFavorite',
@@ -1217,8 +1217,8 @@ describe('writers read storage, not their own snapshot', () => {
     expect(heldAtWrite).toBe(true);
   });
 
-  // No observer converges currentQuote, and the write no longer resurrects the quote, so
-  // without this the card renders a deleted quote across reloads.
+  // No observer converges currentQuote, so nothing else moves the card off a quote the write
+  // found already deleted.
   it.each([
     ['toggleFavorite', () => useQuoteStore.getState().toggleFavorite('gone')],
     ['editQuote', () => useQuoteStore.getState().editQuote('gone', { text: 'x' })],
@@ -1436,7 +1436,7 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastSuccess).not.toHaveBeenCalled();
   });
 
-  // The singular writers got clearCurrentQuoteIfGone; the bulk siblings kept rendering the quote.
+  // refreshCardIfQuoteGone rolls a new quote onto the card; the bulk writers need it too.
   it.each([
     ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['gone'], true)],
     ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['gone'], false)],
@@ -1573,6 +1573,54 @@ describe('writers read storage, not their own snapshot', () => {
     await useQuoteStore.getState().addQuotesToCollection(['gone', 'other'], 'c1');
 
     expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
+  });
+
+  // The forms and the selection UI act on these, so a failed write must not look like a
+  // completed one.
+  it.each([
+    [
+      'addCustomQuote',
+      () => useQuoteStore.getState().addCustomQuote('new', 'Author', 'inspiration'),
+    ],
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['mine'])],
+    ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['mine'], true)],
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['mine'], true)],
+  ])('%s reports false when the write did not persist', async (_label, act) => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'mine', isCustom: true })] });
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(act()).resolves.toBe(false);
+  });
+
+  it.each([
+    [
+      'addCustomQuote',
+      () => useQuoteStore.getState().addCustomQuote('new', 'Author', 'inspiration'),
+    ],
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['mine'])],
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['mine'], true)],
+  ])('%s reports true when the write persisted', async (_label, act) => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'mine', isCustom: true })] });
+
+    await expect(act()).resolves.toBe(true);
+  });
+
+  // The new-tab interval calls refreshQuote unprompted; latching `error` there would replace
+  // the card with a load-failure panel for a write the user never asked for.
+  it('refreshQuote does not latch the load-error panel', async () => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'mine' })], currentQuote: null });
+    vi.mocked(storage.setCurrentQuote).mockRejectedValue(new Error('storage gone'));
+
+    await useQuoteStore.getState().refreshQuote();
+
+    expect(useQuoteStore.getState().error).toBeNull();
+    expect(mockToastError).toHaveBeenCalledWith(
+      'Failed to refresh quote. Please try again.',
+      expect.objectContaining({ collapseRepeats: true })
+    );
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {
@@ -1784,7 +1832,6 @@ describe('writers read storage, not their own snapshot', () => {
     configurePlatform({ syncSink: sink });
 
     const ok = await useQuoteStore.getState().deleteCollection('mine');
-    configurePlatform({ syncSink: null });
 
     expect(sink.markDeleted).toHaveBeenCalledWith('collections', 'mine');
     // The delete landed and pushed; calling it a failure would send the user to retry an
