@@ -1132,7 +1132,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await act();
@@ -1292,7 +1292,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
     onLockGranted.set('quotes', () => {
       vi.mocked(storage.getQuotes).mockResolvedValue([pulledQuote]);
@@ -1486,7 +1486,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await useQuoteStore.getState().initialize();
@@ -1500,7 +1500,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await expect(useQuoteStore.getState().restoreMissingQuotes()).rejects.toThrow();
@@ -1513,7 +1513,7 @@ describe('writers read storage, not their own snapshot', () => {
     useQuoteStore.setState({ quotes: [mine] });
     vi.mocked(storage.setQuotesRaw).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await expect(useQuoteStore.getState().resetAllQuotes()).rejects.toThrow();
@@ -1526,7 +1526,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await useQuoteStore
@@ -1589,7 +1589,7 @@ describe('writers read storage, not their own snapshot', () => {
     useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'mine', isCustom: true })] });
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await expect(act()).resolves.toBe(false);
@@ -1621,6 +1621,72 @@ describe('writers read storage, not their own snapshot', () => {
       'Failed to refresh quote. Please try again.',
       expect.objectContaining({ collapseRepeats: true })
     );
+  });
+
+  // A retry cannot clear a full disk, so "please try again" is the one thing not to say.
+  it('a quota failure gets actionable copy instead of a retry', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().toggleFavorite('mine');
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      'Storage is full. Remove some quotes or free up space to continue.'
+    );
+  });
+
+  // Without tombstones the reset is local only: every peer pushes the wiped quotes back.
+  it('resetAllQuotes announces the custom quotes it destroys', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    const seed = quoteFactory.build({ id: 'seed', isCustom: false });
+    useQuoteStore.setState({ quotes: [mine, seed] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine, seed]);
+    vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+    const sink = createSyncSink();
+    configurePlatform({ syncSink: sink });
+
+    await useQuoteStore.getState().resetAllQuotes();
+
+    expect(sink.markDeleted).toHaveBeenCalledWith('quotes', 'mine');
+    expect(sink.markDeleted).not.toHaveBeenCalledWith('quotes', 'seed');
+  });
+
+  // Membership lives on the quote, so an unannounced unlink is undone by the next pull.
+  it('deleteCollection announces the quotes it unlinked', async () => {
+    const mine = { ...pulled(), id: 'c1', name: 'Mine' };
+    const member = quoteFactory.build({ id: 'member', isCustom: true, collectionIds: ['c1'] });
+    const other = quoteFactory.build({ id: 'other', isCustom: true, collectionIds: [] });
+    useQuoteStore.setState({ collections: [mine], quotes: [member, other] });
+    vi.mocked(storage.getCollections).mockResolvedValue([mine]);
+    vi.mocked(storage.getQuotes).mockResolvedValue([member, other]);
+    const sink = createSyncSink();
+    configurePlatform({ syncSink: sink });
+
+    await useQuoteStore.getState().deleteCollection('c1');
+
+    expect(sink.markMutatedBulk).toHaveBeenCalledWith('quotes', ['member']);
+  });
+
+  // Rewriting an identical list can still fail, and the caller would report that instead of
+  // the truth, which is that the quote is gone.
+  it('does not write at all when the locked read no longer holds the quote', async () => {
+    useQuoteStore.setState({
+      quotes: [quoteFactory.build({ id: 'gone', isCustom: true })],
+      currentQuote: null,
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+
+    await useQuoteStore.getState().toggleFavorite('gone');
+
+    expect(storage.setQuotes).not.toHaveBeenCalled();
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
+      collapseRepeats: true,
+    });
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {
@@ -1799,7 +1865,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getCollections).mockResolvedValue([mine]);
     vi.mocked(storage.setCollections).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await expect(useQuoteStore.getState().updateCollection('mine', { name: 'x' })).resolves.toBe(
@@ -1813,7 +1879,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getCollections).mockResolvedValue([]);
     vi.mocked(storage.setCollections).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await expect(useQuoteStore.getState().createCollection('Mine')).resolves.toBe(false);
@@ -1850,7 +1916,7 @@ describe('writers read storage, not their own snapshot', () => {
     ]);
     vi.mocked(storage.setQuotes).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await useQuoteStore.getState().deleteCollection('mine');
@@ -1865,7 +1931,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.getCollections).mockResolvedValue([{ ...pulled(), id: 'mine' }]);
     vi.mocked(storage.setCollections).mockResolvedValue({
       success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
+      error: { type: 'unknown', message: 'write failed' },
     });
 
     await expect(useQuoteStore.getState().deleteCollection('mine')).resolves.toBe(false);
