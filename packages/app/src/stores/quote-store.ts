@@ -65,7 +65,7 @@ async function navigateHistory(
     const quote = quotes.find((q) => q.id === quoteId);
 
     if (quote && !quote.isHidden) {
-      await setCurrentQuote(quote);
+      await persistCurrentQuote(quote);
       set({ currentQuote: quote, historyIndex: newIndex });
       await get().incrementViewCount(quote.id);
     } else {
@@ -210,12 +210,24 @@ function syncsLocalEdits(quote: Quote | null): boolean {
   return quote?.isCustom === true;
 }
 
+/**
+ * The card's own key. It resolves {success:false} rather than rejecting, so an unchecked call
+ * is the one storage write in this store that can fail with no record at all — the displayed
+ * quote silently reverts on the next tab. Not a toast: several callers are background ticks.
+ */
+async function persistCurrentQuote(quote: Quote): Promise<void> {
+  const result = await setCurrentQuote(quote);
+  if (result?.success !== true) {
+    logger.error('Could not persist the displayed quote', result.error, { quoteId: quote.id });
+  }
+}
+
 /** A write aimed at one entity: 'gone' is not a failure, and a retry cannot fix it. */
 type QuoteWriteOutcome = 'saved' | 'gone' | 'failed';
 
 /**
- * The card renders `currentQuote`, which no observer converges — before these writes stopped
- * resurrecting the quote, their stale-snapshot rewrite is what kept the two agreeing.
+ * The card renders `currentQuote`, which no observer converges, so a writer that finds the quote
+ * gone has to move the card itself.
  *
  * Checked against `written` rather than trusted from the call site: a caller that reaches here
  * with the quote still present would otherwise reroll the card for no reason.
@@ -295,11 +307,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           if (current.length > 0) {
             return current;
           }
-          const result = await setQuotes(SEED_QUOTES);
-          if (!result.success) {
-            logger.error('Failed to seed the default quotes', result.error);
-          }
-          assertPersisted(result);
+          assertPersisted(await setQuotes(SEED_QUOTES));
           return SEED_QUOTES;
         });
       }
@@ -328,7 +336,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!stored || stored.isHidden || !quotes.some((q) => q.id === stored.id)) {
         currentQuote = getRandomQuote(quotes);
         if (currentQuote) {
-          await setCurrentQuote(currentQuote);
+          await persistCurrentQuote(currentQuote);
         }
       }
 
@@ -391,7 +399,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       );
 
       if (newQuote) {
-        await setCurrentQuote(newQuote);
+        await persistCurrentQuote(newQuote);
 
         // Add to history - if we're not at the most recent position,
         // clear forward history (like browser navigation)
@@ -464,7 +472,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // The persisted value, not a re-toggle of the snapshot: a pull may have flipped the flag.
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        await setCurrentQuote(target);
+        await persistCurrentQuote(target);
         set({ currentQuote: target });
       }
     } catch (error) {
@@ -614,7 +622,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        await setCurrentQuote(target);
+        await persistCurrentQuote(target);
         set({ currentQuote: target });
       }
 
@@ -771,7 +779,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
         const persisted = updatedQuotes.find((q) => q.id === currentQuote.id);
         if (persisted) {
-          await setCurrentQuote(persisted);
+          await persistCurrentQuote(persisted);
           set({ currentQuote: persisted });
         } else {
           await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
@@ -828,7 +836,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         } else if (setHidden) {
           await get().refreshQuote();
         } else {
-          await setCurrentQuote(persisted);
+          await persistCurrentQuote(persisted);
           set({ currentQuote: persisted });
         }
       }
@@ -897,20 +905,24 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         lastViewed: undefined,
       }));
 
-      // Raw, like `resetToDefaults`: a reset means every stored quote, including one this build
-      // cannot parse — the preserving setter would carry those through.
+      // Raw: a reset means every stored quote, including one this build cannot parse, and the
+      // preserving setter would carry those through.
       const wiped: string[] = [];
+      const tombstones = { complete: true };
       const resetResult = await withCollectionLock('quotes', async () => {
         // Raw, to match the raw write: the validating read drops rows this build cannot parse,
         // and the write destroys them anyway — their ids need tombstones too. Failing to read
         // must not block the reset, which is the escape hatch for unreadable storage.
         try {
           for (const quote of await getQuotesRaw()) {
-            if (syncsLocalEdits(quote)) {
+            // The raw read validates nothing, and an id the server rejects wedges every later
+            // push for this device, not just this record.
+            if (typeof quote?.id === 'string' && quote.id !== '' && syncsLocalEdits(quote)) {
               wiped.push(quote.id);
             }
           }
         } catch (error) {
+          tombstones.complete = false;
           logger.error('Resetting quotes without tombstones: could not read what is stored', error);
         }
         return setQuotesRaw(freshQuotes);
@@ -925,7 +937,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Reset current quote to a random one
       const newCurrent = getRandomQuote(freshQuotes);
       if (newCurrent) {
-        await setCurrentQuote(newCurrent);
+        await persistCurrentQuote(newCurrent);
         set({
           currentQuote: newCurrent,
           quoteHistory: [newCurrent.id],
@@ -933,7 +945,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         });
       }
 
-      useToastStore.getState().success('All quotes reset to defaults');
+      if (tombstones.complete) {
+        useToastStore.getState().success('All quotes reset to defaults');
+      } else {
+        useToastStore
+          .getState()
+          .warning('Quotes reset on this device. They may return from your other devices.');
+      }
     } catch (error) {
       logger.error('Error resetting quotes', error);
       const errorMessage = 'Failed to reset quotes. Please try again.';
@@ -1140,7 +1158,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && currentQuote.id === quoteId) {
         const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
         if (updatedCurrentQuote) {
-          await setCurrentQuote(updatedCurrentQuote);
+          await persistCurrentQuote(updatedCurrentQuote);
           set({ currentQuote: updatedCurrentQuote });
         }
       }
@@ -1149,7 +1167,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error adding quote to collection', error);
       const errorMessage = 'Failed to add quote to collection. Please try again.';
-      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
+      // Collapsed for the same reason as reportQuoteGone: the modal applies one quote at a time,
+      // and a full disk fails every one of them.
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, errorMessage), { collapseRepeats: true });
       return 'failed';
     }
   },
@@ -1186,7 +1208,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && currentQuote.id === quoteId) {
         const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
         if (updatedCurrentQuote) {
-          await setCurrentQuote(updatedCurrentQuote);
+          await persistCurrentQuote(updatedCurrentQuote);
           set({ currentQuote: updatedCurrentQuote });
         }
       }
@@ -1195,7 +1217,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error removing quote from collection', error);
       const errorMessage = 'Failed to remove quote from collection. Please try again.';
-      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, errorMessage), { collapseRepeats: true });
       return 'failed';
     }
   },
@@ -1240,7 +1264,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
-        return false;
+        // True, like bulkDelete: nothing landed, but nothing is retryable either, so the caller
+        // should clear the selection rather than invite an endless retry.
+        return true;
       }
       if (added === 0) {
         useToastStore.getState().info(`Those quotes are already in "${collectionName}"`);

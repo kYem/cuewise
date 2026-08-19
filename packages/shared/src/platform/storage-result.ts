@@ -9,7 +9,9 @@ export function storageFailure(message: string): StorageResult {
 // for callers whose catch is the failure path. The StorageError rides as cause.
 export function assertPersisted(result: StorageResult): void {
   if (result?.success !== true) {
-    throw new Error(result.error.message, { cause: result.error });
+    throw new Error(result?.error?.message ?? 'The write reported no result', {
+      cause: result?.error,
+    });
   }
 }
 

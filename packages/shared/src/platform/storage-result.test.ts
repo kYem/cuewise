@@ -38,8 +38,10 @@ describe('assertPersisted', () => {
     );
   });
 
-  it('throws on a result that is missing rather than treating it as persisted', () => {
-    expect(() => assertPersisted(undefined as never)).toThrow();
+  // Not just any throw: reading `.error.message` off nothing raises a TypeError, which reads
+  // as a bug rather than as the write not landing.
+  it('throws a described error when the result is missing entirely', () => {
+    expect(() => assertPersisted(undefined as never)).toThrowError('The write reported no result');
   });
 
   it('accepts a successful write', () => {

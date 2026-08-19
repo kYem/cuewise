@@ -207,15 +207,19 @@ describe('Insights Store - Import Methods', () => {
         heldWhenRead.push(heldLocks.has('quotes'));
         return [];
       });
+      // Unstubbed, assertPersisted throws inside the lock and the import fails, so the merge
+      // this names never happens.
+      vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
       useInsightsStore.setState({
         importValidation: createValidImportValidation({
           quotes: [quoteFactory.build({ id: 'new-q' })],
         }),
       });
 
-      await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
+      const result = await useInsightsStore.getState().executeImport(DEFAULT_IMPORT_OPTIONS);
 
       expect(heldWhenRead).toEqual([true]);
+      expect(result.imported.quotes).toBe(1);
     });
 
     // The backup's whole contract is faithfulness, and it was only ever mocked, never run.
