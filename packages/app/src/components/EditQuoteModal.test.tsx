@@ -31,17 +31,12 @@ describe('EditQuoteModal', () => {
     vi.clearAllMocks();
   });
 
-  it('closes once the edit is saved', async () => {
-    const { onClose } = renderModal('saved');
-
-    save();
-
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
-  });
-
-  // The store has already warned, and a retry can only fail the same way.
-  it('closes when the pull deleted the quote first', async () => {
-    const { onClose } = renderModal('gone');
+  it.each([
+    ['saved' as const],
+    // The store has already warned, and a retry can only fail the same way.
+    ['gone' as const],
+  ])('closes on %s', async (outcome) => {
+    const { onClose } = renderModal(outcome);
 
     save();
 
