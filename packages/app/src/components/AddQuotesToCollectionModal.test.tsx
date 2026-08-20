@@ -22,13 +22,13 @@ type Outcome = Awaited<ReturnType<QuoteStore['addQuoteToCollection']>>;
 const member = quoteFactory.build({ id: 'q1', text: 'Already in', collectionIds: ['c1'] });
 const outsider = quoteFactory.build({ id: 'q2', text: 'Not in yet', collectionIds: [] });
 
-function renderModal(outcome: Outcome) {
+function renderModal(outcome: Outcome, removeOutcome: Outcome = outcome) {
   const addQuoteToCollection = vi
     .fn<QuoteStore['addQuoteToCollection']>()
     .mockResolvedValue(outcome);
   const removeQuoteFromCollection = vi
     .fn<QuoteStore['removeQuoteFromCollection']>()
-    .mockResolvedValue(outcome);
+    .mockResolvedValue(removeOutcome);
   vi.mocked(useQuoteStore).mockImplementation(
     createSelectorMock({
       quotes: [member, outsider],
@@ -38,11 +38,15 @@ function renderModal(outcome: Outcome) {
   );
   const onClose = vi.fn();
   render(<AddQuotesToCollectionModal collection={collection} onClose={onClose} />);
-  return { onClose };
+  return { onClose, addQuoteToCollection, removeQuoteFromCollection };
 }
 
 function toggleOutsider() {
   fireEvent.click(screen.getByRole('button', { name: /Not in yet/ }));
+}
+
+function toggleMember() {
+  fireEvent.click(screen.getByRole('button', { name: /Already in/ }));
 }
 
 function apply() {
@@ -84,5 +88,39 @@ describe('AddQuotesToCollectionModal', () => {
       expect(screen.getByRole('button', { name: /Apply Changes/ })).toBeEnabled()
     );
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddQuotesToCollectionModal applying a mixed batch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Untoggling a member is the other half of the ternary, and nothing else covers it.
+  it('removes the memberships it was asked to remove', async () => {
+    const { removeQuoteFromCollection } = renderModal('saved');
+
+    toggleMember();
+    apply();
+
+    await waitFor(() => expect(removeQuoteFromCollection).toHaveBeenCalledWith('q1', 'c1'));
+  });
+
+  // One retryable failure must not abandon the rest of the batch, and must keep the modal open.
+  it('applies every change even when one of them fails', async () => {
+    const { onClose, addQuoteToCollection, removeQuoteFromCollection } = renderModal(
+      'saved',
+      'failed'
+    );
+
+    toggleMember();
+    toggleOutsider();
+    apply();
+
+    await waitFor(() => expect(addQuoteToCollection).toHaveBeenCalledWith('q2', 'c1'));
+    expect(removeQuoteFromCollection).toHaveBeenCalledWith('q1', 'c1');
+    expect(onClose).not.toHaveBeenCalled();
+    // Only the failure stays outstanding; the one that landed must not read as pending.
+    expect(screen.getByText('1 changes pending')).toBeInTheDocument();
   });
 });

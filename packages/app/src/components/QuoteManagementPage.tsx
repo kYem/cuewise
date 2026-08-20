@@ -241,7 +241,9 @@ export const QuoteManagementPage: React.FC = () => {
   const handleBulkAddToCollection = async (collectionId: string) => {
     setIsBulkLoading(true);
     try {
-      await addQuotesToCollection(Array.from(selectedQuoteIds), collectionId);
+      if (await addQuotesToCollection(Array.from(selectedQuoteIds), collectionId)) {
+        clearSelection();
+      }
     } catch (err) {
       logger.error('Bulk add to collection operation failed', err);
     } finally {
