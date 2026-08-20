@@ -72,6 +72,10 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
   // Count changes
   const changeCount = Object.keys(pendingChanges).length;
 
+  // A toggle made mid-apply is overwritten wholesale when the loop rebuilds the pending set,
+  // so its tick would revert with no explanation.
+  const rowsLocked = isSubmitting;
+
   // Apply changes
   const handleApplyChanges = async () => {
     if (changeCount === 0) {
@@ -152,6 +156,7 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
                   key={quote.id}
                   type="button"
                   onClick={() => toggleQuote(quote.id)}
+                  disabled={rowsLocked}
                   className={cn(
                     'w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all',
                     isSelected
