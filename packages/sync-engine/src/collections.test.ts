@@ -1,4 +1,4 @@
-import { configurePlatform, DEFAULT_SETTINGS, toStoredValues } from '@cuewise/shared';
+import { configurePlatform, DEFAULT_SETTINGS, type Goal, toStoredValues } from '@cuewise/shared';
 import {
   getGoals,
   getManyFromStorage,
@@ -49,6 +49,17 @@ describe('goals binding', () => {
     const result = await goalsBinding().readAll();
 
     expect(result).toEqual({ g1, g2 });
+  });
+
+  // The raw readers validate shape, not content. An id-less row keys as "undefined", the enroll
+  // backfill claims it, and the server rejects the whole batch — every cycle, until a re-enroll.
+  it('readAll skips a stored row with no usable id rather than keying it as undefined', async () => {
+    const g1 = goalFactory.build({ id: 'g1' });
+    await setGoals([g1, { title: 'no id at all' } as unknown as Goal, { id: '' } as Goal]);
+
+    const result = await goalsBinding().readAll();
+
+    expect(Object.keys(result)).toEqual(['g1']);
   });
 
   it('writeOne appends a new goal', async () => {

@@ -52,7 +52,14 @@ function arrayBinding<T extends HasId>(
     name,
     async readAll() {
       const items = await getAll();
-      return Object.fromEntries(items.map((item) => [item.id, item]));
+      // The raw readers validate shape, not content, so `T extends HasId` is a cast rather than
+      // a guarantee. An id-less row keys as "undefined" here, and the enroll backfill claims it:
+      // the server rejects that record and the whole batch fails, every cycle, until a re-enroll.
+      const usable = items.filter((item) => typeof item?.id === 'string' && item.id !== '');
+      if (usable.length !== items.length) {
+        logger.error(`Skipping ${items.length - usable.length} stored ${name} with no usable id`);
+      }
+      return Object.fromEntries(usable.map((item) => [item.id, item]));
     },
     async writeOne(entityId, entity) {
       // Reads inside the lock: the service worker runs this while the page writes the same array

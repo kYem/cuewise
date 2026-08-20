@@ -18,7 +18,6 @@ export function assertPersisted(result: StorageResult): void {
 /**
  * Copy for a write that did not persist. A quota failure is not retryable, so the generic
  * "please try again" is worse than useless there — it sends the user round the same loop.
- * Reads the `StorageError` `assertPersisted` attaches as `cause`.
  */
 export function storageWriteErrorMessage(error: unknown, fallback: string): string {
   // Either shape: the StorageError itself, or the Error `assertPersisted` wrapped it in.
