@@ -64,8 +64,11 @@ export const CollectionList: React.FC = () => {
 
     setIsDeleting(true);
     try {
-      await deleteCollection(deletingCollection.id);
-      setDeletingCollection(null);
+      // Closing on a failed delete leaves the collection in the list behind a dialog that
+      // reported nothing, with the error toast the only trace.
+      if (await deleteCollection(deletingCollection.id)) {
+        setDeletingCollection(null);
+      }
     } finally {
       setIsDeleting(false);
     }
