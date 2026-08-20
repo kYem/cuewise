@@ -182,23 +182,39 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
  * announcing that write would mark a gone id dirty, which pushes as a tombstone. `change` must
  * return a quote: it reads `target` back out of the written list, so a removal reads as gone.
  */
+/**
+ * A write aimed at one quote. `gone` carries no result because no write was attempted — a
+ * shape that reports success for a write that never ran would hand `assertPersisted` a value
+ * it cannot vouch for, and that is the one check keeping an unpersisted list off the screen.
+ */
+type OneQuoteWrite =
+  | { kind: 'gone'; quotes: Quote[] }
+  | { kind: 'written'; result: StorageResult; quotes: Quote[]; target: Quote };
+
 async function persistOneQuote(
   quoteId: string,
   change: (quote: Quote) => Quote
-): Promise<{ result: StorageResult; quotes: Quote[]; target: Quote | null }> {
+): Promise<OneQuoteWrite> {
   // Its own lock rather than updateQuotes, so a gone id skips the write entirely: rewriting an
   // identical list can still fail, and the caller would report that instead of the gone.
-  return withCollectionLock('quotes', async () => {
+  return withCollectionLock('quotes', async (): Promise<OneQuoteWrite> => {
     const current = await getQuotes();
-    if (!current.some((q) => q.id === quoteId)) {
-      return { result: { success: true } as StorageResult, quotes: current, target: null };
+    // Kept from the map rather than re-found afterwards: `change` returning a different id would
+    // otherwise read as gone once the write had already landed.
+    let target: Quote | null = null;
+    const quotes = current.map((q) => {
+      if (q.id !== quoteId) {
+        return q;
+      }
+      target = change(q);
+      return target;
+    });
+    // Never entered the map, so nothing changed and there is nothing to write. Rewriting the
+    // identical list could still fail, and the caller would report that instead of the gone.
+    if (target === null) {
+      return { kind: 'gone', quotes: current };
     }
-    const quotes = current.map((q) => (q.id === quoteId ? change(q) : q));
-    return {
-      result: await setQuotes(quotes),
-      quotes,
-      target: quotes.find((q) => q.id === quoteId) ?? null,
-    };
+    return { kind: 'written', result: await setQuotes(quotes), quotes, target };
   });
 }
 
@@ -466,21 +482,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   toggleFavorite: async (quoteId: string) => {
     try {
-      const {
-        result,
-        quotes: updatedQuotes,
-        target,
-      } = await persistOneQuote(quoteId, (q) => ({
+      const write = await persistOneQuote(quoteId, (q) => ({
         ...q,
         isFavorite: !q.isFavorite,
       }));
-      assertPersisted(result);
-      set({ quotes: updatedQuotes });
-      if (target === null) {
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
         reportQuoteGone('toggleFavorite', quoteId);
-        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
         return;
       }
+      const { quotes: updatedQuotes, target } = write;
+      assertPersisted(write.result);
+      set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
@@ -500,22 +514,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   hideQuote: async (quoteId: string) => {
     try {
-      const {
-        result,
-        quotes: updatedQuotes,
-        target,
-      } = await persistOneQuote(quoteId, (q) => ({
+      const write = await persistOneQuote(quoteId, (q) => ({
         ...q,
         isHidden: true,
       }));
-      assertPersisted(result);
-      set({ quotes: updatedQuotes });
-      if (syncsLocalEdits(target)) {
-        notifyMutated('quotes', quoteId);
+      if (write.kind === 'written') {
+        assertPersisted(write.result);
       }
+      set({ quotes: write.quotes });
       // No early return: the refresh below is what the user asked for either way.
-      if (target === null) {
+      if (write.kind === 'gone') {
         reportQuoteGone('hideQuote', quoteId);
+      } else if (syncsLocalEdits(write.target)) {
+        notifyMutated('quotes', quoteId);
       }
 
       // If hiding current quote, get a new one
@@ -570,18 +581,22 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   incrementViewCount: async (quoteId: string) => {
     try {
-      const { result, quotes: updatedQuotes } = await persistOneQuote(quoteId, (q) => ({
+      const write = await persistOneQuote(quoteId, (q) => ({
         ...q,
         viewCount: q.viewCount + 1,
         lastViewed: new Date().toISOString(),
       }));
-      // No toast: background telemetry the user did not initiate. A failed increment is dropped,
-      // not retried — the next view counts up from whatever last persisted.
-      if (!result.success) {
-        logger.error('Could not persist the view count', result.error);
+      // Nothing to say either way: this is background telemetry the user did not initiate, and
+      // a failed increment is dropped rather than retried.
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
         return;
       }
-      set({ quotes: updatedQuotes });
+      if (!write.result.success) {
+        logger.error('Could not persist the view count', write.result.error);
+        return;
+      }
+      set({ quotes: write.quotes });
     } catch (error) {
       logger.error('Error incrementing view count', error);
     }
@@ -589,21 +604,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   unhideQuote: async (quoteId: string) => {
     try {
-      const {
-        result,
-        quotes: updatedQuotes,
-        target,
-      } = await persistOneQuote(quoteId, (q) => ({
+      const write = await persistOneQuote(quoteId, (q) => ({
         ...q,
         isHidden: false,
       }));
-      assertPersisted(result);
-      set({ quotes: updatedQuotes });
-      if (target === null) {
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
         reportQuoteGone('unhideQuote', quoteId);
-        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
         return;
       }
+      const { quotes: updatedQuotes, target } = write;
+      assertPersisted(write.result);
+      set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
@@ -617,21 +630,19 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   editQuote: async (quoteId: string, updates) => {
     try {
-      const {
-        result,
-        quotes: updatedQuotes,
-        target,
-      } = await persistOneQuote(quoteId, (q) => ({
+      const write = await persistOneQuote(quoteId, (q) => ({
         ...q,
         ...updates,
       }));
-      assertPersisted(result);
-      set({ quotes: updatedQuotes });
-      if (target === null) {
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
         reportQuoteGone('editQuote', quoteId);
-        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
         return 'gone';
       }
+      const { quotes: updatedQuotes, target } = write;
+      assertPersisted(write.result);
+      set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
@@ -1161,11 +1172,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // announcing a write that changed nothing marks the quote dirty for no reason.
       const changed = { added: false };
 
-      const {
-        result,
-        quotes: updatedQuotes,
-        target,
-      } = await persistOneQuote(quoteId, (q) => {
+      const write = await persistOneQuote(quoteId, (q) => {
         const currentIds = q.collectionIds ?? [];
         if (currentIds.includes(collectionId)) {
           return q;
@@ -1173,13 +1180,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         changed.added = true;
         return { ...q, collectionIds: [...currentIds, collectionId] };
       });
-      assertPersisted(result);
-      set({ quotes: updatedQuotes, error: null });
-      if (target === null) {
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes, error: null });
         reportQuoteGone('addQuoteToCollection', quoteId);
-        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
         return 'gone';
       }
+      const { quotes: updatedQuotes, target } = write;
+      assertPersisted(write.result);
+      set({ quotes: updatedQuotes, error: null });
       if (changed.added && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
@@ -1212,24 +1221,22 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Decided against the locked read, for the same reason as addQuoteToCollection.
       const changed = { removed: false };
 
-      const {
-        result,
-        quotes: updatedQuotes,
-        target,
-      } = await persistOneQuote(quoteId, (q) => {
+      const write = await persistOneQuote(quoteId, (q) => {
         if (!q.collectionIds?.includes(collectionId)) {
           return q;
         }
         changed.removed = true;
         return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== collectionId) };
       });
-      assertPersisted(result);
-      set({ quotes: updatedQuotes, error: null });
-      if (target === null) {
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes, error: null });
         reportQuoteGone('removeQuoteFromCollection', quoteId);
-        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
         return 'gone';
       }
+      const { quotes: updatedQuotes, target } = write;
+      assertPersisted(write.result);
+      set({ quotes: updatedQuotes, error: null });
       if (changed.removed && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
