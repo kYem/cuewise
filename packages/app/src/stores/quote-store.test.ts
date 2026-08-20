@@ -837,13 +837,13 @@ describe('Quote Store', () => {
   });
 });
 
-// Storage holds collections the store has not seen — a pull that landed while this action waited
-// on the lock. Every writer must merge into that list, not the one it can see.
 afterEach(() => {
   onLockGranted.clear();
   configurePlatform({ syncSink: null });
 });
 
+// Storage holds entities the store has not seen — a pull that landed while the action waited on
+// the lock. Every writer must merge into that list, not the one it can see.
 describe('writers read storage, not their own snapshot', () => {
   beforeEach(() => {
     useQuoteStore.setState(EMPTY_STORE_STATE);
@@ -1453,7 +1453,7 @@ describe('writers read storage, not their own snapshot', () => {
     });
     vi.mocked(storage.getQuotes).mockResolvedValue([]);
 
-    // True like bulkDelete: nothing landed, but a retry cannot help either.
+    // True like bulkDelete: nothing matched, but a retry cannot help either.
     await expect(useQuoteStore.getState().addQuotesToCollection(['gone'], 'c1')).resolves.toBe(
       true
     );
@@ -1760,39 +1760,6 @@ describe('writers read storage, not their own snapshot', () => {
     expect(sink.markDeleted.mock.calls).toEqual([['quotes', 'usable']]);
   });
 
-  // initialize reads the stored card back verbatim, so losing this write leaves the card on
-  // the pre-edit quote for every later tab while the list shows the new one.
-  it.each([
-    ['editQuote', () => useQuoteStore.getState().editQuote('mine', { text: 'edited' })],
-    ['toggleFavorite', () => useQuoteStore.getState().toggleFavorite('mine')],
-    ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['mine'], true)],
-    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['mine'], false)],
-    ['addQuoteToCollection', () => useQuoteStore.getState().addQuoteToCollection('mine', 'c2')],
-    [
-      'removeQuoteFromCollection',
-      () => useQuoteStore.getState().removeQuoteFromCollection('mine', 'c1'),
-    ],
-  ])('%s warns when the card write failed', async (_label, act) => {
-    const mine = quoteFactory.build({
-      id: 'mine',
-      isCustom: true,
-      isHidden: true,
-      collectionIds: ['c1'],
-    });
-    useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
-    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
-    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
-      success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
-    });
-
-    await act();
-
-    expect(mockToastWarning).toHaveBeenCalledWith(
-      'Saved. Your new tab may keep showing the previous version until the quote changes again.'
-    );
-  });
-
   // Every other storage WRITE failure in this store answers rather than throwing; a rejection
   // here would report the whole action as failed for a list write that already landed.
   it('reports the list write as saved when only the card write rejects', async () => {
@@ -1805,8 +1772,8 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastError).not.toHaveBeenCalled();
   });
 
-  // A nullish result is the shape a non-Chrome adapter can return; dereferencing it turned a
-  // logged card failure into the whole action failing.
+  // No shipped adapter answers nullish, but the port's type does not forbid it, and the guard
+  // that admits it must not then dereference it.
   it('treats a missing card-write result as a failure without throwing', async () => {
     const mine = quoteFactory.build({ id: 'mine', isCustom: true });
     useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
@@ -1814,9 +1781,7 @@ describe('writers read storage, not their own snapshot', () => {
     vi.mocked(storage.setCurrentQuote).mockResolvedValue(undefined as never);
 
     await expect(useQuoteStore.getState().editQuote('mine', { text: 'x' })).resolves.toBe('saved');
-    expect(mockToastWarning).toHaveBeenCalledWith(
-      'Saved. Your new tab may keep showing the previous version until the quote changes again.'
-    );
+    expect(mockToastError).not.toHaveBeenCalled();
   });
 
   // Their own fixture: against the shared one these two writers mutate nothing, so the store
@@ -1856,59 +1821,6 @@ describe('writers read storage, not their own snapshot', () => {
     }
   });
 
-  // The count is the only place a pull that removed part of the selection is ever surfaced,
-  // so a card-write failure must not swallow it.
-  it.each([
-    [
-      'bulkToggleFavorite',
-      () => useQuoteStore.getState().bulkToggleFavorite(['kept', 'gone'], true),
-      '1 quotes added to favorites',
-    ],
-    [
-      'bulkToggleHidden',
-      () => useQuoteStore.getState().bulkToggleHidden(['kept', 'gone'], false),
-      '1 quotes unhidden',
-    ],
-  ])('%s still reports its count when the card write failed', async (_label, act, message) => {
-    const kept = quoteFactory.build({ id: 'kept', isCustom: true, isHidden: true });
-    useQuoteStore.setState({ quotes: [kept], currentQuote: kept });
-    vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
-    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
-      success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
-    });
-
-    await act();
-
-    expect(mockToastSuccess).toHaveBeenCalledWith(message);
-    expect(mockToastWarning).toHaveBeenCalledWith(
-      'Saved. Your new tab may keep showing the previous version until the quote changes again.'
-    );
-  });
-
-  // The card write is the whole action here — there is no list write to have landed.
-  it('navigateHistory says so when the card write failed', async () => {
-    const first = quoteFactory.build({ id: 'first' });
-    const second = quoteFactory.build({ id: 'second' });
-    useQuoteStore.setState({
-      quotes: [first, second],
-      currentQuote: second,
-      quoteHistory: [second.id, first.id],
-      historyIndex: 0,
-    });
-    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
-      success: false,
-      error: { type: 'quota_exceeded', message: 'full' },
-    });
-
-    await useQuoteStore.getState().goBack();
-
-    expect(mockToastWarning).toHaveBeenCalledWith(
-      'Saved. Your new tab may keep showing the previous version until the quote changes again.',
-      expect.objectContaining({ collapseRepeats: true })
-    );
-  });
-
   // Rows destroyed with no id cannot be tombstoned, so the reset is not clean either.
   it('resetAllQuotes does not claim a clean reset when it skipped unusable rows', async () => {
     useQuoteStore.setState({ quotes: [] });
@@ -1921,6 +1833,50 @@ describe('writers read storage, not their own snapshot', () => {
 
     expect(mockToastSuccess).not.toHaveBeenCalled();
     expect(mockToastWarning).toHaveBeenCalled();
+  });
+
+  // The stored card is a snapshot nothing converges. Reading its fields back is how a quote
+  // another device hid or edited kept rendering on this one, with no failure involved.
+  it('initialize shows the live quote, not the copy the card was stored with', async () => {
+    const stale = quoteFactory.build({ id: 'q1', text: 'before the other device edited it' });
+    const live = { ...stale, text: 'edited elsewhere' };
+    vi.mocked(storage.getQuotes).mockResolvedValue([live]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(stale);
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+
+    await useQuoteStore.getState().initialize();
+
+    expect(useQuoteStore.getState().currentQuote?.text).toBe('edited elsewhere');
+  });
+
+  it('initialize rerolls when the displayed quote was hidden on another device', async () => {
+    const stale = quoteFactory.build({ id: 'q1', isHidden: false });
+    const other = quoteFactory.build({ id: 'q2', isHidden: false });
+    vi.mocked(storage.getQuotes).mockResolvedValue([{ ...stale, isHidden: true }, other]);
+    vi.mocked(storage.getCurrentQuote).mockResolvedValue(stale);
+    vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
+
+    await useQuoteStore.getState().initialize();
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('q2');
+  });
+
+  // Only the id of the stored card is trusted now, so a lost card write costs nothing the
+  // user can see and must not be dressed up as something that did.
+  it('says nothing when only the card write failed', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().editQuote('mine', { text: 'edited' });
+
+    expect(mockToastSuccess).toHaveBeenCalledWith('Quote updated successfully');
+    expect(mockToastWarning).not.toHaveBeenCalled();
+    expect(mockToastError).not.toHaveBeenCalled();
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {
@@ -2485,7 +2441,7 @@ describe('converging on quotes written elsewhere', () => {
     // test's waitFor before it has done anything.
     mockToastWarning.mockClear();
     mockToastError.mockClear();
-    // Its own setters: borrowed from the describe above, this block reads as green in a full run
+    // Its own setters: borrowed from an earlier block, this reads as green in a full run
     // and fails every write under `-t`, which is how anyone debugging it runs it.
     vi.mocked(storage.setQuotes).mockResolvedValue({ success: true });
     vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
