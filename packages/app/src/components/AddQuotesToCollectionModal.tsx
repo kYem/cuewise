@@ -81,18 +81,21 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
 
     setIsSubmitting(true);
     try {
-      let anyRetryable = false;
+      const stillPending: Record<string, boolean> = {};
       for (const [quoteId, shouldBeIn] of Object.entries(pendingChanges)) {
         const outcome = shouldBeIn
           ? await addQuoteToCollection(quoteId, collection.id)
           : await removeQuoteFromCollection(quoteId, collection.id);
+        // Only a retryable failure stays pending. Keeping the ones that landed would report
+        // the whole batch as outstanding and leave their rows ringed as unsaved.
         if (outcome === 'failed') {
-          anyRetryable = true;
+          stillPending[quoteId] = shouldBeIn;
         }
       }
-      // Only a retryable failure holds the modal open. Staying open on 'gone' would loop
-      // forever: the quote is deleted, so applying again can only fail the same way.
-      if (!anyRetryable) {
+      setPendingChanges(stillPending);
+      // Staying open on 'gone' would loop forever: the quote is deleted, so applying again
+      // can only answer 'gone' again.
+      if (Object.keys(stillPending).length === 0) {
         onClose();
       }
     } finally {

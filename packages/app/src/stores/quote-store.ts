@@ -65,7 +65,7 @@ async function navigateHistory(
     const quote = quotes.find((q) => q.id === quoteId);
 
     if (quote && !quote.isHidden) {
-      await persistCurrentQuote(quote);
+      await persistCurrentQuote(quote, 'navigateHistory');
       set({ currentQuote: quote, historyIndex: newIndex });
       await get().incrementViewCount(quote.id);
     } else {
@@ -211,16 +211,31 @@ function syncsLocalEdits(quote: Quote | null): boolean {
 }
 
 /**
- * The card's own key. It resolves {success:false} rather than rejecting, so an unchecked call
- * is the one storage write in this store that can fail with no record at all — the displayed
- * quote silently reverts on the next tab. Not a toast: several callers are background ticks.
+ * The card's own key, which `initialize` reads back verbatim — so losing this write leaves the
+ * card showing the pre-edit quote on every later tab while the list shows the new one.
+ *
+ * Answers rather than throwing: several callers are background ticks with nothing to tell, and
+ * at the rest the list write has already landed, so a throw here would report the whole action
+ * as failed. `getStorageArea` can reject, so both exits have to end up in the same place.
  */
-async function persistCurrentQuote(quote: Quote): Promise<void> {
-  const result = await setCurrentQuote(quote);
-  if (result?.success !== true) {
-    logger.error('Could not persist the displayed quote', result.error, { quoteId: quote.id });
+async function persistCurrentQuote(quote: Quote, action: string): Promise<boolean> {
+  try {
+    const result = await setCurrentQuote(quote);
+    if (result?.success !== true) {
+      logger.error(`${action}: could not persist the displayed quote`, result?.error, {
+        quoteId: quote.id,
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error(`${action}: could not persist the displayed quote`, error, { quoteId: quote.id });
+    return false;
   }
 }
+
+/** The list write landed and the card write did not, so the card is behind until a refresh. */
+const CARD_BEHIND_MESSAGE = 'Saved, but this tab may show the old quote until you refresh.';
 
 /** A write aimed at one entity: 'gone' is not a failure, and a retry cannot fix it. */
 type QuoteWriteOutcome = 'saved' | 'gone' | 'failed';
@@ -336,7 +351,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!stored || stored.isHidden || !quotes.some((q) => q.id === stored.id)) {
         currentQuote = getRandomQuote(quotes);
         if (currentQuote) {
-          await persistCurrentQuote(currentQuote);
+          await persistCurrentQuote(currentQuote, 'initialize');
         }
       }
 
@@ -399,7 +414,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       );
 
       if (newQuote) {
-        await persistCurrentQuote(newQuote);
+        // Collapsed: the new-tab interval calls this on every tick, so a persistent failure
+        // would otherwise stack one warning per tick.
+        if (!(await persistCurrentQuote(newQuote, 'refreshQuote'))) {
+          useToastStore.getState().warning(CARD_BEHIND_MESSAGE, { collapseRepeats: true });
+        }
 
         // Add to history - if we're not at the most recent position,
         // clear forward history (like browser navigation)
@@ -472,7 +491,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // The persisted value, not a re-toggle of the snapshot: a pull may have flipped the flag.
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        await persistCurrentQuote(target);
+        if (!(await persistCurrentQuote(target, 'toggleFavorite'))) {
+          useToastStore.getState().warning(CARD_BEHIND_MESSAGE);
+        }
         set({ currentQuote: target });
       }
     } catch (error) {
@@ -620,13 +641,18 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         notifyMutated('quotes', quoteId);
       }
 
+      let cardBehind = false;
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        await persistCurrentQuote(target);
+        cardBehind = !(await persistCurrentQuote(target, 'editQuote'));
         set({ currentQuote: target });
       }
 
-      useToastStore.getState().success('Quote updated successfully');
+      if (cardBehind) {
+        useToastStore.getState().warning(CARD_BEHIND_MESSAGE);
+      } else {
+        useToastStore.getState().success('Quote updated successfully');
+      }
       return 'saved';
     } catch (error) {
       logger.error('Error editing quote', error);
@@ -754,6 +780,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   bulkToggleFavorite: async (quoteIds: string[], setFavorite: boolean) => {
     try {
+      let cardBehind = false;
       const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
       const affectedCustomIds: string[] = [];
@@ -779,7 +806,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
         const persisted = updatedQuotes.find((q) => q.id === currentQuote.id);
         if (persisted) {
-          await persistCurrentQuote(persisted);
+          cardBehind = !(await persistCurrentQuote(persisted, 'bulkToggleFavorite'));
           set({ currentQuote: persisted });
         } else {
           await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
@@ -788,6 +815,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
+        return true;
+      }
+      if (cardBehind) {
+        useToastStore.getState().warning(CARD_BEHIND_MESSAGE);
         return true;
       }
       const action = setFavorite ? 'added to favorites' : 'removed from favorites';
@@ -808,6 +839,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   bulkToggleHidden: async (quoteIds: string[], setHidden: boolean) => {
     try {
+      let cardBehind = false;
       const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
       const affectedCustomIds: string[] = [];
@@ -836,13 +868,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         } else if (setHidden) {
           await get().refreshQuote();
         } else {
-          await persistCurrentQuote(persisted);
+          cardBehind = !(await persistCurrentQuote(persisted, 'bulkToggleHidden'));
           set({ currentQuote: persisted });
         }
       }
 
       if (matched === 0) {
         useToastStore.getState().warning('Those quotes no longer exist');
+        return true;
+      }
+      if (cardBehind) {
+        useToastStore.getState().warning(CARD_BEHIND_MESSAGE);
         return true;
       }
       const action = setHidden ? 'hidden' : 'unhidden';
@@ -908,6 +944,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Raw: a reset means every stored quote, including one this build cannot parse, and the
       // preserving setter would carry those through.
       const wiped: string[] = [];
+      let unusable = 0;
       const tombstones = { complete: true };
       const resetResult = await withCollectionLock('quotes', async () => {
         // Raw, to match the raw write: the validating read drops rows this build cannot parse,
@@ -917,13 +954,20 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           for (const quote of await getQuotesRaw()) {
             // The raw read validates nothing, and an id the server rejects wedges every later
             // push for this device, not just this record.
-            if (typeof quote?.id === 'string' && quote.id !== '' && syncsLocalEdits(quote)) {
+            if (typeof quote?.id !== 'string' || quote.id === '') {
+              unusable += 1;
+              continue;
+            }
+            if (syncsLocalEdits(quote)) {
               wiped.push(quote.id);
             }
           }
         } catch (error) {
           tombstones.complete = false;
           logger.error('Resetting quotes without tombstones: could not read what is stored', error);
+        }
+        if (unusable > 0) {
+          logger.warn(`Reset destroyed ${unusable} stored quotes with no usable id`);
         }
         return setQuotesRaw(freshQuotes);
       });
@@ -937,7 +981,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Reset current quote to a random one
       const newCurrent = getRandomQuote(freshQuotes);
       if (newCurrent) {
-        await persistCurrentQuote(newCurrent);
+        await persistCurrentQuote(newCurrent, 'resetAllQuotes');
         set({
           currentQuote: newCurrent,
           quoteHistory: [newCurrent.id],
@@ -950,7 +994,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       } else {
         useToastStore
           .getState()
-          .warning('Quotes reset on this device. They may return from your other devices.');
+          .warning(
+            "Quotes reset, but Cuewise couldn't read what it replaced. If you use sync, some may return from your other devices."
+          );
       }
     } catch (error) {
       logger.error('Error resetting quotes', error);
@@ -1126,6 +1172,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   addQuoteToCollection: async (quoteId: string, collectionId: string) => {
     try {
+      let cardBehind = false;
       const { currentQuote } = get();
       // Decided against the locked read: a pull may have added this membership already, and
       // announcing a write that changed nothing marks the quote dirty for no reason.
@@ -1158,11 +1205,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && currentQuote.id === quoteId) {
         const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
         if (updatedCurrentQuote) {
-          await persistCurrentQuote(updatedCurrentQuote);
+          cardBehind = !(await persistCurrentQuote(updatedCurrentQuote, 'addQuoteToCollection'));
           set({ currentQuote: updatedCurrentQuote });
         }
       }
 
+      if (cardBehind) {
+        useToastStore.getState().warning(CARD_BEHIND_MESSAGE);
+      }
       return 'saved';
     } catch (error) {
       logger.error('Error adding quote to collection', error);
@@ -1178,6 +1228,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   removeQuoteFromCollection: async (quoteId: string, collectionId: string) => {
     try {
+      let cardBehind = false;
       const { currentQuote } = get();
       // Decided against the locked read, for the same reason as addQuoteToCollection.
       const changed = { removed: false };
@@ -1208,11 +1259,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && currentQuote.id === quoteId) {
         const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
         if (updatedCurrentQuote) {
-          await persistCurrentQuote(updatedCurrentQuote);
+          cardBehind = !(await persistCurrentQuote(
+            updatedCurrentQuote,
+            'removeQuoteFromCollection'
+          ));
           set({ currentQuote: updatedCurrentQuote });
         }
       }
 
+      if (cardBehind) {
+        useToastStore.getState().warning(CARD_BEHIND_MESSAGE);
+      }
       return 'saved';
     } catch (error) {
       logger.error('Error removing quote from collection', error);
@@ -1263,9 +1320,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
 
       if (matched === 0) {
+        // True, like bulkDelete: nothing landed, but nothing is retryable either.
         useToastStore.getState().warning('Those quotes no longer exist');
-        // True, like bulkDelete: nothing landed, but nothing is retryable either, so the caller
-        // should clear the selection rather than invite an endless retry.
         return true;
       }
       if (added === 0) {

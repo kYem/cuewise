@@ -1047,42 +1047,30 @@ describe('writers read storage, not their own snapshot', () => {
       'toggleFavorite',
       () => useQuoteStore.getState().toggleFavorite('mine'),
       'Failed to update favorite. Please try again.',
-
       undefined,
     ],
     [
       'hideQuote',
       () => useQuoteStore.getState().hideQuote('mine'),
       'Failed to hide quote. Please try again.',
-
-      undefined,
-    ],
-    [
-      'unhideQuote',
-      () => useQuoteStore.getState().unhideQuote('mine'),
-      'Failed to unhide quote. Please try again.',
-
       undefined,
     ],
     [
       'deleteQuote',
       () => useQuoteStore.getState().deleteQuote('mine'),
       'Failed to delete quote. Please try again.',
-
       undefined,
     ],
     [
       'editQuote',
       () => useQuoteStore.getState().editQuote('mine', { text: 'edited' }),
       'Failed to update quote. Please try again.',
-
       undefined,
     ],
     [
       'addCustomQuote',
       () => useQuoteStore.getState().addCustomQuote('new', 'Author', 'inspiration'),
       'Failed to add custom quote. Please try again.',
-
       undefined,
     ],
     [
@@ -1098,37 +1086,27 @@ describe('writers read storage, not their own snapshot', () => {
       { collapseRepeats: true },
     ],
     [
-      'removeQuoteFromCollection',
-      () => useQuoteStore.getState().removeQuoteFromCollection('mine', 'c1'),
-      'Failed to remove quote from collection. Please try again.',
-      { collapseRepeats: true },
-    ],
-    [
       'bulkDelete',
       () => useQuoteStore.getState().bulkDelete(['mine']),
       'Failed to delete quotes. Please try again.',
-
       undefined,
     ],
     [
       'bulkToggleFavorite',
       () => useQuoteStore.getState().bulkToggleFavorite(['mine'], true),
       'Failed to update favorites. Please try again.',
-
       undefined,
     ],
     [
       'bulkToggleHidden',
       () => useQuoteStore.getState().bulkToggleHidden(['mine'], true),
       'Failed to update quotes. Please try again.',
-
       undefined,
     ],
     [
       'addQuotesToCollection',
       () => useQuoteStore.getState().addQuotesToCollection(['mine'], 'c1'),
       'Failed to add quotes to collection. Please try again.',
-
       undefined,
     ],
   ])('%s does not adopt a write that did not persist', async (_label, act, message, options) => {
@@ -1638,8 +1616,9 @@ describe('writers read storage, not their own snapshot', () => {
     await useQuoteStore.getState().refreshQuote();
 
     expect(useQuoteStore.getState().error).toBeNull();
-    expect(mockToastError).toHaveBeenCalledWith(
-      'Failed to refresh quote. Please try again.',
+    // The card did change; only the write that would have kept it did not.
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      'Saved, but this tab may show the old quote until you refresh.',
       expect.objectContaining({ collapseRepeats: true })
     );
   });
@@ -1718,7 +1697,7 @@ describe('writers read storage, not their own snapshot', () => {
     expect(storage.setQuotesRaw).toHaveBeenCalled();
     // Warned, not claimed: with no tombstones the peers push those quotes straight back.
     expect(mockToastWarning).toHaveBeenCalledWith(
-      'Quotes reset on this device. They may return from your other devices.'
+      "Quotes reset, but Cuewise couldn't read what it replaced. If you use sync, some may return from your other devices."
     );
     expect(mockToastSuccess).not.toHaveBeenCalled();
   });
@@ -1780,6 +1759,93 @@ describe('writers read storage, not their own snapshot', () => {
     await useQuoteStore.getState().resetAllQuotes();
 
     expect(sink.markDeleted.mock.calls).toEqual([['quotes', 'usable']]);
+  });
+
+  // initialize reads the stored card back verbatim, so losing this write leaves the card on
+  // the pre-edit quote for every later tab while the list shows the new one.
+  it.each([
+    ['editQuote', () => useQuoteStore.getState().editQuote('mine', { text: 'edited' })],
+    ['toggleFavorite', () => useQuoteStore.getState().toggleFavorite('mine')],
+    ['bulkToggleFavorite', () => useQuoteStore.getState().bulkToggleFavorite(['mine'], true)],
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['mine'], false)],
+  ])('%s does not claim success when the card write failed', async (_label, act) => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true, isHidden: true });
+    useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await act();
+
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      'Saved, but this tab may show the old quote until you refresh.'
+    );
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
+  // Every other storage failure in this store answers rather than throwing; a rejection here
+  // would report the whole action as failed for a list write that already landed.
+  it('reports the list write as saved when only the card write rejects', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setCurrentQuote).mockRejectedValue(new Error('storage area unreadable'));
+
+    await expect(useQuoteStore.getState().editQuote('mine', { text: 'x' })).resolves.toBe('saved');
+    expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  // A nullish result is the shape a non-Chrome adapter can return; dereferencing it turned a
+  // logged card failure into the whole action failing.
+  it('treats a missing card-write result as a failure without throwing', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue(undefined as never);
+
+    await expect(useQuoteStore.getState().editQuote('mine', { text: 'x' })).resolves.toBe('saved');
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      'Saved, but this tab may show the old quote until you refresh.'
+    );
+  });
+
+  // Their own fixture: against the shared one these two writers mutate nothing, so the store
+  // adopting the failed write and rejecting it produce the same array.
+  it.each([
+    [
+      'unhideQuote',
+      { isHidden: true },
+      () => useQuoteStore.getState().unhideQuote('mine'),
+      'Failed to unhide quote. Please try again.',
+      undefined,
+    ],
+    [
+      'removeQuoteFromCollection',
+      { collectionIds: ['c1'] },
+      () => useQuoteStore.getState().removeQuoteFromCollection('mine', 'c1'),
+      'Failed to remove quote from collection. Please try again.',
+      { collapseRepeats: true },
+    ],
+  ])('%s does not adopt a write that did not persist', async (_label, seed, act, message, options) => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true, ...seed });
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
+
+    await act();
+
+    expect(useQuoteStore.getState().quotes).toEqual([mine]);
+    expect(useQuoteStore.getState().error).toBeNull();
+    if (options === undefined) {
+      expect(mockToastError).toHaveBeenCalledWith(message);
+    } else {
+      expect(mockToastError).toHaveBeenCalledWith(message, options);
+    }
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {
