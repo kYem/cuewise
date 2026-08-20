@@ -1,6 +1,6 @@
 import { quoteFactory } from '@cuewise/test-utils/factories';
-import { render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, type Mock, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
 import { QuoteManagementPage } from './QuoteManagementPage';
 
@@ -51,5 +51,44 @@ describe('QuoteManagementPage initialization', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(initialize).not.toHaveBeenCalled();
+  });
+});
+
+// The store answers whether the write landed; a failed one must leave the user's picks alone
+// rather than making them re-select everything to retry.
+describe('QuoteManagementPage bulk selection', () => {
+  const mine = quoteFactory.build({ id: 'mine', isHidden: false });
+
+  async function selectOneQuote(): Promise<void> {
+    fireEvent.click(screen.getByRole('button', { name: /Enable Selection/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Select All/ }));
+  }
+
+  function renderWith(bulkToggleHidden: Mock): void {
+    useQuoteStore.setState({
+      quotes: [mine],
+      isLoading: false,
+      error: null,
+      initialize: vi.fn(async () => undefined),
+      bulkToggleHidden,
+    });
+    render(<QuoteManagementPage />);
+  }
+
+  it.each([
+    ['keeps the selection when the write failed', false, '1 selected'],
+    ['clears the selection once the write lands', true, null],
+  ])('%s', async (_label, landed, stillSelected) => {
+    const bulkToggleHidden = vi.fn(async () => landed);
+    renderWith(bulkToggleHidden);
+    await selectOneQuote();
+    fireEvent.click(screen.getByTitle('Hide quotes'));
+
+    await waitFor(() => expect(bulkToggleHidden).toHaveBeenCalledWith(['mine'], true));
+    if (stillSelected === null) {
+      await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument());
+    } else {
+      await waitFor(() => expect(screen.getByText(stillSelected)).toBeInTheDocument());
+    }
   });
 });
