@@ -43,6 +43,10 @@ interface HasId {
  * reporting an empty collection the cycle would seal as a tombstone for every id, and `writeOne`
  * fails the write rather than rewriting the list from items it never saw.
  */
+// One report per collection per process: readAll runs once per pulled record, so logging on
+// every call buries the stall diagnostics it sits beside.
+const reportedUnusableIds = new Set<string>();
+
 function arrayBinding<T extends HasId>(
   name: CollectionLock,
   getAll: () => Promise<T[]>,
@@ -52,11 +56,12 @@ function arrayBinding<T extends HasId>(
     name,
     async readAll() {
       const items = await getAll();
-      // The raw readers validate shape, not content, so `T extends HasId` is a cast rather than
-      // a guarantee. An id-less row keys as "undefined" here, and the enroll backfill claims it:
-      // the server rejects that record and the whole batch fails, every cycle, until a re-enroll.
+      // The raw readers validate shape, not content, so `T extends HasId` is a cast rather than a
+      // guarantee. An empty id pushes as an empty entityId, which the server rejects — the whole
+      // batch, every cycle. A missing one keys as "undefined" and syncs a row every peer appends.
       const usable = items.filter((item) => typeof item?.id === 'string' && item.id !== '');
-      if (usable.length !== items.length) {
+      if (usable.length !== items.length && !reportedUnusableIds.has(name)) {
+        reportedUnusableIds.add(name);
         logger.error(`Skipping ${items.length - usable.length} stored ${name} with no usable id`);
       }
       return Object.fromEntries(usable.map((item) => [item.id, item]));

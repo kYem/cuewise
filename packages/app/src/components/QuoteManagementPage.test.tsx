@@ -113,7 +113,7 @@ describe('QuoteManagementPage bulk selection', () => {
     }
     await selectOneQuote();
 
-    // Scoped: the per-quote card carries the same titles.
+    // Scoped: the per-quote card carries the same two favourite titles.
     fireEvent.click(within(bulkToolbar()).getByTitle(label));
 
     await waitFor(() => expect(writer).toHaveBeenCalledWith(...expected));

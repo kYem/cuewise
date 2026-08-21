@@ -22,7 +22,6 @@ import {
   getQuotes,
   getQuotesRaw,
   getSettings,
-  type StorageResult,
   setCurrentQuote,
   setQuotes,
   setQuotesRaw,
@@ -65,7 +64,9 @@ async function navigateHistory(
     const quote = quotes.find((q) => q.id === quoteId);
 
     if (quote && !quote.isHidden) {
-      await persistCurrentQuote(quote, 'navigateHistory');
+      if (!(await persistCurrentQuote(quote, 'navigateHistory'))) {
+        useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+      }
       set({ currentQuote: quote, historyIndex: newIndex });
       await get().incrementViewCount(quote.id);
     } else {
@@ -98,7 +99,8 @@ interface QuoteStore {
 
   // Actions
   initialize: () => Promise<void>;
-  refreshQuote: () => Promise<void>;
+  /** `userInitiated` reports a card write the user's own click asked for; ticks stay quiet. */
+  refreshQuote: (options?: { userInitiated?: boolean }) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
   canGoBack: () => boolean;
@@ -178,18 +180,13 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
 }
 
 /**
- * Change one quote inside the lock. `target` is null when the locked read no longer held the id —
- * announcing that write would mark a gone id dirty, which pushes as a tombstone. `change` must
- * return a quote: it reads `target` back out of the written list, so a removal reads as gone.
- */
-/**
- * A write aimed at one quote. `gone` carries no result because no write was attempted — a
- * shape that reports success for a write that never ran would hand `assertPersisted` a value
- * it cannot vouch for, and that is the one check keeping an unpersisted list off the screen.
+ * A write aimed at one quote. Both members carry a list storage has vouched for: `gone` never
+ * wrote, and `saved` throws rather than answering, so no caller can adopt an unpersisted list.
+ * Announcing a gone id would mark it dirty, which pushes as a tombstone this device never made.
  */
 type OneQuoteWrite =
   | { kind: 'gone'; quotes: Quote[] }
-  | { kind: 'written'; result: StorageResult; quotes: Quote[]; target: Quote };
+  | { kind: 'saved'; quotes: Quote[]; target: Quote };
 
 async function persistOneQuote(
   quoteId: string,
@@ -199,22 +196,23 @@ async function persistOneQuote(
   // identical list can still fail, and the caller would report that instead of the gone.
   return withCollectionLock('quotes', async (): Promise<OneQuoteWrite> => {
     const current = await getQuotes();
-    // Kept from the map rather than re-found afterwards: `change` returning a different id would
-    // otherwise read as gone once the write had already landed.
-    let target: Quote | null = null;
+    // Boxed because TypeScript does not track an assignment made inside the callback: a bare
+    // `let` narrows to `never` past the guard below, and the compiler stops checking `target`.
+    // Kept from the map rather than re-found afterwards, so a `change` that rewrote the id
+    // cannot read as gone once the write has landed.
+    const hit: { target: Quote | null } = { target: null };
     const quotes = current.map((q) => {
       if (q.id !== quoteId) {
         return q;
       }
-      target = change(q);
-      return target;
+      hit.target = change(q);
+      return hit.target;
     });
-    // Never entered the map, so nothing changed and there is nothing to write. Rewriting the
-    // identical list could still fail, and the caller would report that instead of the gone.
-    if (target === null) {
+    if (hit.target === null) {
       return { kind: 'gone', quotes: current };
     }
-    return { kind: 'written', result: await setQuotes(quotes), quotes, target };
+    assertPersisted(await setQuotes(quotes));
+    return { kind: 'saved', quotes, target: hit.target };
   });
 }
 
@@ -227,12 +225,10 @@ function syncsLocalEdits(quote: Quote | null): boolean {
 }
 
 /**
- * The card's own key, which `initialize` reads back verbatim — so losing this write leaves the
- * card showing the pre-edit quote on every later tab while the list shows the new one.
- *
- * Answers rather than throwing: most callers have already landed their list write, so a throw
- * would report the whole action as failed. Each decides for itself whether to say anything —
- * the ones that reroll a gone quote need not. `getStorageArea` rejects, so both exits agree.
+ * The card's own key. `initialize` reads back only its id, so losing this write matters just
+ * where the id changes — a writer that keeps it is re-resolved from the list on the next mount.
+ * Answers rather than throwing: the list write has usually already landed, and `getStorageArea`
+ * rejects, so both exits have to end up in the same place.
  */
 async function persistCurrentQuote(quote: Quote, action: string): Promise<boolean> {
   try {
@@ -278,6 +274,9 @@ function reportQuoteGone(action: string, quoteId: string): void {
   // pull that removed the selection would otherwise stack one identical toast per quote.
   useToastStore.getState().warning('This quote no longer exists', { collapseRepeats: true });
 }
+
+/** The card moved here but the write that remembers it did not, so other tabs keep the old one. */
+const CARD_NOT_REMEMBERED = 'Showing a new quote, but your other tabs may still show the last one.';
 
 const STALE_QUOTES_MESSAGE =
   "Cuewise couldn't re-read your quotes just now, so what you see may be out of date.";
@@ -405,7 +404,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     await quotesObserver.reconcile();
   },
 
-  refreshQuote: async () => {
+  refreshQuote: async (options = {}) => {
     try {
       const {
         quotes,
@@ -429,10 +428,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       );
 
       if (newQuote) {
-        // No warning: every caller rerolls because the old quote is gone or hidden, which is
-        // the state initialize already discards the stored card for. The interval calls this
-        // unprompted too, and the user saved nothing.
-        await persistCurrentQuote(newQuote, 'refreshQuote');
+        // Only a deliberate reroll is worth reporting: the interval calls this unprompted, and
+        // the writers that call it are already rerolling a quote that is gone or hidden.
+        const remembered = await persistCurrentQuote(newQuote, 'refreshQuote');
+        if (!remembered && options.userInitiated === true) {
+          useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+        }
 
         // Add to history - if we're not at the most recent position,
         // clear forward history (like browser navigation)
@@ -493,7 +494,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         return;
       }
       const { quotes: updatedQuotes, target } = write;
-      assertPersisted(write.result);
       set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -518,9 +518,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         ...q,
         isHidden: true,
       }));
-      if (write.kind === 'written') {
-        assertPersisted(write.result);
-      }
       set({ quotes: write.quotes });
       // No early return: the refresh below is what the user asked for either way.
       if (write.kind === 'gone') {
@@ -586,14 +583,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         viewCount: q.viewCount + 1,
         lastViewed: new Date().toISOString(),
       }));
-      // Nothing to say either way: this is background telemetry the user did not initiate, and
-      // a failed increment is dropped rather than retried.
+      // No toast: the count is telemetry the user never asked for, and a failed increment is
+      // dropped rather than retried. The catch below still logs it.
       if (write.kind === 'gone') {
         set({ quotes: write.quotes });
-        return;
-      }
-      if (!write.result.success) {
-        logger.error('Could not persist the view count', write.result.error);
+        // error, not warn: the shipped logLevel is 'error'. Every other gone path moves the card;
+        // this one is where the phantom would otherwise survive.
+        logger.error(`incrementViewCount: quote ${quoteId} was gone before the write`);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
         return;
       }
       set({ quotes: write.quotes });
@@ -615,7 +612,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         return;
       }
       const { quotes: updatedQuotes, target } = write;
-      assertPersisted(write.result);
       set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -641,7 +637,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         return 'gone';
       }
       const { quotes: updatedQuotes, target } = write;
-      assertPersisted(write.result);
       set({ quotes: updatedQuotes });
       if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -1187,7 +1182,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         return 'gone';
       }
       const { quotes: updatedQuotes, target } = write;
-      assertPersisted(write.result);
       set({ quotes: updatedQuotes, error: null });
       if (changed.added && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
@@ -1235,7 +1229,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         return 'gone';
       }
       const { quotes: updatedQuotes, target } = write;
-      assertPersisted(write.result);
       set({ quotes: updatedQuotes, error: null });
       if (changed.removed && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
