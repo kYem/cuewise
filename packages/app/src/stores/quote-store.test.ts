@@ -1772,8 +1772,8 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastError).not.toHaveBeenCalled();
   });
 
-  // No shipped adapter answers nullish, but the port's type does not forbid it, and the guard
-  // that admits it must not then dereference it.
+  // The port's type says non-null, but it is a runtime seam a type cannot police, and the
+  // guard that admits nullish must not then dereference it.
   it('treats a missing card-write result as a failure without throwing', async () => {
     const mine = quoteFactory.build({ id: 'mine', isCustom: true });
     useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
@@ -1861,8 +1861,8 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().currentQuote?.id).toBe('q2');
   });
 
-  // Only the id of the stored card is trusted now, so a lost card write costs nothing the
-  // user can see and must not be dressed up as something that did.
+  // The id is all initialize trusts, so a lost card write costs a writer that keeps it nothing
+  // the user can see.
   it('says nothing when only the card write failed', async () => {
     const mine = quoteFactory.build({ id: 'mine', isCustom: true });
     useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
@@ -1877,6 +1877,122 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastSuccess).toHaveBeenCalledWith('Quote updated successfully');
     expect(mockToastWarning).not.toHaveBeenCalled();
     expect(mockToastError).not.toHaveBeenCalled();
+  });
+
+  // Nothing converges currentQuote, so each writer has to put the persisted value on the card
+  // itself. Deleting that block leaves the tab rendering pre-write content for the session.
+  it.each([
+    [
+      'editQuote',
+      () => useQuoteStore.getState().editQuote('mine', { text: 'edited' }),
+      (q: Quote) => expect(q.text).toBe('edited'),
+    ],
+    [
+      'toggleFavorite',
+      () => useQuoteStore.getState().toggleFavorite('mine'),
+      (q: Quote) => expect(q.isFavorite).toBe(true),
+    ],
+    [
+      'bulkToggleFavorite',
+      () => useQuoteStore.getState().bulkToggleFavorite(['mine'], true),
+      (q: Quote) => expect(q.isFavorite).toBe(true),
+    ],
+    [
+      'bulkToggleHidden',
+      () => useQuoteStore.getState().bulkToggleHidden(['mine'], false),
+      (q: Quote) => expect(q.isHidden).toBe(false),
+    ],
+    [
+      'addQuoteToCollection',
+      () => useQuoteStore.getState().addQuoteToCollection('mine', 'c2'),
+      (q: Quote) => expect(q.collectionIds).toContain('c2'),
+    ],
+    [
+      'removeQuoteFromCollection',
+      () => useQuoteStore.getState().removeQuoteFromCollection('mine', 'c1'),
+      (q: Quote) => expect(q.collectionIds).not.toContain('c1'),
+    ],
+  ])('%s puts what it wrote on the card', async (_label, act, assertCard) => {
+    const mine = quoteFactory.build({
+      id: 'mine',
+      isCustom: true,
+      isFavorite: false,
+      isHidden: true,
+      text: 'original',
+      collectionIds: ['c1'],
+    });
+    useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+
+    await act();
+
+    const card = useQuoteStore.getState().currentQuote;
+    expect(card?.id).toBe('mine');
+    assertCard(card as Quote);
+  });
+
+  // The one three-outcome writer whose 'failed' was never asserted on the store side, and the
+  // one whose modal discards typed text if it wrongly answers 'saved'.
+  it('editQuote reports failed when the write did not persist', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({ quotes: [mine] });
+    vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'unknown', message: 'write failed' },
+    });
+
+    await expect(useQuoteStore.getState().editQuote('mine', { text: 'x' })).resolves.toBe('failed');
+  });
+
+  // The card write is the whole action here: there is no list write to have landed, and the id
+  // it replaces is still live, so nothing re-resolves it on the next mount.
+  it('navigateHistory reports a card write that did not persist', async () => {
+    const [first, second] = quoteFactory.buildList(2);
+    useQuoteStore.setState({
+      quotes: [first, second],
+      currentQuote: second,
+      quoteHistory: [second.id, first.id],
+      historyIndex: 0,
+    });
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().goBack();
+
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      'Showing a new quote, but your other tabs may still show the last one.',
+      expect.objectContaining({ collapseRepeats: true })
+    );
+  });
+
+  it.each([
+    ['a deliberate reroll reports it', { userInitiated: true }, true],
+    ['an interval tick stays quiet', undefined, false],
+  ])('refreshQuote: %s', async (_label, options, warns) => {
+    useQuoteStore.setState({ quotes: quoteFactory.buildList(3), currentQuote: null });
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().refreshQuote(options);
+
+    expect(mockToastWarning.mock.calls.length > 0).toBe(warns);
+  });
+
+  // The phantom 691168a removed, reachable through the one writer that fix skipped.
+  it('incrementViewCount moves the card off a quote the pull deleted', async () => {
+    const gone = quoteFactory.build({ id: 'gone' });
+    const other = quoteFactory.build({ id: 'other' });
+    useQuoteStore.setState({ quotes: [other], currentQuote: gone });
+    vi.mocked(storage.getQuotes).mockResolvedValue([other]);
+
+    await useQuoteStore.getState().incrementViewCount('gone');
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {

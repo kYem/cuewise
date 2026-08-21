@@ -104,7 +104,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
   }, [quoteChangeInterval, currentQuote]);
 
   const handleRefreshClick = async () => {
-    await refreshQuote();
+    await refreshQuote({ userInitiated: true });
     setTimeRemaining(quoteChangeInterval); // Reset countdown on manual refresh
     onManualRefresh?.();
   };
@@ -216,7 +216,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
                   toggleCustomQuotes();
                 }
                 // Refresh to get a new quote with the restored filters
-                await refreshQuote();
+                await refreshQuote({ userInitiated: true });
               }}
               className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
