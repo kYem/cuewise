@@ -1,6 +1,7 @@
+import type { Quote } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
-import { render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { describe, expect, it, type Mock, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
 import { QuoteManagementPage } from './QuoteManagementPage';
 
@@ -51,5 +52,87 @@ describe('QuoteManagementPage initialization', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(initialize).not.toHaveBeenCalled();
+  });
+});
+
+// The store answers whether the write landed; a failed one must leave the user's picks alone
+// rather than making them re-select everything to retry.
+describe('QuoteManagementPage bulk selection', () => {
+  const mine = quoteFactory.build({ id: 'mine', isHidden: false });
+
+  function bulkToolbar(): HTMLElement {
+    return screen.getByRole('toolbar', { name: 'Bulk actions' });
+  }
+
+  async function selectOneQuote(): Promise<void> {
+    fireEvent.click(screen.getByRole('button', { name: /Enable Selection/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Select All/ }));
+  }
+
+  function renderWith(bulkToggleHidden: Mock): void {
+    useQuoteStore.setState({
+      quotes: [mine],
+      isLoading: false,
+      error: null,
+      initialize: vi.fn(async () => undefined),
+      bulkToggleHidden,
+    });
+    render(<QuoteManagementPage />);
+  }
+
+  // A flipped argument here inverts a bulk action across the user's whole selection, and
+  // nothing else in the suite reaches these handlers.
+  it.each([
+    ['Add to favorites', 'bulkToggleFavorite' as const, {} as Partial<Quote>, [['mine'], true]],
+    [
+      'Remove from favorites',
+      'bulkToggleFavorite' as const,
+      { isFavorite: true } as Partial<Quote>,
+      [['mine'], false],
+    ],
+    ['Hide quotes', 'bulkToggleHidden' as const, {} as Partial<Quote>, [['mine'], true]],
+    // Hidden quotes sit behind the Hidden filter, so this row switches to it first.
+    [
+      'Unhide quotes',
+      'bulkToggleHidden' as const,
+      { isHidden: true } as Partial<Quote>,
+      [['mine'], false],
+    ],
+  ])('%s calls the store with the argument that matches the button', async (label, method, seed, expected) => {
+    const writer = vi.fn(async () => true);
+    useQuoteStore.setState({
+      quotes: [quoteFactory.build({ id: 'mine', isFavorite: false, isHidden: false, ...seed })],
+      isLoading: false,
+      error: null,
+      initialize: vi.fn(async () => undefined),
+      [method]: writer,
+    });
+    render(<QuoteManagementPage />);
+    if (seed.isHidden === true) {
+      fireEvent.click(screen.getByRole('button', { name: 'Hidden' }));
+    }
+    await selectOneQuote();
+
+    // Scoped: the per-quote card carries the same two favourite titles.
+    fireEvent.click(within(bulkToolbar()).getByTitle(label));
+
+    await waitFor(() => expect(writer).toHaveBeenCalledWith(...expected));
+  });
+
+  it.each([
+    ['keeps the selection when the write failed', false, '1 selected'],
+    ['clears the selection once the write lands', true, null],
+  ])('%s', async (_label, landed, stillSelected) => {
+    const bulkToggleHidden = vi.fn(async () => landed);
+    renderWith(bulkToggleHidden);
+    await selectOneQuote();
+    fireEvent.click(screen.getByTitle('Hide quotes'));
+
+    await waitFor(() => expect(bulkToggleHidden).toHaveBeenCalledWith(['mine'], true));
+    if (stillSelected === null) {
+      await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument());
+    } else {
+      await waitFor(() => expect(screen.getByText(stillSelected)).toBeInTheDocument());
+    }
   });
 });

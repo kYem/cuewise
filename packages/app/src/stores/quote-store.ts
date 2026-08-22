@@ -1,5 +1,6 @@
 import {
   ALL_QUOTE_CATEGORIES,
+  assertPersisted,
   type BulkImportResult,
   type CSVQuoteRow,
   DEFAULT_SETTINGS,
@@ -13,16 +14,19 @@ import {
   type QuoteCategory,
   type QuoteCollection,
   STORAGE_KEYS,
+  storageWriteErrorMessage,
 } from '@cuewise/shared';
 import {
   getCollections,
   getCurrentQuote,
   getQuotes,
+  getQuotesRaw,
   getSettings,
   setCurrentQuote,
   setQuotes,
   setQuotesRaw,
   updateCollections,
+  updateQuotes,
   withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -60,7 +64,9 @@ async function navigateHistory(
     const quote = quotes.find((q) => q.id === quoteId);
 
     if (quote && !quote.isHidden) {
-      await setCurrentQuote(quote);
+      if (!(await persistCurrentQuote(quote, 'navigateHistory'))) {
+        useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+      }
       set({ currentQuote: quote, historyIndex: newIndex });
       await get().incrementViewCount(quote.id);
     } else {
@@ -70,9 +76,9 @@ async function navigateHistory(
     }
   } catch (error) {
     logger.error(`Error going ${direction} in history`, error);
-    const errorMessage = `Failed to navigate ${direction}. Please try again.`;
-    set({ error: errorMessage });
-    useToastStore.getState().error(errorMessage);
+    // Not `error` state: both renderers read that as "the load failed" and replace the page.
+    // A single action that failed has its toast.
+    useToastStore.getState().error(`Failed to navigate ${direction}. Please try again.`);
   }
 }
 
@@ -93,7 +99,8 @@ interface QuoteStore {
 
   // Actions
   initialize: () => Promise<void>;
-  refreshQuote: () => Promise<void>;
+  /** `userInitiated` warns when the card write is lost; unprompted ticks stay quiet. */
+  refreshQuote: (options?: { userInitiated?: boolean }) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
   canGoBack: () => boolean;
@@ -101,13 +108,15 @@ interface QuoteStore {
   toggleFavorite: (quoteId: string) => Promise<void>;
   hideQuote: (quoteId: string) => Promise<void>;
   unhideQuote: (quoteId: string) => Promise<void>;
+  /** False when the write did not persist, so the form can keep what the user typed. */
   addCustomQuote: (
     text: string,
     author: string,
     category: QuoteCategory,
     source?: string,
     notes?: string
-  ) => Promise<void>;
+  ) => Promise<boolean>;
+  /** 'gone' when a pull deleted it first, 'failed' when the write did not persist. */
   editQuote: (
     quoteId: string,
     updates: {
@@ -117,7 +126,7 @@ interface QuoteStore {
       source?: string;
       notes?: string;
     }
-  ) => Promise<void>;
+  ) => Promise<QuoteWriteOutcome>;
   deleteQuote: (quoteId: string) => Promise<void>;
   incrementViewCount: (quoteId: string) => Promise<void>;
   setEnabledCategories: (categories: QuoteCategory[]) => Promise<void>;
@@ -126,9 +135,10 @@ interface QuoteStore {
   toggleFavoritesOnly: () => Promise<void>;
 
   // Bulk operations
-  bulkDelete: (quoteIds: string[]) => Promise<void>;
-  bulkToggleFavorite: (quoteIds: string[], setFavorite: boolean) => Promise<void>;
-  bulkToggleHidden: (quoteIds: string[], setHidden: boolean) => Promise<void>;
+  /** False when the write did not persist, so the caller can keep the user's selection. */
+  bulkDelete: (quoteIds: string[]) => Promise<boolean>;
+  bulkToggleFavorite: (quoteIds: string[], setFavorite: boolean) => Promise<boolean>;
+  bulkToggleHidden: (quoteIds: string[], setHidden: boolean) => Promise<boolean>;
 
   // Restoration operations
   restoreMissingQuotes: () => Promise<{ restored: number }>;
@@ -141,10 +151,11 @@ interface QuoteStore {
   updateCollection: (
     id: string,
     updates: Partial<Pick<QuoteCollection, 'name' | 'description'>>
-  ) => Promise<'saved' | 'gone' | 'failed'>;
+  ) => Promise<QuoteWriteOutcome>;
   deleteCollection: (id: string) => Promise<boolean>;
-  addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
-  removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<boolean>;
+  /** 'gone' when a pull deleted the quote first, 'failed' when the write did not persist. */
+  addQuoteToCollection: (quoteId: string, collectionId: string) => Promise<QuoteWriteOutcome>;
+  removeQuoteFromCollection: (quoteId: string, collectionId: string) => Promise<QuoteWriteOutcome>;
   addQuotesToCollection: (quoteIds: string[], collectionId: string) => Promise<boolean>;
   toggleCollection: (collectionId: string) => Promise<void>;
   setActiveCollectionIds: (collectionIds: string[]) => Promise<void>;
@@ -167,6 +178,106 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
     quoteFilterActiveCollectionIds: state.activeCollectionIds,
   });
 }
+
+/**
+ * A write aimed at one quote. Both members carry a list storage has vouched for: `gone` never
+ * wrote, and a write that fails throws instead of answering. Announcing a gone id would mark it
+ * dirty, which pushes as a tombstone this device never made.
+ */
+type OneQuoteWrite =
+  | { kind: 'gone'; quotes: Quote[] }
+  | { kind: 'saved'; quotes: Quote[]; target: Quote };
+
+async function persistOneQuote(
+  quoteId: string,
+  change: (quote: Quote) => Quote
+): Promise<OneQuoteWrite> {
+  // Its own lock rather than updateQuotes, so a gone id skips the write entirely: rewriting an
+  // identical list can still fail, and the caller would report that instead of the gone.
+  return withCollectionLock('quotes', async (): Promise<OneQuoteWrite> => {
+    const current = await getQuotes();
+    // Boxed because TypeScript does not track an assignment inside the callback: a bare `let`
+    // narrows to `never` past the guard, and the compiler stops checking `target` altogether.
+    const hit: { target: Quote | null } = { target: null };
+    const quotes = current.map((q) => {
+      if (q.id !== quoteId) {
+        return q;
+      }
+      hit.target = change(q);
+      return hit.target;
+    });
+    if (hit.target === null) {
+      return { kind: 'gone', quotes: current };
+    }
+    assertPersisted(await setQuotes(quotes));
+    return { kind: 'saved', quotes, target: hit.target };
+  });
+}
+
+/**
+ * Seed quotes do reach the account — the enroll backfill claims every stored id — but only a
+ * custom quote's edit is announced from here, so a seed edit stays on this device.
+ */
+function syncsLocalEdits(quote: Quote | null): boolean {
+  return quote?.isCustom === true;
+}
+
+/**
+ * The card's own key. `initialize` reads back only its id, so losing this write matters just
+ * where the id changes — a writer that keeps it is re-resolved from the list on the next mount.
+ * Answers rather than throwing: the list write has usually already landed, and `getStorageArea`
+ * rejects, so both exits have to end up in the same place.
+ */
+async function persistCurrentQuote(quote: Quote, action: string): Promise<boolean> {
+  try {
+    const result = await setCurrentQuote(quote);
+    if (result?.success !== true) {
+      logger.error(`${action}: could not persist the displayed quote`, result?.error, {
+        quoteId: quote.id,
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error(`${action}: could not persist the displayed quote`, error, { quoteId: quote.id });
+    return false;
+  }
+}
+
+/** A write aimed at one entity: 'gone' is not a failure, and a retry cannot fix it. */
+type QuoteWriteOutcome = 'saved' | 'gone' | 'failed';
+
+/**
+ * The card renders `currentQuote`, which no observer converges, so a writer that finds the quote
+ * gone has to move the card itself.
+ *
+ * Checked against `written` rather than trusted from the call site: a caller that reaches here
+ * with the quote still present would otherwise reroll the card for no reason.
+ */
+async function refreshCardIfQuoteGone(
+  quoteId: string,
+  written: Quote[],
+  get: () => QuoteStore
+): Promise<void> {
+  const isGone = !written.some((q) => q.id === quoteId);
+  if (isGone && get().currentQuote?.id === quoteId) {
+    await get().refreshQuote();
+  }
+}
+
+/** The locked read no longer holds it: a pull deleted it between the user's click and the write. */
+function reportQuoteGone(action: string, quoteId: string): void {
+  // error, not warn: the shipped logLevel is 'error', and this is where a "but it's right
+  // there" report starts.
+  logger.error(`${action}: quote ${quoteId} was gone before the write`);
+  // Collapsed: AddQuotesToCollectionModal applies its pending changes one quote at a time, so a
+  // pull that removed the selection would otherwise stack one identical toast per quote.
+  useToastStore.getState().warning('This quote no longer exists', { collapseRepeats: true });
+}
+
+/** Only `initialize` reads the card key, so a lost write shows up on the next tab, not this one. */
+const CARD_NOT_REMEMBERED =
+  "Couldn't remember this quote — the next tab you open may still show the previous one.";
 
 const STALE_QUOTES_MESSAGE =
   "Cuewise couldn't re-read your quotes just now, so what you see may be out of date.";
@@ -208,8 +319,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   activeCollectionIds: [],
 
   initialize: async () => {
-    // Before the read: a pull landing during it is otherwise announced to nobody, and the seed
-    // and view-count writes below would persist the pre-pull snapshot over it.
+    // Before the read: a pull landing during it is otherwise announced to nobody.
     quotesObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
@@ -218,12 +328,16 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // "nothing is stored" — getQuotes throws rather than reporting a failed read as empty.
       let quotes = await getQuotes();
       if (quotes.length === 0) {
-        quotes = SEED_QUOTES;
-        const seedResult = await setQuotes(quotes);
-        if (!seedResult.success) {
-          logger.error('Failed to seed the default quotes', seedResult.error);
-          throw new Error(seedResult.error.message);
-        }
+        // Re-checked inside the lock: a pull landing between that read and this write would
+        // otherwise be replaced wholesale by the seed set.
+        quotes = await withCollectionLock('quotes', async () => {
+          const current = await getQuotes();
+          if (current.length > 0) {
+            return current;
+          }
+          assertPersisted(await setQuotes(SEED_QUOTES));
+          return SEED_QUOTES;
+        });
       }
 
       // Get collections from storage
@@ -243,12 +357,23 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         settings?.quoteFilterActiveCollectionIds ?? DEFAULT_SETTINGS.quoteFilterActiveCollectionIds
       ).filter((id) => collectionIds.has(id));
 
-      // Get current quote or select a random one
-      let currentQuote = await getCurrentQuote();
-      if (!currentQuote || currentQuote.isHidden) {
-        currentQuote = getRandomQuote(quotes);
+      // The stored card is a snapshot: only its id is trusted, and the quote itself is taken
+      // from the list. Reading its fields back would show a quote another device has since
+      // hidden or edited, and nothing converges this key.
+      const stored = await getCurrentQuote();
+      const storedId = stored === null ? null : stored.id;
+      let currentQuote = quotes.find((q) => q.id === storedId) ?? null;
+      if (currentQuote === null || currentQuote.isHidden) {
+        currentQuote = getRandomQuote(
+          quotes,
+          undefined,
+          enabledCategories,
+          showCustomQuotes,
+          showFavoritesOnly,
+          activeCollectionIds
+        );
         if (currentQuote) {
-          await setCurrentQuote(currentQuote);
+          await persistCurrentQuote(currentQuote, 'initialize');
         }
       }
 
@@ -273,7 +398,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
     } catch (error) {
       logger.error('Error initializing quote store', error);
-      const errorMessage = 'Failed to load quotes. Please refresh the page.';
+      // One message for both: the panel and the toast disagreeing about the same failure is
+      // worse than either wording.
+      const errorMessage = storageWriteErrorMessage(
+        error,
+        'Failed to load quotes. Please refresh the page.'
+      );
       set({ error: errorMessage, isLoading: false });
       useToastStore.getState().error(errorMessage);
     }
@@ -282,7 +412,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     await quotesObserver.reconcile();
   },
 
-  refreshQuote: async () => {
+  refreshQuote: async (options = {}) => {
     try {
       const {
         quotes,
@@ -306,7 +436,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       );
 
       if (newQuote) {
-        await setCurrentQuote(newQuote);
+        // Only a deliberate reroll is worth reporting: the interval calls this unprompted, and
+        // the writers that call it are already rerolling a quote that is gone or hidden.
+        const remembered = await persistCurrentQuote(newQuote, 'refreshQuote');
+        if (!remembered && options.userInitiated === true) {
+          useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+        }
 
         // Add to history - if we're not at the most recent position,
         // clear forward history (like browser navigation)
@@ -329,9 +464,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error refreshing quote', error);
       const errorMessage = 'Failed to refresh quote. Please try again.';
-      set({ error: errorMessage });
-      // The new-tab interval calls this on every tick, so a persistent failure would otherwise
-      // stack one identical toast per tick.
+      // The new-tab interval calls this unprompted on every tick, so latching `error` would
+      // replace the card with a load-failure panel the user never asked for, and an uncollapsed
+      // toast would stack one copy per tick.
       useToastStore.getState().error(errorMessage, { collapseRepeats: true });
     }
   },
@@ -356,44 +491,46 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   toggleFavorite: async (quoteId: string) => {
     try {
-      const { quotes } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const updatedQuotes = quotes.map((q) =>
-        q.id === quoteId ? { ...q, isFavorite: !q.isFavorite } : q
-      );
-
-      await setQuotes(updatedQuotes);
+      const write = await persistOneQuote(quoteId, (q) => ({
+        ...q,
+        isFavorite: !q.isFavorite,
+      }));
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
+        reportQuoteGone('toggleFavorite', quoteId);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
+        return;
+      }
+      const { quotes: updatedQuotes, target } = write;
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
-      // Update current quote if it's the one being favorited
+      // The persisted value, not a re-toggle of the snapshot: a pull may have flipped the flag.
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        const updatedCurrentQuote = { ...currentQuote, isFavorite: !currentQuote.isFavorite };
-        await setCurrentQuote(updatedCurrentQuote);
-        set({ currentQuote: updatedCurrentQuote });
+        await persistCurrentQuote(target, 'toggleFavorite');
+        set({ currentQuote: target });
       }
     } catch (error) {
       logger.error('Error toggling favorite', error);
       const errorMessage = 'Failed to update favorite. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
   hideQuote: async (quoteId: string) => {
     try {
-      const { quotes } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, isHidden: true } : q));
-
-      await setQuotes(updatedQuotes);
-      set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      const write = await persistOneQuote(quoteId, (q) => ({
+        ...q,
+        isHidden: true,
+      }));
+      set({ quotes: write.quotes });
+      // No early return: the refresh below is what the user asked for either way.
+      if (write.kind === 'gone') {
+        reportQuoteGone('hideQuote', quoteId);
+      } else if (syncsLocalEdits(write.target)) {
         notifyMutated('quotes', quoteId);
       }
 
@@ -405,8 +542,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error hiding quote', error);
       const errorMessage = 'Failed to hide quote. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
@@ -418,7 +554,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     notes?: string
   ) => {
     try {
-      const { quotes } = get();
       const newQuote: Quote = {
         id: `custom-${Date.now()}`,
         text,
@@ -432,95 +567,149 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         notes,
       };
 
-      const updatedQuotes = [...quotes, newQuote];
-      await setQuotes(updatedQuotes);
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) => [
+        ...current,
+        newQuote,
+      ]);
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
       notifyMutated('quotes', newQuote.id);
+      return true;
     } catch (error) {
       logger.error('Error adding custom quote', error);
-      const errorMessage = 'Failed to add custom quote. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to add custom quote. Please try again.'));
+      return false;
     }
   },
 
+  // No toast on any path: the count is telemetry the user never asked for, and a failed
+  // increment is dropped rather than retried.
   incrementViewCount: async (quoteId: string) => {
     try {
-      const { quotes } = get();
-      const updatedQuotes = quotes.map((q) =>
-        q.id === quoteId
-          ? { ...q, viewCount: q.viewCount + 1, lastViewed: new Date().toISOString() }
-          : q
-      );
-
-      await setQuotes(updatedQuotes);
-      set({ quotes: updatedQuotes });
+      const write = await persistOneQuote(quoteId, (q) => ({
+        ...q,
+        viewCount: q.viewCount + 1,
+        lastViewed: new Date().toISOString(),
+      }));
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
+        // error, not warn: the shipped logLevel is 'error'. Every other gone path moves the card;
+        // this one is where the phantom would otherwise survive.
+        logger.error(`incrementViewCount: quote ${quoteId} was gone before the write`);
+        // Picked here rather than through refreshQuote: that is usually our own caller, and
+        // going back through it recurses until the heap dies when storage keeps answering a
+        // list without the quote just handed out.
+        if (get().currentQuote?.id === quoteId) {
+          // Through the same filters refreshQuote uses: an unfiltered pick can land on a
+          // category the user turned off, or outside the collection they are looking at.
+          const state = get();
+          const replacement = getRandomQuote(
+            write.quotes,
+            quoteId,
+            state.enabledCategories,
+            state.showCustomQuotes,
+            state.showFavoritesOnly,
+            state.activeCollectionIds
+          );
+          // The history slot holds the id we just found gone, at every entry point. Leaving it
+          // there makes forward navigation land on a quote that no longer exists.
+          const history = [...state.quoteHistory];
+          if (replacement === null) {
+            history.splice(state.historyIndex, 1);
+          } else {
+            history[state.historyIndex] = replacement.id;
+          }
+          set({ currentQuote: replacement, quoteHistory: history });
+          if (replacement !== null && !(await persistCurrentQuote(replacement, 'increment'))) {
+            useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+          }
+        }
+        return;
+      }
+      set({ quotes: write.quotes });
     } catch (error) {
-      logger.error('Error incrementing view count', error);
+      logger.error('Error incrementing view count', error, { quoteId });
     }
   },
 
   unhideQuote: async (quoteId: string) => {
     try {
-      const { quotes } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, isHidden: false } : q));
-
-      await setQuotes(updatedQuotes);
+      const write = await persistOneQuote(quoteId, (q) => ({
+        ...q,
+        isHidden: false,
+      }));
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
+        reportQuoteGone('unhideQuote', quoteId);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
+        return;
+      }
+      const { quotes: updatedQuotes, target } = write;
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
       useToastStore.getState().success('Quote unhidden successfully');
     } catch (error) {
       logger.error('Error unhiding quote', error);
       const errorMessage = 'Failed to unhide quote. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
   editQuote: async (quoteId: string, updates) => {
     try {
-      const { quotes } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const updatedQuotes = quotes.map((q) => (q.id === quoteId ? { ...q, ...updates } : q));
-
-      await setQuotes(updatedQuotes);
+      const write = await persistOneQuote(quoteId, (q) => ({
+        ...q,
+        ...updates,
+      }));
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes });
+        reportQuoteGone('editQuote', quoteId);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
+        return 'gone';
+      }
+      const { quotes: updatedQuotes, target } = write;
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
-      // Update current quote if it's the one being edited
       const currentQuote = get().currentQuote;
       if (currentQuote && currentQuote.id === quoteId) {
-        const updatedCurrentQuote = { ...currentQuote, ...updates };
-        await setCurrentQuote(updatedCurrentQuote);
-        set({ currentQuote: updatedCurrentQuote });
+        await persistCurrentQuote(target, 'editQuote');
+        set({ currentQuote: target });
       }
 
       useToastStore.getState().success('Quote updated successfully');
+      return 'saved';
     } catch (error) {
       logger.error('Error editing quote', error);
       const errorMessage = 'Failed to update quote. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
+      return 'failed';
     }
   },
 
   deleteQuote: async (quoteId: string) => {
     try {
-      const { quotes } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const updatedQuotes = quotes.filter((q) => q.id !== quoteId);
-
-      await setQuotes(updatedQuotes);
+      // Captured inside the mutator: a tombstone for one this write never deleted is
+      // authorship we do not have.
+      const deleted: { target: Quote | null } = { target: null };
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) =>
+        current.filter((q) => {
+          if (q.id !== quoteId) {
+            return true;
+          }
+          deleted.target = q;
+          return false;
+        })
+      );
+      assertPersisted(result);
       set({ quotes: updatedQuotes });
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      if (target?.isCustom) {
+      if (syncsLocalEdits(deleted.target)) {
         notifyDeleted('quotes', quoteId);
       }
 
@@ -530,12 +719,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await get().refreshQuote();
       }
 
+      if (deleted.target === null) {
+        reportQuoteGone('deleteQuote', quoteId);
+        return;
+      }
       useToastStore.getState().success('Quote deleted successfully');
     } catch (error) {
       logger.error('Error deleting quote', error);
       const errorMessage = 'Failed to delete quote. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
     }
   },
 
@@ -571,15 +763,27 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   // Bulk operations
   bulkDelete: async (quoteIds: string[]) => {
     try {
-      const { quotes, currentQuote } = get();
+      const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      const deletedCustomIds = quotes
-        .filter((q) => quoteIdSet.has(q.id) && q.isCustom)
-        .map((q) => q.id);
-      const updatedQuotes = quotes.filter((q) => !quoteIdSet.has(q.id));
+      // Collected from the locked read: a pull may have removed some of these, and a tombstone
+      // for one this write never deleted is authorship we do not have.
+      const deletedCustomIds: string[] = [];
+      // Not deletedCustomIds.length: seed quotes are deletable too, they are just not announced.
+      let matched = 0;
 
-      await setQuotes(updatedQuotes);
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
+        for (const q of current) {
+          if (!quoteIdSet.has(q.id)) {
+            continue;
+          }
+          matched += 1;
+          if (syncsLocalEdits(q)) {
+            deletedCustomIds.push(q.id);
+          }
+        }
+        return current.filter((q) => !quoteIdSet.has(q.id));
+      });
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       for (const id of deletedCustomIds) {
         notifyDeleted('quotes', id);
@@ -590,111 +794,159 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         await get().refreshQuote();
       }
 
-      useToastStore.getState().success(`Deleted ${quoteIds.length} quotes`);
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return true;
+      }
+      useToastStore.getState().success(`Deleted ${matched} quotes`);
+      return true;
     } catch (error) {
       logger.error('Error bulk deleting quotes', error, { quoteIds, count: quoteIds.length });
-      const errorMessage = 'Failed to delete quotes. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to delete quotes. Please try again.'));
+      return false;
     }
   },
 
   bulkToggleFavorite: async (quoteIds: string[], setFavorite: boolean) => {
     try {
-      const { quotes, currentQuote } = get();
+      const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      const affectedCustomIds = quotes
-        .filter((q) => quoteIdSet.has(q.id) && q.isCustom)
-        .map((q) => q.id);
-      const updatedQuotes = quotes.map((q) =>
-        quoteIdSet.has(q.id) ? { ...q, isFavorite: setFavorite } : q
-      );
+      const affectedCustomIds: string[] = [];
+      let matched = 0;
 
-      await setQuotes(updatedQuotes);
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
+        for (const q of current) {
+          if (!quoteIdSet.has(q.id)) {
+            continue;
+          }
+          matched += 1;
+          if (syncsLocalEdits(q)) {
+            affectedCustomIds.push(q.id);
+          }
+        }
+        return current.map((q) => (quoteIdSet.has(q.id) ? { ...q, isFavorite: setFavorite } : q));
+      });
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
-      // Update current quote if it was in the selection
+      // The persisted value: a pull may have changed this quote while the write held the lock.
       if (currentQuote && quoteIdSet.has(currentQuote.id)) {
-        const updatedCurrentQuote = { ...currentQuote, isFavorite: setFavorite };
-        await setCurrentQuote(updatedCurrentQuote);
-        set({ currentQuote: updatedCurrentQuote });
+        const persisted = updatedQuotes.find((q) => q.id === currentQuote.id);
+        if (persisted) {
+          await persistCurrentQuote(persisted, 'bulkToggleFavorite');
+          set({ currentQuote: persisted });
+        } else {
+          await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
+        }
       }
 
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return true;
+      }
       const action = setFavorite ? 'added to favorites' : 'removed from favorites';
-      useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
+      useToastStore.getState().success(`${matched} quotes ${action}`);
+      return true;
     } catch (error) {
       logger.error('Error bulk toggling favorites', error, {
         quoteIds,
         setFavorite,
         count: quoteIds.length,
       });
-      const errorMessage = 'Failed to update favorites. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to update favorites. Please try again.'));
+      return false;
     }
   },
 
   bulkToggleHidden: async (quoteIds: string[], setHidden: boolean) => {
     try {
-      const { quotes, currentQuote } = get();
+      const { currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Only custom quotes sync — seed quotes are excluded (spec v1 scope).
-      const affectedCustomIds = quotes
-        .filter((q) => quoteIdSet.has(q.id) && q.isCustom)
-        .map((q) => q.id);
-      const updatedQuotes = quotes.map((q) =>
-        quoteIdSet.has(q.id) ? { ...q, isHidden: setHidden } : q
-      );
+      const affectedCustomIds: string[] = [];
+      let matched = 0;
 
-      await setQuotes(updatedQuotes);
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
+        for (const q of current) {
+          if (!quoteIdSet.has(q.id)) {
+            continue;
+          }
+          matched += 1;
+          if (syncsLocalEdits(q)) {
+            affectedCustomIds.push(q.id);
+          }
+        }
+        return current.map((q) => (quoteIdSet.has(q.id) ? { ...q, isHidden: setHidden } : q));
+      });
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
-      // If hiding current quote, refresh to a new one
-      if (setHidden && currentQuote && quoteIdSet.has(currentQuote.id)) {
-        await get().refreshQuote();
+      if (currentQuote && quoteIdSet.has(currentQuote.id)) {
+        const persisted = updatedQuotes.find((q) => q.id === currentQuote.id);
+        if (!persisted) {
+          await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
+        } else if (setHidden) {
+          await get().refreshQuote();
+        } else {
+          await persistCurrentQuote(persisted, 'bulkToggleHidden');
+          set({ currentQuote: persisted });
+        }
       }
 
+      if (matched === 0) {
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return true;
+      }
       const action = setHidden ? 'hidden' : 'unhidden';
-      useToastStore.getState().success(`${quoteIds.length} quotes ${action}`);
+      useToastStore.getState().success(`${matched} quotes ${action}`);
+      return true;
     } catch (error) {
       logger.error('Error bulk toggling hidden', error, {
         quoteIds,
         setHidden,
         count: quoteIds.length,
       });
-      const errorMessage = 'Failed to update quotes. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, 'Failed to update quotes. Please try again.'));
+      return false;
     }
   },
 
   // Restoration operations
   restoreMissingQuotes: async () => {
     try {
-      const { quotes } = get();
-      const missingQuotes = getMissingSeedQuotes(quotes);
-
-      if (missingQuotes.length === 0) {
+      if (getMissingSeedQuotes(get().quotes).length === 0) {
         useToastStore.getState().info('All default quotes are already present');
         return { restored: 0 };
       }
 
-      // Add missing quotes back
-      const updatedQuotes = [...quotes, ...missingQuotes];
-
-      await setQuotes(updatedQuotes);
+      // Recomputed against the locked read: a pull may have restored some of them already, and
+      // adding those again would duplicate ids.
+      let restored = 0;
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) => {
+        const missing = getMissingSeedQuotes(current);
+        restored = missing.length;
+        return [...current, ...missing];
+      });
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
 
-      useToastStore.getState().success(`Restored ${missingQuotes.length} missing quotes`);
-      return { restored: missingQuotes.length };
+      if (restored === 0) {
+        useToastStore.getState().info('All default quotes are already present');
+        return { restored: 0 };
+      }
+      useToastStore.getState().success(`Restored ${restored} missing quotes`);
+      return { restored };
     } catch (error) {
       logger.error('Error restoring missing quotes', error);
       const errorMessage = 'Failed to restore quotes. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       throw error;
     }
   },
@@ -702,6 +954,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   resetAllQuotes: async () => {
     try {
       // Create fresh copy of seed quotes with default properties
+      let cardForgotten = false;
       const freshQuotes = SEED_QUOTES.map((q) => ({
         ...q,
         isFavorite: false,
@@ -710,16 +963,59 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         lastViewed: undefined,
       }));
 
-      // Raw, like `resetToDefaults`: a reset means every stored quote, including one this
-      // build cannot parse. The preserving setter would carry those through and they would
-      // reappear on the next build that can read them.
-      await setQuotesRaw(freshQuotes);
+      // Raw: a reset means every stored quote, including one this build cannot parse, and the
+      // preserving setter would carry those through.
+      const wiped: string[] = [];
+      let unusable = 0;
+      const tombstones = { complete: true };
+      const resetResult = await withCollectionLock('quotes', async () => {
+        // Raw, to match the raw write: the validating read drops rows this build cannot parse,
+        // and the write destroys them anyway — their ids need tombstones too. Failing to read
+        // must not block the reset, which is the escape hatch for unreadable storage.
+        try {
+          for (const quote of await getQuotesRaw()) {
+            // The raw read validates nothing, and an id the server rejects wedges every later
+            // push for this device, not just this record.
+            if (typeof quote?.id !== 'string' || quote.id === '') {
+              unusable += 1;
+              tombstones.complete = false;
+              continue;
+            }
+            if (syncsLocalEdits(quote)) {
+              wiped.push(quote.id);
+            }
+          }
+        } catch (error) {
+          tombstones.complete = false;
+          logger.error('Resetting quotes without tombstones: could not read what is stored', error);
+        }
+        return setQuotesRaw(freshQuotes);
+      });
+      assertPersisted(resetResult);
+      // error, not warn: the shipped logLevel is 'error', and rows destroyed with no tombstone
+      // possible are the kind of thing that has to survive to a report. After the write, so it
+      // cannot claim a destruction a failed reset never performed.
+      if (unusable > 0) {
+        logger.error(`Reset destroyed ${unusable} stored rows with no usable quote id`);
+      }
       set({ quotes: freshQuotes, error: null });
+      // Without these the reset is local only: every peer still holding these pushes them back.
+      for (const id of wiped) {
+        notifyDeleted('quotes', id);
+      }
 
       // Reset current quote to a random one
-      const newCurrent = getRandomQuote(freshQuotes);
+      const filters = get();
+      const newCurrent = getRandomQuote(
+        freshQuotes,
+        undefined,
+        filters.enabledCategories,
+        filters.showCustomQuotes,
+        filters.showFavoritesOnly,
+        filters.activeCollectionIds
+      );
       if (newCurrent) {
-        await setCurrentQuote(newCurrent);
+        cardForgotten = !(await persistCurrentQuote(newCurrent, 'resetAllQuotes'));
         set({
           currentQuote: newCurrent,
           quoteHistory: [newCurrent.id],
@@ -727,12 +1023,22 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         });
       }
 
-      useToastStore.getState().success('All quotes reset to defaults');
+      if (cardForgotten) {
+        useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+      }
+      if (tombstones.complete) {
+        useToastStore.getState().success('All quotes reset to defaults');
+      } else {
+        useToastStore
+          .getState()
+          .warning(
+            "Quotes reset, but Cuewise couldn't read what it replaced. If you use sync, some may return from your other devices."
+          );
+      }
     } catch (error) {
       logger.error('Error resetting quotes', error);
       const errorMessage = 'Failed to reset quotes. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       throw error;
     }
   },
@@ -762,8 +1068,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the new collection', result.error);
         const errorMessage = 'Failed to create collection. Please try again.';
-        set({ error: errorMessage });
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(storageWriteErrorMessage(result.error, errorMessage));
         return false;
       }
       set({ collections: updatedCollections, error: null });
@@ -774,8 +1079,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error creating collection', error);
       const errorMessage = 'Failed to create collection. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -797,14 +1101,13 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the collection update', result.error);
         const errorMessage = 'Failed to update collection. Please try again.';
-        set({ error: errorMessage });
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(storageWriteErrorMessage(result.error, errorMessage));
         return 'failed';
       }
       // Announcing a write that found nothing marks a gone id dirty, and the next push seals a
       // tombstone this device never authored.
       if (!applied.found) {
-        logger.warn(`updateCollection: collection ${id} was gone before the write`);
+        logger.error(`updateCollection: collection ${id} was gone before the write`);
         useToastStore.getState().warning('This collection no longer exists');
         return 'gone';
       }
@@ -816,8 +1119,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error updating collection', error);
       const errorMessage = 'Failed to update collection. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return 'failed';
     }
   },
@@ -831,8 +1133,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (!result.success) {
         logger.error('Failed to persist the collection deletion', result.error);
         const errorMessage = 'Failed to delete collection. Please try again.';
-        set({ error: errorMessage });
-        useToastStore.getState().error(errorMessage);
+        useToastStore.getState().error(storageWriteErrorMessage(result.error, errorMessage));
         return false;
       }
       // Straight after the write, with nothing fallible in between: the steps below can throw, and
@@ -853,8 +1154,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             logger.error('Deleted the collection but could not read its quotes to unlink', error);
             return { quotes: null, unlinked: false };
           }
+          const unlinkedCustomIds: string[] = [];
           const next = current.map((q) => {
             if (q.collectionIds?.includes(id)) {
+              if (syncsLocalEdits(q)) {
+                unlinkedCustomIds.push(q.id);
+              }
               return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== id) };
             }
             return q;
@@ -867,6 +1172,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             );
             return { quotes: current, unlinked: false };
           }
+          // Membership lives on the quote, so an unannounced unlink is undone by the next pull.
+          notifyMutatedBulk('quotes', unlinkedCustomIds);
           return { quotes: next, unlinked: true };
         }
       );
@@ -895,33 +1202,35 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     } catch (error) {
       logger.error('Error deleting collection', error);
       const errorMessage = 'Failed to delete collection. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
 
   addQuoteToCollection: async (quoteId: string, collectionId: string) => {
     try {
-      const { quotes, currentQuote } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const alreadyInCollection = target?.collectionIds?.includes(collectionId) ?? false;
+      const { currentQuote } = get();
+      // Decided against the locked read: a pull may have added this membership already, and
+      // announcing a write that changed nothing marks the quote dirty for no reason.
+      const changed = { added: false };
 
-      const updatedQuotes = quotes.map((q) => {
-        if (q.id === quoteId) {
-          const currentIds = q.collectionIds ?? [];
-          if (currentIds.includes(collectionId)) {
-            return q; // Already in collection
-          }
-          return { ...q, collectionIds: [...currentIds, collectionId] };
+      const write = await persistOneQuote(quoteId, (q) => {
+        const currentIds = q.collectionIds ?? [];
+        if (currentIds.includes(collectionId)) {
+          return q;
         }
-        return q;
+        changed.added = true;
+        return { ...q, collectionIds: [...currentIds, collectionId] };
       });
-
-      await setQuotes(updatedQuotes);
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes, error: null });
+        reportQuoteGone('addQuoteToCollection', quoteId);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
+        return 'gone';
+      }
+      const { quotes: updatedQuotes, target } = write;
       set({ quotes: updatedQuotes, error: null });
-      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
-      if (!alreadyInCollection && target?.isCustom) {
+      if (changed.added && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
@@ -929,41 +1238,46 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && currentQuote.id === quoteId) {
         const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
         if (updatedCurrentQuote) {
-          await setCurrentQuote(updatedCurrentQuote);
+          await persistCurrentQuote(updatedCurrentQuote, 'addQuoteToCollection');
           set({ currentQuote: updatedCurrentQuote });
         }
       }
 
-      return true;
+      return 'saved';
     } catch (error) {
       logger.error('Error adding quote to collection', error);
       const errorMessage = 'Failed to add quote to collection. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-      return false;
+      // Collapsed for the same reason as reportQuoteGone: the modal applies one quote at a time,
+      // and a full disk fails every one of them.
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, errorMessage), { collapseRepeats: true });
+      return 'failed';
     }
   },
 
   removeQuoteFromCollection: async (quoteId: string, collectionId: string) => {
     try {
-      const { quotes, currentQuote } = get();
-      const target = quotes.find((q) => q.id === quoteId);
-      const wasInCollection = target?.collectionIds?.includes(collectionId) ?? false;
+      const { currentQuote } = get();
+      // Decided against the locked read, for the same reason as addQuoteToCollection.
+      const changed = { removed: false };
 
-      const updatedQuotes = quotes.map((q) => {
-        if (q.id === quoteId && q.collectionIds) {
-          return {
-            ...q,
-            collectionIds: q.collectionIds.filter((cId) => cId !== collectionId),
-          };
+      const write = await persistOneQuote(quoteId, (q) => {
+        if (!q.collectionIds?.includes(collectionId)) {
+          return q;
         }
-        return q;
+        changed.removed = true;
+        return { ...q, collectionIds: q.collectionIds.filter((cId) => cId !== collectionId) };
       });
-
-      await setQuotes(updatedQuotes);
+      if (write.kind === 'gone') {
+        set({ quotes: write.quotes, error: null });
+        reportQuoteGone('removeQuoteFromCollection', quoteId);
+        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
+        return 'gone';
+      }
+      const { quotes: updatedQuotes, target } = write;
       set({ quotes: updatedQuotes, error: null });
-      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
-      if (wasInCollection && target?.isCustom) {
+      if (changed.removed && syncsLocalEdits(target)) {
         notifyMutated('quotes', quoteId);
       }
 
@@ -971,58 +1285,76 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       if (currentQuote && currentQuote.id === quoteId) {
         const updatedCurrentQuote = updatedQuotes.find((q) => q.id === quoteId);
         if (updatedCurrentQuote) {
-          await setCurrentQuote(updatedCurrentQuote);
+          await persistCurrentQuote(updatedCurrentQuote, 'removeQuoteFromCollection');
           set({ currentQuote: updatedCurrentQuote });
         }
       }
 
-      return true;
+      return 'saved';
     } catch (error) {
       logger.error('Error removing quote from collection', error);
       const errorMessage = 'Failed to remove quote from collection. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-      return false;
+      useToastStore
+        .getState()
+        .error(storageWriteErrorMessage(error, errorMessage), { collapseRepeats: true });
+      return 'failed';
     }
   },
 
   addQuotesToCollection: async (quoteIds: string[], collectionId: string) => {
     try {
-      const { quotes, collections } = get();
+      const { collections, currentQuote } = get();
       const quoteIdSet = new Set(quoteIds);
-      // Membership lives on the quote (collectionIds); only custom quotes sync (spec v1 scope).
-      const affectedCustomIds = quotes
-        .filter(
-          (q) =>
-            quoteIdSet.has(q.id) && q.isCustom && !(q.collectionIds ?? []).includes(collectionId)
-        )
-        .map((q) => q.id);
+      // Only the ones this write actually moved: membership lives on the quote itself.
+      const affectedCustomIds: string[] = [];
+      // Separately from `added`: zero of both is a pull deleting them, zero added alone is
+      // membership they already had.
+      let matched = 0;
+      let added = 0;
 
-      const updatedQuotes = quotes.map((q) => {
-        if (quoteIdSet.has(q.id)) {
+      const { result, quotes: updatedQuotes } = await updateQuotes((current) =>
+        current.map((q) => {
+          if (!quoteIdSet.has(q.id)) {
+            return q;
+          }
+          matched += 1;
           const currentIds = q.collectionIds ?? [];
           if (currentIds.includes(collectionId)) {
-            return q; // Already in collection
+            return q;
+          }
+          added += 1;
+          if (syncsLocalEdits(q)) {
+            affectedCustomIds.push(q.id);
           }
           return { ...q, collectionIds: [...currentIds, collectionId] };
-        }
-        return q;
-      });
-
-      await setQuotes(updatedQuotes);
+        })
+      );
+      assertPersisted(result);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk('quotes', affectedCustomIds);
 
       const collection = collections.find((c) => c.id === collectionId);
       const collectionName = collection?.name ?? 'collection';
-      useToastStore.getState().success(`${quoteIds.length} quotes added to "${collectionName}"`);
+      if (currentQuote && quoteIdSet.has(currentQuote.id)) {
+        await refreshCardIfQuoteGone(currentQuote.id, updatedQuotes, get);
+      }
+
+      if (matched === 0) {
+        // True, like bulkDelete: the write landed and matched nothing, which no retry fixes.
+        useToastStore.getState().warning('Those quotes no longer exist');
+        return true;
+      }
+      if (added === 0) {
+        useToastStore.getState().info(`Those quotes are already in "${collectionName}"`);
+        return true;
+      }
+      useToastStore.getState().success(`${added} quotes added to "${collectionName}"`);
 
       return true;
     } catch (error) {
       logger.error('Error adding quotes to collection', error);
       const errorMessage = 'Failed to add quotes to collection. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return false;
     }
   },
@@ -1062,7 +1394,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
 
     try {
-      const { quotes } = get();
       const timestamp = Date.now();
 
       // Create Quote objects from CSV rows
@@ -1081,8 +1412,11 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }));
 
       // Add to existing quotes
-      const updatedQuotes = [...quotes, ...newQuotes];
-      await setQuotes(updatedQuotes);
+      const { result: writeResult, quotes: updatedQuotes } = await updateQuotes((current) => [
+        ...current,
+        ...newQuotes,
+      ]);
+      assertPersisted(writeResult);
       set({ quotes: updatedQuotes, error: null });
       notifyMutatedBulk(
         'quotes',
@@ -1100,8 +1434,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       logger.error('Error bulk adding quotes', error);
       const errorMessage = 'Failed to import quotes. Please try again.';
       result.errors.push(errorMessage);
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
+      useToastStore.getState().error(storageWriteErrorMessage(error, errorMessage));
       return result;
     }
   },

@@ -24,7 +24,7 @@ export interface EditQuoteModalProps {
       source?: string;
       notes?: string;
     }
-  ) => Promise<void>;
+  ) => Promise<'saved' | 'gone' | 'failed'>;
 }
 
 export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave }) => {
@@ -48,14 +48,18 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
     setIsSubmitting(true);
 
     try {
-      await onSave(quote.id, {
+      const outcome = await onSave(quote.id, {
         text: text.trim(),
         author: author.trim(),
         category,
         source: source.trim() || undefined,
         notes: notes.trim() || undefined,
       });
-      onClose();
+      // Closing on 'failed' would discard what the user typed on a write they can retry; 'gone'
+      // is not retryable and the store has already said so.
+      if (outcome !== 'failed') {
+        onClose();
+      }
     } catch (error) {
       logger.error('Failed to save quote', error);
       useToastStore.getState().error('Failed to save changes. Please try again.');

@@ -36,13 +36,18 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
     setIsSubmitting(true);
 
     try {
-      await addCustomQuote(
+      const saved = await addCustomQuote(
         text.trim(),
         author.trim(),
         category,
         source.trim() || undefined,
         notes.trim() || undefined
       );
+      // Clearing here would discard what the user typed on a write they can retry; the store
+      // has already said why it failed.
+      if (!saved) {
+        return;
+      }
 
       // Reset form
       setText('');

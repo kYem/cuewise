@@ -36,6 +36,10 @@ interface HasId {
   id: string;
 }
 
+// Collections already reported: readAll runs once per pulled record, so logging on every call
+// buries the stall diagnostics it sits beside.
+const reportedUnusableCollections = new Set<string>();
+
 /**
  * Wraps a whole-array storage helper pair as a per-entity binding, keyed by `id`.
  *
@@ -52,11 +56,19 @@ function arrayBinding<T extends HasId>(
     name,
     async readAll() {
       const items = await getAll();
-      return Object.fromEntries(items.map((item) => [item.id, item]));
+      // The raw readers validate shape, not content, so `T extends HasId` is a cast rather than a
+      // guarantee. An empty id pushes as an empty entityId, which the server rejects — the whole
+      // batch, every cycle. A missing one keys as "undefined" and syncs a row every peer appends.
+      const usable = items.filter((item) => typeof item?.id === 'string' && item.id !== '');
+      if (usable.length !== items.length && !reportedUnusableCollections.has(name)) {
+        reportedUnusableCollections.add(name);
+        logger.error(`Skipping ${items.length - usable.length} stored ${name} with no usable id`);
+      }
+      return Object.fromEntries(usable.map((item) => [item.id, item]));
     },
     async writeOne(entityId, entity) {
       // Reads inside the lock: the service worker runs this while the page writes the same array
-      // from its own read. The everyday quote writers are the ones still not taking this lock.
+      // from its own read, so a read hoisted above the lock would erase whichever landed first.
       return withCollectionLock(name, async (): Promise<StorageResult> => {
         let items: T[];
         try {

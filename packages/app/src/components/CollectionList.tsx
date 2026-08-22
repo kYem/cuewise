@@ -64,8 +64,10 @@ export const CollectionList: React.FC = () => {
 
     setIsDeleting(true);
     try {
-      await deleteCollection(deletingCollection.id);
-      setDeletingCollection(null);
+      // A failed delete must keep the dialog: closing it reads as a completed delete.
+      if (await deleteCollection(deletingCollection.id)) {
+        setDeletingCollection(null);
+      }
     } finally {
       setIsDeleting(false);
     }

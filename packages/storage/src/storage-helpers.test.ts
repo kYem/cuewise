@@ -24,6 +24,7 @@ import {
   getCollections,
   getCustomBackground,
   getGoals,
+  getQuotes,
   getReminders,
   getSettings,
   getSettingsForSync,
@@ -38,12 +39,14 @@ import {
   setCollections,
   setCustomBackground,
   setGoals,
+  setQuotes,
   setReminders,
   setSettingsPatch,
   setSettingsPatchRaw,
   settingsStorageKey,
   updateCollections,
   updateGoals,
+  updateQuotes,
   updateReminders,
 } from './storage-helpers';
 
@@ -261,6 +264,65 @@ describe('updateCollections', () => {
 
     const stored = await getCollections();
     expect(stored.map((c) => c.id).sort()).toEqual(['c1', 'c2']);
+  });
+});
+
+describe('setQuotes across the seed and custom keys', () => {
+  // Favouriting a seed quote moves it to the custom key. The seed write drops it first, so a
+  // failed custom write used to leave the quote in neither key — gone, not merely unsaved.
+  it('puts a moved quote back when the custom write fails', async () => {
+    const store = new LocalStorageKeyValueStore();
+    configurePlatform({ storage: store });
+    const seed = quoteFactory.build({ id: 'seed-1', isCustom: false, isFavorite: false });
+    await setQuotes([seed]);
+
+    const original = store.set.bind(store);
+    vi.spyOn(store, 'set').mockImplementation(async (key, value, area) => {
+      if (key === STORAGE_KEYS.CUSTOM_QUOTES) {
+        return { success: false, error: { type: 'quota_exceeded', message: 'full' } };
+      }
+      return original(key, value, area);
+    });
+
+    const result = await setQuotes([{ ...seed, isFavorite: true }]);
+    vi.restoreAllMocks();
+
+    expect(result.success).toBe(false);
+    expect((await getQuotes()).map((q) => q.id)).toEqual(['seed-1']);
+  });
+});
+
+describe('updateQuotes', () => {
+  it('lets two concurrent writers both land', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const [first, second] = quoteFactory.buildList(2, { isCustom: true });
+    await setQuotes([]);
+
+    await Promise.all([
+      updateQuotes((current) => [...current, first]),
+      updateQuotes((current) => [...current, second]),
+    ]);
+
+    const stored = await getQuotes();
+    expect(stored.map((quote) => quote.id).sort()).toEqual([first.id, second.id].sort());
+  });
+
+  // Seed and custom quotes live under separate keys, so a writer touching one must still see
+  // a concurrent writer's changes to the other.
+  it('serialises writers that touch different quote kinds', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const seed = quoteFactory.build({ id: 'seed-1', isCustom: false });
+    const custom = quoteFactory.build({ id: 'custom-1', isCustom: true });
+    await setQuotes([seed]);
+
+    await Promise.all([
+      updateQuotes((current) => [...current, custom]),
+      updateQuotes((current) => current.map((q) => (q.isCustom ? q : { ...q, isFavorite: true }))),
+    ]);
+
+    const stored = await getQuotes();
+    expect(stored.map((quote) => quote.id).sort()).toEqual(['custom-1', 'seed-1']);
+    expect(stored.find((quote) => quote.id === 'seed-1')?.isFavorite).toBe(true);
   });
 });
 

@@ -1,6 +1,11 @@
-import type { Quote, QuoteCategory } from '@cuewise/shared';
+import {
+  ALL_QUOTE_CATEGORIES,
+  type Quote,
+  type QuoteCategory,
+  type SyncMutationSink,
+} from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
-import type { Mock } from 'vitest';
+import { type Mock, vi } from 'vitest';
 
 /**
  * Common test fixtures for quote store tests
@@ -52,6 +57,8 @@ export function createHiddenQuote(overrides: Partial<Quote> = {}) {
 /**
  * Initial empty store state
  */
+// The filter fields are here because they gate getRandomQuote: a test that narrows them and
+// does not reset leaves every later test picking from a filtered list.
 export const EMPTY_STORE_STATE = {
   quotes: [],
   currentQuote: null,
@@ -61,6 +68,9 @@ export const EMPTY_STORE_STATE = {
   historyIndex: 0,
   collections: [],
   activeCollectionIds: [],
+  enabledCategories: [...ALL_QUOTE_CATEGORIES],
+  showCustomQuotes: true,
+  showFavoritesOnly: false,
 };
 
 /**
@@ -236,4 +246,12 @@ export function createCategoryFavoritesScenario() {
     favoriteInspiration,
     currentQuote: nonFavoriteInspiration,
   };
+}
+
+export function createSyncSink(): SyncMutationSink & {
+  markMutated: Mock;
+  markDeleted: Mock;
+  markMutatedBulk: Mock;
+} {
+  return { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
 }
