@@ -99,7 +99,7 @@ interface QuoteStore {
 
   // Actions
   initialize: () => Promise<void>;
-  /** `userInitiated` reports a card write the user's own click asked for; ticks stay quiet. */
+  /** `userInitiated` warns when the card write is lost; unprompted ticks stay quiet. */
   refreshQuote: (options?: { userInitiated?: boolean }) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
@@ -181,8 +181,8 @@ async function persistFilterSettings(state: QuoteStore): Promise<void> {
 
 /**
  * A write aimed at one quote. Both members carry a list storage has vouched for: `gone` never
- * wrote, and `saved` throws rather than answering, so no caller can adopt an unpersisted list.
- * Announcing a gone id would mark it dirty, which pushes as a tombstone this device never made.
+ * wrote, and a write that fails throws instead of answering. Announcing a gone id would mark it
+ * dirty, which pushes as a tombstone this device never made.
  */
 type OneQuoteWrite =
   | { kind: 'gone'; quotes: Quote[] }
@@ -587,6 +587,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     }
   },
 
+  // No toast on any path: the count is telemetry the user never asked for, and a failed
+  // increment is dropped rather than retried.
   incrementViewCount: async (quoteId: string) => {
     try {
       const write = await persistOneQuote(quoteId, (q) => ({
@@ -594,8 +596,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         viewCount: q.viewCount + 1,
         lastViewed: new Date().toISOString(),
       }));
-      // No toast: the count is telemetry the user never asked for, and a failed increment is
-      // dropped rather than retried. The catch below still logs it.
       if (write.kind === 'gone') {
         set({ quotes: write.quotes });
         // error, not warn: the shipped logLevel is 'error'. Every other gone path moves the card;
