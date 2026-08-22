@@ -2041,6 +2041,45 @@ describe('writers read storage, not their own snapshot', () => {
     );
   });
 
+  // The history slot still held the deleted id, so forward navigation landed on a quote that
+  // no longer exists and the arrow went inert.
+  it('incrementViewCount keeps history in step with the card it replaced', async () => {
+    const gone = quoteFactory.build({ id: 'gone' });
+    const older = quoteFactory.build({ id: 'older' });
+    const live = quoteFactory.build({ id: 'live' });
+    useQuoteStore.setState({
+      quotes: [older, live],
+      currentQuote: gone,
+      quoteHistory: [gone.id, older.id],
+      historyIndex: 0,
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([older, live]);
+
+    await useQuoteStore.getState().incrementViewCount('gone');
+
+    const { quoteHistory, currentQuote } = useQuoteStore.getState();
+    expect(quoteHistory).not.toContain('gone');
+    expect(quoteHistory[0]).toBe(currentQuote?.id);
+  });
+
+  // The card survives the write but must not keep showing a quote the user just hid or deleted.
+  // Every existing case seeded a gone id, which takes a different path entirely.
+  it.each([
+    ['hideQuote', () => useQuoteStore.getState().hideQuote('shown')],
+    ['deleteQuote', () => useQuoteStore.getState().deleteQuote('shown')],
+    ['bulkToggleHidden', () => useQuoteStore.getState().bulkToggleHidden(['shown'], true)],
+    ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['shown'])],
+  ])('%s moves the card off a quote it just hid or removed', async (_label, act) => {
+    const shown = quoteFactory.build({ id: 'shown', isHidden: false, isCustom: true });
+    const spare = quoteFactory.build({ id: 'spare', isHidden: false });
+    useQuoteStore.setState({ quotes: [shown, spare], currentQuote: shown });
+    vi.mocked(storage.getQuotes).mockResolvedValue([shown, spare]);
+
+    await act();
+
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('spare');
+  });
+
   it('createCollection reads the collections after the lock is granted', async () => {
     const late = { ...pulled(), id: 'late' };
     useQuoteStore.setState({ collections: [] });

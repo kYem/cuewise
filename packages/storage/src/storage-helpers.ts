@@ -267,6 +267,18 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     // to the sibling key, and a per-key view would keep its quarantined twin beside the new copy.
     const coveredIds = quotes.map((q) => q.id);
 
+    // Kept for rollback: favouriting or hiding a seed quote moves it to the custom key, and
+    // coveredIds makes the seed write drop it — so a custom write that then fails would leave
+    // that quote in neither key. Unreadable means no rollback, not no write.
+    let seedBefore: Quote[] | null = null;
+    try {
+      seedBefore = await getListRaw<Quote>(STORAGE_KEYS.SEED_QUOTES, 'local');
+    } catch (error) {
+      logger.error('Could not read the seed quotes; a half-written pair cannot be rolled back', {
+        error,
+      });
+    }
+
     // Store seed quotes in local storage
     const seedResult = await setValidatedListInStorage(
       STORAGE_KEYS.SEED_QUOTES,
@@ -280,21 +292,32 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
     }
 
     // Store custom quotes in appropriate storage area
-    const area = await getStorageArea();
-    const customResult = await setValidatedListInStorage(
-      STORAGE_KEYS.CUSTOM_QUOTES,
-      customQuotes,
-      quoteSchema,
-      area,
-      coveredIds
-    );
+    let customResult: StorageResult;
+    try {
+      const area = await getStorageArea();
+      customResult = await setValidatedListInStorage(
+        STORAGE_KEYS.CUSTOM_QUOTES,
+        customQuotes,
+        quoteSchema,
+        area,
+        coveredIds
+      );
+    } catch (error) {
+      // Rejecting here lands past the seed write just like a false result does, so it needs
+      // the same rollback rather than the generic catch below.
+      logger.error('Could not write the custom quotes', error);
+      customResult = storageFailure('Could not write the custom quotes');
+    }
 
-    if (!customResult.success) {
-      // The seed key already took its half, so this is not "nothing was written" — the caller
-      // will say the write failed, and only the log records that part of it landed.
-      logger.error('Quotes are half written: the seed key changed and the custom key did not', {
-        error: customResult.error,
-      });
+    if (!customResult.success && seedBefore !== null) {
+      const rolledBack = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedBefore, 'local');
+      if (!rolledBack.success) {
+        const stranded = seedBefore.filter((q) => isCustomQuote(q)).map((q) => q.id);
+        logger.error('Quotes are half written and the seed key could not be restored', {
+          error: customResult.error,
+          stranded,
+        });
+      }
     }
     return customResult;
   } catch (error) {
@@ -1086,11 +1109,34 @@ export async function setPomodoroSessionsRaw(sessions: PomodoroSession[]): Promi
 export async function setQuotesRaw(quotes: Quote[]): Promise<StorageResult> {
   const seed = quotes.filter((q) => !isCustomQuote(q));
   const custom = quotes.filter((q) => isCustomQuote(q));
+  // Kept for the same rollback `setQuotes` needs: a reset writes every quote to the seed key,
+  // so a failed custom write leaves the old custom copies beside their fresh seed twins.
+  let seedBefore: Quote[] | null = null;
+  try {
+    seedBefore = await getListRaw<Quote>(STORAGE_KEYS.SEED_QUOTES, 'local');
+  } catch (error) {
+    logger.error('Could not read the seed quotes; a half-written pair cannot be rolled back', {
+      error,
+    });
+  }
   const seedResult = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seed, 'local');
   if (!seedResult.success) {
     return seedResult;
   }
-  return setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, custom, await getStorageArea());
+  const customResult = await setInStorage(
+    STORAGE_KEYS.CUSTOM_QUOTES,
+    custom,
+    await getStorageArea()
+  );
+  if (!customResult.success && seedBefore !== null) {
+    const rolledBack = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedBefore, 'local');
+    if (!rolledBack.success) {
+      logger.error('Quotes are half written and the seed key could not be restored', {
+        error: customResult.error,
+      });
+    }
+  }
+  return customResult;
 }
 
 /** Seed plus custom, mirroring `getQuotes`, but without dropping anything. */

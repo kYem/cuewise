@@ -233,8 +233,8 @@ export const QuoteManagementPage: React.FC = () => {
       clearSelection();
       setShowResetAllConfirm(false);
     } catch (err) {
+      // Left open: a vanished dialog reads as a completed reset, and the store already toasted.
       logger.error('Reset all quotes operation failed', err);
-      setShowResetAllConfirm(false);
     } finally {
       setIsBulkLoading(false);
     }
@@ -243,9 +243,9 @@ export const QuoteManagementPage: React.FC = () => {
   const handleBulkAddToCollection = async (collectionId: string) => {
     setIsBulkLoading(true);
     try {
-      if (await addQuotesToCollection(Array.from(selectedQuoteIds), collectionId)) {
-        clearSelection();
-      }
+      // Not cleared, unlike delete and hide: the quotes stay on screen, and adding the same
+      // selection to a second collection is the normal next move.
+      await addQuotesToCollection(Array.from(selectedQuoteIds), collectionId);
     } catch (err) {
       logger.error('Bulk add to collection operation failed', err);
     } finally {

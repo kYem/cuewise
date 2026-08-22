@@ -53,14 +53,13 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
     const pendingState = pendingChanges[quoteId];
 
     if (pendingState !== undefined) {
-      // If there's a pending change, check if toggling would revert to original
-      if (pendingState === currentlyIn) {
-        // Remove from pending (no change needed)
+      // Toggling back to the stored value is not a change: keeping the entry leaves the footer
+      // counting it and makes Apply rewrite the whole list for nothing.
+      if (!pendingState === currentlyIn) {
         const newPending = { ...pendingChanges };
         delete newPending[quoteId];
         setPendingChanges(newPending);
       } else {
-        // Toggle the pending state
         setPendingChanges({ ...pendingChanges, [quoteId]: !pendingState });
       }
     } else {

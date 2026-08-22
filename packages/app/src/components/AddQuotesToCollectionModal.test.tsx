@@ -124,3 +124,23 @@ describe('AddQuotesToCollectionModal applying a mixed batch', () => {
     expect(screen.getByText('1 changes pending')).toBeInTheDocument();
   });
 });
+
+describe('AddQuotesToCollectionModal pending changes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Toggling back to the stored value is not a change; counting it makes Apply rewrite the
+  // whole list for nothing.
+  it('drops a change the user toggled back', async () => {
+    renderModal('saved');
+
+    toggleOutsider();
+    expect(screen.getByText('1 changes pending')).toBeInTheDocument();
+    toggleOutsider();
+
+    await waitFor(() =>
+      expect(screen.getByText('Click quotes to add or remove')).toBeInTheDocument()
+    );
+  });
+});
