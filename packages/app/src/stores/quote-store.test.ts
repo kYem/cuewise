@@ -1995,6 +1995,24 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
   });
 
+  // refreshQuote -> incrementViewCount -> refreshCardIfQuoteGone -> refreshQuote is a cycle.
+  // It terminates because each level rerolls from a list that no longer holds the id, but
+  // nothing proved that until this test.
+  it('does not recurse forever when the quote it rerolls onto is already gone', async () => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build()], currentQuote: null });
+    // A pull storm: every read answers a list that never holds what the last reroll picked, so
+    // each level's gone path feeds the next one.
+    let reads = 0;
+    vi.mocked(storage.getQuotes).mockImplementation(async () => {
+      reads += 1;
+      return [quoteFactory.build()];
+    });
+
+    await useQuoteStore.getState().refreshQuote();
+
+    expect(reads).toBeLessThan(20);
+  });
+
   it('createCollection reads the collections after the lock is granted', async () => {
     const late = { ...pulled(), id: 'late' };
     useQuoteStore.setState({ collections: [] });
