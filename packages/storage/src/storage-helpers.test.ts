@@ -267,6 +267,31 @@ describe('updateCollections', () => {
   });
 });
 
+describe('setQuotes across the seed and custom keys', () => {
+  // Favouriting a seed quote moves it to the custom key. The seed write drops it first, so a
+  // failed custom write used to leave the quote in neither key — gone, not merely unsaved.
+  it('puts a moved quote back when the custom write fails', async () => {
+    const store = new LocalStorageKeyValueStore();
+    configurePlatform({ storage: store });
+    const seed = quoteFactory.build({ id: 'seed-1', isCustom: false, isFavorite: false });
+    await setQuotes([seed]);
+
+    const original = store.set.bind(store);
+    vi.spyOn(store, 'set').mockImplementation(async (key, value, area) => {
+      if (key === STORAGE_KEYS.CUSTOM_QUOTES) {
+        return { success: false, error: { type: 'quota_exceeded', message: 'full' } };
+      }
+      return original(key, value, area);
+    });
+
+    const result = await setQuotes([{ ...seed, isFavorite: true }]);
+    vi.restoreAllMocks();
+
+    expect(result.success).toBe(false);
+    expect((await getQuotes()).map((q) => q.id)).toEqual(['seed-1']);
+  });
+});
+
 describe('updateQuotes', () => {
   it('lets two concurrent writers both land', async () => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });

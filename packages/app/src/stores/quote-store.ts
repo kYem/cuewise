@@ -364,7 +364,14 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const storedId = stored === null ? null : stored.id;
       let currentQuote = quotes.find((q) => q.id === storedId) ?? null;
       if (currentQuote === null || currentQuote.isHidden) {
-        currentQuote = getRandomQuote(quotes);
+        currentQuote = getRandomQuote(
+          quotes,
+          undefined,
+          enabledCategories,
+          showCustomQuotes,
+          showFavoritesOnly,
+          activeCollectionIds
+        );
         if (currentQuote) {
           await persistCurrentQuote(currentQuote, 'initialize');
         }
@@ -606,9 +613,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             state.showFavoritesOnly,
             state.activeCollectionIds
           );
-          set({ currentQuote: replacement });
-          if (replacement !== null) {
-            await persistCurrentQuote(replacement, 'incrementViewCount');
+          // The history slot holds the id we just found gone, at every entry point. Leaving it
+          // there makes forward navigation land on a quote that no longer exists.
+          const history = [...state.quoteHistory];
+          if (replacement === null) {
+            history.splice(state.historyIndex, 1);
+          } else {
+            history[state.historyIndex] = replacement.id;
+          }
+          set({ currentQuote: replacement, quoteHistory: history });
+          if (replacement !== null && !(await persistCurrentQuote(replacement, 'increment'))) {
+            useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
           }
         }
         return;
@@ -990,7 +1005,15 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       }
 
       // Reset current quote to a random one
-      const newCurrent = getRandomQuote(freshQuotes);
+      const filters = get();
+      const newCurrent = getRandomQuote(
+        freshQuotes,
+        undefined,
+        filters.enabledCategories,
+        filters.showCustomQuotes,
+        filters.showFavoritesOnly,
+        filters.activeCollectionIds
+      );
       if (newCurrent) {
         cardForgotten = !(await persistCurrentQuote(newCurrent, 'resetAllQuotes'));
         set({
@@ -1084,7 +1107,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Announcing a write that found nothing marks a gone id dirty, and the next push seals a
       // tombstone this device never authored.
       if (!applied.found) {
-        logger.warn(`updateCollection: collection ${id} was gone before the write`);
+        logger.error(`updateCollection: collection ${id} was gone before the write`);
         useToastStore.getState().warning('This collection no longer exists');
         return 'gone';
       }

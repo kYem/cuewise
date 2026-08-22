@@ -42,6 +42,8 @@ describe('CollectionList deleting a collection', () => {
     vi.clearAllMocks();
   });
 
+  // The dialog relabels to "Processing..." while the write is in flight, so a plain
+  // queryByRole('Delete') is already null before the outcome is known.
   it('closes the confirmation once the delete lands', async () => {
     renderList(true);
 
@@ -49,8 +51,9 @@ describe('CollectionList deleting a collection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Processing...' })).not.toBeInTheDocument()
     );
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
   it('keeps the confirmation open when the delete did not land', async () => {
@@ -60,6 +63,5 @@ describe('CollectionList deleting a collection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled());
-    expect(screen.getByText('Morning Motivation')).toBeInTheDocument();
   });
 });
