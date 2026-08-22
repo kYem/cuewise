@@ -275,6 +275,11 @@ function reportQuoteGone(action: string, quoteId: string): void {
   useToastStore.getState().warning('This quote no longer exists', { collapseRepeats: true });
 }
 
+// refreshQuote bumps the view count, and a gone count rerolls the card — so the two call each
+// other. Each hop normally resyncs the list and settles, but a read that keeps answering a list
+// without the quote just picked recurses until the worker dies.
+let rerollInProgress = false;
+
 /** The card moved here but the write that remembers it did not, so other tabs keep the old one. */
 const CARD_NOT_REMEMBERED = 'Showing a new quote, but your other tabs may still show the last one.';
 
@@ -405,6 +410,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   },
 
   refreshQuote: async (options = {}) => {
+    if (rerollInProgress) {
+      return;
+    }
+    rerollInProgress = true;
     try {
       const {
         quotes,
@@ -460,6 +469,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // replace the card with a load-failure panel the user never asked for, and an uncollapsed
       // toast would stack one copy per tick.
       useToastStore.getState().error(errorMessage, { collapseRepeats: true });
+    } finally {
+      rerollInProgress = false;
     }
   },
 
