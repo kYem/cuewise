@@ -1962,7 +1962,7 @@ describe('writers read storage, not their own snapshot', () => {
     await useQuoteStore.getState().goBack();
 
     expect(mockToastWarning).toHaveBeenCalledWith(
-      'Showing a new quote, but your other tabs may still show the last one.',
+      "Couldn't remember this quote — the next tab you open may still show the previous one.",
       expect.objectContaining({ collapseRepeats: true })
     );
   });
@@ -1993,10 +1993,9 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
   });
 
-  // refreshQuote -> incrementViewCount -> refreshCardIfQuoteGone -> refreshQuote is a cycle.
-  // It terminates because each level rerolls from a list that no longer holds the id, but
-  // nothing proved that until this test.
-  it('does not recurse forever when the quote it rerolls onto is already gone', async () => {
+  // A reroll that repairs the card by calling back into refreshQuote cannot settle while
+  // storage keeps answering without the quote just handed out. It died of OOM, not a timeout.
+  it('does not spin when every read answers a list without the quote just picked', async () => {
     useQuoteStore.setState({ quotes: [quoteFactory.build()], currentQuote: null });
     // A pull storm: every read answers a list that never holds what the last reroll picked, so
     // each level's gone path feeds the next one.
@@ -2008,7 +2007,31 @@ describe('writers read storage, not their own snapshot', () => {
 
     await useQuoteStore.getState().refreshQuote();
 
+    // Both bounds: `< 20` alone passes when the path never ran at all.
+    expect(reads).toBeGreaterThan(0);
     expect(reads).toBeLessThan(20);
+  });
+
+  // Two independent failures, two messages: the tombstone one warns the wiped quotes may come
+  // back from other devices, which a cosmetic card warning must not shadow.
+  it('resetAllQuotes reports the tombstone gap even when the card write also failed', async () => {
+    useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'mine', isCustom: true })] });
+    vi.mocked(storage.getQuotesRaw).mockRejectedValue(new Error('unreadable'));
+    vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+    vi.mocked(storage.setCurrentQuote).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().resetAllQuotes();
+
+    const warnings = mockToastWarning.mock.calls.flat();
+    expect(warnings).toContain(
+      "Couldn't remember this quote — the next tab you open may still show the previous one."
+    );
+    expect(warnings).toContain(
+      "Quotes reset, but Cuewise couldn't read what it replaced. If you use sync, some may return from your other devices."
+    );
   });
 
   it('createCollection reads the collections after the lock is granted', async () => {

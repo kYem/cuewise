@@ -289,6 +289,13 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
       coveredIds
     );
 
+    if (!customResult.success) {
+      // The seed key already took its half, so this is not "nothing was written" — the caller
+      // will say the write failed, and only the log records that part of it landed.
+      logger.error('Quotes are half written: the seed key changed and the custom key did not', {
+        error: customResult.error,
+      });
+    }
     return customResult;
   } catch (error) {
     logger.error('Error setting quotes', error);
