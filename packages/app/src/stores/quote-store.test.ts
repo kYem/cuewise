@@ -1982,15 +1982,22 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastWarning.mock.calls.length > 0).toBe(warns);
   });
 
-  it('incrementViewCount moves the card off a quote the pull deleted', async () => {
-    const gone = quoteFactory.build({ id: 'gone' });
-    const other = quoteFactory.build({ id: 'other' });
-    useQuoteStore.setState({ quotes: [other], currentQuote: gone });
-    vi.mocked(storage.getQuotes).mockResolvedValue([other]);
+  // Through the user's filters, not any surviving quote: an unfiltered pick lands on a
+  // category they turned off.
+  it('incrementViewCount replaces a deleted card from within the active filters', async () => {
+    const gone = quoteFactory.build({ id: 'gone', category: 'inspiration' });
+    const wanted = quoteFactory.build({ id: 'wanted', category: 'inspiration' });
+    const filteredOut = quoteFactory.build({ id: 'filtered-out', category: 'productivity' });
+    useQuoteStore.setState({
+      quotes: [wanted, filteredOut],
+      currentQuote: gone,
+      enabledCategories: ['inspiration'],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([wanted, filteredOut]);
 
     await useQuoteStore.getState().incrementViewCount('gone');
 
-    expect(useQuoteStore.getState().currentQuote?.id).toBe('other');
+    expect(useQuoteStore.getState().currentQuote?.id).toBe('wanted');
   });
 
   // A reroll that repairs the card by calling back into refreshQuote cannot settle while

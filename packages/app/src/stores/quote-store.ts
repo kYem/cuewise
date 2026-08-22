@@ -595,7 +595,17 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         // going back through it recurses until the heap dies when storage keeps answering a
         // list without the quote just handed out.
         if (get().currentQuote?.id === quoteId) {
-          const replacement = getRandomQuote(write.quotes);
+          // Through the same filters refreshQuote uses: an unfiltered pick can land on a
+          // category the user turned off, or outside the collection they are looking at.
+          const state = get();
+          const replacement = getRandomQuote(
+            write.quotes,
+            quoteId,
+            state.enabledCategories,
+            state.showCustomQuotes,
+            state.showFavoritesOnly,
+            state.activeCollectionIds
+          );
           set({ currentQuote: replacement });
           if (replacement !== null) {
             await persistCurrentQuote(replacement, 'incrementViewCount');
