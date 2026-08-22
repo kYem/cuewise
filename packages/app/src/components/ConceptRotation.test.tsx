@@ -97,6 +97,8 @@ describe('ConceptRotation', () => {
 
     expect(screen.getByText('QUOTE')).toBeInTheDocument();
     expect(refreshQuote).toHaveBeenCalledTimes(1);
+    // A keypress, so a lost card write is worth reporting; the rotation tick's is not.
+    expect(refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
     // Without this the host's rotation keeps its phase and overwrites the quote just asked for.
     expect(onManualRefresh).toHaveBeenCalledTimes(1);
   });

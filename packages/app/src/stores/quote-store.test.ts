@@ -1772,8 +1772,8 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastError).not.toHaveBeenCalled();
   });
 
-  // The port's type says non-null, but it is a runtime seam a type cannot police, and the
-  // guard that admits nullish must not then dereference it.
+  // The helper's signature says non-null, but it is a runtime seam a type cannot police, and
+  // the guard that admits nullish must not then dereference it.
   it('treats a missing card-write result as a failure without throwing', async () => {
     const mine = quoteFactory.build({ id: 'mine', isCustom: true });
     useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
@@ -1861,8 +1861,7 @@ describe('writers read storage, not their own snapshot', () => {
     expect(useQuoteStore.getState().currentQuote?.id).toBe('q2');
   });
 
-  // The id is all initialize trusts, so a lost card write costs a writer that keeps it nothing
-  // the user can see.
+  // A writer that keeps the quote's id loses nothing the user can see: initialize re-resolves it.
   it('says nothing when only the card write failed', async () => {
     const mine = quoteFactory.build({ id: 'mine', isCustom: true });
     useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
@@ -1970,7 +1969,7 @@ describe('writers read storage, not their own snapshot', () => {
 
   it.each([
     ['a deliberate reroll reports it', { userInitiated: true }, true],
-    ['an interval tick stays quiet', undefined, false],
+    ['an unprompted call stays quiet', undefined, false],
   ])('refreshQuote: %s', async (_label, options, warns) => {
     useQuoteStore.setState({ quotes: quoteFactory.buildList(3), currentQuote: null });
     vi.mocked(storage.setCurrentQuote).mockResolvedValue({
@@ -1983,7 +1982,6 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastWarning.mock.calls.length > 0).toBe(warns);
   });
 
-  // The phantom 691168a removed, reachable through the one writer that fix skipped.
   it('incrementViewCount moves the card off a quote the pull deleted', async () => {
     const gone = quoteFactory.build({ id: 'gone' });
     const other = quoteFactory.build({ id: 'other' });

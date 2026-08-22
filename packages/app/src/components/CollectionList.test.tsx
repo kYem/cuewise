@@ -53,7 +53,6 @@ describe('CollectionList deleting a collection', () => {
     );
   });
 
-  // Closing here reads as a completed delete while the collection is still listed.
   it('keeps the confirmation open when the delete did not land', async () => {
     renderList(false);
 

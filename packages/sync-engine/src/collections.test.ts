@@ -51,8 +51,8 @@ describe('goals binding', () => {
     expect(result).toEqual({ g1, g2 });
   });
 
-  // The raw readers validate shape, not content. An id-less row keys as "undefined", the enroll
-  // backfill claims it, and the server rejects the whole batch — every cycle, until a re-enroll.
+  // The raw readers validate shape, not content, so an unusable id reaches the push: an empty
+  // one fails validation for the whole batch, a missing one syncs a row every peer appends.
   it('readAll skips a stored row with no usable id rather than keying it as undefined', async () => {
     const g1 = goalFactory.build({ id: 'g1' });
     await setGoals([g1, { title: 'no id at all' } as unknown as Goal, { id: '' } as Goal]);
