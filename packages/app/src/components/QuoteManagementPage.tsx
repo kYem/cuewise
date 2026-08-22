@@ -154,10 +154,12 @@ export const QuoteManagementPage: React.FC = () => {
     try {
       // Keep the selection when the write failed: clearing it reads as a completed delete
       // and leaves the user re-picking every quote to retry.
+      // Both gated: a vanished dialog is the loudest signal in the frame, and on a failed
+      // delete it says "done" while every quote is still listed.
       if (await bulkDelete(Array.from(selectedQuoteIds))) {
         clearSelection();
+        setShowBulkDeleteConfirm(false);
       }
-      setShowBulkDeleteConfirm(false);
     } catch (err) {
       logger.error('Bulk delete operation failed', err);
       setShowBulkDeleteConfirm(false);

@@ -196,10 +196,8 @@ async function persistOneQuote(
   // identical list can still fail, and the caller would report that instead of the gone.
   return withCollectionLock('quotes', async (): Promise<OneQuoteWrite> => {
     const current = await getQuotes();
-    // Boxed because TypeScript does not track an assignment made inside the callback: a bare
-    // `let` narrows to `never` past the guard below, and the compiler stops checking `target`.
-    // Kept from the map rather than re-found afterwards, so a `change` that rewrote the id
-    // cannot read as gone once the write has landed.
+    // Boxed because TypeScript does not track an assignment inside the callback: a bare `let`
+    // narrows to `never` past the guard, and the compiler stops checking `target` altogether.
     const hit: { target: Quote | null } = { target: null };
     const quotes = current.map((q) => {
       if (q.id !== quoteId) {
@@ -269,19 +267,17 @@ async function refreshCardIfQuoteGone(
 
 /** The locked read no longer holds it: a pull deleted it between the user's click and the write. */
 function reportQuoteGone(action: string, quoteId: string): void {
-  logger.warn(`${action}: quote ${quoteId} was gone before the write`);
+  // error, not warn: the shipped logLevel is 'error', and this is where a "but it's right
+  // there" report starts.
+  logger.error(`${action}: quote ${quoteId} was gone before the write`);
   // Collapsed: AddQuotesToCollectionModal applies its pending changes one quote at a time, so a
   // pull that removed the selection would otherwise stack one identical toast per quote.
   useToastStore.getState().warning('This quote no longer exists', { collapseRepeats: true });
 }
 
-// refreshQuote bumps the view count, and a gone count rerolls the card — so the two call each
-// other. Each hop normally resyncs the list and settles, but a read that keeps answering a list
-// without the quote just picked recurses until the worker dies.
-let rerollInProgress = false;
-
-/** The card moved here but the write that remembers it did not, so other tabs keep the old one. */
-const CARD_NOT_REMEMBERED = 'Showing a new quote, but your other tabs may still show the last one.';
+/** Only `initialize` reads the card key, so a lost write shows up on the next tab, not this one. */
+const CARD_NOT_REMEMBERED =
+  "Couldn't remember this quote — the next tab you open may still show the previous one.";
 
 const STALE_QUOTES_MESSAGE =
   "Cuewise couldn't re-read your quotes just now, so what you see may be out of date.";
@@ -410,10 +406,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   },
 
   refreshQuote: async (options = {}) => {
-    if (rerollInProgress) {
-      return;
-    }
-    rerollInProgress = true;
     try {
       const {
         quotes,
@@ -469,8 +461,6 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // replace the card with a load-failure panel the user never asked for, and an uncollapsed
       // toast would stack one copy per tick.
       useToastStore.getState().error(errorMessage, { collapseRepeats: true });
-    } finally {
-      rerollInProgress = false;
     }
   },
 
@@ -601,12 +591,21 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         // error, not warn: the shipped logLevel is 'error'. Every other gone path moves the card;
         // this one is where the phantom would otherwise survive.
         logger.error(`incrementViewCount: quote ${quoteId} was gone before the write`);
-        await refreshCardIfQuoteGone(quoteId, write.quotes, get);
+        // Picked here rather than through refreshQuote: that is usually our own caller, and
+        // going back through it recurses until the heap dies when storage keeps answering a
+        // list without the quote just handed out.
+        if (get().currentQuote?.id === quoteId) {
+          const replacement = getRandomQuote(write.quotes);
+          set({ currentQuote: replacement });
+          if (replacement !== null) {
+            await persistCurrentQuote(replacement, 'incrementViewCount');
+          }
+        }
         return;
       }
       set({ quotes: write.quotes });
     } catch (error) {
-      logger.error('Error incrementing view count', error);
+      logger.error('Error incrementing view count', error, { quoteId });
     }
   },
 
@@ -930,6 +929,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
   resetAllQuotes: async () => {
     try {
       // Create fresh copy of seed quotes with default properties
+      let cardForgotten = false;
       const freshQuotes = SEED_QUOTES.map((q) => ({
         ...q,
         isFavorite: false,
@@ -982,7 +982,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       // Reset current quote to a random one
       const newCurrent = getRandomQuote(freshQuotes);
       if (newCurrent) {
-        await persistCurrentQuote(newCurrent, 'resetAllQuotes');
+        cardForgotten = !(await persistCurrentQuote(newCurrent, 'resetAllQuotes'));
         set({
           currentQuote: newCurrent,
           quoteHistory: [newCurrent.id],
@@ -990,6 +990,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         });
       }
 
+      if (cardForgotten) {
+        useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+      }
       if (tombstones.complete) {
         useToastStore.getState().success('All quotes reset to defaults');
       } else {
