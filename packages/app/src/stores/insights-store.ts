@@ -396,7 +396,8 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         result.skipped.quotes = skippedCount;
       }
 
-      // Import pomodoro sessions
+      // Unlocked, unlike the two blocks above: sessions are not a synced collection, so no pull
+      // can race this read.
       if (options.importPomodoroSessions === true && data.pomodoroSessions.length > 0) {
         const existingSessions = await getPomodoroSessionsRaw();
         const { merged, importedCount, skippedCount } = mergeImport(

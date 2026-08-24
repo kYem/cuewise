@@ -55,12 +55,13 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
     if (pendingState !== undefined) {
       // Toggling back to the stored value is not a change: keeping the entry leaves the footer
       // counting it and makes Apply rewrite the whole list for nothing.
-      if (!pendingState === currentlyIn) {
+      const nextState = !pendingState;
+      if (nextState === currentlyIn) {
         const newPending = { ...pendingChanges };
         delete newPending[quoteId];
         setPendingChanges(newPending);
       } else {
-        setPendingChanges({ ...pendingChanges, [quoteId]: !pendingState });
+        setPendingChanges({ ...pendingChanges, [quoteId]: nextState });
       }
     } else {
       // No pending change, create one

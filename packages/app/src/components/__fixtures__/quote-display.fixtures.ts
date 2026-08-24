@@ -203,14 +203,9 @@ export function createNoNavigationMockStore(
 // Assertion Helpers
 // ============================================================================
 
-/**
- * Validates that a navigation method was called
- */
+/** Unconditional: a guarded assertion passes silently when the mock store lacks the key. */
 export function expectNavigationMethodCalled(store: MockQuoteStore, method: keyof MockQuoteStore) {
-  const mockMethod = store[method];
-  if (typeof mockMethod === 'function') {
-    expect(mockMethod).toHaveBeenCalledTimes(1);
-  }
+  expect(store[method]).toHaveBeenCalledTimes(1);
 }
 
 /**

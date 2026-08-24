@@ -130,8 +130,6 @@ describe('AddQuotesToCollectionModal pending changes', () => {
     vi.clearAllMocks();
   });
 
-  // Toggling back to the stored value is not a change; counting it makes Apply rewrite the
-  // whole list for nothing.
   it('drops a change the user toggled back', async () => {
     renderModal('saved');
 
