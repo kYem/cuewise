@@ -223,8 +223,9 @@ function syncsLocalEdits(quote: Quote | null): boolean {
 }
 
 /**
- * The card's own key. `initialize` reads back only its id, so losing this write matters just
- * where the id changes — a writer that keeps it is re-resolved from the list on the next mount.
+ * The card's own key. `initialize` reads back only its id and re-resolves it against the list,
+ * so losing this write matters only where the id changes AND the stored one still resolves: a
+ * writer that keeps the id, or one replacing an id the list no longer holds, loses nothing.
  * Answers rather than throwing: the list write has usually already landed, and `getStorageArea`
  * rejects, so both exits have to end up in the same place.
  */
@@ -245,7 +246,7 @@ async function persistCurrentQuote(quote: Quote, action: string): Promise<boolea
 }
 
 /** A write aimed at one entity: 'gone' is not a failure, and a retry cannot fix it. */
-type QuoteWriteOutcome = 'saved' | 'gone' | 'failed';
+export type QuoteWriteOutcome = 'saved' | 'gone' | 'failed';
 
 /**
  * The card renders `currentQuote`, which no observer converges, so a writer that finds the quote
@@ -304,6 +305,25 @@ const quotesObserver = createStorageObserver(
   },
   createStaleLatch((message) => useToastStore.getState().warning(message), STALE_QUOTES_MESSAGE)
 );
+
+/** The four fields the pick filters on, named so the two adjacent booleans cannot be transposed. */
+interface QuoteFilters {
+  enabledCategories: QuoteCategory[];
+  showCustomQuotes: boolean;
+  showFavoritesOnly: boolean;
+  activeCollectionIds: string[];
+}
+
+function pickQuote(quotes: Quote[], filters: QuoteFilters, excludeId?: string): Quote | null {
+  return getRandomQuote(
+    quotes,
+    excludeId,
+    filters.enabledCategories,
+    filters.showCustomQuotes,
+    filters.showFavoritesOnly,
+    filters.activeCollectionIds
+  );
+}
 
 export const useQuoteStore = create<QuoteStore>((set, get) => ({
   quotes: [],
@@ -364,14 +384,12 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
       const storedId = stored === null ? null : stored.id;
       let currentQuote = quotes.find((q) => q.id === storedId) ?? null;
       if (currentQuote === null || currentQuote.isHidden) {
-        currentQuote = getRandomQuote(
-          quotes,
-          undefined,
+        currentQuote = pickQuote(quotes, {
           enabledCategories,
           showCustomQuotes,
           showFavoritesOnly,
-          activeCollectionIds
-        );
+          activeCollectionIds,
+        });
         if (currentQuote) {
           await persistCurrentQuote(currentQuote, 'initialize');
         }
@@ -414,26 +432,9 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
 
   refreshQuote: async (options = {}) => {
     try {
-      const {
-        quotes,
-        currentQuote,
-        quoteHistory,
-        historyIndex,
-        enabledCategories,
-        showCustomQuotes,
-        showFavoritesOnly,
-        activeCollectionIds,
-      } = get();
-
-      // Pass current quote ID, enabled categories, custom filter, favorites filter, and collection filter
-      const newQuote = getRandomQuote(
-        quotes,
-        currentQuote?.id,
-        enabledCategories,
-        showCustomQuotes,
-        showFavoritesOnly,
-        activeCollectionIds
-      );
+      const state = get();
+      const { quotes, currentQuote, quoteHistory, historyIndex } = state;
+      const newQuote = pickQuote(quotes, state, currentQuote?.id);
 
       if (newQuote) {
         // Only a deliberate reroll is worth reporting: the interval calls this unprompted, and
@@ -605,14 +606,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           // Through the same filters refreshQuote uses: an unfiltered pick can land on a
           // category the user turned off, or outside the collection they are looking at.
           const state = get();
-          const replacement = getRandomQuote(
-            write.quotes,
-            quoteId,
-            state.enabledCategories,
-            state.showCustomQuotes,
-            state.showFavoritesOnly,
-            state.activeCollectionIds
-          );
+          const replacement = pickQuote(write.quotes, state, quoteId);
           // The history slot holds the id we just found gone, at every entry point. Leaving it
           // there makes forward navigation land on a quote that no longer exists.
           const history = [...state.quoteHistory];
@@ -622,8 +616,8 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
             history[state.historyIndex] = replacement.id;
           }
           set({ currentQuote: replacement, quoteHistory: history });
-          if (replacement !== null && !(await persistCurrentQuote(replacement, 'increment'))) {
-            useToastStore.getState().warning(CARD_NOT_REMEMBERED, { collapseRepeats: true });
+          if (replacement !== null) {
+            await persistCurrentQuote(replacement, 'incrementViewCount');
           }
         }
         return;
@@ -707,21 +701,22 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
           return false;
         })
       );
+      // Ahead of assertPersisted: nothing matched, so the list is unchanged and a failed write
+      // would tell the user to free space for a delete that has already happened.
+      if (deleted.target === null) {
+        set({ quotes: updatedQuotes });
+        reportQuoteGone('deleteQuote', quoteId);
+        await refreshCardIfQuoteGone(quoteId, updatedQuotes, get);
+        return;
+      }
       assertPersisted(result);
       set({ quotes: updatedQuotes });
       if (syncsLocalEdits(deleted.target)) {
         notifyDeleted('quotes', quoteId);
       }
 
-      // If deleting current quote, get a new one
-      const currentQuote = get().currentQuote;
-      if (currentQuote && currentQuote.id === quoteId) {
+      if (get().currentQuote?.id === quoteId) {
         await get().refreshQuote();
-      }
-
-      if (deleted.target === null) {
-        reportQuoteGone('deleteQuote', quoteId);
-        return;
       }
       useToastStore.getState().success('Quote deleted successfully');
     } catch (error) {
@@ -1004,17 +999,10 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
         notifyDeleted('quotes', id);
       }
 
-      // Reset current quote to a random one
-      const filters = get();
-      const newCurrent = getRandomQuote(
-        freshQuotes,
-        undefined,
-        filters.enabledCategories,
-        filters.showCustomQuotes,
-        filters.showFavoritesOnly,
-        filters.activeCollectionIds
-      );
-      if (newCurrent) {
+      const newCurrent = pickQuote(freshQuotes, get());
+      if (newCurrent === null) {
+        set({ currentQuote: null, quoteHistory: [], historyIndex: 0 });
+      } else {
         cardForgotten = !(await persistCurrentQuote(newCurrent, 'resetAllQuotes'));
         set({
           currentQuote: newCurrent,

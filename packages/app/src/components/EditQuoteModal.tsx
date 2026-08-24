@@ -9,7 +9,7 @@ import { Autocomplete, Select } from '@cuewise/ui';
 import { X } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
-import { useQuoteStore } from '../stores/quote-store';
+import { type QuoteWriteOutcome, useQuoteStore } from '../stores/quote-store';
 import { useToastStore } from '../stores/toast-store';
 
 export interface EditQuoteModalProps {
@@ -24,7 +24,7 @@ export interface EditQuoteModalProps {
       source?: string;
       notes?: string;
     }
-  ) => Promise<'saved' | 'gone' | 'failed'>;
+  ) => Promise<QuoteWriteOutcome>;
 }
 
 export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, onSave }) => {

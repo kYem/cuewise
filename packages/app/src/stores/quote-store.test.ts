@@ -701,6 +701,34 @@ describe('Quote Store', () => {
         expect(useQuoteStore.getState().activeCollectionIds).toEqual(['col-1']);
       });
 
+      it('picks the first card through the filters it just read, not unfiltered', async () => {
+        const wanted = quoteFactory.build({
+          id: 'wanted',
+          category: 'inspiration',
+          isCustom: false,
+        });
+        const offCategory = quoteFactory.buildList(8, {
+          category: 'productivity',
+          isCustom: false,
+        });
+        vi.mocked(storage.getQuotes).mockResolvedValue([...offCategory, wanted]);
+        vi.mocked(storage.getCurrentQuote).mockResolvedValue(null);
+        vi.mocked(storage.getCollections).mockResolvedValue([]);
+        vi.mocked(storage.getSettings).mockResolvedValue({
+          ...defaultSettings,
+          quoteFilterEnabledCategories: ['inspiration'],
+          quoteFilterShowCustomQuotes: false,
+          quoteFilterShowFavoritesOnly: false,
+          quoteFilterActiveCollectionIds: [],
+        });
+        // Only reached if the pick is unfiltered: one eligible quote short-circuits the draw.
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+
+        await useQuoteStore.getState().initialize();
+
+        expect(useQuoteStore.getState().currentQuote?.id).toBe('wanted');
+      });
+
       it('should use default values when settings are null', async () => {
         const mockQuotes = quoteFactory.buildList(3);
         vi.mocked(storage.getQuotes).mockResolvedValue(mockQuotes);
@@ -1653,6 +1681,28 @@ describe('writers read storage, not their own snapshot', () => {
     expect(sink.markDeleted).not.toHaveBeenCalledWith('quotes', 'seed');
   });
 
+  it('resetAllQuotes clears the card when the filters exclude every fresh quote', async () => {
+    const mine = quoteFactory.build({ id: 'mine', isCustom: true });
+    useQuoteStore.setState({
+      quotes: [mine],
+      currentQuote: mine,
+      quoteHistory: ['mine'],
+      historyIndex: 0,
+      enabledCategories: [],
+      showCustomQuotes: false,
+      showFavoritesOnly: false,
+      activeCollectionIds: [],
+    });
+    vi.mocked(storage.getQuotesRaw).mockResolvedValue([mine]);
+    vi.mocked(storage.setQuotesRaw).mockResolvedValue({ success: true });
+
+    await useQuoteStore.getState().resetAllQuotes();
+
+    const state = useQuoteStore.getState();
+    expect(state.currentQuote).toBeNull();
+    expect(state.quoteHistory).toEqual([]);
+  });
+
   it('deleteCollection announces only the custom quotes it unlinked', async () => {
     const mine = { ...pulled(), id: 'c1', name: 'Mine' };
     const member = quoteFactory.build({ id: 'member', isCustom: true, collectionIds: ['c1'] });
@@ -1682,6 +1732,25 @@ describe('writers read storage, not their own snapshot', () => {
     expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
       collapseRepeats: true,
     });
+  });
+
+  it('deleteQuote names the gone quote rather than a storage error it cannot act on', async () => {
+    useQuoteStore.setState({
+      quotes: [quoteFactory.build({ id: 'gone', isCustom: true })],
+      currentQuote: null,
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    vi.mocked(storage.setQuotes).mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useQuoteStore.getState().deleteQuote('gone');
+
+    expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
+      collapseRepeats: true,
+    });
+    expect(mockToastError).not.toHaveBeenCalled();
   });
 
   // The reset is the escape hatch for storage this build cannot read, so it must not need
@@ -2009,14 +2078,19 @@ describe('writers read storage, not their own snapshot', () => {
     let reads = 0;
     vi.mocked(storage.getQuotes).mockImplementation(async () => {
       reads += 1;
+      // The breaker: a re-entering reroll dies of OOM before any assertion runs, so the mock
+      // has to end it. incrementViewCount's catch swallows the throw.
+      if (reads > 3) {
+        throw new Error('reroll did not settle');
+      }
       return [quoteFactory.build()];
     });
 
     await useQuoteStore.getState().refreshQuote();
 
-    // Both bounds: `< 20` alone passes when the path never ran at all.
+    // Both bounds: the upper one alone passes when the path never ran at all.
     expect(reads).toBeGreaterThan(0);
-    expect(reads).toBeLessThan(20);
+    expect(reads).toBeLessThanOrEqual(3);
   });
 
   // Two independent failures, two messages: the tombstone one warns the wiped quotes may come
@@ -2041,8 +2115,6 @@ describe('writers read storage, not their own snapshot', () => {
     );
   });
 
-  // The history slot still held the deleted id, so forward navigation landed on a quote that
-  // no longer exists and the arrow went inert.
   it('incrementViewCount keeps history in step with the card it replaced', async () => {
     const gone = quoteFactory.build({ id: 'gone' });
     const older = quoteFactory.build({ id: 'older' });
@@ -2063,7 +2135,6 @@ describe('writers read storage, not their own snapshot', () => {
   });
 
   // The card survives the write but must not keep showing a quote the user just hid or deleted.
-  // Every existing case seeded a gone id, which takes a different path entirely.
   it.each([
     ['hideQuote', () => useQuoteStore.getState().hideQuote('shown')],
     ['deleteQuote', () => useQuoteStore.getState().deleteQuote('shown')],
@@ -2071,9 +2142,29 @@ describe('writers read storage, not their own snapshot', () => {
     ['bulkDelete', () => useQuoteStore.getState().bulkDelete(['shown'])],
   ])('%s moves the card off a quote it just hid or removed', async (_label, act) => {
     const shown = quoteFactory.build({ id: 'shown', isHidden: false, isCustom: true });
-    const spare = quoteFactory.build({ id: 'spare', isHidden: false });
-    useQuoteStore.setState({ quotes: [shown, spare], currentQuote: shown });
-    vi.mocked(storage.getQuotes).mockResolvedValue([shown, spare]);
+    const spare = quoteFactory.build({
+      id: 'spare',
+      isHidden: false,
+      isCustom: false,
+      category: 'inspiration',
+    });
+    const offCategory = quoteFactory.build({
+      id: 'off',
+      isHidden: false,
+      isCustom: false,
+      category: 'productivity',
+    });
+    useQuoteStore.setState({
+      quotes: [shown, offCategory, spare],
+      currentQuote: shown,
+      enabledCategories: ['inspiration'],
+      showCustomQuotes: false,
+      showFavoritesOnly: false,
+      activeCollectionIds: [],
+    });
+    vi.mocked(storage.getQuotes).mockResolvedValue([shown, offCategory, spare]);
+    // Only reached if the replacement is picked unfiltered: one eligible quote skips the draw.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
 
     await act();
 
