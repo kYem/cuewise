@@ -257,29 +257,62 @@ export async function updateQuotes(
   });
 }
 
-/** Two keys, written in sequence: a failure on the second leaves the first one's write standing. */
+/**
+ * The seed key is written first, so a failed custom write leaves the pair inconsistent: a quote
+ * this write moved between the keys is now in neither.
+ */
+async function restoreSeedAfterFailedCustomWrite(
+  seedBefore: Quote[] | null,
+  seedReadError: unknown,
+  customQuotes: Quote[],
+  customResult: Extract<StorageResult, { success: false }>
+): Promise<void> {
+  if (seedBefore === null) {
+    logger.error(
+      'Quotes are half written and the seed key was unreadable, so it was not restored',
+      {
+        error: customResult.error,
+        seedReadError,
+      }
+    );
+    return;
+  }
+  const rolledBack = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedBefore, 'local');
+  if (rolledBack.success) {
+    return;
+  }
+  // seedBefore holds the pre-write rows, so an id this write moved to the custom key is one the
+  // seed write dropped and the custom write never took.
+  const movedToCustom = new Set(customQuotes.map((q) => q.id));
+  logger.error('Quotes are half written and the seed key could not be restored', {
+    error: customResult.error,
+    restoreError: rolledBack.error,
+    stranded: seedBefore.filter((q) => movedToCustom.has(q.id)).map((q) => q.id),
+  });
+}
+
+/** Unreadable means no rollback, not no write — the error is reported only if the write fails. */
+async function readSeedForRollback(): Promise<{ quotes: Quote[] | null; error: unknown }> {
+  try {
+    return { quotes: await getListRaw<Quote>(STORAGE_KEYS.SEED_QUOTES, 'local'), error: null };
+  } catch (error) {
+    return { quotes: null, error };
+  }
+}
+
+/** Two keys, written in sequence: a failed custom write rolls the seed key back. */
 export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
   try {
-    // Split into seed and custom quotes
     const seedQuotes = quotes.filter((q) => !isCustomQuote(q));
     const customQuotes = quotes.filter((q) => isCustomQuote(q));
     // Both keys judge preservation against every id this write covers: favouriting moves a quote
     // to the sibling key, and a per-key view would keep its quarantined twin beside the new copy.
     const coveredIds = quotes.map((q) => q.id);
 
-    // Kept for rollback: favouriting or hiding a seed quote moves it to the custom key, and
-    // coveredIds makes the seed write drop it — so a custom write that then fails would leave
-    // that quote in neither key. Unreadable means no rollback, not no write.
-    let seedBefore: Quote[] | null = null;
-    try {
-      seedBefore = await getListRaw<Quote>(STORAGE_KEYS.SEED_QUOTES, 'local');
-    } catch (error) {
-      logger.error('Could not read the seed quotes; a half-written pair cannot be rolled back', {
-        error,
-      });
-    }
+    // Favouriting or hiding a seed quote moves it to the custom key, so the seed write drops it
+    // and a custom write that then fails would leave it in neither.
+    const seedBefore = await readSeedForRollback();
 
-    // Store seed quotes in local storage
     const seedResult = await setValidatedListInStorage(
       STORAGE_KEYS.SEED_QUOTES,
       seedQuotes,
@@ -291,7 +324,6 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
       return seedResult;
     }
 
-    // Store custom quotes in appropriate storage area
     let customResult: StorageResult;
     try {
       const area = await getStorageArea();
@@ -309,15 +341,13 @@ export async function setQuotes(quotes: Quote[]): Promise<StorageResult> {
       customResult = storageFailure('Could not write the custom quotes');
     }
 
-    if (!customResult.success && seedBefore !== null) {
-      const rolledBack = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedBefore, 'local');
-      if (!rolledBack.success) {
-        const stranded = seedBefore.filter((q) => isCustomQuote(q)).map((q) => q.id);
-        logger.error('Quotes are half written and the seed key could not be restored', {
-          error: customResult.error,
-          stranded,
-        });
-      }
+    if (!customResult.success) {
+      await restoreSeedAfterFailedCustomWrite(
+        seedBefore.quotes,
+        seedBefore.error,
+        customQuotes,
+        customResult
+      );
     }
     return customResult;
   } catch (error) {
@@ -1109,32 +1139,27 @@ export async function setPomodoroSessionsRaw(sessions: PomodoroSession[]): Promi
 export async function setQuotesRaw(quotes: Quote[]): Promise<StorageResult> {
   const seed = quotes.filter((q) => !isCustomQuote(q));
   const custom = quotes.filter((q) => isCustomQuote(q));
-  // Kept for the same rollback `setQuotes` needs: a reset writes every quote to the seed key,
-  // so a failed custom write leaves the old custom copies beside their fresh seed twins.
-  let seedBefore: Quote[] | null = null;
-  try {
-    seedBefore = await getListRaw<Quote>(STORAGE_KEYS.SEED_QUOTES, 'local');
-  } catch (error) {
-    logger.error('Could not read the seed quotes; a half-written pair cannot be rolled back', {
-      error,
-    });
-  }
+  // Same rollback `setQuotes` needs: a reset, or a pull that favourites a seed quote, moves
+  // quotes between the keys, and a failed custom write loses whatever the seed write dropped.
+  const seedBefore = await readSeedForRollback();
   const seedResult = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seed, 'local');
   if (!seedResult.success) {
     return seedResult;
   }
-  const customResult = await setInStorage(
-    STORAGE_KEYS.CUSTOM_QUOTES,
-    custom,
-    await getStorageArea()
-  );
-  if (!customResult.success && seedBefore !== null) {
-    const rolledBack = await setInStorage(STORAGE_KEYS.SEED_QUOTES, seedBefore, 'local');
-    if (!rolledBack.success) {
-      logger.error('Quotes are half written and the seed key could not be restored', {
-        error: customResult.error,
-      });
-    }
+  let customResult: StorageResult;
+  try {
+    customResult = await setInStorage(STORAGE_KEYS.CUSTOM_QUOTES, custom, await getStorageArea());
+  } catch (error) {
+    logger.error('Could not write the custom quotes', error);
+    customResult = storageFailure('Could not write the custom quotes');
+  }
+  if (!customResult.success) {
+    await restoreSeedAfterFailedCustomWrite(
+      seedBefore.quotes,
+      seedBefore.error,
+      custom,
+      customResult
+    );
   }
   return customResult;
 }

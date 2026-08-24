@@ -40,6 +40,7 @@ import {
   setCustomBackground,
   setGoals,
   setQuotes,
+  setQuotesRaw,
   setReminders,
   setSettingsPatch,
   setSettingsPatchRaw,
@@ -268,9 +269,22 @@ describe('updateCollections', () => {
 });
 
 describe('setQuotes across the seed and custom keys', () => {
-  // Favouriting a seed quote moves it to the custom key. The seed write drops it first, so a
-  // failed custom write used to leave the quote in neither key — gone, not merely unsaved.
-  it('puts a moved quote back when the custom write fails', async () => {
+  const writers = { setQuotes, setQuotesRaw };
+  const failures = {
+    'reports failure': () =>
+      Promise.resolve({
+        success: false as const,
+        error: { type: 'quota_exceeded' as const, message: 'full' },
+      }),
+    throws: () => Promise.reject(new Error('storage unavailable')),
+  };
+
+  it.each([
+    ['setQuotes' as const, 'reports failure' as const],
+    ['setQuotes' as const, 'throws' as const],
+    ['setQuotesRaw' as const, 'reports failure' as const],
+    ['setQuotesRaw' as const, 'throws' as const],
+  ])('%s puts a moved quote back when the custom write %s', async (writer, mode) => {
     const store = new LocalStorageKeyValueStore();
     configurePlatform({ storage: store });
     const seed = quoteFactory.build({ id: 'seed-1', isCustom: false, isFavorite: false });
@@ -279,16 +293,20 @@ describe('setQuotes across the seed and custom keys', () => {
     const original = store.set.bind(store);
     vi.spyOn(store, 'set').mockImplementation(async (key, value, area) => {
       if (key === STORAGE_KEYS.CUSTOM_QUOTES) {
-        return { success: false, error: { type: 'quota_exceeded', message: 'full' } };
+        return failures[mode]();
       }
       return original(key, value, area);
     });
 
-    const result = await setQuotes([{ ...seed, isFavorite: true }]);
+    const result = await writers[writer]([{ ...seed, isFavorite: true }]);
     vi.restoreAllMocks();
 
     expect(result.success).toBe(false);
-    expect((await getQuotes()).map((q) => q.id)).toEqual(['seed-1']);
+    const stored = await getQuotes();
+    expect(stored.map((q) => q.id)).toEqual(['seed-1']);
+    // The pre-write copy, not the favourited one the failed write was carrying: a rollback that
+    // restored the incoming list would land the favourite while reporting failure.
+    expect(stored[0]?.isFavorite).toBe(false);
   });
 });
 
