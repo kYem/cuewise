@@ -1,4 +1,10 @@
-import { configurePlatform, DEFAULT_SETTINGS, toStoredValues } from '@cuewise/shared';
+import {
+  configurePlatform,
+  DEFAULT_SETTINGS,
+  type Goal,
+  STORAGE_KEYS,
+  toStoredValues,
+} from '@cuewise/shared';
 import {
   getGoals,
   getManyFromStorage,
@@ -9,14 +15,16 @@ import {
   setGoals,
   setGoalsRaw,
   setManyInStorage,
+  setQuotes,
   setQuotesRaw,
   setRemindersRaw,
   setSettingsPatch,
   settingsStorageKey,
   updateGoals,
+  updateQuotes,
 } from '@cuewise/storage';
-import { goalFactory } from '@cuewise/test-utils/factories';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { DEVICE_LOCAL_SETTINGS_KEYS, defaultBindings } from './collections';
 
@@ -28,6 +36,14 @@ function goalsBinding() {
   const binding = defaultBindings().find((b) => b.name === 'goals');
   if (binding === undefined) {
     throw new Error('goals binding missing from defaultBindings()');
+  }
+  return binding;
+}
+
+function quotesBinding() {
+  const binding = defaultBindings().find((b) => b.name === 'quotes');
+  if (binding === undefined) {
+    throw new Error('quotes binding missing from defaultBindings()');
   }
   return binding;
 }
@@ -49,6 +65,17 @@ describe('goals binding', () => {
     const result = await goalsBinding().readAll();
 
     expect(result).toEqual({ g1, g2 });
+  });
+
+  // The raw readers validate shape, not content, so an unusable id reaches the push: an empty
+  // one fails validation for the whole batch, a missing one syncs a row every peer appends.
+  it('readAll skips a stored row with no usable id rather than keying it as undefined', async () => {
+    const g1 = goalFactory.build({ id: 'g1' });
+    await setGoals([g1, { title: 'no id at all' } as unknown as Goal, { id: '' } as Goal]);
+
+    const result = await goalsBinding().readAll();
+
+    expect(Object.keys(result)).toEqual(['g1']);
   });
 
   it('writeOne appends a new goal', async () => {
@@ -312,5 +339,33 @@ describe('goals binding and the page-side writer share one lock', () => {
 
     const stored = await getGoals();
     expect(stored.map((goal) => goal.id).sort()).toEqual([pulled.id, edited.id].sort());
+  });
+});
+
+describe('readAll reads under the collection lock', () => {
+  // Quotes live in two keys, so a favourite moving between them is briefly in neither. An
+  // unlocked readAll reports that absence, and the push cycle seals it as a tombstone every
+  // other device applies.
+  it('does not observe a quote mid-move between the two quote keys', async () => {
+    const kv = new FakeKvStore();
+    configurePlatform({ storage: kv });
+    const seed = quoteFactory.build({ id: 'seed-1', isCustom: false, isFavorite: false });
+    await setQuotes([seed]);
+
+    const original = kv.set.bind(kv);
+    let midWrite: Promise<Record<string, unknown>> | null = null;
+    vi.spyOn(kv, 'set').mockImplementation(async (key, value, area) => {
+      if (key === STORAGE_KEYS.CUSTOM_QUOTES && midWrite === null) {
+        midWrite = quotesBinding().readAll();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      return original(key, value, area);
+    });
+
+    await updateQuotes((current) => current.map((q) => ({ ...q, isFavorite: true })));
+    const observed = await midWrite;
+    vi.restoreAllMocks();
+
+    expect(Object.keys(observed ?? {})).toEqual(['seed-1']);
   });
 });

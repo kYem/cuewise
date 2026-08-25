@@ -81,6 +81,7 @@ describe('QuoteDisplay - Navigation', () => {
       await user.click(newQuoteButton);
 
       expectNavigationMethodCalled(mockStore, 'refreshQuote');
+      expect(mockStore.refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
     });
 
     it('should call refreshQuote on the space key', async () => {
@@ -91,6 +92,7 @@ describe('QuoteDisplay - Navigation', () => {
       fireEvent.keyDown(document.body, { key: ' ' });
 
       expectNavigationMethodCalled(mockStore, 'refreshQuote');
+      expect(mockStore.refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
     });
 
     it('should signal a manual refresh on the space key, as the button does', async () => {

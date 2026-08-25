@@ -170,7 +170,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
     // knownIds and keeps surfacing, which would leave space looking dead. `c` brings it back.
     yieldToQuotes();
     setSlot('quotes');
-    useQuoteStore.getState().refreshQuote();
+    useQuoteStore.getState().refreshQuote({ userInitiated: true });
     onManualRefresh?.();
   };
 

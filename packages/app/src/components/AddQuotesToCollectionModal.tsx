@@ -53,15 +53,15 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
     const pendingState = pendingChanges[quoteId];
 
     if (pendingState !== undefined) {
-      // If there's a pending change, check if toggling would revert to original
-      if (pendingState === currentlyIn) {
-        // Remove from pending (no change needed)
+      // Toggling back to the stored value is not a change: keeping the entry leaves the footer
+      // counting it and makes Apply rewrite the whole list for nothing.
+      const nextState = !pendingState;
+      if (nextState === currentlyIn) {
         const newPending = { ...pendingChanges };
         delete newPending[quoteId];
         setPendingChanges(newPending);
       } else {
-        // Toggle the pending state
-        setPendingChanges({ ...pendingChanges, [quoteId]: !pendingState });
+        setPendingChanges({ ...pendingChanges, [quoteId]: nextState });
       }
     } else {
       // No pending change, create one
@@ -72,6 +72,10 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
   // Count changes
   const changeCount = Object.keys(pendingChanges).length;
 
+  // A toggle made mid-apply is overwritten wholesale when the loop rebuilds the pending set,
+  // so its tick would revert with no explanation.
+  const rowsLocked = isSubmitting;
+
   // Apply changes
   const handleApplyChanges = async () => {
     if (changeCount === 0) {
@@ -81,14 +85,23 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
 
     setIsSubmitting(true);
     try {
+      const stillPending: Record<string, boolean> = {};
       for (const [quoteId, shouldBeIn] of Object.entries(pendingChanges)) {
-        if (shouldBeIn) {
-          await addQuoteToCollection(quoteId, collection.id);
-        } else {
-          await removeQuoteFromCollection(quoteId, collection.id);
+        const outcome = shouldBeIn
+          ? await addQuoteToCollection(quoteId, collection.id)
+          : await removeQuoteFromCollection(quoteId, collection.id);
+        // Only a retryable failure stays pending. Keeping the ones that landed would report
+        // the whole batch as outstanding and leave their rows ringed as unsaved.
+        if (outcome === 'failed') {
+          stillPending[quoteId] = shouldBeIn;
         }
       }
-      onClose();
+      setPendingChanges(stillPending);
+      // Staying open on 'gone' would loop forever: the quote is deleted, so applying again
+      // can only answer 'gone' again.
+      if (Object.keys(stillPending).length === 0) {
+        onClose();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -143,6 +156,7 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
                   key={quote.id}
                   type="button"
                   onClick={() => toggleQuote(quote.id)}
+                  disabled={rowsLocked}
                   className={cn(
                     'w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all',
                     isSelected

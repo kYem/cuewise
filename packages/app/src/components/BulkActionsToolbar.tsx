@@ -66,7 +66,11 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   };
 
   return (
-    <div className="bg-surface-variant border border-border rounded-lg p-3 mb-6">
+    <div
+      role="toolbar"
+      aria-label="Bulk actions"
+      className="bg-surface-variant border border-border rounded-lg p-3 mb-6"
+    >
       <div className="flex flex-wrap items-center gap-3">
         {/* Selection Mode Toggle */}
         <button
