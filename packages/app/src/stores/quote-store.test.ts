@@ -1848,9 +1848,16 @@ describe('writers read storage, not their own snapshot', () => {
     useQuoteStore.setState({ quotes: [mine], currentQuote: mine });
     vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
     vi.mocked(storage.setCurrentQuote).mockResolvedValue(undefined as never);
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
     await expect(useQuoteStore.getState().editQuote('mine', { text: 'x' })).resolves.toBe('saved');
     expect(mockToastError).not.toHaveBeenCalled();
+    expect(logged).toHaveBeenCalledWith(
+      'editQuote: could not persist the displayed quote',
+      undefined,
+      { quoteId: 'mine' }
+    );
+    logged.mockRestore();
   });
 
   // Their own fixture: against the shared one these two writers mutate nothing, so the store
@@ -1901,7 +1908,9 @@ describe('writers read storage, not their own snapshot', () => {
     await useQuoteStore.getState().resetAllQuotes();
 
     expect(mockToastSuccess).not.toHaveBeenCalled();
-    expect(mockToastWarning).toHaveBeenCalled();
+    expect(mockToastWarning).toHaveBeenCalledWith(
+      "Quotes reset, but Cuewise couldn't read what it replaced. If you use sync, some may return from your other devices."
+    );
   });
 
   // The stored card is a snapshot nothing converges. Reading its fields back is how a quote
@@ -2048,7 +2057,14 @@ describe('writers read storage, not their own snapshot', () => {
 
     await useQuoteStore.getState().refreshQuote(options);
 
-    expect(mockToastWarning.mock.calls.length > 0).toBe(warns);
+    if (warns) {
+      expect(mockToastWarning).toHaveBeenCalledWith(
+        "Couldn't remember this quote — the next tab you open may still show the previous one.",
+        expect.objectContaining({ collapseRepeats: true })
+      );
+    } else {
+      expect(mockToastWarning).not.toHaveBeenCalled();
+    }
   });
 
   // Through the user's filters, not any surviving quote: an unfiltered pick lands on a
