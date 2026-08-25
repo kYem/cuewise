@@ -2,6 +2,7 @@ import {
   ALL_QUOTE_CATEGORIES,
   type Quote,
   type QuoteCategory,
+  type StorageResult,
   type SyncMutationSink,
 } from '@cuewise/shared';
 import { quoteFactory } from '@cuewise/test-utils/factories';
@@ -255,3 +256,14 @@ export function createSyncSink(): SyncMutationSink & {
 } {
   return { markMutated: vi.fn(), markDeleted: vi.fn(), markMutatedBulk: vi.fn() };
 }
+
+/** The two write failures the store distinguishes: quota is the one with its own user copy. */
+export const WRITE_FAILED = {
+  success: false,
+  error: { type: 'unknown', message: 'write failed' },
+} as const satisfies StorageResult;
+
+export const QUOTA_EXCEEDED = {
+  success: false,
+  error: { type: 'quota_exceeded', message: 'full' },
+} as const satisfies StorageResult;
