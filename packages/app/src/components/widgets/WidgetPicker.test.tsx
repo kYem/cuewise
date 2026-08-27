@@ -70,6 +70,27 @@ describe('WidgetPicker', () => {
     expect(updateSettings).toHaveBeenCalledWith({ showClock: true });
   });
 
+  it('leaves the toggle unchecked when the write fails, rather than lying about it', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF, saveSucceeds: false });
+    render(<WidgetPicker />);
+
+    await user.click(screen.getByRole('checkbox', { name: 'Clock' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).not.toBeChecked();
+  });
+
+  it('leaves every toggle alone when a preset fails to save', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF, saveSucceeds: false });
+    render(<WidgetPicker showPresets />);
+
+    await user.click(screen.getByRole('button', { name: 'Everything' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Notes' })).not.toBeChecked();
+  });
+
   it('turns a widget back off', async () => {
     const user = userEvent.setup();
     const { updateSettings } = mockWidgetPickerStores({ settings: { showNotes: true } });

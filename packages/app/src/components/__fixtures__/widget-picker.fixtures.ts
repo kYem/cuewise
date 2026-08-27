@@ -10,6 +10,8 @@ export interface WidgetPickerStoreOptions {
   settings?: Partial<Settings>;
   hasWeatherLocation?: boolean;
   isLoading?: boolean;
+  /** Mirrors the store's real contract: a rejected write returns false and commits nothing. */
+  saveSucceeds?: boolean;
 }
 
 /** A real Zustand store behind the mocked hook, so a toggle click re-renders like production. */
@@ -17,6 +19,7 @@ export function mockWidgetPickerStores({
   settings = {},
   hasWeatherLocation = true,
   isLoading = false,
+  saveSucceeds = true,
 }: WidgetPickerStoreOptions = {}) {
   const store = create<SettingsStore>((set) => ({
     settings: { ...DEFAULT_SETTINGS, ...settings },
@@ -27,6 +30,9 @@ export function mockWidgetPickerStores({
     previewSettings: vi.fn(),
     clearPreview: vi.fn(),
     updateSettings: vi.fn(async (patch: Partial<Settings>) => {
+      if (!saveSucceeds) {
+        return false;
+      }
       set((state) => ({ settings: { ...state.settings, ...patch } }));
       return true;
     }),

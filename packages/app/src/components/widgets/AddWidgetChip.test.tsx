@@ -43,6 +43,20 @@ describe('AddWidgetChip', () => {
     expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
   });
 
+  it('stays available when the write that would have completed the set failed', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({
+      settings: { ...ALL_WIDGETS_ON, showClock: false },
+      saveSucceeds: false,
+    });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Clock' }));
+
+    expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
+  });
+
   it('stops offering itself when the only widget left off is one this build cannot render', () => {
     vi.mocked(isCalendarFeatureEnabled).mockReturnValue(false);
     mockWidgetPickerStores({ settings: { ...ALL_WIDGETS_ON, newTabShowCalendar: false } });

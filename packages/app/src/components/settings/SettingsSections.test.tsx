@@ -176,6 +176,12 @@ describe('settings sections', () => {
       }
     });
 
+    it('leaves calendar out, since the goals area owns that toggle', () => {
+      renderSection('home');
+
+      expect(screen.queryByText('Calendar')).not.toBeInTheDocument();
+    });
+
     it('keeps the weather sub-group behind its toggle', () => {
       renderSection('home', '', { showWeather: false });
 
