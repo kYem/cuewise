@@ -32,10 +32,11 @@ import {
   Timer,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
+import { HOME_WIDGETS, type HomeWidgetKey, widgetPatch } from '../widgets/widget-catalog';
 import { BackgroundEffectControls } from './BackgroundEffectControls';
 import { CustomBackgroundPicker } from './CustomBackgroundPicker';
 import { PresetGrid } from './PresetGrid';
@@ -545,84 +546,75 @@ function chipClass(active: boolean): string {
 }
 
 /* Home screen */
+// Calendar is toggled in the goals area, not here.
+export const SETTINGS_HOME_WIDGETS = HOME_WIDGETS.filter((w) => w.key !== 'newTabShowCalendar');
+
+type SubgroupRenderer = (
+  props: Pick<SettingsSectionProps, 's' | 'set' | 'filter'>
+) => React.ReactNode;
+
+const HOME_SUBGROUPS: Partial<Record<HomeWidgetKey, SubgroupRenderer>> = {
+  showClock: ({ s, set, filter }) => (
+    <SettingSubgroup>
+      <SettingRow label="Time format" filter={filter} keywords="12 hour 24 hour clock am pm">
+        <Segmented
+          value={s.timeFormat}
+          onChange={(v) => set({ timeFormat: v })}
+          options={TIME_FORMAT_OPTIONS}
+        />
+      </SettingRow>
+    </SettingSubgroup>
+  ),
+  showWeather: ({ s, set, filter }) => (
+    <SettingSubgroup>
+      <SettingRow
+        label="Location"
+        filter={filter}
+        keywords="weather city town place location search"
+      >
+        <WeatherLocationPicker />
+      </SettingRow>
+      <SettingRow label="Units" filter={filter} keywords="weather celsius fahrenheit units">
+        <Segmented
+          value={s.weatherUnits}
+          options={WEATHER_UNITS_OPTIONS}
+          onChange={(v) => set({ weatherUnits: v })}
+        />
+      </SettingRow>
+      <SettingRow label="Position" filter={filter} keywords="weather left right position">
+        <Segmented
+          value={s.weatherPosition}
+          options={WEATHER_POSITION_OPTIONS}
+          onChange={(v) => set({ weatherPosition: v })}
+        />
+      </SettingRow>
+    </SettingSubgroup>
+  ),
+};
+
 function HomeSection({ s, set, filter }: SettingsSectionProps) {
   const quotesVisible = s.quoteDisplayMode !== 'hidden';
   const goalsPositionVisible = s.quoteDisplayMode === 'bottom' || s.quoteDisplayMode === 'hidden';
 
   return (
     <div>
-      <SettingRow
-        label="Clock"
-        filter={filter}
-        help="Time, date, and greeting on the home page"
-        keywords="time date greeting show format 12 24"
-      >
-        <Switch label="Clock" checked={s.showClock} onChange={(v) => set({ showClock: v })} />
-      </SettingRow>
-      {s.showClock && (
-        <SettingSubgroup>
-          <SettingRow label="Time format" filter={filter} keywords="12 hour 24 hour clock am pm">
-            <Segmented
-              value={s.timeFormat}
-              onChange={(v) => set({ timeFormat: v })}
-              options={TIME_FORMAT_OPTIONS}
-            />
-          </SettingRow>
-        </SettingSubgroup>
-      )}
-      <SettingRow
-        label="Quick links"
-        filter={filter}
-        help="Pinned shortcut tiles in the top-left of the home page"
-        keywords="shortcut bookmark favicon links tiles pinned sites"
-      >
-        <Switch
-          label="Quick links"
-          checked={s.showQuickLinks}
-          onChange={(v) => set({ showQuickLinks: v })}
-        />
-      </SettingRow>
-      <SettingRow
-        label="Notes"
-        filter={filter}
-        help="A scratchpad in the top-left of the home page, kept on this device unless Cloud Sync is on"
-        keywords="notes scratchpad jot memo text note pad reminder scribble"
-      >
-        <Switch label="Notes" checked={s.showNotes} onChange={(v) => set({ showNotes: v })} />
-      </SettingRow>
-      <SettingRow
-        label="Weather"
-        filter={filter}
-        help="Current conditions and today's forecast, fetched through Cuewise's own proxy"
-        keywords="weather temperature forecast rain sun location city climate"
-      >
-        <Switch label="Weather" checked={s.showWeather} onChange={(v) => set({ showWeather: v })} />
-      </SettingRow>
-      {s.showWeather && (
-        <SettingSubgroup>
+      {SETTINGS_HOME_WIDGETS.map((widget) => (
+        <Fragment key={widget.key}>
           <SettingRow
-            label="Location"
+            label={widget.label}
             filter={filter}
-            keywords="weather city town place location search"
+            help={widget.help}
+            keywords={widget.keywords}
           >
-            <WeatherLocationPicker />
-          </SettingRow>
-          <SettingRow label="Units" filter={filter} keywords="weather celsius fahrenheit units">
-            <Segmented
-              value={s.weatherUnits}
-              options={WEATHER_UNITS_OPTIONS}
-              onChange={(v) => set({ weatherUnits: v })}
+            <Switch
+              label={widget.label}
+              checked={s[widget.key]}
+              onChange={(v) => set(widgetPatch(widget.key, v))}
             />
           </SettingRow>
-          <SettingRow label="Position" filter={filter} keywords="weather left right position">
-            <Segmented
-              value={s.weatherPosition}
-              options={WEATHER_POSITION_OPTIONS}
-              onChange={(v) => set({ weatherPosition: v })}
-            />
-          </SettingRow>
-        </SettingSubgroup>
-      )}
+          {s[widget.key] && HOME_SUBGROUPS[widget.key]?.({ s, set, filter })}
+        </Fragment>
+      ))}
       <SettingDivider />
       <SettingRow
         label="Quote display"

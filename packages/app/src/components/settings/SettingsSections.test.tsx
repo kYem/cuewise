@@ -4,7 +4,7 @@ import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
-import { SETTINGS_SECTIONS } from './SettingsSections';
+import { SETTINGS_HOME_WIDGETS, SETTINGS_SECTIONS } from './SettingsSections';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 
@@ -163,6 +163,29 @@ describe('settings sections', () => {
         });
 
       expect(orphans).toEqual([]);
+    });
+  });
+
+  describe('Home', () => {
+    it('takes its widget copy from the catalog, so the picker cannot drift', () => {
+      renderSection('home');
+
+      for (const widget of SETTINGS_HOME_WIDGETS) {
+        expect(screen.getByText(widget.label)).toBeInTheDocument();
+        expect(screen.getByText(widget.help)).toBeInTheDocument();
+      }
+    });
+
+    it('keeps the weather sub-group behind its toggle', () => {
+      renderSection('home', '', { showWeather: false });
+
+      expect(screen.queryByText('Units')).not.toBeInTheDocument();
+    });
+
+    it('reveals the weather sub-group once weather is on', () => {
+      renderSection('home', '', { showWeather: true });
+
+      expect(screen.getByText('Units')).toBeInTheDocument();
     });
   });
 });
