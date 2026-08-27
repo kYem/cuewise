@@ -1,6 +1,7 @@
 import type { Settings } from '@cuewise/shared';
 import { Calendar, Clock, CloudSun, LayoutGrid, NotebookPen } from 'lucide-react';
 import type React from 'react';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { WeatherSetupRow } from './WeatherSetupRow';
 
 export type HomeWidgetKey = Extract<
@@ -63,6 +64,18 @@ export const HOME_WIDGETS = [
     where: () => 'Centre',
   },
 ] as const satisfies readonly HomeWidget[];
+
+// The widgets this build can actually render, so no surface offers a switch that does nothing.
+// Folds the build-time calendar gate the same way calendar-visibility.ts does; `featureEnabled`
+// defaults to the live gate and is passed explicitly in tests.
+export function offeredHomeWidgets(
+  featureEnabled: boolean = isCalendarFeatureEnabled()
+): readonly HomeWidget[] {
+  if (featureEnabled) {
+    return HOME_WIDGETS;
+  }
+  return HOME_WIDGETS.filter((widget) => widget.key !== 'newTabShowCalendar');
+}
 
 // A computed key from a union widens to string, so the annotation is what keeps this
 // assignable to Partial<Settings>. Both the picker and Settings write through it.

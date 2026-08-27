@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { WIDGET_PRESETS } from './widget-presets';
+import { offeredHomeWidgets } from './widget-catalog';
+import { widgetPresets } from './widget-presets';
 
-function preset(id: string) {
-  return WIDGET_PRESETS.find((p) => p.id === id);
+function preset(id: string, featureEnabled = true) {
+  return widgetPresets(offeredHomeWidgets(featureEnabled)).find((p) => p.id === id);
 }
 
-describe('WIDGET_PRESETS', () => {
+describe('widgetPresets', () => {
   it('turns everything off for minimal', () => {
     expect(preset('minimal')?.patch).toEqual({
       showClock: false,
@@ -33,6 +34,23 @@ describe('WIDGET_PRESETS', () => {
       showNotes: true,
       showWeather: true,
       newTabShowCalendar: true,
+    });
+  });
+
+  it.each([
+    'minimal',
+    'recommended',
+    'everything',
+  ])('leaves the calendar key out of %s on a build that cannot render it', (id) => {
+    expect(preset(id, false)?.patch).not.toHaveProperty('newTabShowCalendar');
+  });
+
+  it('still writes the four remaining widgets when the calendar is not offered', () => {
+    expect(preset('everything', false)?.patch).toEqual({
+      showClock: true,
+      showQuickLinks: true,
+      showNotes: true,
+      showWeather: true,
     });
   });
 });

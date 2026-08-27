@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
-import { HOME_WIDGETS } from './widget-catalog';
+import { HOME_WIDGETS, offeredHomeWidgets } from './widget-catalog';
 
 describe('HOME_WIDGETS', () => {
   it('lists every home widget exactly once', () => {
@@ -36,5 +36,19 @@ describe('HOME_WIDGETS', () => {
     const centre = HOME_WIDGETS.filter((w) => w.where(DEFAULT_SETTINGS) === 'Centre');
 
     expect(centre.map((w) => w.key)).toEqual(['showClock', 'newTabShowCalendar']);
+  });
+});
+
+describe('offeredHomeWidgets', () => {
+  it('offers the calendar on a build that can actually render it', () => {
+    const keys = offeredHomeWidgets(true).map((w) => w.key);
+
+    expect(keys).toContain('newTabShowCalendar');
+  });
+
+  it('withholds the calendar on a build without an OAuth client id, where it is a dead switch', () => {
+    const keys = offeredHomeWidgets(false).map((w) => w.key);
+
+    expect(keys).toEqual(['showClock', 'showQuickLinks', 'showNotes', 'showWeather']);
   });
 });

@@ -1,16 +1,17 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
-import type { HomeWidgetKey } from './widget-catalog';
+import { type HomeWidget, type HomeWidgetKey, offeredHomeWidgets } from './widget-catalog';
 
-type WidgetPatch = Record<HomeWidgetKey, boolean>;
+type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;
 
-function allWidgets(value: boolean): WidgetPatch {
-  return {
-    showClock: value,
-    showQuickLinks: value,
-    showNotes: value,
-    showWeather: value,
-    newTabShowCalendar: value,
-  };
+function patchFrom(
+  widgets: readonly HomeWidget[],
+  value: (key: HomeWidgetKey) => boolean
+): WidgetPatch {
+  const patch: WidgetPatch = {};
+  for (const widget of widgets) {
+    patch[widget.key] = value(widget.key);
+  }
+  return patch;
 }
 
 export interface WidgetPreset {
@@ -19,18 +20,17 @@ export interface WidgetPreset {
   patch: WidgetPatch;
 }
 
-export const WIDGET_PRESETS: readonly WidgetPreset[] = [
-  { id: 'minimal', label: 'Minimal', patch: allWidgets(false) },
-  {
-    id: 'recommended',
-    label: 'Recommended',
-    patch: {
-      showClock: DEFAULT_SETTINGS.showClock,
-      showQuickLinks: DEFAULT_SETTINGS.showQuickLinks,
-      showNotes: DEFAULT_SETTINGS.showNotes,
-      showWeather: DEFAULT_SETTINGS.showWeather,
-      newTabShowCalendar: DEFAULT_SETTINGS.newTabShowCalendar,
+// Built from the offered widgets so a preset can never switch on something this build hides.
+export function widgetPresets(
+  widgets: readonly HomeWidget[] = offeredHomeWidgets()
+): readonly WidgetPreset[] {
+  return [
+    { id: 'minimal', label: 'Minimal', patch: patchFrom(widgets, () => false) },
+    {
+      id: 'recommended',
+      label: 'Recommended',
+      patch: patchFrom(widgets, (key) => DEFAULT_SETTINGS[key]),
     },
-  },
-  { id: 'everything', label: 'Everything', patch: allWidgets(true) },
-];
+    { id: 'everything', label: 'Everything', patch: patchFrom(widgets, () => true) },
+  ];
+}

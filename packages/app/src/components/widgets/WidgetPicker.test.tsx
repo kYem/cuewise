@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import {
   ALL_WIDGETS_OFF,
   ALL_WIDGETS_ON,
@@ -10,6 +11,7 @@ import { WidgetPicker } from './WidgetPicker';
 
 vi.mock('../../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
+vi.mock('../../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
 vi.mock('../settings/WeatherLocationPicker', () => ({
   WeatherLocationPicker: () => <div data-testid="location-picker" />,
 }));
@@ -17,6 +19,7 @@ vi.mock('../settings/WeatherLocationPicker', () => ({
 describe('WidgetPicker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isCalendarFeatureEnabled).mockReturnValue(true);
   });
 
   it('lists every widget with its destination', () => {
@@ -29,6 +32,31 @@ describe('WidgetPicker', () => {
     expect(screen.getByRole('checkbox', { name: 'Weather' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Calendar' })).toBeInTheDocument();
     expect(screen.getAllByText('Centre')).toHaveLength(2);
+  });
+
+  it('drops the calendar on a build that could never render it', () => {
+    vi.mocked(isCalendarFeatureEnabled).mockReturnValue(false);
+    mockWidgetPickerStores();
+    render(<WidgetPicker />);
+
+    expect(screen.queryByRole('checkbox', { name: 'Calendar' })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeInTheDocument();
+  });
+
+  it('leaves the calendar out of a preset it cannot deliver', async () => {
+    const user = userEvent.setup();
+    vi.mocked(isCalendarFeatureEnabled).mockReturnValue(false);
+    const { updateSettings } = mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<WidgetPicker showPresets />);
+
+    await user.click(screen.getByRole('button', { name: 'Everything' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({
+      showClock: true,
+      showQuickLinks: true,
+      showNotes: true,
+      showWeather: true,
+    });
   });
 
   it('writes only the toggled widget key', async () => {
