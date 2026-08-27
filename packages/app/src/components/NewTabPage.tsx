@@ -30,6 +30,7 @@ import { SyncMenuFooter } from './SyncMenuFooter';
 import type { SettingsSection } from './settings/SettingsSections';
 import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
+import { AddWidgetChip } from './widgets/AddWidgetChip';
 
 interface NewTabPageProps {
   /** Platform-specific settings sections injected by the host (macOS Posture). */
@@ -423,6 +424,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
             {showQuickLinks && <QuickLinksWidget />}
             {showNotes && <NotesWidget />}
             {weatherPosition === 'left' && <WeatherWidget />}
+            <AddWidgetChip />
           </div>
         </div>
 
