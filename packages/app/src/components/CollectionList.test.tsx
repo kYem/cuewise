@@ -23,9 +23,11 @@ function renderList(deleted: boolean) {
     createSelectorMock({
       collections: [mine],
       quotes: [],
-      activeCollectionIds: [],
       deleteCollection,
-      setActiveCollections: vi.fn(),
+      toggleFavorite: vi.fn(),
+      hideQuote: vi.fn(),
+      unhideQuote: vi.fn(),
+      deleteQuote: vi.fn(),
     })
   );
   render(<CollectionList />);
