@@ -1,7 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALL_WIDGETS_OFF, mockWidgetPickerStores } from '../__fixtures__/widget-picker.fixtures';
+import {
+  ALL_WIDGETS_OFF,
+  ALL_WIDGETS_ON,
+  mockWidgetPickerStores,
+} from '../__fixtures__/widget-picker.fixtures';
 import { WidgetPicker } from './WidgetPicker';
 
 vi.mock('../../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
@@ -67,5 +71,40 @@ describe('WidgetPicker', () => {
     render(<WidgetPicker />);
 
     expect(screen.queryByText('Pick a city to see your weather.')).not.toBeInTheDocument();
+  });
+
+  it('hides presets by default, so a mistap cannot wipe a tuned home screen', () => {
+    mockWidgetPickerStores();
+    render(<WidgetPicker />);
+
+    expect(screen.queryByRole('button', { name: 'Minimal' })).not.toBeInTheDocument();
+  });
+
+  it('writes the whole preset patch in one call', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockWidgetPickerStores({ settings: ALL_WIDGETS_ON });
+    render(<WidgetPicker showPresets />);
+
+    await user.click(screen.getByRole('button', { name: 'Minimal' }));
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith({
+      showClock: false,
+      showQuickLinks: false,
+      showNotes: false,
+      showWeather: false,
+      newTabShowCalendar: false,
+    });
+  });
+
+  it('leaves the toggles reflecting the preset it just applied', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<WidgetPicker showPresets />);
+
+    await user.click(screen.getByRole('button', { name: 'Everything' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Calendar' })).toBeChecked();
   });
 });

@@ -2,6 +2,7 @@ import type React from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { Switch } from '../settings/SettingControls';
 import { HOME_WIDGETS, type HomeWidget, widgetPatch } from './widget-catalog';
+import { WIDGET_PRESETS } from './widget-presets';
 
 interface WidgetPickerProps {
   showPresets?: boolean;
@@ -11,12 +12,28 @@ interface WidgetPickerProps {
 // property entirely; widen back to the interface (satisfies already proved this assignable).
 const widgets: readonly HomeWidget[] = HOME_WIDGETS;
 
-export const WidgetPicker: React.FC<WidgetPickerProps> = () => {
+export const WidgetPicker: React.FC<WidgetPickerProps> = ({ showPresets = false }) => {
   const settings = useSettingsStore((state) => state.settings);
   const updateSettings = useSettingsStore((state) => state.updateSettings);
 
   return (
     <div className="space-y-1">
+      {showPresets && (
+        <div className="mb-2 flex gap-1.5">
+          {WIDGET_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => {
+                void updateSettings(preset.patch);
+              }}
+              className="flex-1 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-secondary transition-colors hover:bg-surface-variant hover:text-primary"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      )}
       {widgets.map((widget) => {
         const enabled = settings[widget.key];
         const Setup = widget.setup;
