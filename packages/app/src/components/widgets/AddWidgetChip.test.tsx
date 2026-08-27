@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import {
   ALL_WIDGETS_OFF,
   ALL_WIDGETS_ON,
@@ -10,6 +11,7 @@ import { AddWidgetChip } from './AddWidgetChip';
 
 vi.mock('../../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
+vi.mock('../../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
 vi.mock('../settings/WeatherLocationPicker', () => ({
   WeatherLocationPicker: () => <div data-testid="location-picker" />,
 }));
@@ -17,6 +19,7 @@ vi.mock('../settings/WeatherLocationPicker', () => ({
 describe('AddWidgetChip', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isCalendarFeatureEnabled).mockReturnValue(true);
   });
 
   it('offers itself while any widget is still off', () => {
@@ -33,6 +36,28 @@ describe('AddWidgetChip', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('stays available while weather is on without a city, since that widget draws nothing', () => {
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_ON, hasWeatherLocation: false });
+    render(<AddWidgetChip />);
+
+    expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
+  });
+
+  it('stops offering itself when the only widget left off is one this build cannot render', () => {
+    vi.mocked(isCalendarFeatureEnabled).mockReturnValue(false);
+    mockWidgetPickerStores({ settings: { ...ALL_WIDGETS_ON, newTabShowCalendar: false } });
+    const { container } = render(<AddWidgetChip />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('waits for settings to load, so a fully configured home screen never flashes it', () => {
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF, isLoading: true });
+    const { container } = render(<AddWidgetChip />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('opens the picker without presets', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
@@ -42,6 +67,40 @@ describe('AddWidgetChip', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Minimal' })).not.toBeInTheDocument();
+  });
+
+  it('names its popover after the heading inside it', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+
+    expect(screen.getByRole('dialog', { name: 'Add to your home screen' })).toBeInTheDocument();
+  });
+
+  it('keeps the open panel when the last remaining widget is switched on', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: { ...ALL_WIDGETS_ON, showClock: false } });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Clock' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeChecked();
+  });
+
+  it('disappears once that panel is closed', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: { ...ALL_WIDGETS_ON, showClock: false } });
+    const { container } = render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Clock' }));
+    await user.keyboard('{Escape}');
+
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('closes on Escape', async () => {

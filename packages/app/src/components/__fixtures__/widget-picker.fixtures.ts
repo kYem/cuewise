@@ -9,17 +9,19 @@ import { useWeatherStore } from '../../stores/weather-store';
 export interface WidgetPickerStoreOptions {
   settings?: Partial<Settings>;
   hasWeatherLocation?: boolean;
+  isLoading?: boolean;
 }
 
 /** A real Zustand store behind the mocked hook, so a toggle click re-renders like production. */
 export function mockWidgetPickerStores({
   settings = {},
   hasWeatherLocation = true,
+  isLoading = false,
 }: WidgetPickerStoreOptions = {}) {
   const store = create<SettingsStore>((set) => ({
     settings: { ...DEFAULT_SETTINGS, ...settings },
     preview: null,
-    isLoading: false,
+    isLoading,
     error: null,
     initialize: vi.fn(async () => {}),
     previewSettings: vi.fn(),

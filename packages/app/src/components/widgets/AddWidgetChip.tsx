@@ -1,15 +1,27 @@
 import { Plus } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
+import { useWeatherStore } from '../../stores/weather-store';
 import { WidgetPicker } from './WidgetPicker';
-import { HOME_WIDGETS } from './widget-catalog';
+import { offeredHomeWidgets } from './widget-catalog';
 
 export const AddWidgetChip: React.FC = () => {
   const settings = useSettingsStore((state) => state.settings);
+  const settingsLoading = useSettingsStore((state) => state.isLoading);
+  const weatherLocation = useWeatherStore((state) => state.location);
   const [isOpen, setIsOpen] = useState(false);
   const chipRef = useRef<HTMLDivElement>(null);
-  const everyWidgetOn = HOME_WIDGETS.every((widget) => settings[widget.key]);
+  const headingId = useId();
+
+  // A flag is not a widget: weather without a city renders nothing, and this chip is the
+  // only inline route back to the city search.
+  const everyWidgetDelivers = offeredHomeWidgets().every((widget) => {
+    if (widget.key === 'showWeather') {
+      return settings.showWeather && weatherLocation !== null;
+    }
+    return settings[widget.key];
+  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -36,7 +48,12 @@ export const AddWidgetChip: React.FC = () => {
     };
   }, [isOpen]);
 
-  if (everyWidgetOn) {
+  if (settingsLoading) {
+    return null;
+  }
+
+  // Hide at rest only — vanishing mid-gesture would drop the user's focus to the document.
+  if (everyWidgetDelivers && !isOpen) {
     return null;
   }
 
@@ -49,19 +66,23 @@ export const AddWidgetChip: React.FC = () => {
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         title="Add a widget"
-        className="home-tile"
+        className="flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
       >
-        <Plus className="h-5 w-5 text-primary" />
+        <Plus className="w-5 h-5 text-primary-600" />
+        <span className="hidden sm:inline text-sm font-medium text-primary">Add a widget</span>
       </button>
 
       {isOpen && (
         <div
           role="dialog"
           aria-modal="false"
-          aria-label="Add a widget"
-          className="absolute left-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border border-border bg-surface-elevated p-2 shadow-xl animate-fade-in"
+          aria-labelledby={headingId}
+          className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-lg border border-border bg-surface-elevated p-2 shadow-xl animate-fade-in"
         >
-          <h3 className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-tertiary">
+          <h3
+            id={headingId}
+            className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-tertiary"
+          >
             Add to your home screen
           </h3>
           <WidgetPicker />
