@@ -74,10 +74,10 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
         role="dialog"
         aria-modal="true"
         aria-label="Welcome to Cuewise"
-        className="relative bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-slide-up"
+        className="relative flex flex-col bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden animate-slide-up"
       >
         {/* Header with gradient accent */}
-        <div className="px-6 pt-6 pb-4 text-center">
+        <div className="flex-shrink-0 px-6 pt-6 pb-4 text-center">
           <div className="flex justify-center mb-3">
             <img
               src="/icons/icon.svg"
@@ -89,7 +89,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
           <p className="mt-2 text-secondary">Your personal productivity companion</p>
         </div>
 
-        <div className="px-6 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
           {step === 1 ? (
             <>
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-tertiary">
@@ -123,7 +123,7 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
           )}
         </div>
 
-        <div className="flex gap-2 px-6 pb-6 pt-2">
+        <div className="flex flex-shrink-0 gap-2 px-6 pb-6 pt-2">
           {step === 1 ? (
             <>
               <button

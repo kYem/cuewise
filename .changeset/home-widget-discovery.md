@@ -1,4 +1,6 @@
 ---
+'@cuewise/browser-extension': minor
+'@cuewise/macos': minor
 '@cuewise/app': minor
 ---
 

@@ -114,6 +114,21 @@ describe('WelcomeModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('scrolls the widget step instead of pushing Done past the bottom of the viewport', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores();
+    render(<WelcomeModal isOpen={true} onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('max-h-[90vh]');
+
+    const [body] = Array.from(dialog.querySelectorAll<HTMLElement>('.overflow-y-auto'));
+    expect(body).toContainElement(screen.getByRole('checkbox', { name: 'Clock' }));
+    expect(body).not.toContainElement(screen.getByRole('button', { name: 'Done' }));
+  });
+
   it('reopens on the tips step after being closed', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores();

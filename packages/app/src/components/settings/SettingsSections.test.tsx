@@ -167,7 +167,7 @@ describe('settings sections', () => {
   });
 
   describe('Home', () => {
-    it('takes its widget copy from the catalog, so the picker cannot drift', () => {
+    it('renders every catalogued widget row with its help text', () => {
       renderSection('home');
 
       for (const widget of SETTINGS_HOME_WIDGETS) {
