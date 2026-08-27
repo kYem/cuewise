@@ -1,0 +1,55 @@
+import { DEFAULT_SETTINGS, type Settings } from '@cuewise/shared';
+import { createSelectorMock } from '@cuewise/test-utils';
+import { type Mock, vi } from 'vitest';
+import { create } from 'zustand';
+import { VILNIUS } from '../../stores/__fixtures__/weather-store.fixtures';
+import { type SettingsStore, useSettingsStore } from '../../stores/settings-store';
+import { useWeatherStore } from '../../stores/weather-store';
+
+export interface WidgetPickerStoreOptions {
+  settings?: Partial<Settings>;
+  hasWeatherLocation?: boolean;
+}
+
+/** A real Zustand store behind the mocked hook, so a toggle click re-renders like production. */
+export function mockWidgetPickerStores({
+  settings = {},
+  hasWeatherLocation = true,
+}: WidgetPickerStoreOptions = {}) {
+  const store = create<SettingsStore>((set) => ({
+    settings: { ...DEFAULT_SETTINGS, ...settings },
+    preview: null,
+    isLoading: false,
+    error: null,
+    initialize: vi.fn(async () => {}),
+    previewSettings: vi.fn(),
+    clearPreview: vi.fn(),
+    updateSettings: vi.fn(async (patch: Partial<Settings>) => {
+      set((state) => ({ settings: { ...state.settings, ...patch } }));
+      return true;
+    }),
+    resetToDefaults: vi.fn(async () => true),
+  }));
+  vi.mocked(useSettingsStore).mockImplementation(store);
+
+  const location = hasWeatherLocation ? VILNIUS : null;
+  vi.mocked(useWeatherStore).mockImplementation(createSelectorMock({ location }));
+
+  return { updateSettings: store.getState().updateSettings as Mock };
+}
+
+export const ALL_WIDGETS_ON: Partial<Settings> = {
+  showClock: true,
+  showQuickLinks: true,
+  showNotes: true,
+  showWeather: true,
+  newTabShowCalendar: true,
+};
+
+export const ALL_WIDGETS_OFF: Partial<Settings> = {
+  showClock: false,
+  showQuickLinks: false,
+  showNotes: false,
+  showWeather: false,
+  newTabShowCalendar: false,
+};
