@@ -45,7 +45,7 @@ describe('WelcomeModal', () => {
     expect(screen.getByText('Start a Pomodoro')).toBeInTheDocument();
   });
 
-  it('should call onClose when "Skip" button is clicked', async () => {
+  it('should call onClose when "Skip" is clicked, so skipping is never punished with a second ask', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     mockWidgetPickerStores();
@@ -110,17 +110,6 @@ describe('WelcomeModal', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await user.click(screen.getByRole('button', { name: 'Done' }));
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('closes from the first step, so skipping is never punished with a second ask', async () => {
-    const user = userEvent.setup();
-    const onClose = vi.fn();
-    mockWidgetPickerStores();
-    render(<WelcomeModal isOpen={true} onClose={onClose} />);
-
-    await user.click(screen.getByRole('button', { name: 'Skip' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
