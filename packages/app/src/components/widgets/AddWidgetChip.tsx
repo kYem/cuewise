@@ -1,6 +1,6 @@
 import { Plus } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { WidgetPicker } from './WidgetPicker';
 import { HOME_WIDGETS } from './widget-catalog';
@@ -8,6 +8,7 @@ import { HOME_WIDGETS } from './widget-catalog';
 export const AddWidgetChip: React.FC = () => {
   const settings = useSettingsStore((state) => state.settings);
   const [isOpen, setIsOpen] = useState(false);
+  const chipRef = useRef<HTMLDivElement>(null);
   const everyWidgetOn = HOME_WIDGETS.every((widget) => settings[widget.key]);
 
   useEffect(() => {
@@ -15,14 +16,22 @@ export const AddWidgetChip: React.FC = () => {
       return;
     }
 
+    const handleClickOutside = (event: MouseEvent) => {
+      if (chipRef.current && !chipRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
       }
     };
 
+    document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
     return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
   }, [isOpen]);
@@ -32,7 +41,7 @@ export const AddWidgetChip: React.FC = () => {
   }
 
   return (
-    <div className="relative">
+    <div ref={chipRef} className="relative">
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}

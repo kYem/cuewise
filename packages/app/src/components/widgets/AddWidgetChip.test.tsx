@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -51,6 +51,17 @@ describe('AddWidgetChip', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add a widget' }));
     await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
+  });
+
+  it('closes on an outside click', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    fireEvent.mouseDown(document.body);
 
     expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
   });
