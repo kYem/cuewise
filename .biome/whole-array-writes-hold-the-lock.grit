@@ -1,0 +1,27 @@
+language js(typescript)
+
+// Whole-array writers read, modify and write the entire collection, so two of them racing lose
+// whichever landed first. The page realm and the service worker genuinely run at once, which is
+// why every one of these calls sits inside withCollectionLock.
+// Only catches a lexically nested lock — a caller handed the lock by a helper still slips through,
+// and reads are not covered at all: getQuotes has many legitimate unlocked callers.
+// setPomodoroSessionsRaw is absent on purpose — sessions are not a synced collection, so no pull
+// can race them.
+`$setter($_)` as $write where {
+  $setter <: or {
+    `setQuotes`,
+    `setQuotesRaw`,
+    `setGoals`,
+    `setGoalsRaw`,
+    `setCollections`,
+    `setCollectionsRaw`,
+    `setReminders`,
+    `setRemindersRaw`
+  },
+  $filename <: not r".*\.test\.tsx?$",
+  $write <: not within or {
+    `withCollectionLock($...)`,
+    `withCollectionLock<$_>($...)`
+  } ,
+  register_diagnostic(span=$write, message="This rewrites the whole collection: call it inside withCollectionLock so a concurrent write in the other realm cannot be lost.", severity="error")
+}

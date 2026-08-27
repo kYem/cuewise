@@ -61,6 +61,12 @@ await setReminders(remindersArray);
 const reminders = await getReminders();
 ```
 
+**Whole-array writes take the collection lock.** Quotes, goals, collections and reminders are each
+stored as one array, so a read-modify-write in the page realm and a sync pull in the service worker
+lose whichever landed first. Prefer the `update*` helpers (`updateQuotes`, `updateGoals`, ...), which
+read and write inside the lock for you; a bare `setQuotes`/`setGoals`/... must sit inside
+`withCollectionLock`. `.biome/whole-array-writes-hold-the-lock.grit` fails the build otherwise.
+
 **Location**: ports + registry in `packages/shared/src/platform/`; storage adapter + typed helpers in `packages/storage/src/`.
 
 ### 3. Pure Business Logic in Shared Package
