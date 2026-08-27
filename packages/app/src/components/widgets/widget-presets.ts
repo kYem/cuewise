@@ -1,7 +1,10 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
-import { type HomeWidget, type HomeWidgetKey, offeredHomeWidgets } from './widget-catalog';
-
-type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;
+import {
+  type HomeWidget,
+  type HomeWidgetKey,
+  offeredHomeWidgets,
+  type WidgetPatch,
+} from './widget-catalog';
 
 function patchFrom(
   widgets: readonly HomeWidget[],

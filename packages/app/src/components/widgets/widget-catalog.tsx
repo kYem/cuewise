@@ -65,9 +65,8 @@ export const HOME_WIDGETS = [
   },
 ] as const satisfies readonly HomeWidget[];
 
-// The widgets this build can actually render, so no surface offers a switch that does nothing.
-// Folds the build-time calendar gate the same way calendar-visibility.ts does; `featureEnabled`
-// defaults to the live gate and is passed explicitly in tests.
+// So no surface offers a switch this build cannot render; folds the gate the same way
+// calendar-visibility.ts does (featureEnabled defaults live, passed explicitly in tests).
 export function offeredHomeWidgets(
   featureEnabled: boolean = isCalendarFeatureEnabled()
 ): readonly HomeWidget[] {
@@ -77,11 +76,15 @@ export function offeredHomeWidgets(
   return HOME_WIDGETS.filter((widget) => widget.key !== 'newTabShowCalendar');
 }
 
-// A computed key from a union widens to string, so the annotation is what keeps this
-// assignable to Partial<Settings>. Both the picker and Settings write through it.
-export function widgetPatch(key: HomeWidgetKey, value: boolean): Partial<Settings> {
+/** A settings patch that can only touch home widget flags. */
+export type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;
+
+// Narrower than the Partial<Settings> the store accepts, so a caller cannot smuggle an
+// unrelated setting through the picker's write path.
+export function widgetPatch(key: HomeWidgetKey, value: boolean): WidgetPatch {
   return { [key]: value };
 }
 
+// Fails to compile if HomeWidgetKey ever gains a key HOME_WIDGETS does not catalogue.
 type UncataloguedKey = Exclude<HomeWidgetKey, (typeof HOME_WIDGETS)[number]['key']>;
 export const _everyWidgetIsCatalogued: UncataloguedKey extends never ? true : never = true;
