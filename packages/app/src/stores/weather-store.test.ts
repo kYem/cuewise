@@ -51,6 +51,7 @@ function resetStore(): void {
     searchError: null,
     searchedFor: null,
     epoch: 0,
+    initialized: false,
   });
 }
 
@@ -78,6 +79,28 @@ describe('initialize', () => {
 
     expect(useWeatherStore.getState().location).toEqual(LONDON);
     expect(useWeatherStore.getState().snapshot).not.toBeNull();
+  });
+
+  it('reports itself initialized after restoring a stored location', async () => {
+    getWeatherStateMock.mockResolvedValue(freshState());
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().initialized).toBe(true);
+  });
+
+  it('reports itself initialized when nothing was stored', async () => {
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().initialized).toBe(true);
+  });
+
+  it('reports itself initialized after a failed read, so consumers are never left waiting', async () => {
+    getWeatherStateMock.mockRejectedValue(new Error('storage unavailable'));
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().initialized).toBe(true);
   });
 
   it('does not refetch a reading that is still fresh', async () => {

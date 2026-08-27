@@ -76,7 +76,6 @@ export function offeredHomeWidgets(
   return HOME_WIDGETS.filter((widget) => widget.key !== 'newTabShowCalendar');
 }
 
-/** A settings patch that can only touch home widget flags. */
 export type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;
 
 export function widgetPatch(key: HomeWidgetKey, value: boolean): WidgetPatch {

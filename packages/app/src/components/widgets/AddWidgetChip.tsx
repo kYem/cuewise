@@ -53,12 +53,13 @@ export const AddWidgetChip: React.FC = () => {
   // someone whose city is already saved.
   const awaitingWeather = settings.showWeather && !weatherInitialized;
 
-  if (settingsLoading || awaitingWeather) {
+  if (settingsLoading) {
     return null;
   }
 
-  // Hide at rest only — vanishing mid-gesture would drop the user's focus to the document.
-  if (everyWidgetDelivers && !isOpen) {
+  // Both reasons to hide are at-rest only — vanishing mid-gesture would drop the user's focus
+  // to the document, and enabling weather from the open panel is exactly that.
+  if ((everyWidgetDelivers || awaitingWeather) && !isOpen) {
     return null;
   }
 

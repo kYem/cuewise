@@ -54,6 +54,21 @@ describe('AddWidgetChip', () => {
     expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
   });
 
+  it('survives enabling weather from its own open panel, before the store has hydrated', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({
+      settings: { ...ALL_WIDGETS_ON, showWeather: false },
+      hasWeatherLocation: false,
+      weatherInitialized: false,
+    });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Weather' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Weather' })).toBeInTheDocument();
+  });
+
   it('waits for the weather store before deciding, so a saved city never flashes the chip', () => {
     mockWidgetPickerStores({
       settings: ALL_WIDGETS_ON,
