@@ -121,7 +121,7 @@ describe('AddQuotesToCollectionModal applying a mixed batch', () => {
     expect(removeQuoteFromCollection).toHaveBeenCalledWith('q1', 'c1');
     expect(onClose).not.toHaveBeenCalled();
     // Only the failure stays outstanding; the one that landed must not read as pending.
-    expect(screen.getByText('1 changes pending')).toBeInTheDocument();
+    expect(screen.getByText('1 change pending')).toBeInTheDocument();
   });
 });
 
@@ -134,7 +134,7 @@ describe('AddQuotesToCollectionModal pending changes', () => {
     renderModal('saved');
 
     toggleOutsider();
-    expect(screen.getByText('1 changes pending')).toBeInTheDocument();
+    expect(screen.getByText('1 change pending')).toBeInTheDocument();
     toggleOutsider();
 
     await waitFor(() =>

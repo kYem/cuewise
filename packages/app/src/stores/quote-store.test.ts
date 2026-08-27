@@ -369,8 +369,7 @@ describe('Quote Store', () => {
 
       expect(storage.setCurrentQuote).toHaveBeenCalled();
       const state = useQuoteStore.getState();
-      // Should have a different quote (unless only 1 visible quote exists)
-      expect(state.currentQuote).toBeTruthy();
+      expect(state.currentQuote?.id).not.toBe(currentQuote.id);
     });
 
     it('should add new quote to history at index 0', async () => {
@@ -1886,7 +1885,10 @@ describe('writers read storage, not their own snapshot', () => {
     it('initialize shows the live quote, not the copy the card was stored with', async () => {
       const stale = quoteFactory.build({ id: 'q1', text: 'before the other device edited it' });
       const live = { ...stale, text: 'edited elsewhere' };
-      vi.mocked(storage.getQuotes).mockResolvedValue([live]);
+      const other = quoteFactory.build({ id: 'q2', text: 'a quote the card never pointed at' });
+      vi.mocked(storage.getQuotes).mockResolvedValue([other, live]);
+      // Only reached if the stored id is ignored: resolving it needs no draw.
+      vi.spyOn(Math, 'random').mockReturnValue(0);
       vi.mocked(storage.getCurrentQuote).mockResolvedValue(stale);
       vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
 
@@ -2383,7 +2385,6 @@ describe('writers read storage, not their own snapshot', () => {
       vi.mocked(storage.setCollections).mockResolvedValue(WRITE_FAILED);
 
       await expect(useQuoteStore.getState().deleteCollection('mine')).resolves.toBe(false);
-      // CollectionList closes its dialog either way, so the toast is the only signal.
       expect(mockToastError).toHaveBeenCalledWith('Failed to delete collection. Please try again.');
     });
 

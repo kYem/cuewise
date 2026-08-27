@@ -193,7 +193,9 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
         <div className="flex items-center justify-between p-4 border-t border-border bg-surface-variant/50">
           <span className="text-sm text-secondary">
             {changeCount > 0 ? (
-              <span className="text-primary-600 font-medium">{changeCount} changes pending</span>
+              <span className="text-primary-600 font-medium">
+                {changeCount} {changeCount === 1 ? 'change' : 'changes'} pending
+              </span>
             ) : (
               'Click quotes to add or remove'
             )}
