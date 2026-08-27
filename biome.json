@@ -96,5 +96,8 @@
       }
     }
   ],
-  "plugins": ["./.biome/no-reentrant-envelope-queue.grit"]
+  "plugins": [
+    "./.biome/no-reentrant-envelope-queue.grit",
+    "./.biome/whole-array-writes-hold-the-lock.grit"
+  ]
 }
