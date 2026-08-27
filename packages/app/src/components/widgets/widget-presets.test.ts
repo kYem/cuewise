@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { offeredHomeWidgets } from './widget-catalog';
 import { widgetPresets } from './widget-presets';
 
 function preset(id: string, featureEnabled = true) {
-  return widgetPresets(offeredHomeWidgets(featureEnabled)).find((p) => p.id === id);
+  return widgetPresets(featureEnabled).find((p) => p.id === id);
 }
 
 describe('widgetPresets', () => {

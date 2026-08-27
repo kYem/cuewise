@@ -70,7 +70,7 @@ describe('WidgetPicker', () => {
     expect(updateSettings).toHaveBeenCalledWith({ showClock: true });
   });
 
-  it('leaves the toggle unchecked when the write fails, rather than lying about it', async () => {
+  it('drives the toggle from stored settings alone, never an optimistic local flip', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF, saveSucceeds: false });
     render(<WidgetPicker />);
@@ -80,7 +80,7 @@ describe('WidgetPicker', () => {
     expect(screen.getByRole('checkbox', { name: 'Clock' })).not.toBeChecked();
   });
 
-  it('leaves every toggle alone when a preset fails to save', async () => {
+  it('drives preset results from stored settings alone, never an optimistic local flip', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF, saveSucceeds: false });
     render(<WidgetPicker showPresets />);

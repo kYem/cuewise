@@ -6,6 +6,7 @@ import { WelcomeModal } from './WelcomeModal';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
+vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn(() => true) }));
 vi.mock('./settings/WeatherLocationPicker', () => ({
   WeatherLocationPicker: () => <div data-testid="location-picker" />,
 }));

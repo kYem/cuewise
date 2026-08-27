@@ -10,6 +10,7 @@ export const AddWidgetChip: React.FC = () => {
   const settings = useSettingsStore((state) => state.settings);
   const settingsLoading = useSettingsStore((state) => state.isLoading);
   const weatherLocation = useWeatherStore((state) => state.location);
+  const weatherInitialized = useWeatherStore((state) => state.initialized);
   const [isOpen, setIsOpen] = useState(false);
   const chipRef = useRef<HTMLDivElement>(null);
   const headingId = useId();
@@ -48,7 +49,11 @@ export const AddWidgetChip: React.FC = () => {
     };
   }, [isOpen]);
 
-  if (settingsLoading) {
+  // Weather's store hydrates separately, so deciding before it lands would flash the chip at
+  // someone whose city is already saved.
+  const awaitingWeather = settings.showWeather && !weatherInitialized;
+
+  if (settingsLoading || awaitingWeather) {
     return null;
   }
 

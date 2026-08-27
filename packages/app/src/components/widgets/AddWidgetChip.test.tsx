@@ -43,18 +43,26 @@ describe('AddWidgetChip', () => {
     expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
   });
 
-  it('stays available when the write that would have completed the set failed', async () => {
+  it('closes when the trigger is clicked a second time', async () => {
     const user = userEvent.setup();
-    mockWidgetPickerStores({
-      settings: { ...ALL_WIDGETS_ON, showClock: false },
-      saveSucceeds: false,
-    });
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
     render(<AddWidgetChip />);
 
     await user.click(screen.getByRole('button', { name: 'Add a widget' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Clock' }));
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
 
-    expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
+  });
+
+  it('waits for the weather store before deciding, so a saved city never flashes the chip', () => {
+    mockWidgetPickerStores({
+      settings: ALL_WIDGETS_ON,
+      hasWeatherLocation: false,
+      weatherInitialized: false,
+    });
+    const { container } = render(<AddWidgetChip />);
+
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('stops offering itself when the only widget left off is one this build cannot render', () => {

@@ -12,6 +12,8 @@ export interface WidgetPickerStoreOptions {
   isLoading?: boolean;
   /** Mirrors the store's real contract: a rejected write returns false and commits nothing. */
   saveSucceeds?: boolean;
+  /** False models the window before the weather store has read storage. */
+  weatherInitialized?: boolean;
 }
 
 /** A real Zustand store behind the mocked hook, so a toggle click re-renders like production. */
@@ -20,6 +22,7 @@ export function mockWidgetPickerStores({
   hasWeatherLocation = true,
   isLoading = false,
   saveSucceeds = true,
+  weatherInitialized = true,
 }: WidgetPickerStoreOptions = {}) {
   const store = create<SettingsStore>((set) => ({
     settings: { ...DEFAULT_SETTINGS, ...settings },
@@ -41,7 +44,9 @@ export function mockWidgetPickerStores({
   vi.mocked(useSettingsStore).mockImplementation(store);
 
   const location = hasWeatherLocation ? VILNIUS : null;
-  vi.mocked(useWeatherStore).mockImplementation(createSelectorMock({ location }));
+  vi.mocked(useWeatherStore).mockImplementation(
+    createSelectorMock({ location, initialized: weatherInitialized })
+  );
 
   return { updateSettings: store.getState().updateSettings as Mock };
 }

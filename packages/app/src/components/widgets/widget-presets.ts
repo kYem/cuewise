@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import {
   type HomeWidget,
   type HomeWidgetKey,
@@ -23,10 +24,12 @@ export interface WidgetPreset {
   patch: WidgetPatch;
 }
 
-// Built from the offered widgets so a preset can never switch on something this build hides.
+// Takes the gate rather than a widget list, so no caller can hand it the raw catalog and
+// manufacture a preset that switches on something this build hides.
 export function widgetPresets(
-  widgets: readonly HomeWidget[] = offeredHomeWidgets()
+  featureEnabled: boolean = isCalendarFeatureEnabled()
 ): readonly WidgetPreset[] {
+  const widgets = offeredHomeWidgets(featureEnabled);
   return [
     { id: 'minimal', label: 'Minimal', patch: patchFrom(widgets, () => false) },
     {

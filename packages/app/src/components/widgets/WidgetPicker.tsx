@@ -17,7 +17,7 @@ export const WidgetPicker: React.FC<WidgetPickerProps> = ({ showPresets = false 
     <div className="space-y-1">
       {showPresets && (
         <div className="mb-2 flex gap-1.5">
-          {widgetPresets(widgets).map((preset) => (
+          {widgetPresets().map((preset) => (
             <button
               key={preset.id}
               type="button"

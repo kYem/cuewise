@@ -79,8 +79,6 @@ export function offeredHomeWidgets(
 /** A settings patch that can only touch home widget flags. */
 export type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;
 
-// Narrower than the Partial<Settings> the store accepts, so a caller cannot smuggle an
-// unrelated setting through the picker's write path.
 export function widgetPatch(key: HomeWidgetKey, value: boolean): WidgetPatch {
   return { [key]: value };
 }

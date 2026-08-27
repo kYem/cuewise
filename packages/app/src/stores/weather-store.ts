@@ -52,6 +52,9 @@ interface WeatherStore {
   // Bumped on every location change so an in-flight fetch can tell the place changed under
   // it and skip its now-stale commit. Same mechanism as calendar-store.
   epoch: number;
+  // A null `location` alone cannot tell "no city saved" from "storage not read yet", so a
+  // consumer deciding what to show on that basis has to wait for this.
+  initialized: boolean;
 
   // Actions
   initialize: (unitsPreference?: WeatherUnitsPreference) => Promise<void>;
@@ -129,6 +132,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   searchError: null,
   searchedFor: null,
   epoch: 0,
+  initialized: false,
 
   initialize: async (unitsPreference) => {
     // Only the read is guarded. Both storage adapters already answer null rather than
@@ -139,9 +143,11 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       stored = await getWeatherState();
     } catch (error) {
       logger.error('Failed to load weather state', error);
+      set({ initialized: true });
       return;
     }
     if (stored === null) {
+      set({ initialized: true });
       return;
     }
     // Anything that no longer matches the shape is dropped rather than rendered. The
@@ -158,7 +164,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (stored.location !== null && location === null) {
       logger.warn('Discarded an unreadable stored weather location');
     }
-    set({ location, snapshot, lastFetch });
+    set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {
       return;
     }
