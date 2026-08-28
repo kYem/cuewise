@@ -113,6 +113,8 @@ describe('initialize', () => {
     await stale;
 
     expect(useWeatherStore.getState().location).toBeNull();
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(useWeatherStore.getState().initialized).toBe(true);
   });
 
   it('discards a stored location the user replaced while the read was in flight', async () => {
@@ -125,6 +127,8 @@ describe('initialize', () => {
     await stale;
 
     expect(useWeatherStore.getState().location).toEqual(VILNIUS);
+    expect(useWeatherStore.getState().snapshot?.location).toEqual(VILNIUS);
+    expect(useWeatherStore.getState().initialized).toBe(true);
   });
 
   it('does not refetch a reading that is still fresh', async () => {

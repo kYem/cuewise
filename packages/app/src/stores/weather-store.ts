@@ -154,6 +154,12 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       set({ initialized: true });
       return;
     }
+    // A clear or a pick landed while this read was in flight, so everything it carries is
+    // stale — including the shape warnings below, which would blame the wrong thing.
+    if (get().epoch !== epoch) {
+      set({ initialized: true });
+      return;
+    }
     if (stored === null) {
       set({ initialized: true });
       return;
@@ -171,10 +177,6 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     }
     if (stored.location !== null && location === null) {
       logger.warn('Discarded an unreadable stored weather location');
-    }
-    if (get().epoch !== epoch) {
-      set({ initialized: true });
-      return;
     }
     set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {
