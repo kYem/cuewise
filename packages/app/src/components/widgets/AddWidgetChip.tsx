@@ -1,7 +1,7 @@
+import { Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { Blocks } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useId, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
 import { WidgetPicker } from './WidgetPicker';
@@ -13,8 +13,6 @@ export const AddWidgetChip: React.FC = () => {
   const weatherLocation = useWeatherStore((state) => state.location);
   const weatherInitialized = useWeatherStore((state) => state.initialized);
   const [isOpen, setIsOpen] = useState(false);
-  const chipRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const headingId = useId();
 
   // A flag is not a widget: weather without a city renders nothing, and this chip is the
@@ -25,34 +23,6 @@ export const AddWidgetChip: React.FC = () => {
     }
     return settings[widget.key];
   });
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const clickedTrigger = chipRef.current?.contains(target) ?? false;
-      const clickedPanel = panelRef.current?.contains(target) ?? false;
-      if (!clickedTrigger && !clickedPanel) {
-        setIsOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen]);
 
   // Weather's store hydrates separately, so deciding before it lands would flash the chip at
   // someone whose city is already saved.
@@ -69,42 +39,25 @@ export const AddWidgetChip: React.FC = () => {
   }
 
   return (
-    <div ref={chipRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        aria-label="Add a widget"
-        aria-expanded={isOpen}
-        aria-haspopup="dialog"
-        title="Add a widget"
-        className="home-tile"
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" aria-label="Add a widget" title="Add a widget" className="home-tile">
+          <Blocks className="w-5 h-5 text-primary-600" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        aria-labelledby={headingId}
+        className="max-h-[70vh] w-80 overflow-y-auto p-2"
       >
-        <Blocks className="w-5 h-5 text-primary-600" />
-      </button>
-
-      {isOpen &&
-        createPortal(
-          <div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="false"
-            aria-labelledby={headingId}
-            className="fixed z-[100] max-h-[70vh] w-80 overflow-y-auto rounded-lg border border-border bg-surface-elevated p-2 shadow-xl animate-fade-in"
-            style={{
-              top: (chipRef.current?.getBoundingClientRect().bottom ?? 0) + 8,
-              left: chipRef.current?.getBoundingClientRect().left ?? 0,
-            }}
-          >
-            <h3
-              id={headingId}
-              className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-tertiary"
-            >
-              Add to your home screen
-            </h3>
-            <WidgetPicker />
-          </div>,
-          document.body
-        )}
-    </div>
+        <h3
+          id={headingId}
+          className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-tertiary"
+        >
+          Add to your home screen
+        </h3>
+        <WidgetPicker />
+      </PopoverContent>
+    </Popover>
   );
 };

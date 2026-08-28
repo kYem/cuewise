@@ -81,7 +81,18 @@ test('production build reports zero CSP violations across every surface (WebKit)
 
   await page.goto(BASE_URL);
   await expect(page.getByRole('heading', { name: 'Welcome to Cuewise!' })).toBeVisible();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  // Walked rather than skipped: step 2 and the portalled widget panel are surfaces of their
+  // own, and skipping at step 1 left both outside the only CSP sweep there is.
+  const welcome = page.getByRole('dialog', { name: 'Welcome to Cuewise' });
+  await welcome.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(welcome.getByRole('checkbox', { name: 'Clock' })).toBeVisible();
+  await welcome.getByRole('button', { name: 'Done', exact: true }).click();
+
+  await test.step('the widget panel portals its own styles outside the app root', async () => {
+    await page.getByRole('button', { name: 'Add a widget' }).click();
+    await expect(page.getByRole('dialog', { name: 'Add to your home screen' })).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
 
   await test.step('sweep every hash-routed surface', async () => {
     // Home ('') last, matching smoke.spec.ts — the "Menu" button that opens

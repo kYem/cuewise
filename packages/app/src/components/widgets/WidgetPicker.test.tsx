@@ -129,6 +129,24 @@ describe('WidgetPicker', () => {
     expect(screen.queryByText('Pick a city to see your weather.')).not.toBeInTheDocument();
   });
 
+  it('keeps the location control after a city is chosen, so the choice can be changed', () => {
+    mockWidgetPickerStores({ settings: { showWeather: true }, hasWeatherLocation: true });
+    render(<WidgetPicker />);
+
+    expect(screen.getByTestId('location-picker')).toBeInTheDocument();
+  });
+
+  it('holds the location control until the weather store has read storage', () => {
+    mockWidgetPickerStores({
+      settings: { showWeather: true },
+      hasWeatherLocation: false,
+      weatherInitialized: false,
+    });
+    render(<WidgetPicker />);
+
+    expect(screen.queryByTestId('location-picker')).not.toBeInTheDocument();
+  });
+
   it('does not ask for a city while weather is off', () => {
     mockWidgetPickerStores({ settings: { showWeather: false }, hasWeatherLocation: false });
     render(<WidgetPicker />);
