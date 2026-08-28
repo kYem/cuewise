@@ -35,6 +35,8 @@ test('reused extension UI renders on every surface without errors (WebKit)', asy
     .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0);
   expect(logoLoaded, 'welcome-modal logo should load').toBe(true);
   // The widget step's toggles are sr-only inputs, so assert the painted heading instead.
+  // Scoped to the dialog because aria-modal hides nothing from the role engine: every
+  // button on the home screen behind it is still a candidate.
   const welcome = page.getByRole('dialog', { name: 'Welcome to Cuewise' });
   await welcome.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Add to your home screen' })).toBeVisible();

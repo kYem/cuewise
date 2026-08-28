@@ -81,8 +81,8 @@ test('production build reports zero CSP violations across every surface (WebKit)
 
   await page.goto(BASE_URL);
   await expect(page.getByRole('heading', { name: 'Welcome to Cuewise!' })).toBeVisible();
-  // Walk the modal rather than skipping it: step 2 renders WidgetPicker, a surface no
-  // other CSP sweep reaches.
+  // Walk the modal rather than skipping it: step 2 is the only surface that renders the
+  // picker's preset row.
   const welcome = page.getByRole('dialog', { name: 'Welcome to Cuewise' });
   await welcome.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(welcome.getByRole('checkbox', { name: 'Clock' })).toBeVisible();

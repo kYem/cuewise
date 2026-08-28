@@ -7,8 +7,8 @@ export const WeatherSetupRow: React.FC = () => {
   const needsCity = useWeatherStore(needsWeatherCity);
   const initialized = useWeatherStore((state) => state.initialized);
 
-  // Blank until the mounted WeatherWidget's initialize() lands, or the picker would flash
-  // "no city" at someone whose city is already on disk.
+  // Blank until the mounted WeatherWidget's initialize() lands, or someone whose city is
+  // already on disk gets the bare search box instead of their saved city.
   if (!initialized) {
     return null;
   }
