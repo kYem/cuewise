@@ -1,21 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { installAppRenderStubs } from './__fixtures__/app-render.fixtures';
 import App from './App';
-import { setReducedMotion } from './components/__fixtures__/motion.fixtures';
-
-// jsdom has no IntersectionObserver; NewTabPage's sticky-header effect only
-// needs the constructor to exist, never fires it here.
-class StubIntersectionObserver {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
 
 describe('App home widget discovery', () => {
   beforeEach(() => {
-    setReducedMotion(false);
-    window.IntersectionObserver =
-      StubIntersectionObserver as unknown as typeof IntersectionObserver;
+    installAppRenderStubs();
   });
 
   // The picker and the chip are covered in isolation; this is the only check that the

@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Blocks } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -77,10 +77,9 @@ export const AddWidgetChip: React.FC = () => {
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         title="Add a widget"
-        className="flex items-center gap-2 px-4 py-2.5 bg-surface/80 backdrop-blur-sm text-primary rounded-full shadow-md hover:shadow-lg hover:scale-105 transition-all"
+        className="home-tile"
       >
-        <Plus className="w-5 h-5 text-primary-600" />
-        <span className="hidden sm:inline text-sm font-medium text-primary">Add a widget</span>
+        <Blocks className="w-5 h-5 text-primary-600" />
       </button>
 
       {isOpen &&
