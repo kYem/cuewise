@@ -1,5 +1,41 @@
 # @cuewise/macos
 
+## 0.8.0
+
+### Minor Changes
+
+- b215f72: Connect a new device by approving it from one you already have — no recovery code typing; a short code on both screens confirms it's really your device.
+- ed14709: Home widgets are now discoverable from the new tab and during onboarding.
+- 67744a5: A notes scratchpad on the new tab.
+
+### Patch Changes
+
+- 7008a7b: Connecting a new device no longer reverts settings you chose on another device to their defaults.
+- dc30188: Stop Cloud Sync asking the server about your recovery code every five minutes. The extension re-checked it on every background wake — around 288 requests a day — even though the only thing that reads the answer is a banner in the Cloud Sync settings panel. The check now runs when that panel asks for it, and the background one runs only if this device has actually lost its key, which is the case where the answer changes anything.
+- 340e2a5: Device pairing now stops straight away if the other device's key arrives damaged, instead of waiting out the full ten minutes.
+- fa44878: Turning the weather widget back on no longer undoes a city you removed or changed at the same moment.
+- fa44878: The add-widget panel now stays put while you scroll, is reachable by keyboard, and keeps the weather location control visible after you pick a city.
+- 1039e43: Escape no longer ends onboarding while you are typing, Settings lists the same home widgets as the picker, and presets show which one you are on.
+- Updated dependencies [93c497f]
+- Updated dependencies [b215f72]
+- Updated dependencies [2d84067]
+- Updated dependencies [7008a7b]
+- Updated dependencies [dc30188]
+- Updated dependencies [641ac48]
+- Updated dependencies [3587c5b]
+- Updated dependencies [ed14709]
+- Updated dependencies [67744a5]
+- Updated dependencies [340e2a5]
+- Updated dependencies [fa44878]
+- Updated dependencies [fa44878]
+- Updated dependencies [1039e43]
+  - @cuewise/app@1.23.0
+  - @cuewise/storage@1.25.0
+  - @cuewise/sync-engine@0.3.0
+  - @cuewise/sync-client@0.2.0
+  - @cuewise/shared@1.25.0
+  - @cuewise/ui@1.25.0
+
 ## 0.7.0
 
 ### Minor Changes

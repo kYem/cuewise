@@ -1,5 +1,12 @@
 # @cuewise/shared
 
+## 1.25.0
+
+### Minor Changes
+
+- 641ac48: An account export now includes the wrapped key envelopes, so it is no longer permanently undecryptable. Previously it held ciphertext and no key — unreadable even by the person who exported it.
+- 67744a5: A notes scratchpad on the new tab.
+
 ## 1.21.0
 
 ### Patch Changes

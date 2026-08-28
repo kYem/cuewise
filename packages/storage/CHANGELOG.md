@@ -1,5 +1,21 @@
 # @cuewise/storage
 
+## 1.25.0
+
+### Minor Changes
+
+- 2d84067: Delete the duplicate copy of your settings that the per-key storage change left behind. A device that cannot finish the move now says so, rather than quietly showing defaults and reading your synced data as empty.
+- 67744a5: A notes scratchpad on the new tab.
+
+### Patch Changes
+
+- 93c497f: Stop a quote or collection you edit from erasing one that synced in at the same moment, and stop the new tab showing a quote you hid or edited on another device.
+- 7008a7b: Connecting a new device no longer reverts settings you chose on another device to their defaults.
+- 3587c5b: Stop an edit and an incoming sync landing at the same moment from erasing each other, for goals and reminders alike.
+- Updated dependencies [641ac48]
+- Updated dependencies [67744a5]
+  - @cuewise/shared@1.25.0
+
 ## 1.22.0
 
 ### Patch Changes
