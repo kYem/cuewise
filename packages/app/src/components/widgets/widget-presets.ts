@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from '@cuewise/shared';
+import { DEFAULT_SETTINGS, type Settings } from '@cuewise/shared';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import {
   type HomeWidget,
@@ -16,6 +16,11 @@ function patchFrom(
     patch[widget.key] = value(widget.key);
   }
   return patch;
+}
+
+/** A preset is a write, not a stored mode, so "which one am I on" is read back off the settings. */
+export function matchesPreset(settings: Settings, patch: WidgetPatch): boolean {
+  return Object.entries(patch).every(([key, value]) => settings[key as HomeWidgetKey] === value);
 }
 
 export interface WidgetPreset {

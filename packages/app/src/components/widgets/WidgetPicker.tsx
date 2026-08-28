@@ -1,8 +1,9 @@
+import { cn } from '@cuewise/ui';
 import type React from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { Switch } from '../settings/SettingControls';
 import { offeredHomeWidgets, widgetPatch } from './widget-catalog';
-import { widgetPresets } from './widget-presets';
+import { matchesPreset, widgetPresets } from './widget-presets';
 
 interface WidgetPickerProps {
   showPresets?: boolean;
@@ -17,18 +18,28 @@ export const WidgetPicker: React.FC<WidgetPickerProps> = ({ showPresets = false 
     <div className="space-y-1">
       {showPresets && (
         <div className="mb-2 flex gap-1.5">
-          {widgetPresets().map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => {
-                void updateSettings(preset.patch);
-              }}
-              className="flex-1 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-secondary transition-colors hover:bg-surface-variant hover:text-primary"
-            >
-              {preset.label}
-            </button>
-          ))}
+          {widgetPresets().map((preset) => {
+            const active = matchesPreset(settings, preset.patch);
+
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  void updateSettings(preset.patch);
+                }}
+                className={cn(
+                  'flex-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                  active
+                    ? 'border-transparent bg-primary-600 text-white'
+                    : 'border-border bg-surface text-secondary hover:bg-surface-variant hover:text-primary'
+                )}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
         </div>
       )}
       {widgets.map((widget) => {

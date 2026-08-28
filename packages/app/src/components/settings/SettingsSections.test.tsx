@@ -4,6 +4,7 @@ import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
+import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { SETTINGS_SECTIONS, settingsHomeWidgets } from './SettingsSections';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
@@ -25,6 +26,10 @@ vi.mock('@cuewise/shared', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cuewise/shared')>()),
   getStorage: () => ({ supportsSync: true }),
 }));
+
+// Left off by default so the un-provisioned build stays the baseline; the calendar tests
+// opt in, since a released build does carry an OAuth client id.
+vi.mock('../../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn(() => false) }));
 
 vi.mock('../../stores/toast-store', () => ({
   useToastStore: {
@@ -69,6 +74,8 @@ describe('settings sections', () => {
       error: null,
     });
     vi.clearAllMocks();
+    // clearAllMocks keeps return values, so an opted-in test would otherwise leak into the next.
+    vi.mocked(isCalendarFeatureEnabled).mockReturnValue(false);
     vi.mocked(storage.setSettingsPatch).mockResolvedValue({ success: true });
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: true, settings: defaultSettings });
     // BackgroundSection mounts the real CustomBackgroundPicker, which reads on mount.
@@ -202,10 +209,26 @@ describe('settings sections', () => {
       expect(screen.queryByText('Time format')).not.toBeInTheDocument();
     });
 
-    it('leaves calendar out, since the goals area owns that toggle', () => {
+    it('lists the calendar, so a build that offers it in the picker can also switch it off', () => {
+      vi.mocked(isCalendarFeatureEnabled).mockReturnValue(true);
       renderSection('home');
 
-      expect(screen.queryByText('Calendar')).not.toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: 'Calendar' })).toBeInTheDocument();
+    });
+
+    it('writes only the calendar key when it is toggled', () => {
+      vi.mocked(isCalendarFeatureEnabled).mockReturnValue(true);
+      const { set } = renderSection('home', '', { newTabShowCalendar: false });
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Calendar' }));
+
+      expect(set).toHaveBeenCalledWith({ newTabShowCalendar: true });
+    });
+
+    it('drops the calendar on a build that could never render it', () => {
+      renderSection('home');
+
+      expect(screen.queryByRole('checkbox', { name: 'Calendar' })).not.toBeInTheDocument();
     });
 
     it('keeps the weather sub-group behind its toggle', () => {

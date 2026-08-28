@@ -552,9 +552,10 @@ function chipClass(active: boolean): string {
 
 /* Home screen */
 // Off the gated list, not the raw catalog, so a future gated widget can't get a switch here on a
-// build that cannot render it. Calendar is excluded separately: the goals area owns that toggle.
+// build that cannot render it. Matches the picker exactly: anything switchable on from there has
+// to be switchable off from here.
 export function settingsHomeWidgets(): readonly HomeWidget[] {
-  return offeredHomeWidgets().filter((w) => w.key !== 'newTabShowCalendar');
+  return offeredHomeWidgets();
 }
 
 type SubgroupRenderer = (

@@ -170,4 +170,42 @@ describe('WidgetPicker', () => {
     expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Calendar' })).toBeChecked();
   });
+
+  it('marks the preset the home screen already matches', () => {
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<WidgetPicker showPresets />);
+
+    expect(screen.getByRole('button', { name: 'Minimal' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Everything' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('marks Recommended on a fresh profile, where applying it changes nothing visible', () => {
+    mockWidgetPickerStores();
+    render(<WidgetPicker showPresets />);
+
+    expect(screen.getByRole('button', { name: 'Recommended' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('moves the mark to the preset just applied', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<WidgetPicker showPresets />);
+
+    await user.click(screen.getByRole('button', { name: 'Everything' }));
+
+    expect(screen.getByRole('button', { name: 'Everything' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: 'Minimal' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
 });
