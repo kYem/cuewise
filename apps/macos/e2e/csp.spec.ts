@@ -81,7 +81,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
 
   await page.goto(BASE_URL);
   await expect(page.getByRole('heading', { name: 'Welcome to Cuewise!' })).toBeVisible();
-  await page.getByRole('button', { name: 'Get Started' }).click();
+  await page.getByRole('button', { name: 'Skip' }).click();
 
   await test.step('sweep every hash-routed surface', async () => {
     // Home ('') last, matching smoke.spec.ts — the "Menu" button that opens

@@ -1,6 +1,7 @@
 import { CheckCircle2, Target, Timer } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { WidgetPicker } from './widgets/WidgetPicker';
 
 interface WelcomeModalProps {
   isOpen: boolean;
@@ -26,6 +27,14 @@ const QuickStartItem: React.FC<QuickStartItemProps> = ({ icon, title, descriptio
 );
 
 export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) => {
+  const [step, setStep] = useState<1 | 2>(1);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setStep(1);
+    }
+  }, [isOpen]);
+
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -65,10 +74,10 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
         role="dialog"
         aria-modal="true"
         aria-label="Welcome to Cuewise"
-        className="relative bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-slide-up"
+        className="relative flex flex-col bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden animate-slide-up"
       >
         {/* Header with gradient accent */}
-        <div className="px-6 pt-6 pb-4 text-center">
+        <div className="flex-shrink-0 px-6 pt-6 pb-4 text-center">
           <div className="flex justify-center mb-3">
             <img
               src="/icons/icon.svg"
@@ -80,39 +89,67 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
           <p className="mt-2 text-secondary">Your personal productivity companion</p>
         </div>
 
-        {/* Quick Start Tips */}
-        <div className="px-6 pb-4">
-          <h3 className="text-sm font-semibold text-tertiary uppercase tracking-wide mb-3">
-            Quick Start
-          </h3>
-          <div className="space-y-2">
-            <QuickStartItem
-              icon={<Target className="w-5 h-5 text-primary-600 dark:text-primary-400" />}
-              title="Add a goal"
-              description="Type in the goals section and press Enter"
-            />
-            <QuickStartItem
-              icon={<CheckCircle2 className="w-5 h-5 text-primary-600 dark:text-primary-400" />}
-              title="Browse quotes"
-              description="Click the arrows or refresh for new inspiration"
-            />
-            <QuickStartItem
-              icon={<Timer className="w-5 h-5 text-primary-600 dark:text-primary-400" />}
-              title="Start a Pomodoro"
-              description="Click Pomodoro in the top-right to focus"
-            />
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+          {step === 1 ? (
+            <>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-tertiary">
+                Quick Start
+              </h3>
+              <div className="space-y-2">
+                <QuickStartItem
+                  icon={<Target className="w-5 h-5 text-primary-600 dark:text-primary-400" />}
+                  title="Add a goal"
+                  description="Type in the goals section and press Enter"
+                />
+                <QuickStartItem
+                  icon={<CheckCircle2 className="w-5 h-5 text-primary-600 dark:text-primary-400" />}
+                  title="Browse quotes"
+                  description="Click the arrows or refresh for new inspiration"
+                />
+                <QuickStartItem
+                  icon={<Timer className="w-5 h-5 text-primary-600 dark:text-primary-400" />}
+                  title="Start a Pomodoro"
+                  description="Click Pomodoro in the top-right to focus"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-tertiary">
+                Add to your home screen
+              </h3>
+              <WidgetPicker showPresets />
+            </>
+          )}
         </div>
 
-        {/* Footer with CTA */}
-        <div className="px-6 pb-6 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-          >
-            Get Started
-          </button>
+        <div className="flex flex-shrink-0 gap-2 px-6 pb-6 pt-2">
+          {step === 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg px-4 py-3 font-medium text-secondary transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="flex-1 rounded-lg bg-primary-600 px-4 py-3 font-medium text-white transition-colors hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              >
+                Next
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full rounded-lg bg-primary-600 px-4 py-3 font-medium text-white transition-colors hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+            >
+              Done
+            </button>
+          )}
         </div>
       </div>
     </div>

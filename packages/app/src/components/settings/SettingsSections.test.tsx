@@ -1,10 +1,10 @@
 import type { Settings } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
-import { SETTINGS_SECTIONS } from './SettingsSections';
+import { SETTINGS_SECTIONS, settingsHomeWidgets } from './SettingsSections';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 
@@ -52,7 +52,7 @@ function renderSection(id: string, filter = '', settingsOverrides: Partial<Setti
     onReset: vi.fn(),
     onOpenSoundsPanel: vi.fn(),
   };
-  return render(<section.component {...props} />);
+  return { ...render(<section.component {...props} />), set: props.set };
 }
 
 // Mirrors the section filter in ../SettingsModal — drifts silently if that changes.
@@ -163,6 +163,61 @@ describe('settings sections', () => {
         });
 
       expect(orphans).toEqual([]);
+    });
+  });
+
+  describe('Home', () => {
+    it('renders every catalogued widget row with its help text', () => {
+      renderSection('home');
+
+      for (const widget of settingsHomeWidgets()) {
+        expect(screen.getByText(widget.label)).toBeInTheDocument();
+        expect(screen.getByText(widget.help)).toBeInTheDocument();
+      }
+    });
+
+    const allHomeWidgetsOff = Object.fromEntries(
+      settingsHomeWidgets().map((w) => [w.key, false])
+    ) as Partial<Settings>;
+
+    it.each(
+      settingsHomeWidgets().map((w) => [w.label, w.key] as const)
+    )('writes only its own settings key when %s is toggled', (label, key) => {
+      const { set } = renderSection('home', '', allHomeWidgetsOff);
+
+      fireEvent.click(screen.getByRole('checkbox', { name: label }));
+
+      expect(set).toHaveBeenCalledWith({ [key]: true });
+    });
+
+    it('reveals the time format control once the clock is on', () => {
+      renderSection('home', '', { showClock: true });
+
+      expect(screen.getByText('Time format')).toBeInTheDocument();
+    });
+
+    it('keeps the time format control behind its toggle', () => {
+      renderSection('home', '', { showClock: false });
+
+      expect(screen.queryByText('Time format')).not.toBeInTheDocument();
+    });
+
+    it('leaves calendar out, since the goals area owns that toggle', () => {
+      renderSection('home');
+
+      expect(screen.queryByText('Calendar')).not.toBeInTheDocument();
+    });
+
+    it('keeps the weather sub-group behind its toggle', () => {
+      renderSection('home', '', { showWeather: false });
+
+      expect(screen.queryByText('Units')).not.toBeInTheDocument();
+    });
+
+    it('reveals the weather sub-group once weather is on', () => {
+      renderSection('home', '', { showWeather: true });
+
+      expect(screen.getByText('Units')).toBeInTheDocument();
     });
   });
 });
