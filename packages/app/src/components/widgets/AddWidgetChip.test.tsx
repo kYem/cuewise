@@ -197,6 +197,16 @@ describe('AddWidgetChip', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('lines the panel up with the left edge of the chip, not the right', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-align', 'start');
+  });
+
   it('tells assistive tech the trigger opens a dialog, and whether it is open', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });

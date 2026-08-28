@@ -85,7 +85,7 @@ test('production build reports zero CSP violations across every surface (WebKit)
   // picker's preset row.
   const welcome = page.getByRole('dialog', { name: 'Welcome to Cuewise' });
   await welcome.getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(welcome.getByRole('checkbox', { name: 'Clock' })).toBeVisible();
+  await expect(welcome.getByRole('button', { name: 'Recommended' })).toBeVisible();
   await welcome.getByRole('button', { name: 'Done', exact: true }).click();
 
   await test.step('the widget panel renders and dismisses CSP-clean', async () => {
