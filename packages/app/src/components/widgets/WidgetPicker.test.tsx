@@ -154,6 +154,13 @@ describe('WidgetPicker', () => {
     expect(screen.queryByText('Pick a city to see your weather.')).not.toBeInTheDocument();
   });
 
+  it('hides the location control while weather is off, even with a city already saved', () => {
+    mockWidgetPickerStores({ settings: { showWeather: false }, hasWeatherLocation: true });
+    render(<WidgetPicker />);
+
+    expect(screen.queryByTestId('location-picker')).not.toBeInTheDocument();
+  });
+
   it('hides presets by default, so a mistap cannot wipe a tuned home screen', () => {
     mockWidgetPickerStores();
     render(<WidgetPicker />);

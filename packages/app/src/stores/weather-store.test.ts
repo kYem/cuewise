@@ -103,6 +103,30 @@ describe('initialize', () => {
     expect(useWeatherStore.getState().initialized).toBe(true);
   });
 
+  it('discards a stored location the user cleared while the read was in flight', async () => {
+    const pending = deferred<ReturnType<typeof freshState>>();
+    getWeatherStateMock.mockReturnValueOnce(pending.promise);
+
+    const stale = useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().clearLocation();
+    pending.release(freshState());
+    await stale;
+
+    expect(useWeatherStore.getState().location).toBeNull();
+  });
+
+  it('discards a stored location the user replaced while the read was in flight', async () => {
+    const pending = deferred<ReturnType<typeof freshState>>();
+    getWeatherStateMock.mockReturnValueOnce(pending.promise);
+
+    const stale = useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().setLocation(VILNIUS);
+    pending.release(freshState());
+    await stale;
+
+    expect(useWeatherStore.getState().location).toEqual(VILNIUS);
+  });
+
   it('does not refetch a reading that is still fresh', async () => {
     getWeatherStateMock.mockResolvedValue(freshState());
 

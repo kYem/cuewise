@@ -2,14 +2,13 @@ import type React from 'react';
 import { needsWeatherCity, useWeatherStore } from '../../stores/weather-store';
 import { WeatherLocationPicker } from '../settings/WeatherLocationPicker';
 
-/**
- * Weather renders nothing without a location, so the picker must collect one inline — and stay
- * put afterwards, or choosing the wrong city would unmount the only control that could fix it.
- */
+/** Weather renders nothing without a location, so the picker collects one inline and stays put. */
 export const WeatherSetupRow: React.FC = () => {
   const needsCity = useWeatherStore(needsWeatherCity);
   const initialized = useWeatherStore((state) => state.initialized);
 
+  // Blank until the mounted WeatherWidget's initialize() lands, or the picker would flash
+  // "no city" at someone whose city is already on disk.
   if (!initialized) {
     return null;
   }

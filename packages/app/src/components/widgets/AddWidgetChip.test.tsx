@@ -175,17 +175,17 @@ describe('AddWidgetChip', () => {
     expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
   });
 
-  it('moves focus into the panel, which is the only way a keyboard reaches the switches', async () => {
+  it('moves focus to the first switch on open', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
     render(<AddWidgetChip />);
 
     await user.click(screen.getByRole('button', { name: 'Add a widget' }));
 
-    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).toHaveFocus();
   });
 
-  it('returns focus to the trigger on close, rather than dropping it to the document', async () => {
+  it('returns focus to the trigger on close', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
     render(<AddWidgetChip />);
@@ -197,14 +197,18 @@ describe('AddWidgetChip', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('blurs behind the panel, which the glass theme needs to stay legible', async () => {
+  it('tells assistive tech the trigger opens a dialog, and whether it is open', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
     render(<AddWidgetChip />);
 
-    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    const trigger = screen.getByRole('button', { name: 'Add a widget' });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
-    expect(screen.getByRole('dialog').className).toMatch(/backdrop-blur/);
+    await user.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('closes on an outside click', async () => {

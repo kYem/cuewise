@@ -140,6 +140,9 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   initialized: false,
 
   initialize: async (unitsPreference) => {
+    // Re-runs whenever weather is switched back on, and the city control stays mounted
+    // beside that switch, so a clear or a pick can land while this read is in flight.
+    const epoch = get().epoch;
     // Only the read is guarded. Both storage adapters already answer null rather than
     // throwing, so anything caught here would be a bug of ours — and wrapping the rest
     // would turn that bug into a widget that silently does not exist, on every tab.
@@ -168,6 +171,10 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     }
     if (stored.location !== null && location === null) {
       logger.warn('Discarded an unreadable stored weather location');
+    }
+    if (get().epoch !== epoch) {
+      set({ initialized: true });
+      return;
     }
     set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {
