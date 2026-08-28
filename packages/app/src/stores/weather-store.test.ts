@@ -131,6 +131,19 @@ describe('initialize', () => {
     expect(useWeatherStore.getState().initialized).toBe(true);
   });
 
+  it('does not blame the shape for a read it discarded as stale', async () => {
+    const warned = vi.spyOn(logger, 'warn');
+    const pending = deferred<ReturnType<typeof freshState>>();
+    getWeatherStateMock.mockReturnValueOnce(pending.promise);
+
+    const stale = useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().clearLocation();
+    pending.release({ ...freshState(), snapshot: { ...snapshot(), current: undefined } } as never);
+    await stale;
+
+    expect(warned).not.toHaveBeenCalled();
+  });
+
   it('does not refetch a reading that is still fresh', async () => {
     getWeatherStateMock.mockResolvedValue(freshState());
 

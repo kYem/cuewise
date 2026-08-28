@@ -4,4 +4,4 @@
 '@cuewise/app': patch
 ---
 
-Removing or changing your weather city no longer gets undone by a reload happening at the same moment.
+Turning the weather widget back on no longer undoes a city you removed or changed at the same moment.
