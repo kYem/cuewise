@@ -1,6 +1,7 @@
 import { CheckCircle2, Target, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { isTextEntryEvent } from '../utils/keyboard-shortcut';
 import { WidgetPicker } from './widgets/WidgetPicker';
 
 interface WelcomeModalProps {
@@ -35,10 +36,11 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
     }
   }, [isOpen]);
 
-  // Close on Escape key
+  // Close on Escape key. Not while typing: onboarding never reopens, so Escape meant as
+  // "clear this field" would retire it for the life of the profile.
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isTextEntryEvent(e)) {
         onClose();
       }
     };

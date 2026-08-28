@@ -10,8 +10,12 @@ vi.mock('../stores/weather-store', async (importOriginal) => ({
   useWeatherStore: vi.fn(),
 }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn(() => true) }));
+// A real input, not a placeholder div: step 2 is the first modal step to hold a text field,
+// and that is exactly what the document-level Escape handler has to coexist with.
 vi.mock('./settings/WeatherLocationPicker', () => ({
-  WeatherLocationPicker: () => <div data-testid="location-picker" />,
+  WeatherLocationPicker: () => (
+    <input type="text" aria-label="City" data-testid="location-picker" />
+  ),
 }));
 
 describe('WelcomeModal', () => {
@@ -85,6 +89,19 @@ describe('WelcomeModal', () => {
     await user.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('survives Escape pressed inside the city field, which onboarding cannot be reopened after', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    mockWidgetPickerStores({ settings: { showWeather: true }, hasWeatherLocation: false });
+
+    render(<WelcomeModal isOpen={true} onClose={onClose} />);
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await user.click(screen.getByRole('textbox', { name: 'City' }));
+    await user.keyboard('{Escape}');
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('opens on the tips step', () => {
