@@ -91,7 +91,7 @@ test('allowlisted extension id: the player iframe loads', async () => {
   const context = await launchExtensionContext();
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto(`chrome-extension://${extensionId}/index.html`);
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip', exact: true }).click();
   await page.goto(`chrome-extension://${extensionId}/index.html#pomodoro`);
   await page.getByRole('button', { name: 'Open sounds panel' }).click();
   await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();
@@ -116,7 +116,7 @@ test('a NOT-allowlisted extension id: the player iframe is blocked', async () =>
   const context = await launchExtensionContext();
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto(`chrome-extension://${extensionId}/index.html`);
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip', exact: true }).click();
   await page.goto(`chrome-extension://${extensionId}/index.html#pomodoro`);
   await page.getByRole('button', { name: 'Open sounds panel' }).click();
   await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();

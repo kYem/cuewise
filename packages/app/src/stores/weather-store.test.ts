@@ -103,6 +103,47 @@ describe('initialize', () => {
     expect(useWeatherStore.getState().initialized).toBe(true);
   });
 
+  it('discards a stored location the user cleared while the read was in flight', async () => {
+    const pending = deferred<ReturnType<typeof freshState>>();
+    getWeatherStateMock.mockReturnValueOnce(pending.promise);
+
+    const stale = useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().clearLocation();
+    pending.release(freshState());
+    await stale;
+
+    expect(useWeatherStore.getState().location).toBeNull();
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(useWeatherStore.getState().initialized).toBe(true);
+  });
+
+  it('discards a stored location the user replaced while the read was in flight', async () => {
+    const pending = deferred<ReturnType<typeof freshState>>();
+    getWeatherStateMock.mockReturnValueOnce(pending.promise);
+
+    const stale = useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().setLocation(VILNIUS);
+    pending.release(freshState());
+    await stale;
+
+    expect(useWeatherStore.getState().location).toEqual(VILNIUS);
+    expect(useWeatherStore.getState().snapshot?.location).toEqual(VILNIUS);
+    expect(useWeatherStore.getState().initialized).toBe(true);
+  });
+
+  it('does not blame the shape for a read it discarded as stale', async () => {
+    const warned = vi.spyOn(logger, 'warn');
+    const pending = deferred<ReturnType<typeof freshState>>();
+    getWeatherStateMock.mockReturnValueOnce(pending.promise);
+
+    const stale = useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().clearLocation();
+    pending.release({ ...freshState(), snapshot: { ...snapshot(), current: undefined } } as never);
+    await stale;
+
+    expect(warned).not.toHaveBeenCalled();
+  });
+
   it('does not refetch a reading that is still fresh', async () => {
     getWeatherStateMock.mockResolvedValue(freshState());
 

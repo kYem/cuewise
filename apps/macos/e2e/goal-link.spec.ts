@@ -9,7 +9,7 @@ test('link-to-goal picker opens from the edit row without closing it (WebKit)', 
 }) => {
   await stubThirdPartyRequests(page);
   await page.goto('/');
-  await page.getByRole('button', { name: 'Skip' }).click();
+  await page.getByRole('button', { name: 'Skip', exact: true }).click();
 
   // Seed an objective plus a linked task for today. The link makes the trigger
   // read "Change linked goal" — unique (the add-row also offers "Link to goal").

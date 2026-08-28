@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
@@ -125,7 +125,7 @@ describe('AddWidgetChip', () => {
     render(<AddWidgetChip />);
 
     await user.click(screen.getByRole('button', { name: 'Add a widget' }));
-    fireEvent.mouseDown(screen.getByRole('dialog'));
+    await user.click(screen.getByRole('dialog'));
 
     expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeInTheDocument();
   });
@@ -175,13 +175,59 @@ describe('AddWidgetChip', () => {
     expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
   });
 
+  it('moves focus to the first switch on open', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).toHaveFocus();
+  });
+
+  it('returns focus to the trigger on close', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    const trigger = screen.getByRole('button', { name: 'Add a widget' });
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('lines the panel up with the left edge of the chip, not the right', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-align', 'start');
+  });
+
+  it('tells assistive tech the trigger opens a dialog, and whether it is open', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    const trigger = screen.getByRole('button', { name: 'Add a widget' });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('closes on an outside click', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
     render(<AddWidgetChip />);
 
     await user.click(screen.getByRole('button', { name: 'Add a widget' }));
-    fireEvent.mouseDown(document.body);
+    await user.click(document.body);
 
     expect(screen.queryByRole('checkbox', { name: 'Clock' })).not.toBeInTheDocument();
   });

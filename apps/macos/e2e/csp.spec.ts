@@ -81,7 +81,20 @@ test('production build reports zero CSP violations across every surface (WebKit)
 
   await page.goto(BASE_URL);
   await expect(page.getByRole('heading', { name: 'Welcome to Cuewise!' })).toBeVisible();
-  await page.getByRole('button', { name: 'Skip' }).click();
+  // Walk the modal rather than skipping it: step 2 is the only surface that renders the
+  // picker's preset row.
+  const welcome = page.getByRole('dialog', { name: 'Welcome to Cuewise' });
+  await welcome.getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(welcome.getByRole('button', { name: 'Recommended' })).toBeVisible();
+  await welcome.getByRole('button', { name: 'Done', exact: true }).click();
+
+  await test.step('the widget panel renders and dismisses CSP-clean', async () => {
+    const panel = page.getByRole('dialog', { name: 'Add to your home screen' });
+    await page.getByRole('button', { name: 'Add a widget' }).click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+  });
 
   await test.step('sweep every hash-routed surface', async () => {
     // Home ('') last, matching smoke.spec.ts — the "Menu" button that opens

@@ -140,6 +140,9 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   initialized: false,
 
   initialize: async (unitsPreference) => {
+    // Re-runs whenever weather is switched back on, and the city control stays mounted
+    // beside that switch, so a clear or a pick can land while this read is in flight.
+    const epoch = get().epoch;
     // Only the read is guarded. Both storage adapters already answer null rather than
     // throwing, so anything caught here would be a bug of ours — and wrapping the rest
     // would turn that bug into a widget that silently does not exist, on every tab.
@@ -148,6 +151,12 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       stored = await getWeatherState();
     } catch (error) {
       logger.error('Failed to load weather state', error);
+      set({ initialized: true });
+      return;
+    }
+    // A clear or a pick landed while this read was in flight, so everything it carries is
+    // stale — including the shape warnings below, which would blame the wrong thing.
+    if (get().epoch !== epoch) {
       set({ initialized: true });
       return;
     }
