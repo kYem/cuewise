@@ -126,11 +126,15 @@ describe('WelcomeModal', () => {
     await user.click(screen.getByRole('button', { name: 'Next' }));
 
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveClass('max-h-[90vh]');
+    expect(dialog).toHaveClass('flex', 'flex-col', 'max-h-[90vh]', 'overflow-hidden');
 
     const [body] = Array.from(dialog.querySelectorAll<HTMLElement>('.overflow-y-auto'));
+    expect(body).toHaveClass('min-h-0', 'flex-1');
     expect(body).toContainElement(screen.getByRole('checkbox', { name: 'Clock' }));
-    expect(body).not.toContainElement(screen.getByRole('button', { name: 'Done' }));
+
+    const done = screen.getByRole('button', { name: 'Done' });
+    expect(body).not.toContainElement(done);
+    expect(done.parentElement).toHaveClass('flex-shrink-0');
   });
 
   it('reopens on the tips step after being closed', async () => {
