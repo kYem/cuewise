@@ -34,7 +34,7 @@ describe('WidgetPicker', () => {
     expect(screen.getByRole('checkbox', { name: 'Notes' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Weather' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Calendar' })).toBeInTheDocument();
-    expect(screen.getAllByText('Centre')).toHaveLength(2);
+    expect(screen.getAllByText('Center')).toHaveLength(2);
   });
 
   it('drops the calendar on a build that could never render it', () => {

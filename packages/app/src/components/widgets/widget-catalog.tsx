@@ -15,7 +15,7 @@ export interface HomeWidget {
   help: string;
   keywords: string;
   icon: React.ReactNode;
-  where: (s: Settings) => 'Top left' | 'Top right' | 'Centre';
+  where: (s: Settings) => 'Top left' | 'Top right' | 'Center';
   setup?: React.FC;
 }
 
@@ -28,7 +28,7 @@ export const HOME_WIDGETS = [
     help: 'Time, date, and greeting on the home page',
     keywords: 'time date greeting show format 12 24',
     icon: <Clock className={iconClass} />,
-    where: () => 'Centre',
+    where: () => 'Center',
   },
   {
     key: 'showQuickLinks',
@@ -61,7 +61,7 @@ export const HOME_WIDGETS = [
     help: 'A strip of your upcoming events on the home page',
     keywords: 'calendar events agenda schedule upcoming strip',
     icon: <Calendar className={iconClass} />,
-    where: () => 'Centre',
+    where: () => 'Center',
   },
 ] as const satisfies readonly HomeWidget[];
 

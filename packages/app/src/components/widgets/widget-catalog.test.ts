@@ -32,10 +32,10 @@ describe('HOME_WIDGETS', () => {
     expect(weather?.where({ ...DEFAULT_SETTINGS, weatherPosition: 'right' })).toBe('Top right');
   });
 
-  it('sends clock and calendar to the centre column', () => {
-    const centre = HOME_WIDGETS.filter((w) => w.where(DEFAULT_SETTINGS) === 'Centre');
+  it('sends clock and calendar to the center column', () => {
+    const center = HOME_WIDGETS.filter((w) => w.where(DEFAULT_SETTINGS) === 'Center');
 
-    expect(centre.map((w) => w.key)).toEqual(['showClock', 'newTabShowCalendar']);
+    expect(center.map((w) => w.key)).toEqual(['showClock', 'newTabShowCalendar']);
   });
 });
 
