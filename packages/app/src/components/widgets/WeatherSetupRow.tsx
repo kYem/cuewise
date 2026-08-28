@@ -1,12 +1,12 @@
 import type React from 'react';
-import { useWeatherStore } from '../../stores/weather-store';
+import { needsWeatherCity, useWeatherStore } from '../../stores/weather-store';
 import { WeatherLocationPicker } from '../settings/WeatherLocationPicker';
 
 /** Weather renders nothing without a location, so the picker must collect one inline. */
 export const WeatherSetupRow: React.FC = () => {
-  const location = useWeatherStore((state) => state.location);
+  const needsCity = useWeatherStore(needsWeatherCity);
 
-  if (location !== null) {
+  if (!needsCity) {
     return null;
   }
 

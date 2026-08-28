@@ -121,6 +121,11 @@ function messageFor(error: unknown, context: 'forecast' | 'search'): string {
   return context === 'search' ? 'Could not search for places' : 'Could not update the weather';
 }
 
+/** A null location only means "no city" once the read has happened — before that it means nothing. */
+export function needsWeatherCity(state: Pick<WeatherStore, 'location' | 'initialized'>): boolean {
+  return state.initialized && state.location === null;
+}
+
 export const useWeatherStore = create<WeatherStore>((set, get) => ({
   location: null,
   snapshot: null,

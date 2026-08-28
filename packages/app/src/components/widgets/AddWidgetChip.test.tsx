@@ -10,7 +10,10 @@ import {
 import { AddWidgetChip } from './AddWidgetChip';
 
 vi.mock('../../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
-vi.mock('../../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
+vi.mock('../../stores/weather-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../stores/weather-store')>()),
+  useWeatherStore: vi.fn(),
+}));
 vi.mock('../../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
 vi.mock('../settings/WeatherLocationPicker', () => ({
   WeatherLocationPicker: () => <div data-testid="location-picker" />,
@@ -104,6 +107,27 @@ describe('AddWidgetChip', () => {
 
     expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Minimal' })).not.toBeInTheDocument();
+  });
+
+  it('portals the panel out, since the row it sits in fades away on scroll', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    const { container } = render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+
+    expect(container).not.toContainElement(screen.getByRole('dialog'));
+  });
+
+  it('stays open when the panel itself is clicked', async () => {
+    const user = userEvent.setup();
+    mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });
+    render(<AddWidgetChip />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a widget' }));
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+
+    expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeInTheDocument();
   });
 
   it('names its popover after the heading inside it', async () => {

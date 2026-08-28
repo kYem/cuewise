@@ -36,7 +36,12 @@ import { Fragment, useEffect, useState } from 'react';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
-import { HOME_WIDGETS, type HomeWidgetKey, widgetPatch } from '../widgets/widget-catalog';
+import {
+  type HomeWidget,
+  type HomeWidgetKey,
+  offeredHomeWidgets,
+  widgetPatch,
+} from '../widgets/widget-catalog';
 import { BackgroundEffectControls } from './BackgroundEffectControls';
 import { CustomBackgroundPicker } from './CustomBackgroundPicker';
 import { PresetGrid } from './PresetGrid';
@@ -546,8 +551,11 @@ function chipClass(active: boolean): string {
 }
 
 /* Home screen */
-// Calendar is toggled in the goals area, not here.
-export const SETTINGS_HOME_WIDGETS = HOME_WIDGETS.filter((w) => w.key !== 'newTabShowCalendar');
+// Off the gated list, not the raw catalog, so a future gated widget can't get a switch here on a
+// build that cannot render it. Calendar is excluded separately: the goals area owns that toggle.
+export function settingsHomeWidgets(): readonly HomeWidget[] {
+  return offeredHomeWidgets().filter((w) => w.key !== 'newTabShowCalendar');
+}
 
 type SubgroupRenderer = (
   props: Pick<SettingsSectionProps, 's' | 'set' | 'filter'>
@@ -598,7 +606,7 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
 
   return (
     <div>
-      {SETTINGS_HOME_WIDGETS.map((widget) => (
+      {settingsHomeWidgets().map((widget) => (
         <Fragment key={widget.key}>
           <SettingRow
             label={widget.label}

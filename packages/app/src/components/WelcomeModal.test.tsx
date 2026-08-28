@@ -5,7 +5,10 @@ import { mockWidgetPickerStores } from './__fixtures__/widget-picker.fixtures';
 import { WelcomeModal } from './WelcomeModal';
 
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
-vi.mock('../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
+vi.mock('../stores/weather-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../stores/weather-store')>()),
+  useWeatherStore: vi.fn(),
+}));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn(() => true) }));
 vi.mock('./settings/WeatherLocationPicker', () => ({
   WeatherLocationPicker: () => <div data-testid="location-picker" />,
@@ -115,7 +118,7 @@ describe('WelcomeModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('scrolls the widget step instead of pushing Done past the bottom of the viewport', async () => {
+  it('keeps Done outside the scrolling region, so growth cannot push it out of reach', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores();
     render(<WelcomeModal isOpen={true} onClose={vi.fn()} />);

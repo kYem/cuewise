@@ -10,7 +10,10 @@ import {
 import { WidgetPicker } from './WidgetPicker';
 
 vi.mock('../../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
-vi.mock('../../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
+vi.mock('../../stores/weather-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../stores/weather-store')>()),
+  useWeatherStore: vi.fn(),
+}));
 vi.mock('../../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
 vi.mock('../settings/WeatherLocationPicker', () => ({
   WeatherLocationPicker: () => <div data-testid="location-picker" />,
@@ -106,6 +109,17 @@ describe('WidgetPicker', () => {
     render(<WidgetPicker />);
 
     expect(screen.getByText('Pick a city to see your weather.')).toBeInTheDocument();
+  });
+
+  it('holds the city prompt until the weather store has read storage', () => {
+    mockWidgetPickerStores({
+      settings: { showWeather: true },
+      hasWeatherLocation: false,
+      weatherInitialized: false,
+    });
+    render(<WidgetPicker />);
+
+    expect(screen.queryByText('Pick a city to see your weather.')).not.toBeInTheDocument();
   });
 
   it('drops the city prompt once a location is set', () => {

@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
 import { WidgetPicker } from './WidgetPicker';
@@ -13,6 +14,7 @@ export const AddWidgetChip: React.FC = () => {
   const weatherInitialized = useWeatherStore((state) => state.initialized);
   const [isOpen, setIsOpen] = useState(false);
   const chipRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const headingId = useId();
 
   // A flag is not a widget: weather without a city renders nothing, and this chip is the
@@ -30,7 +32,10 @@ export const AddWidgetChip: React.FC = () => {
     }
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (chipRef.current && !chipRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedTrigger = chipRef.current?.contains(target) ?? false;
+      const clickedPanel = panelRef.current?.contains(target) ?? false;
+      if (!clickedTrigger && !clickedPanel) {
         setIsOpen(false);
       }
     };
@@ -78,22 +83,29 @@ export const AddWidgetChip: React.FC = () => {
         <span className="hidden sm:inline text-sm font-medium text-primary">Add a widget</span>
       </button>
 
-      {isOpen && (
-        <div
-          role="dialog"
-          aria-modal="false"
-          aria-labelledby={headingId}
-          className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-lg border border-border bg-surface-elevated p-2 shadow-xl animate-fade-in"
-        >
-          <h3
-            id={headingId}
-            className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-tertiary"
+      {isOpen &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby={headingId}
+            className="fixed z-[100] max-h-[70vh] w-80 overflow-y-auto rounded-lg border border-border bg-surface-elevated p-2 shadow-xl animate-fade-in"
+            style={{
+              top: (chipRef.current?.getBoundingClientRect().bottom ?? 0) + 8,
+              left: chipRef.current?.getBoundingClientRect().left ?? 0,
+            }}
           >
-            Add to your home screen
-          </h3>
-          <WidgetPicker />
-        </div>
-      )}
+            <h3
+              id={headingId}
+              className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-tertiary"
+            >
+              Add to your home screen
+            </h3>
+            <WidgetPicker />
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
