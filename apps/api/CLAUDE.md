@@ -86,7 +86,7 @@ All endpoints are under `/v1`.
 | `DELETE` | `/v1/pairings/:id` | Cancel/deny a pairing request; idempotent, 404 once gone | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records **and every key envelope they hold** | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
-| `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units, days}`. `days: '2'` opts into tomorrow's hours and `tomorrow` high/low; anything else answers a single day, because a client that predates the rolling strip samples across every hour it is sent | No |
+| `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units, days}`. `days: 2` opts into tomorrow's hours and `tomorrow` high/low; anything else answers one day (back-compat — see the note in `weather.ts`) | No |
 | `POST` | `/v1/weather/search` | City lookup proxy, `{q}` | No |
 
 **Why `/v1/export` ships the key envelopes** (ENG-54): records are ciphertext, so an export without

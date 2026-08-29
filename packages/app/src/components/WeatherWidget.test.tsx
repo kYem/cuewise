@@ -358,7 +358,6 @@ describe("the popover's high and low", () => {
     expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument();
   });
 
-  // A reading cached before the proxy sent tomorrow, or one from a proxy that still doesn't.
   it("stays on today's when the reading carries no tomorrow", () => {
     openAt('2026-07-25T23:30:00Z', {
       hours: [...hours('2026-07-25'), ...hours('2026-07-26')],

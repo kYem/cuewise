@@ -22,7 +22,6 @@ function dayOfHours(date = '2026-07-25'): WeatherHour[] {
   }));
 }
 
-/** Today and tomorrow, as the proxy sends them. */
 function twoDaysOfHours(): WeatherHour[] {
   return [...dayOfHours('2026-07-25'), ...dayOfHours('2026-07-26')];
 }
@@ -317,7 +316,6 @@ describe('resolveDayRange', () => {
     });
   });
 
-  // Otherwise the popover keeps advertising a high that already happened.
   it("switches to tomorrow's once none are", () => {
     expect(resolveDayRange(reading, '2026-07-25T23:30')).toEqual({
       high: 26,
@@ -333,6 +331,20 @@ describe('resolveDayRange', () => {
       low: 14,
       isTomorrow: false,
     });
+  });
+
+  // A pinned tab or a suspended laptop: nothing refetches on its own, so the reading can
+  // outlive both the days it describes.
+  it('keeps to the reading when now is past every day it covers', () => {
+    expect(resolveDayRange(reading, '2026-07-29T10:00')).toEqual({
+      high: 21,
+      low: 11,
+      isTomorrow: false,
+    });
+  });
+
+  it('keeps to the reading when the zone could not be resolved at all', () => {
+    expect(resolveDayRange(reading, '')).toEqual({ high: 21, low: 11, isTomorrow: false });
   });
 
   it("keeps today's when the reading carries no tomorrow", () => {

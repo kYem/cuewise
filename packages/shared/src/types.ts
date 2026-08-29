@@ -375,7 +375,7 @@ export interface WeatherDayRange {
   low: number;
 }
 
-// `hours` is two whole local days, not a sample: sampling depends on the current minute,
+// `hours` is one or two whole local days, not a sample: sampling depends on the current minute,
 // which would make every edge-cached response stale a minute after it was stored.
 export interface WeatherForecast {
   units: WeatherUnits;

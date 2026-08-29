@@ -115,8 +115,8 @@ function readRegion(tag: string): string | null {
 /**
  * Up to `max` hours from the next `FORECAST_HORIZON_HOURS`, evenly spread and always
  * including the last so the sample spans the window. The window crosses midnight — pinning
- * it to the rest of today emptied the strip out every evening. Returns fewer only when the
- * payload runs out, which is what an older proxy sending a single day looks like.
+ * it to the rest of today emptied the strip out every evening. Returns fewer as the payload
+ * runs out — an older single-day proxy, or a reading gone stale.
  * @param hours - The location's local hours, ascending, today and tomorrow.
  * @param nowLocalIso - "Now" in the *location's* zone, not the device's.
  */
@@ -157,11 +157,12 @@ export function sampleForecastHours(
 }
 
 /**
- * Which day the popover's high and low belong to. Today's, until the reading has no hours
- * of today left to show — past that, today's high is history and tomorrow's is what the
- * strip is about. Once midnight itself has passed, that second day *is* today, so the
- * label comes off. Falls back to today's whenever tomorrow is missing, so a reading from
- * an older proxy shows what it always did.
+ * Which day the popover's high and low belong to. Today's, until the reading has no hours of
+ * today left to show — past that, today's high is history and tomorrow's is what the strip is
+ * about. Once the reading's second day is the day it now is, that range is simply today's, so
+ * the label comes off. Anything the reading does not cover — no tomorrow, an unresolvable
+ * zone, or a reading left standing past both its days — keeps today's, which the popover's
+ * age line is there to qualify.
  * @param nowLocalIso - "Now" in the *location's* zone, not the device's.
  */
 export function resolveDayRange(
@@ -174,9 +175,14 @@ export function resolveDayRange(
   if (tomorrow === undefined || first === undefined) {
     return today;
   }
+  const firstDate = first.time.slice(0, 10);
   const nowDate = nowLocalIso.slice(0, 10);
-  if (nowDate > first.time.slice(0, 10)) {
+  const second = forecast.hours.find((hour) => hour.time.slice(0, 10) > firstDate);
+  if (second !== undefined && nowDate === second.time.slice(0, 10)) {
     return { high: tomorrow.high, low: tomorrow.low, isTomorrow: false };
+  }
+  if (nowDate !== firstDate) {
+    return today;
   }
   const moreToday = forecast.hours.some(
     (hour) => hour.time > nowLocalIso && hour.time.slice(0, 10) === nowDate

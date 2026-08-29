@@ -117,8 +117,8 @@ interface SunWindow {
 }
 
 /**
- * Sun windows keyed by their own local date. The forecast spans two days, and judging
- * tomorrow's hours against today's window drew a moon beside every one of them.
+ * Sun windows keyed by their own local date: a forecast may carry two, and judging the
+ * second day's hours against the first day's window called every one of them night.
  */
 function readSunWindows(daily: OpenMeteoForecast['daily']): Map<string, SunWindow> {
   const windows = new Map<string, SunWindow>();
@@ -139,17 +139,20 @@ function readSunWindows(daily: OpenMeteoForecast['daily']): Map<string, SunWindo
 }
 
 /**
- * Daylight for one hourly stamp. Every stamp here is local to the same place and in the
- * same format, so string comparison is the whole calculation. A day with no sun times —
- * the poles, or a provider that omitted them — defaults to daylight: the strip has to draw
- * something, and a sun is the neutral choice.
+ * Daylight for one hourly stamp, judged against its own day's window — or the nearest one the
+ * payload carried, since a reply cached across the location's midnight asks about a day it
+ * does not describe, and sun times move only minutes between days. A payload with no window
+ * at all (the poles, or a provider that omitted them) defaults to daylight: the strip has to
+ * draw something, and a sun is the neutral choice.
  */
 function isDaylight(time: string, windows: Map<string, SunWindow>): boolean {
-  const window = windows.get(time.slice(0, 10));
+  const window = windows.get(time.slice(0, 10)) ?? Array.from(windows.values()).pop();
   if (window === undefined) {
     return true;
   }
-  return time >= window.sunrise && time < window.sunset;
+  // Clock-only, so a window borrowed from a neighbouring date still compares.
+  const clock = time.slice(11);
+  return clock >= window.sunrise.slice(11) && clock < window.sunset.slice(11);
 }
 
 /**
@@ -193,7 +196,7 @@ function normalizeHours(
   return hours;
 }
 
-/** The provider's first hourly day, which is the one `high` and `low` describe. */
+/** The first hourly day, which is the one `high` and `low` describe when `daily` is absent. */
 function firstDayOf(hours: WeatherHour[]): WeatherHour[] {
   if (hours.length === 0) {
     return [];
@@ -224,9 +227,9 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     return null;
   }
   const hours = normalizeHours(payload.hourly, payload.daily);
+  const today = firstDayOf(hours);
   // Deriving from the hourly range is fine; falling back to the current temperature is
   // not — H === L === now is fabricated weather that reads as measured.
-  const today = firstDayOf(hours);
   const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(today, Math.max);
   const low = firstNumber(payload.daily?.temperature_2m_min) ?? hourlyExtreme(today, Math.min);
   if (high === null || low === null) {
@@ -249,8 +252,8 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     low,
     hours,
   };
-  // Left off entirely when the provider sent one day, so a client can tell "no tomorrow
-  // here" from a tomorrow we made up.
+  // Both extremes or nothing, and no hourly fallback: a client has to be able to tell "no
+  // tomorrow here" from a tomorrow we made up.
   if (tomorrowHigh !== null && tomorrowLow !== null) {
     forecast.tomorrow = { high: tomorrowHigh, low: tomorrowLow };
   }
@@ -391,8 +394,8 @@ export function registerWeatherRoutes(
     }
     const units = parseUnits(readParam(body?.units));
     // Opt-in, and one day by default: a client that predates the rolling strip samples
-    // across every hour it is sent, so a second day it never asked for would render as
-    // hours running backwards.
+    // across every hour it is sent, so a second day it never asked for renders as an
+    // afternoon followed by a 3 AM, the labels carrying no date to explain it.
     const days = readParam(body?.days) === '2' ? 2 : 1;
     // Rounded again even though the client already does: a request that arrives by any
     // other route must not get finer coordinates forwarded upstream than one that doesn't.
