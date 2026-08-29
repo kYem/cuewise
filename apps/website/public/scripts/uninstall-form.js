@@ -3,6 +3,14 @@ const thanks = document.getElementById('thanks');
 const errorNote = document.getElementById('form-error');
 const submitBtn = document.getElementById('submit-btn');
 
+// Carried across so an uninstall-sourced feature request is not filed as Version: unknown.
+// Outside the form guard: the link works whether or not the survey wiring does.
+const requestFeatureLink = document.getElementById('request-feature-link');
+const pageVersion = new URLSearchParams(window.location.search).get('v');
+if (requestFeatureLink !== null && pageVersion !== null) {
+  requestFeatureLink.href = `/feedback/?source=uninstall&v=${encodeURIComponent(pageVersion)}`;
+}
+
 if (form !== null && thanks !== null && errorNote !== null && submitBtn !== null) {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();

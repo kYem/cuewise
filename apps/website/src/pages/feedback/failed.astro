@@ -1,0 +1,24 @@
+---
+import Base from '../../layouts/Base.astro';
+import { SITE } from '../../lib/site';
+---
+
+<Base title="Request not sent - Cuewise" description="Your feature request did not reach us.">
+  <meta name="robots" content="noindex" slot="head" />
+  <main>
+    <section class="page-hero">
+      <div class="wrap">
+        <h1>That didn't send.</h1>
+        <p class="hero-sub">
+          Your request did not reach us. Press Back and what you typed will still be there — or
+          email it straight to <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a> and
+          it will land either way.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-ghost" href="/feedback/">Start a new one</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</Base>
+

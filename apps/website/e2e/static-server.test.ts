@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -16,6 +16,10 @@ describe('resolveWithinDist', () => {
     dist = join(base, 'dist');
     sibling = `${dist}-evil`;
     writeFileSync(resolve(base, 'secret.txt'), 'SECRET'); // a parent-directory secret
+    // Real on disk: the directory-index branch is unreachable against a path that never exists,
+    // which is how it went uncovered here while a form spec exercised it by accident.
+    mkdirSync(join(dist, 'feedback'), { recursive: true });
+    writeFileSync(join(dist, 'feedback', 'index.html'), '<!doctype html>');
   });
 
   afterAll(() => {
@@ -29,6 +33,18 @@ describe('resolveWithinDist', () => {
 
   it('maps / to index.html', () => {
     expect(resolveWithinDist(dist, '/')).toBe(join(dist, 'index.html'));
+  });
+
+  it('maps a directory to its index.html, which is every page under trailingSlash always', () => {
+    expect(resolveWithinDist(dist, '/feedback/')).toBe(join(dist, 'feedback', 'index.html'));
+  });
+
+  it('maps a directory reached without its trailing slash too', () => {
+    expect(resolveWithinDist(dist, '/feedback')).toBe(join(dist, 'feedback', 'index.html'));
+  });
+
+  it('still maps a clean URL to .html when no such directory exists', () => {
+    expect(resolveWithinDist(dist, '/player')).toBe(join(dist, 'player.html'));
   });
 
   it('rejects a literal parent-escape (../)', () => {

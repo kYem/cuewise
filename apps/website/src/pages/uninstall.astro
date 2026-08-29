@@ -62,8 +62,9 @@ const reasons = [
             />
             <button class="btn btn-primary" type="submit" id="submit-btn">Send feedback</button>
             <p class="form-error text-error" id="form-error" role="status" aria-live="polite" hidden>
-              Couldn't send — please email us instead at
-              <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a>.
+              Couldn't send — please email us instead at <a
+                href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a
+              >.
             </p>
           </form>
 
@@ -73,9 +74,8 @@ const reasons = [
             <div class="thanks-links">
               <a
                 class="btn btn-primary"
-                href={SITE.githubDiscussionsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/feedback/?source=uninstall"
+                id="request-feature-link"
               >
                 Request a feature
               </a>
