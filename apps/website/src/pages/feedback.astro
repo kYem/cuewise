@@ -1,16 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
+import { FEEDBACK_AREAS } from '../lib/feedback-areas';
 import { SITE } from '../lib/site';
-
-const areas = [
-  { value: 'widgets', label: 'A widget for the home screen' },
-  { value: 'goals', label: 'Goals & tasks' },
-  { value: 'pomodoro', label: 'Pomodoro & focus' },
-  { value: 'quotes', label: 'Quotes & concept cards' },
-  { value: 'reminders', label: 'Reminders & habits' },
-  { value: 'sync', label: 'Sync & devices' },
-  { value: 'other', label: 'Something else' },
-];
 ---
 
 <Base
@@ -32,11 +23,11 @@ const areas = [
     <section class="section-pad" style="padding-top:0;">
       <div class="wrap">
         <div class="content-card glass reveal" id="request-card">
-          <form id="request-form">
+          <form id="request-form" action="/api/feedback/request" method="post">
             <h2>What part of Cuewise?</h2>
             <div class="area-list">
               {
-                areas.map((a) => (
+                FEEDBACK_AREAS.map((a) => (
                   <label class="area-option">
                     <input type="radio" name="area" value={a.value} required />
                     <span>{a.label}</span>
@@ -66,7 +57,7 @@ const areas = [
 
             <input
               type="text"
-              name="website"
+              name="trap"
               tabindex="-1"
               autocomplete="off"
               class="hp-field"

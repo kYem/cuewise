@@ -3,19 +3,17 @@ const thanks = document.getElementById('thanks');
 const errorNote = document.getElementById('form-error');
 const submitBtn = document.getElementById('submit-btn');
 
-if (form !== null && thanks !== null && errorNote !== null && submitBtn !== null) {
+const SEND_TIMEOUT_MS = 15000;
+
+if (form === null || thanks === null || errorNote === null || submitBtn === null) {
+  // Without this the page still "works": the form falls back to a native submit, which would
+  // put the request and the email address in the URL.
+  console.error('Feedback form wiring missing', { form, thanks, errorNote, submitBtn });
+} else {
   const params = new URLSearchParams(window.location.search);
 
-  // The app deep-links with ?area= so someone who came from the widget picker lands
-  // on the widget question already chosen.
-  const presetArea = params.get('area');
-  if (presetArea !== null) {
-    const preset = form.querySelector(`input[name="area"][value="${CSS.escape(presetArea)}"]`);
-    if (preset !== null) {
-      preset.checked = true;
-    }
-  }
-
+  // Registered before the preselect below, so a throw there cannot leave the form submitting
+  // natively.
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     submitBtn.disabled = true;
@@ -24,9 +22,9 @@ if (form !== null && thanks !== null && errorNote !== null && submitBtn !== null
     const data = new FormData(form);
     const body = {
       area: data.get('area'),
-      details: data.get('details'),
+      details: String(data.get('details') ?? '').trim(),
       email: data.get('email') || undefined,
-      website: data.get('website') || undefined,
+      trap: data.get('trap') || undefined,
       version: params.get('v') || undefined,
       source: params.get('source') || undefined,
     };
@@ -36,6 +34,7 @@ if (form !== null && thanks !== null && errorNote !== null && submitBtn !== null
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       });
       if (response.ok) {
         form.hidden = true;
@@ -49,4 +48,13 @@ if (form !== null && thanks !== null && errorNote !== null && submitBtn !== null
       submitBtn.disabled = false;
     }
   });
+
+  // CSS.escape is load-bearing: the value goes from the URL straight into a selector.
+  const presetArea = params.get('area');
+  if (presetArea !== null) {
+    const preset = form.querySelector(`input[name="area"][value="${CSS.escape(presetArea)}"]`);
+    if (preset !== null) {
+      preset.checked = true;
+    }
+  }
 }

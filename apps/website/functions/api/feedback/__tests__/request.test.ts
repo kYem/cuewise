@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FEEDBACK_AREAS } from '../../../../src/lib/feedback-areas';
 import { handleFeatureRequest } from '../request';
 import {
   emptyEnv,
   makeRequestFeatureRequest,
   sentEmail,
+  sentRequest,
   stubResendFetch,
+  stubResendFetchRejection,
   testEnv,
   validRequest,
 } from './__fixtures__/request.fixtures';
@@ -56,7 +59,7 @@ describe('handleFeatureRequest', () => {
   it('reports success without sending when the honeypot is filled, so a bot learns nothing', async () => {
     const fetchMock = stubResendFetch(200);
     const response = await handleFeatureRequest(
-      makeRequestFeatureRequest({ ...validRequest, website: 'http://spam.example' }),
+      makeRequestFeatureRequest({ ...validRequest, trap: 'http://spam.example' }),
       testEnv
     );
 
@@ -73,17 +76,24 @@ describe('handleFeatureRequest', () => {
     expect(sentEmail(fetchMock).text).toContain('A master list of tasks');
   });
 
-  it('carries a reply address through, which is the whole point of asking for one', async () => {
+  it('sets reply_to, so hitting reply reaches the person and not our own inbox', async () => {
     const fetchMock = stubResendFetch(200);
     await handleFeatureRequest(
       makeRequestFeatureRequest({ ...validRequest, email: 'someone@example.com' }),
       testEnv
     );
 
-    expect(sentEmail(fetchMock).text).toContain('someone@example.com');
+    expect(sentEmail(fetchMock).reply_to).toEqual(['someone@example.com']);
   });
 
-  it('drops an unusable reply address rather than rejecting the request behind it', async () => {
+  it('keeps reply_to off entirely when no address was given', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
+    expect(sentEmail(fetchMock).reply_to).toBeUndefined();
+  });
+
+  it('never puts an unusable address in reply_to, which would fail the whole send', async () => {
     const fetchMock = stubResendFetch(200);
     const response = await handleFeatureRequest(
       makeRequestFeatureRequest({ ...validRequest, email: 'not-an-address' }),
@@ -91,7 +101,25 @@ describe('handleFeatureRequest', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(sentEmail(fetchMock).text).not.toContain('not-an-address');
+    expect(sentEmail(fetchMock).reply_to).toBeUndefined();
+  });
+
+  it('still records an unusable address, which is answerable by hand', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: 'kes@gmail' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('kes@gmail');
+  });
+
+  it('addresses the support inbox with the configured key', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
+    expect(sentRequest(fetchMock).email.to).toEqual(['support@cuewise.app']);
+    expect(sentRequest(fetchMock).authorization).toBe('Bearer test-api-key');
   });
 
   it('records where the request was raised from, so widget asks are separable', async () => {
@@ -104,8 +132,86 @@ describe('handleFeatureRequest', () => {
     expect(sentEmail(fetchMock).text).toContain('widget-picker');
   });
 
+  it('does not claim a source it was never given, which would poison the split', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
+    expect(sentEmail(fetchMock).text).toContain('Source: unknown');
+  });
+
+  it('drops a source that could never be one of ours', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, source: '../../etc/passwd' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('Source: unknown');
+  });
+
+  it('never echoes an attacker-supplied version, which arrives straight off the query string', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, version: '<script>alert(1)</script>' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('Version: unknown');
+    expect(sentEmail(fetchMock).text).not.toContain('<script>');
+  });
+
+  it('rejects details that are only whitespace, which the browser lets through', async () => {
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, details: '   \n  ' }),
+      testEnv
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('returns 400 for a JSON body that is not an object', async () => {
+    const response = await handleFeatureRequest(makeRequestFeatureRequest('null'), testEnv);
+    expect(response.status).toBe(400);
+  });
+
+  it.each(
+    FEEDBACK_AREAS.map((a) => a.value)
+  )('accepts %s, so no radio on the form can 400 a typed-out request', async (area) => {
+    const fetchMock = stubResendFetch(200);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, area }),
+      testEnv
+    );
+
+    expect(response.status).toBe(200);
+    expect(sentEmail(fetchMock).subject).toContain(area);
+  });
+
   it('returns 502 when Resend rejects the send', async () => {
     stubResendFetch(500);
+    const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+    expect(response.status).toBe(502);
+  });
+
+  it('retries without reply_to when Resend refuses the address, rather than losing the request', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{"name":"validation_error"}', { status: 422 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: 'someone@example.com' }),
+      testEnv
+    );
+
+    expect(response.status).toBe(200);
+    expect(sentEmail(fetchMock, 1).reply_to).toBeUndefined();
+    expect(sentEmail(fetchMock, 1).text).toContain('someone@example.com');
+  });
+
+  it('returns 502 when the request to Resend throws', async () => {
+    stubResendFetchRejection();
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
     expect(response.status).toBe(502);
   });

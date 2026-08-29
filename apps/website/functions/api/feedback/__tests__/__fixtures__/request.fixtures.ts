@@ -22,13 +22,40 @@ export function stubResendFetch(status: number): ReturnType<typeof vi.fn> {
   return fetchMock;
 }
 
+export function stubResendFetchRejection(): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 /** The smallest body the handler accepts, so a test can vary one field at a time. */
 export const validRequest = {
   area: 'widgets',
   details: 'A master list of tasks I can pull from each day.',
 };
 
-export function sentEmail(fetchMock: ReturnType<typeof vi.fn>): { subject: string; text: string } {
-  const [, init] = fetchMock.mock.calls[0];
-  return JSON.parse(String(init.body));
+interface SentEmail {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  reply_to?: string[];
+}
+
+interface SentRequest {
+  authorization: string;
+  email: SentEmail;
+}
+
+/** Whole request, not just the body: a wrong recipient or auth header is otherwise invisible. */
+export function sentRequest(fetchMock: ReturnType<typeof vi.fn>, call = 0): SentRequest {
+  const [, init] = fetchMock.mock.calls[call];
+  return {
+    authorization: String(init.headers.Authorization),
+    email: JSON.parse(String(init.body)) as SentEmail,
+  };
+}
+
+export function sentEmail(fetchMock: ReturnType<typeof vi.fn>, call = 0): SentEmail {
+  return sentRequest(fetchMock, call).email;
 }
