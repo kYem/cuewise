@@ -219,9 +219,9 @@ describe('a stored value that no longer matches its shape', () => {
     expect(JSON.stringify(error.mock.calls)).not.toContain('a private note');
   });
 
-  // The store salvages location, snapshot and timestamp independently; validating the
+  // The store salvages the location separately from the reading; validating the
   // wrapper here would take the saved city with a bad reading.
-  it('leaves the weather blob for the store to salvage per field', async () => {
+  it('leaves the weather blob for the store to salvage', async () => {
     const stored = { location: { id: 'l1' }, snapshot: 'unreadable', lastFetch: null };
     configurePlatform({ storage: storeHolding({ weather: stored }) });
 

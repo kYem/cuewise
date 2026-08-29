@@ -23,6 +23,9 @@ interface CalendarStripProps {
   width?: keyof typeof WIDTHS;
 }
 
+/** Short enough that a returning tab is current, long enough that tab-flicking is free. */
+const CALENDAR_STALE_MS = 2 * 60_000;
+
 // Per-variant color classes (module-level so they aren't rebuilt each render).
 // 'overlay' keeps the immersive white-on-dark glass look; 'surface' uses theme
 // tokens so the strip is readable on light themes.
@@ -130,8 +133,11 @@ export const CalendarStrip: React.FC<CalendarStripProps> = ({
       if (loading) {
         return;
       }
-      const age = lastSync ? Date.now() - new Date(lastSync).getTime() : Number.POSITIVE_INFINITY;
-      if (age > 2 * 60_000) {
+      // A stamp we cannot read, or one from the future, leaves the comparison below false
+      // forever — the agenda would pin to whatever it last loaded. Both count as stale.
+      const syncedAt = lastSync === null ? Number.NaN : Date.parse(lastSync);
+      const age = Number.isNaN(syncedAt) ? Number.POSITIVE_INFINITY : Date.now() - syncedAt;
+      if (age < 0 || age > CALENDAR_STALE_MS) {
         refresh({ silent: true });
       }
     };

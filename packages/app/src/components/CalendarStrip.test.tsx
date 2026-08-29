@@ -283,6 +283,23 @@ describe('CalendarStrip - full mode (past + now-line)', () => {
     expect(store.refresh).not.toHaveBeenCalled();
   });
 
+  // Both make the age comparison false, so the strip would never refetch on foreground
+  // again — the agenda silently pins to whatever it last loaded.
+  it.each([
+    ['a sync stamp it cannot read', 'whenever'],
+    ['a sync stamp from the future', new Date('2026-06-14T13:00:00').toISOString()],
+  ])('refetches on foreground given %s', (_label, lastSync) => {
+    const store = createCalendarStore({ lastSync });
+    mountWith(store);
+
+    render(<CalendarStrip />);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true });
+  });
+
   it('never strikes through an all-day event even when its end is before now', () => {
     const store = createCalendarStore({
       events: [allDayEvent('h', '2026-06-13', '2026-06-14', 'Yesterday onward')],

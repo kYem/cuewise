@@ -6,6 +6,7 @@ import {
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
+  WEATHER_STALE_MS,
   type WeatherConditionKind,
   type WeatherSnapshot,
   type WeatherUnits,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useStaleRefresh } from '../hooks/useStaleRefresh';
 import { useSettingsStore } from '../stores/settings-store';
 import { useWeatherStore } from '../stores/weather-store';
 
@@ -150,7 +152,8 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
 
       {(age !== null || error !== null) && (
         <div className="mt-3 pt-2 border-t border-divider text-[10px] text-secondary">
-          {error ?? age}
+          {error !== null && <div>{error}</div>}
+          {age !== null && <div>{age}</div>}
         </div>
       )}
     </div>
@@ -163,7 +166,8 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
  * Renders nothing without a location, and never blocks page render — weather must not
  * become a second ENG-77. Three states: a skeleton while the first reading loads, a retry
  * chip if that first reading failed, and the last good reading kept through any later
- * failure, with the error shown in the popover beside it.
+ * failure, with the error shown in the popover beside it. A reading that ages past
+ * `WEATHER_STALE_MS` is refetched while the tab is visible.
  */
 export const WeatherWidget: React.FC = () => {
   const showWeather = useSettingsStore((state) => state.settings.showWeather);
@@ -171,6 +175,7 @@ export const WeatherWidget: React.FC = () => {
   const position = useSettingsStore((state) => state.settings.weatherPosition);
   const location = useWeatherStore((state) => state.location);
   const snapshot = useWeatherStore((state) => state.snapshot);
+  const lastFetch = useWeatherStore((state) => state.lastFetch);
   const error = useWeatherStore((state) => state.error);
   const isFetching = useWeatherStore((state) => state.inFlight !== null);
   const initialize = useWeatherStore((state) => state.initialize);
@@ -186,6 +191,11 @@ export const WeatherWidget: React.FC = () => {
   useEffect(() => {
     unitsRef.current = unitsPreference;
   }, [unitsPreference]);
+
+  // Null stands the timer down: no reading yet, chip off, or a fetch running — the last
+  // because the store drops a matching request and the hook would count it as its attempt.
+  const readingToAge = showWeather && !isFetching ? lastFetch : null;
+  useStaleRefresh(readingToAge, WEATHER_STALE_MS, () => refresh({ silent: true, unitsPreference }));
 
   // Reads the preference off a ref so changing units doesn't re-run the storage load;
   // the effect below owns that case.

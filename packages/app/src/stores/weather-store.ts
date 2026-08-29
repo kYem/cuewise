@@ -1,6 +1,7 @@
 import {
   logger,
   resolveWeatherUnits,
+  WEATHER_STALE_MS,
   type WeatherLocation,
   type WeatherSnapshot,
   type WeatherState,
@@ -19,9 +20,6 @@ import {
   WeatherUnavailableError,
 } from '../utils/weather';
 import { useToastStore } from './toast-store';
-
-/** A reading older than this is refetched on mount. */
-export const WEATHER_STALE_MS = 30 * 60 * 1000;
 
 // Typing "lond" issues overlapping lookups; the slower earlier one must not land on top
 // of the newer results.
@@ -71,8 +69,20 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
+/** Slack for our own clock stepping back a little after a reading was written. */
+const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+
+/**
+ * Rejects a stamp from the future as well as an unparseable one: both staleness checks
+ * subtract it from now, so a future one reads as fresh for as long as the skew lasts, and the
+ * age line vouches for it with "Updated just now".
+ */
 function isTimestamp(value: unknown): value is string {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && parsed <= Date.now() + CLOCK_SKEW_TOLERANCE_MS;
 }
 
 /** A lost cache entry only costs one extra fetch, so log and move on. */
@@ -155,7 +165,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       return;
     }
     // A clear or a pick landed while this read was in flight, so everything it carries is
-    // stale — including the shape warnings below, which would blame the wrong thing.
+    // stale — including the discards below, which would blame the wrong thing.
     if (get().epoch !== epoch) {
       set({ initialized: true });
       return;
@@ -164,19 +174,28 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       set({ initialized: true });
       return;
     }
-    // Anything that no longer matches the shape is dropped rather than rendered. The
-    // reading's `lastFetch` goes with it, so the staleness check below refetches instead
-    // of leaving a permanent skeleton.
-    const location = isWeatherLocation(stored.location) ? stored.location : null;
-    const snapshot = isWeatherSnapshot(stored.snapshot) ? stored.snapshot : null;
-    // The timestamp is validated too: an unparseable one makes every staleness check
-    // `NaN > threshold` — false — so the reading would never refresh again.
-    const lastFetch = snapshot === null || !isTimestamp(stored.lastFetch) ? null : stored.lastFetch;
-    if (stored.snapshot !== null && snapshot === null) {
-      logger.warn('Discarded an unreadable stored weather reading');
+    // error, not warn, on every discard below: the shipped logLevel is 'error', and a city
+    // or a reading disappearing is where an "it forgot my weather" report starts.
+    const readable = isWeatherSnapshot(stored.snapshot);
+    const dated = isTimestamp(stored.lastFetch);
+    // An undated reading shows no age and arms no refresh timer, so one failed refetch would
+    // leave it on screen as though it were current. Kept or dropped as one.
+    const usable = readable && dated;
+    const snapshot = usable ? stored.snapshot : null;
+    const lastFetch = usable ? stored.lastFetch : null;
+    if (stored.snapshot !== null && !readable) {
+      logger.error('Discarded an unreadable stored weather reading');
     }
-    if (stored.location !== null && location === null) {
-      logger.warn('Discarded an unreadable stored weather location');
+    if (readable && !dated) {
+      logger.error('Discarded a stored weather reading with an unusable timestamp', {
+        lastFetch: stored.lastFetch,
+      });
+    }
+
+    const placed = isWeatherLocation(stored.location);
+    const location = placed ? stored.location : null;
+    if (stored.location !== null && !placed) {
+      logger.error('Discarded an unreadable stored weather location');
     }
     set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {
@@ -251,7 +270,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       const snapshot: WeatherSnapshot = { ...forecast, location };
       const lastFetch = new Date().toISOString();
       // `error` is cleared here, not only when a request starts: a concurrent request that
-      // failed may have written one, and the popover shows it *instead of* the age — so
+      // failed may have written one, and the popover shows it above the age — so
       // fresh data would sit under a stale failure line with nothing to clear it.
       set({ snapshot, lastFetch, error: null });
       await persistReading({ location, snapshot, lastFetch });
@@ -265,7 +284,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       if (!samePlace() || id < lastStartedId) {
         return;
       }
-      // The cached snapshot deliberately survives; the popover swaps its age line for this.
+      // The cached snapshot deliberately survives; the popover shows this above its age line.
       const message = messageFor(error, 'forecast');
       set({ error: message });
       if (!silent) {

@@ -16,6 +16,9 @@ export const MAX_FORECAST_HOURS = 5;
 /** Past this the strip stops answering "what do the next few hours look like". */
 export const FORECAST_HORIZON_HOURS = 12;
 
+/** A reading past this age is stale; consumers decide when to act on that. */
+export const WEATHER_STALE_MS = 30 * 60 * 1000;
+
 /**
  * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
  * so this costs no accuracy. Shared rather than duplicated: the client rounds so precise
@@ -222,8 +225,8 @@ export function formatTemperature(value: number): string {
 }
 
 /**
- * How old a reading is, in words. The popover shows it whenever there is no error to show
- * in its place, so a cached reading is never passed off as current.
+ * How old a reading is, in words. The popover shows it even when there is an error, so a
+ * cached reading is never passed off as current.
  */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   if (lastFetch === null) {

@@ -53,5 +53,6 @@ assertNoDrift<z.infer<typeof weatherSnapshotSchema>, WeatherSnapshot>();
 
 /*
  * No `weatherStateSchema` on purpose: `getWeatherState` returns the blob untouched so the
- * store can salvage its three fields independently, and a wrapper schema invites wiring in.
+ * store can salvage the location separately from the reading, and a wrapper schema invites
+ * wiring in.
  */

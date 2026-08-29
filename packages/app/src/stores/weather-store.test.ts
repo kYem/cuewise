@@ -9,6 +9,7 @@ import {
   LONDON,
   snapshot,
   staleState,
+  undatedState,
   VILNIUS,
 } from './__fixtures__/weather-store.fixtures';
 import { useWeatherStore } from './weather-store';
@@ -132,7 +133,7 @@ describe('initialize', () => {
   });
 
   it('does not blame the shape for a read it discarded as stale', async () => {
-    const warned = vi.spyOn(logger, 'warn');
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const pending = deferred<ReturnType<typeof freshState>>();
     getWeatherStateMock.mockReturnValueOnce(pending.promise);
 
@@ -141,7 +142,7 @@ describe('initialize', () => {
     pending.release({ ...freshState(), snapshot: { ...snapshot(), current: undefined } } as never);
     await stale;
 
-    expect(warned).not.toHaveBeenCalled();
+    expect(logged).not.toHaveBeenCalled();
   });
 
   it('does not refetch a reading that is still fresh', async () => {
@@ -451,6 +452,7 @@ describe('search', () => {
 // once — it would take the whole page down through the app-wide ErrorBoundary, every open.
 describe('a stored reading that no longer matches the shape', () => {
   it('is discarded rather than handed to the chip', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const broken = { ...freshState(), snapshot: { ...snapshot(), current: undefined } };
     getWeatherStateMock.mockResolvedValue(broken as never);
     // The discard triggers a refetch, which would otherwise land a valid reading and hide
@@ -461,6 +463,8 @@ describe('a stored reading that no longer matches the shape', () => {
 
     expect(useWeatherStore.getState().snapshot).toBeNull();
     expect(useWeatherStore.getState().location).toEqual(LONDON);
+    // error, not warn, or the reason never reaches a default install.
+    expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather reading');
   });
 
   it('is refetched instead of leaving a permanent skeleton', async () => {
@@ -476,6 +480,7 @@ describe('a stored reading that no longer matches the shape', () => {
   // The location outlives any given reading, and the chip reads it directly, so a broken
   // one is the same hazard: no location renders nothing, a malformed one throws.
   it('discards a location that lost required fields', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const { countryCode: _dropped, ...incomplete } = LONDON;
     getWeatherStateMock.mockResolvedValue({ ...freshState(), location: incomplete } as never);
 
@@ -483,6 +488,7 @@ describe('a stored reading that no longer matches the shape', () => {
 
     expect(useWeatherStore.getState().location).toBeNull();
     expect(fetchForecastMock).not.toHaveBeenCalled();
+    expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather location');
   });
 
   it('keeps a reading that is merely missing an optional field', async () => {
@@ -529,7 +535,7 @@ describe('what a refresh actually persists', () => {
     const quotaError = { type: 'quota_exceeded' as const, message: 'Storage is full' };
     setWeatherStateMock.mockResolvedValue({ success: false, error: quotaError });
     useWeatherStore.setState({ location: LONDON });
-    const logged = vi.spyOn(logger, 'error');
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
 
@@ -591,21 +597,93 @@ describe('overlapping refreshes', () => {
   });
 });
 
-describe('a stored timestamp that cannot be read', () => {
-  // Date.parse(NaN) makes every staleness comparison false, so the reading would be pinned
-  // forever — the same permanent-skeleton failure the shape guards exist to prevent.
+// setLocation and clearLocation both persist a blob with no reading in it, so an empty one
+// is ordinary — reporting it as discarded would cry corruption on every tab.
+describe('a stored blob that is merely empty', () => {
+  it('stays quiet about the reading a freshly picked city has not fetched yet', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getWeatherStateMock.mockResolvedValue({
+      location: LONDON,
+      snapshot: null,
+      lastFetch: null,
+    } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet about the city a removal took away', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getWeatherStateMock.mockResolvedValue({ location: null, snapshot: null, lastFetch: null });
+
+    await useWeatherStore.getState().initialize();
+
+    expect(logged).not.toHaveBeenCalled();
+  });
+});
+
+describe('a stored timestamp we cannot trust', () => {
+  // An unreadable stamp reads stale to nothing — neither the check at mount nor the widget's
+  // own timer — so a reading kept beside it would never refresh again.
   it('is treated as no timestamp at all, so the reading refreshes', async () => {
-    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+    getWeatherStateMock.mockResolvedValue(undatedState());
 
     await useWeatherStore.getState().initialize();
 
     expect(fetchForecastMock).toHaveBeenCalledTimes(1);
   });
+
+  it('takes the reading down with it rather than showing it as current', async () => {
+    getWeatherStateMock.mockResolvedValue(undatedState());
+    // Without the rejection the refetch lands and puts a snapshot straight back.
+    fetchForecastMock.mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(useWeatherStore.getState().location).toEqual(LONDON);
+  });
+
+  it('says which value it could not use', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getWeatherStateMock.mockResolvedValue(undatedState());
+
+    await useWeatherStore.getState().initialize();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Discarded a stored weather reading with an unusable timestamp',
+      { lastFetch: 'whenever' }
+    );
+  });
+
+  it('keeps a stamp a few seconds ahead, which is our own clock stepping back', async () => {
+    const barelyAhead = new Date(Date.now() + 10_000).toISOString();
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: barelyAhead } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).not.toBeNull();
+    expect(fetchForecastMock).not.toHaveBeenCalled();
+  });
+
+  // A clock set forward when the reading was written, then corrected: every staleness check
+  // subtracts it from now, so it would read as fresh for as long as the skew lasts.
+  it('drops a stamp from the future, which would otherwise never age out', async () => {
+    const ahead = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: ahead } as never);
+    fetchForecastMock.mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(fetchForecastMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('an error left behind by a concurrent request', () => {
-  // The popover shows the error *instead of* the age, so a stale failure line beside a
-  // reading fetched seconds ago reads as "this data is broken" when it is current.
+  // A stale failure line beside a reading fetched seconds ago reads as "this data is
+  // broken" when it is current.
   it('is cleared by the reading that lands afterwards', async () => {
     const slow = deferred<ReturnType<typeof forecast>>();
     fetchForecastMock
