@@ -166,18 +166,22 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     // reading's `lastFetch` goes with it, so the staleness check below refetches instead
     // of leaving a permanent skeleton.
     const location = isWeatherLocation(stored.location) ? stored.location : null;
-    const snapshot = isWeatherSnapshot(stored.snapshot) ? stored.snapshot : null;
-    // The timestamp is validated too: an unparseable one makes the check below
-    // `NaN > threshold` — false — so the reading would never refresh again.
-    const lastFetch = snapshot === null || !isTimestamp(stored.lastFetch) ? null : stored.lastFetch;
-    if (stored.snapshot !== null && snapshot === null) {
+    const readable = isWeatherSnapshot(stored.snapshot);
+    // A reading goes with its timestamp: undated, it has no age line to qualify it, the
+    // check below reads `NaN > threshold` as false, and the chip presents it as current.
+    const dated = isTimestamp(stored.lastFetch);
+    const snapshot = readable && dated ? stored.snapshot : null;
+    const lastFetch = snapshot === null ? null : stored.lastFetch;
+    if (stored.snapshot !== null && !readable) {
       logger.warn('Discarded an unreadable stored weather reading');
     }
     if (stored.location !== null && location === null) {
       logger.warn('Discarded an unreadable stored weather location');
     }
-    if (snapshot !== null && !isTimestamp(stored.lastFetch)) {
-      logger.warn('Discarded an unreadable stored weather timestamp');
+    if (stored.snapshot !== null && readable && !dated) {
+      logger.warn('Discarded a stored weather reading with an unreadable timestamp', {
+        lastFetch: stored.lastFetch,
+      });
     }
     set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {
@@ -252,7 +256,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       const snapshot: WeatherSnapshot = { ...forecast, location };
       const lastFetch = new Date().toISOString();
       // `error` is cleared here, not only when a request starts: a concurrent request that
-      // failed may have written one, and the popover shows it *instead of* the age — so
+      // failed may have written one, and the popover shows it above the age — so
       // fresh data would sit under a stale failure line with nothing to clear it.
       set({ snapshot, lastFetch, error: null });
       await persistReading({ location, snapshot, lastFetch });
@@ -266,7 +270,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       if (!samePlace() || id < lastStartedId) {
         return;
       }
-      // The cached snapshot deliberately survives; the popover swaps its age line for this.
+      // The cached snapshot deliberately survives; the popover shows this above its age line.
       const message = messageFor(error, 'forecast');
       set({ error: message });
       if (!silent) {

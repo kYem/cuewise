@@ -592,7 +592,7 @@ describe('overlapping refreshes', () => {
 });
 
 describe('a stored timestamp that cannot be read', () => {
-  // Date.parse(NaN) makes every staleness comparison false, so the reading would be pinned
+  // Date.parse(NaN) makes the mount-time comparison false, so the reading would be pinned
   // forever — the same permanent-skeleton failure the shape guards exist to prevent.
   it('is treated as no timestamp at all, so the reading refreshes', async () => {
     getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
@@ -601,11 +601,35 @@ describe('a stored timestamp that cannot be read', () => {
 
     expect(fetchForecastMock).toHaveBeenCalledTimes(1);
   });
+
+  // Undated, it has no age line to qualify it and the widget's own staleness timer never
+  // arms — so it would sit on the new tab as though it were current.
+  it('takes the reading down with it rather than showing it as current', async () => {
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+    fetchForecastMock.mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+  });
+
+  it('says which value it could not read', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Discarded a stored weather reading with an unreadable timestamp',
+      { lastFetch: 'whenever' }
+    );
+    warnSpy.mockRestore();
+  });
 });
 
 describe('an error left behind by a concurrent request', () => {
-  // The popover shows the error *instead of* the age, so a stale failure line beside a
-  // reading fetched seconds ago reads as "this data is broken" when it is current.
+  // A stale failure line beside a reading fetched seconds ago reads as "this data is
+  // broken" when it is current.
   it('is cleared by the reading that lands afterwards', async () => {
     const slow = deferred<ReturnType<typeof forecast>>();
     fetchForecastMock

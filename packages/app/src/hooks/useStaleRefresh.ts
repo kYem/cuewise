@@ -11,8 +11,7 @@ const CHECK_INTERVAL_MS = 60_000;
  * at most once per `staleMs` measured from its own last attempt, since a callback that fails
  * leaves the reading stale and so leaves the trigger armed.
  *
- * @param lastFetch - ISO timestamp of the reading, or null to stand down: nothing fetched
- * yet, or the caller is switched off.
+ * @param lastFetch - ISO timestamp of the reading, or null to stand down.
  */
 export function useStaleRefresh(
   lastFetch: string | null,

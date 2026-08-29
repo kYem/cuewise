@@ -167,8 +167,7 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
  * become a second ENG-77. Three states: a skeleton while the first reading loads, a retry
  * chip if that first reading failed, and the last good reading kept through any later
  * failure, with the error shown in the popover beside it. A reading that ages past
- * `WEATHER_STALE_MS` is refetched while the tab is visible; nothing else re-reads it
- * without a user action.
+ * `WEATHER_STALE_MS` is refetched while the tab is visible.
  */
 export const WeatherWidget: React.FC = () => {
   const showWeather = useSettingsStore((state) => state.settings.showWeather);
@@ -193,8 +192,8 @@ export const WeatherWidget: React.FC = () => {
     unitsRef.current = unitsPreference;
   }, [unitsPreference]);
 
-  // Standing the timer down while a request is already running matters: the hook counts an
-  // attempt when it calls, and the store would dedupe this one into the running request.
+  // The hook counts an attempt when it calls, and the store drops an identical request on
+  // the floor — so a collision with a live fetch would burn the retry window on nothing.
   useStaleRefresh(showWeather && !isFetching ? lastFetch : null, WEATHER_STALE_MS, () =>
     refresh({ silent: true, unitsPreference })
   );

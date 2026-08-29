@@ -101,8 +101,8 @@ describe('useStaleRefresh', () => {
     });
     expect(onStale).toHaveBeenCalledOnce();
 
-    // The replacement lands well after that attempt, so the two windows stop coinciding —
-    // a hook still measuring the reading it started with fires during the next advance.
+    // The replacement has to land well after the attempt, or the two windows expire
+    // together and a hook still measuring its first reading looks identical.
     await act(async () => {
       vi.advanceTimersByTime(20 * 60_000);
     });
@@ -114,7 +114,7 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledOnce();
 
     await act(async () => {
-      vi.advanceTimersByTime(16 * 60_000);
+      vi.advanceTimersByTime(WINDOW_MS);
     });
     expect(onStale).toHaveBeenCalledTimes(2);
   });
@@ -122,8 +122,9 @@ describe('useStaleRefresh', () => {
   it('fires the callback it was last rendered with', async () => {
     const first = vi.fn();
     const second = vi.fn();
+    const reading = readingFrom(31);
     const { rerender } = renderHook(
-      ({ cb }: { cb: () => void }) => useStaleRefresh(readingFrom(31), WINDOW_MS, cb),
+      ({ cb }: { cb: () => void }) => useStaleRefresh(reading, WINDOW_MS, cb),
       { initialProps: { cb: first } }
     );
 

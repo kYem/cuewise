@@ -28,7 +28,7 @@ export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
     snapshot: overrides.snapshot === undefined ? snapshot() : overrides.snapshot,
     inFlight: overrides.isFetching === true ? { id: 1, epoch: 0, units: 'metric' as const } : null,
     error: overrides.error ?? null,
-    lastFetch: overrides.lastFetch ?? new Date().toISOString(),
+    lastFetch: overrides.lastFetch === undefined ? new Date().toISOString() : overrides.lastFetch,
     searchResults: overrides.searchResults ?? [],
     isSearching: overrides.isSearching ?? false,
     searchError: overrides.searchError ?? null,
