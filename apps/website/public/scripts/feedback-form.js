@@ -2,6 +2,7 @@ const form = document.getElementById('request-form');
 const thanks = document.getElementById('thanks');
 const errorNote = document.getElementById('form-error');
 const submitBtn = document.getElementById('submit-btn');
+const errorReason = document.getElementById('form-error-reason');
 
 const SEND_TIMEOUT_MS = 15000;
 // How long the button stays down after a timeout: long enough that an in-flight send lands
@@ -19,22 +20,28 @@ function timeoutSignal(ms) {
   return controller.signal;
 }
 
-if (form === null || thanks === null || errorNote === null || submitBtn === null) {
-  console.error('Feedback form wiring missing', { form, thanks, errorNote, submitBtn });
+if (
+  form === null ||
+  thanks === null ||
+  errorNote === null ||
+  submitBtn === null ||
+  errorReason === null
+) {
+  console.error('Feedback form wiring missing', {
+    form,
+    thanks,
+    errorNote,
+    submitBtn,
+    errorReason,
+  });
 } else {
   const params = new URLSearchParams(window.location.search);
-  // The default is markup — a support mailto link — so a textContent restore would drop it.
-  const defaultErrorNodes = Array.from(errorNote.childNodes).map((node) => node.cloneNode(true));
-  const defaultError = () => defaultErrorNodes.map((node) => node.cloneNode(true));
+  // Only the reason is swapped. The contact line is a sibling element, so the mailto survives
+  // every state without a message having to claim the send failed.
+  const defaultReason = errorReason.textContent;
 
-  // Every message keeps the mailto after it: the states that tell someone to reach us are the
-  // ones that must still show them how.
   const showError = (message, allowRetry = true) => {
-    if (message === undefined) {
-      errorNote.replaceChildren(...defaultError());
-    } else {
-      errorNote.replaceChildren(document.createTextNode(`${message} `), ...defaultError());
-    }
+    errorReason.textContent = message ?? defaultReason;
     errorNote.hidden = false;
     submitBtn.disabled = !allowRetry;
   };

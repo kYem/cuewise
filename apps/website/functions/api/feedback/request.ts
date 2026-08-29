@@ -196,10 +196,10 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
 
     const detail = await response.text().catch(() => '<unreadable>');
     console.error('Resend feature request send failed', response.status, detail);
-    return fail(502, 'Could not send your request — please email us instead');
+    return fail(502, 'Could not send your request just now.');
   } catch (error) {
     console.error('Resend feature request failed', error);
-    return fail(502, 'Could not send your request — please email us instead');
+    return fail(502, 'Could not send your request just now.');
   }
 }
 

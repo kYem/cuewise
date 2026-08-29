@@ -185,7 +185,7 @@ describe('handleFeatureRequest', () => {
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
     const body = (await response.json()) as { error?: string };
 
-    expect(body.error).toContain('email us instead');
+    expect(body.error).toContain('Could not send your request');
   });
 
   it('sends when the honeypot holds only whitespace, which autofill can leave behind', async () => {
@@ -428,7 +428,7 @@ describe('handleFeatureRequest', () => {
 
     expect(response.status).toBe(502);
     // Same string as the non-ok path: the client renders it verbatim, so they must not drift.
-    expect(body.error).toContain('email us instead');
+    expect(body.error).toContain('Could not send your request');
   });
 
   describe('native form post, for a submit that beat the script', () => {
