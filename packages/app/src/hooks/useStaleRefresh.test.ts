@@ -188,6 +188,7 @@ describe('useStaleRefresh', () => {
   });
 
   it('does nothing before the first reading has landed', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(null, WINDOW_MS, onStale));
 
@@ -197,6 +198,10 @@ describe('useStaleRefresh', () => {
     });
 
     expect(onStale).not.toHaveBeenCalled();
+    // Null is the ordinary state — chip off, or a fetch running — so falling through to the
+    // unparseable branch would log an error on every tab.
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('logs instead of leaking when the callback rejects', async () => {

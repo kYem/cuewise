@@ -452,6 +452,7 @@ describe('search', () => {
 // once — it would take the whole page down through the app-wide ErrorBoundary, every open.
 describe('a stored reading that no longer matches the shape', () => {
   it('is discarded rather than handed to the chip', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const broken = { ...freshState(), snapshot: { ...snapshot(), current: undefined } };
     getWeatherStateMock.mockResolvedValue(broken as never);
     // The discard triggers a refetch, which would otherwise land a valid reading and hide
@@ -462,6 +463,9 @@ describe('a stored reading that no longer matches the shape', () => {
 
     expect(useWeatherStore.getState().snapshot).toBeNull();
     expect(useWeatherStore.getState().location).toEqual(LONDON);
+    // error, not warn, or the reason never reaches a default install.
+    expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather reading');
+    logged.mockRestore();
   });
 
   it('is refetched instead of leaving a permanent skeleton', async () => {
@@ -477,6 +481,7 @@ describe('a stored reading that no longer matches the shape', () => {
   // The location outlives any given reading, and the chip reads it directly, so a broken
   // one is the same hazard: no location renders nothing, a malformed one throws.
   it('discards a location that lost required fields', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const { countryCode: _dropped, ...incomplete } = LONDON;
     getWeatherStateMock.mockResolvedValue({ ...freshState(), location: incomplete } as never);
 
@@ -484,6 +489,8 @@ describe('a stored reading that no longer matches the shape', () => {
 
     expect(useWeatherStore.getState().location).toBeNull();
     expect(fetchForecastMock).not.toHaveBeenCalled();
+    expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather location');
+    logged.mockRestore();
   });
 
   it('keeps a reading that is merely missing an optional field', async () => {
