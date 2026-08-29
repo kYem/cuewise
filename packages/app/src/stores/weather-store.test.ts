@@ -491,6 +491,18 @@ describe('a stored reading that no longer matches the shape', () => {
     expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather location');
   });
 
+  // The reading describes a place the store no longer has, and its timestamp would arm the
+  // widget's refresh timer for a fetch that returns the moment it sees no location.
+  it('takes the reading down with the location it belongs to', async () => {
+    const { countryCode: _dropped, ...incomplete } = LONDON;
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), location: incomplete } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(useWeatherStore.getState().lastFetch).toBeNull();
+  });
+
   it('keeps a reading that is merely missing an optional field', async () => {
     const reading = snapshot();
     const withoutApparent = {
