@@ -174,21 +174,23 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       set({ initialized: true });
       return;
     }
+    const location = isWeatherLocation(stored.location) ? stored.location : null;
     // Dropped together: an undated reading shows no age and arms no refresh timer, so one
     // failed refetch would leave it on screen as though it were current.
-    const location = isWeatherLocation(stored.location) ? stored.location : null;
     const readable = isWeatherSnapshot(stored.snapshot);
     const dated = isTimestamp(stored.lastFetch);
     const snapshot = readable && dated ? stored.snapshot : null;
     const lastFetch = snapshot === null ? null : stored.lastFetch;
+    // error, not warn: the shipped logLevel is 'error', and a city or a reading disappearing
+    // is where an "it forgot my weather" report starts.
     if (stored.snapshot !== null && !readable) {
-      logger.warn('Discarded an unreadable stored weather reading');
+      logger.error('Discarded an unreadable stored weather reading');
     }
     if (stored.location !== null && location === null) {
-      logger.warn('Discarded an unreadable stored weather location');
+      logger.error('Discarded an unreadable stored weather location');
     }
     if (readable && !dated) {
-      logger.warn('Discarded a stored weather reading with an unusable timestamp', {
+      logger.error('Discarded a stored weather reading with an unusable timestamp', {
         lastFetch: stored.lastFetch,
       });
     }

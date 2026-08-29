@@ -172,7 +172,7 @@ describe('useStaleRefresh', () => {
   });
 
   it('stands down, and says so, on a timestamp it cannot read', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh('not a timestamp', WINDOW_MS, onStale));
 
@@ -181,10 +181,10 @@ describe('useStaleRefresh', () => {
     });
 
     expect(onStale).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith('Stale refresh stood down: unparseable timestamp', {
+    expect(errorSpy).toHaveBeenCalledWith('Stale refresh stood down: unparseable timestamp', {
       lastFetch: 'not a timestamp',
     });
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('does nothing before the first reading has landed', async () => {

@@ -555,7 +555,7 @@ export async function setCalendarState(state: CalendarState): Promise<StorageRes
 // Always local, which is what makes the location per-device: a travelling laptop shows
 // where it actually is.
 export async function getWeatherState(): Promise<WeatherState | null> {
-  // Raw: `weather-store.initialize` salvages location, snapshot and timestamp independently,
+  // Raw: `weather-store.initialize` salvages the location separately from the reading,
   // and validating the wrapper here would take the saved city with a bad reading.
   return getFromStorage<WeatherState>(STORAGE_KEYS.WEATHER, 'local');
 }

@@ -28,9 +28,9 @@ export function useStaleRefresh(
     }
     const taken = Date.parse(lastFetch);
     if (Number.isNaN(taken)) {
-      // Standing down beats refreshing once a window forever on a reading we cannot date,
-      // but reaching here means a caller passed a timestamp it never validated.
-      logger.warn('Stale refresh stood down: unparseable timestamp', { lastFetch });
+      // A caller handing us a timestamp it never validated is our bug, and the shipped
+      // logLevel is 'error', so a warn would never reach the report that needs it.
+      logger.error('Stale refresh stood down: unparseable timestamp', { lastFetch });
       return;
     }
     const check = () => {

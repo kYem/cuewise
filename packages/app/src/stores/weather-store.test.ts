@@ -615,16 +615,16 @@ describe('a stored timestamp that cannot be read', () => {
   });
 
   it('says which value it could not use', async () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     getWeatherStateMock.mockResolvedValue(undatedState() as never);
 
     await useWeatherStore.getState().initialize();
 
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledWith(
       'Discarded a stored weather reading with an unusable timestamp',
       { lastFetch: 'whenever' }
     );
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('keeps a stamp a few seconds ahead, which is our own clock stepping back', async () => {
