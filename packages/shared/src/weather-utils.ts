@@ -16,6 +16,9 @@ export const MAX_FORECAST_HOURS = 5;
 /** Past this the strip stops answering "what do the next few hours look like". */
 export const FORECAST_HORIZON_HOURS = 12;
 
+/** A reading older than this is refetched — on mount, and while the app stays open. */
+export const WEATHER_STALE_MS = 30 * 60 * 1000;
+
 /**
  * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
  * so this costs no accuracy. Shared rather than duplicated: the client rounds so precise

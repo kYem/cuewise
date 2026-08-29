@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { WEATHER_STALE_MS } from '@cuewise/shared';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hours, LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
 import { mockSettings, mockWeatherStore } from './__fixtures__/weather-widget.fixtures';
@@ -321,6 +322,40 @@ describe('the forecast strip', () => {
     fireEvent.click(screen.getByRole('button'));
 
     expect(screen.getByText('15')).toBeInTheDocument();
+  });
+});
+
+describe('a reading left standing', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('refreshes itself once it ages past the staleness window', async () => {
+    vi.useFakeTimers();
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    const store = mockWeatherStore({
+      lastFetch: new Date(Date.now() - (WEATHER_STALE_MS + 60_000)).toISOString(),
+    });
+
+    render(<WeatherWidget />);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(store.refresh).toHaveBeenCalledWith({ silent: true, unitsPreference: 'metric' });
+  });
+
+  it('leaves a fresh reading alone', async () => {
+    vi.useFakeTimers();
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    const store = mockWeatherStore({ lastFetch: new Date().toISOString() });
+
+    render(<WeatherWidget />);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(store.refresh).not.toHaveBeenCalled();
   });
 });
 

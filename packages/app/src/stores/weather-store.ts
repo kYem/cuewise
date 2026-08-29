@@ -1,6 +1,7 @@
 import {
   logger,
   resolveWeatherUnits,
+  WEATHER_STALE_MS,
   type WeatherLocation,
   type WeatherSnapshot,
   type WeatherState,
@@ -19,9 +20,6 @@ import {
   WeatherUnavailableError,
 } from '../utils/weather';
 import { useToastStore } from './toast-store';
-
-/** A reading older than this is refetched on mount. */
-export const WEATHER_STALE_MS = 30 * 60 * 1000;
 
 // Typing "lond" issues overlapping lookups; the slower earlier one must not land on top
 // of the newer results.

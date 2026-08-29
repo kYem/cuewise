@@ -6,6 +6,7 @@ import {
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
+  WEATHER_STALE_MS,
   type WeatherConditionKind,
   type WeatherSnapshot,
   type WeatherUnits,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useStaleRefresh } from '../hooks/useStaleRefresh';
 import { useSettingsStore } from '../stores/settings-store';
 import { useWeatherStore } from '../stores/weather-store';
 
@@ -171,6 +173,7 @@ export const WeatherWidget: React.FC = () => {
   const position = useSettingsStore((state) => state.settings.weatherPosition);
   const location = useWeatherStore((state) => state.location);
   const snapshot = useWeatherStore((state) => state.snapshot);
+  const lastFetch = useWeatherStore((state) => state.lastFetch);
   const error = useWeatherStore((state) => state.error);
   const isFetching = useWeatherStore((state) => state.inFlight !== null);
   const initialize = useWeatherStore((state) => state.initialize);
@@ -186,6 +189,12 @@ export const WeatherWidget: React.FC = () => {
   useEffect(() => {
     unitsRef.current = unitsPreference;
   }, [unitsPreference]);
+
+  // Mounting is otherwise the only thing that re-reads the weather, so a window left open
+  // keeps the reading it started with. Null while the chip is off, which refetches nothing.
+  useStaleRefresh(showWeather ? lastFetch : null, WEATHER_STALE_MS, () =>
+    refresh({ silent: true, unitsPreference })
+  );
 
   // Reads the preference off a ref so changing units doesn't re-run the storage load;
   // the effect below owns that case.
