@@ -172,11 +172,15 @@ describe('initialize', () => {
   });
 
   it('does not fetch when a location was never chosen', async () => {
+    const logged = vi.spyOn(logger, 'error');
     getWeatherStateMock.mockResolvedValue({ location: null, snapshot: null, lastFetch: null });
 
     await useWeatherStore.getState().initialize();
 
     expect(fetchForecastMock).not.toHaveBeenCalled();
+    // The same blob `clearLocation` writes, so blaming it on a corrupt city would fire on
+    // every tab of anyone who removed theirs.
+    expect(logged).not.toHaveBeenCalled();
   });
 
   it('never toasts when the mount refresh fails', async () => {
