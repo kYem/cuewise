@@ -137,14 +137,25 @@ describe('handleFeatureRequest', () => {
     expect(sentEmail(fetchMock).reply_to).toBeUndefined();
   });
 
-  it('reuses one idempotency key across the retry, so a lost response cannot deliver twice', async () => {
-    const fetchMock = stubResendFetch(422);
+  it('records a version it had to reject, so a whole channel cannot read as never-wired', async () => {
+    const fetchMock = stubResendFetch(200);
     await handleFeatureRequest(
-      makeRequestFeatureRequest({ ...validRequest, email: 'someone@example.com' }),
+      makeRequestFeatureRequest({ ...validRequest, version: '1.26.0-beta.1' }),
       testEnv
     );
 
-    expect(sentRequest(fetchMock, 0).idempotencyKey).toBe(sentRequest(fetchMock, 1).idempotencyKey);
+    expect(sentEmail(fetchMock).text).toContain('1.26.0-beta.1');
+    expect(sentEmail(fetchMock).text).toContain('Version: unknown (rejected:');
+  });
+
+  it('records a source it had to reject', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, source: 'widgetPicker' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('Source: unknown (rejected: widgetPicker)');
   });
 
   it('addresses the support inbox with the configured key', async () => {
@@ -191,6 +202,7 @@ describe('handleFeatureRequest', () => {
 
     expect(sentEmail(fetchMock).text).toContain('Version: unknown');
     expect(sentEmail(fetchMock).text).not.toContain('<script>');
+    expect(sentEmail(fetchMock).text).not.toContain('(1)');
   });
 
   it('rejects details that are only whitespace, which the browser lets through', async () => {
@@ -330,6 +342,19 @@ describe('handleFeatureRequest', () => {
 
       expect(response.status).toBe(303);
       expect(response.headers.get('Location')).toBe('/feedback/?failed=1');
+    });
+
+    it('carries the referring query back, or the retry loses its source and version', async () => {
+      stubResendFetch(200);
+      const response = await handleFeatureRequest(
+        makeNativeFormRequest(validRequest, '?source=uninstall&v=1.25.0'),
+        testEnv
+      );
+
+      const location = response.headers.get('Location') ?? '';
+      expect(location).toContain('source=uninstall');
+      expect(location).toContain('v=1.25.0');
+      expect(location).toContain('sent=1');
     });
 
     it('keeps answering fetch submissions with JSON', async () => {

@@ -9,9 +9,8 @@ export const emptyEnv = {
   RESEND_API_KEY: '',
 };
 
-/** What the browser sends when the form posts without its script. */
-export function makeNativeFormRequest(fields: Record<string, string>): Request {
-  return new Request('https://cuewise.app/api/feedback/request', {
+export function makeNativeFormRequest(fields: Record<string, string>, search = ''): Request {
+  return new Request(`https://cuewise.app/api/feedback/request${search}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(fields).toString(),
@@ -26,7 +25,7 @@ export function makeRequestFeatureRequest(body: unknown): Request {
   });
 }
 
-/** A fresh Response per call: one shared instance throws "body used already" on the retry path. */
+/** Fresh Response per call: the handler reads the body again on the retry path. */
 export function stubResendFetch(status: number): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn().mockImplementation(() => new Response('{}', { status }));
   vi.stubGlobal('fetch', fetchMock);
@@ -47,7 +46,6 @@ export const validRequest = {
 
 interface SentRequest {
   authorization: string;
-  idempotencyKey: string;
   email: ResendEmail;
 }
 
@@ -59,7 +57,6 @@ export function sentRequest(fetchMock: ReturnType<typeof vi.fn>, call = 0): Sent
   const [, init] = fetchMock.mock.calls[call];
   return {
     authorization: String(init.headers.Authorization),
-    idempotencyKey: String(init.headers['Idempotency-Key']),
     email: JSON.parse(String(init.body)) as ResendEmail,
   };
 }

@@ -9,6 +9,19 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
   console.error('Feedback form wiring missing', { form, thanks, errorNote, submitBtn });
 } else {
   const params = new URLSearchParams(window.location.search);
+  // Cloned nodes, not innerHTML: the default carries the support mailto link, and restoring it
+  // must not re-parse markup.
+  const defaultErrorNodes = Array.from(errorNote.childNodes).map((node) => node.cloneNode(true));
+
+  const showError = (message) => {
+    if (message === undefined) {
+      errorNote.replaceChildren(...defaultErrorNodes.map((node) => node.cloneNode(true)));
+    } else {
+      errorNote.textContent = message;
+    }
+    errorNote.hidden = false;
+    submitBtn.disabled = false;
+  };
 
   // Set by the handler's 303 when the form posted natively, before this script ran.
   if (params.get('sent') === '1') {
@@ -16,7 +29,7 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
     thanks.hidden = false;
   }
   if (params.get('failed') === '1') {
-    errorNote.hidden = false;
+    showError();
   }
 
   form.addEventListener('submit', async (event) => {
@@ -45,13 +58,18 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
         form.hidden = true;
         thanks.hidden = false;
       } else {
-        errorNote.hidden = false;
-        submitBtn.disabled = false;
+        // The handler distinguishes "you typed nothing" from "we are down"; one static
+        // string sends the first case to email support about a form that works.
+        const failure = await response.json().catch(() => null);
+        showError(failure?.error);
       }
     } catch (error) {
       console.error('Feature request failed to send', error);
-      errorNote.hidden = false;
-      submitBtn.disabled = false;
+      showError(
+        error?.name === 'TimeoutError'
+          ? 'Taking too long — check with us before resending.'
+          : undefined
+      );
     }
   });
 

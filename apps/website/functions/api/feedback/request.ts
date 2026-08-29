@@ -24,12 +24,12 @@ interface RequestPayload {
 
 const DETAILS_MAX_LENGTH = 2000;
 const EMAIL_MAX_LENGTH = 254;
+const MAX_REJECTED_ECHO = 40;
 const VERSION_PATTERN = /^[\d.]{1,20}$/;
 const SOURCE_PATTERN = /^[a-z-]{1,32}$/;
-// Deliberately disagrees with HTML5 type="email": stricter, in that a dot is required.
+// Diverges from HTML5 type="email": a dot is required, so kes@gmail is unusable here.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// The status Resend uses for a field it will not accept. Anything else (429, 401, 5xx) is about
-// us or the service, and re-sending only burns rate budget or duplicates a queued email.
+// Resend's status for a field it will not accept; every other failure is ours or theirs to retry.
 const FIELD_REJECTED = 422;
 
 function json(status: number, body: Record<string, unknown>): Response {
@@ -39,9 +39,17 @@ function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
-/** Progressive enhancement: the form posts natively whenever its script has not run. */
-function seeOther(path: string): Response {
-  return new Response(null, { status: 303, headers: { Location: path } });
+/**
+ * Progressive enhancement: the form posts natively whenever its script has not run. The referring
+ * query string rides along, or the retry loses the source and version it was opened with.
+ */
+function seeOther(request: Request, outcome: 'sent' | 'failed'): Response {
+  const params = new URLSearchParams(new URL(request.url).search);
+  params.set(outcome, '1');
+  return new Response(null, {
+    status: 303,
+    headers: { Location: `/feedback/?${params.toString()}` },
+  });
 }
 
 async function readPayload(request: Request): Promise<unknown> {
@@ -57,7 +65,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     'application/x-www-form-urlencoded'
   );
   const fail = (status: number, error: string): Response =>
-    nativeSubmit ? seeOther('/feedback/?failed=1') : json(status, { error });
+    nativeSubmit ? seeOther(request, 'failed') : json(status, { error });
 
   if (!env.RESEND_API_KEY) {
     console.error('Resend env var missing');
@@ -67,7 +75,9 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   let payload: unknown;
   try {
     payload = await readPayload(request);
-  } catch {
+  } catch (error) {
+    // Content-Type included: an enctype change makes every submission fail here at once.
+    console.error('Feature request body unreadable', request.headers.get('Content-Type'), error);
     return fail(400, 'Invalid request body');
   }
 
@@ -86,7 +96,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
       detailsLength: typeof requestPayload.details === 'string' ? requestPayload.details.length : 0,
     });
     // Reported as success so a bot learns nothing.
-    return nativeSubmit ? seeOther('/feedback/?sent=1') : json(200, { success: true });
+    return nativeSubmit ? seeOther(request, 'sent') : json(200, { success: true });
   }
 
   if (typeof requestPayload.area !== 'string' || !isFeedbackArea(requestPayload.area)) {
@@ -103,16 +113,24 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   }
   const details = requestPayload.details;
 
-  // Sanitized, never rejected: a malformed optional field must not cost us the request.
-  const version =
-    typeof requestPayload.version === 'string' && VERSION_PATTERN.test(requestPayload.version)
-      ? requestPayload.version
-      : 'unknown';
+  // Sanitized, never rejected: a malformed optional field must not cost us the request. Reported
+  // rather than erased, or a whole channel (a prerelease version, a renamed source) reads as
+  // never-wired instead of rejected.
+  const describe = (value: unknown, pattern: RegExp): string => {
+    if (typeof value === 'string' && pattern.test(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.length > 0) {
+      // Scrubbed to a version/slug charset: enough to recognise 1.26.0-beta.1, never enough to
+      // carry markup or a newline into a field we told the reader was sanitized.
+      const preview = value.replace(/[^\w.+-]/g, '').slice(0, MAX_REJECTED_ECHO);
+      return `unknown (rejected: ${preview})`;
+    }
+    return 'unknown';
+  };
 
-  const source =
-    typeof requestPayload.source === 'string' && SOURCE_PATTERN.test(requestPayload.source)
-      ? requestPayload.source
-      : 'unknown';
+  const version = describe(requestPayload.version, VERSION_PATTERN);
+  const source = describe(requestPayload.source, SOURCE_PATTERN);
 
   const rawEmail = typeof requestPayload.email === 'string' ? requestPayload.email : '';
   const replyAddress =
@@ -135,8 +153,6 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     details,
   ];
 
-  // Same key on both attempts, so a retry after a lost response cannot deliver twice.
-  const idempotencyKey = crypto.randomUUID();
   const send = (reply: string | null): Promise<Response> => {
     const email: ResendEmail = {
       from: 'Cuewise Feedback <feedback@cuewise.app>',
@@ -150,7 +166,6 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
       headers: {
         Authorization: `Bearer ${env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
-        'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify(email),
     });
@@ -168,7 +183,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     }
 
     if (response.ok) {
-      return nativeSubmit ? seeOther('/feedback/?sent=1') : json(200, { success: true });
+      return nativeSubmit ? seeOther(request, 'sent') : json(200, { success: true });
     }
 
     const detail = await response.text().catch(() => '<unreadable>');
