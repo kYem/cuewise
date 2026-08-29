@@ -204,6 +204,39 @@ describe('POST /v1/weather', () => {
     expect(res.status).toBe(503);
   });
 
+  it('asks for two forecast days so the strip can cross midnight', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('2');
+  });
+
+  it("returns tomorrow's high and low, which the popover rolls over to at end of day", async () => {
+    const twoDays = {
+      ...FORECAST_PAYLOAD,
+      daily: { temperature_2m_max: [21.4, 24.8], temperature_2m_min: [11.2, 13.6] },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(await res.json()).toMatchObject({
+      high: 21.4,
+      low: 11.2,
+      tomorrow: { high: 24.8, low: 13.6 },
+    });
+  });
+
+  it('omits tomorrow rather than inventing one when the provider sends a single day', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(await res.json()).not.toHaveProperty('tomorrow');
+  });
+
   it('answers 503 when the provider payload is unusable', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
 
@@ -220,6 +253,25 @@ describe('POST /v1/weather', () => {
     const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(await res.json()).toMatchObject({ high: 14.1, low: 13.2 });
+  });
+
+  // The hourly array now spans two days, so an unscoped extreme would report tomorrow's
+  // heat as today's high.
+  it("keeps that fallback on today's hours when the payload also carries tomorrow's", async () => {
+    const { daily: _omitted, ...withoutDaily } = FORECAST_PAYLOAD;
+    const twoDays = {
+      ...withoutDaily,
+      hourly: {
+        time: ['2026-07-25T12:00', '2026-07-25T18:00', '2026-07-26T12:00'],
+        temperature_2m: [18, 16, 31],
+        weather_code: [0, 0, 0],
+      },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(await res.json()).toMatchObject({ high: 18, low: 16 });
   });
 
   // H === L === current is fabricated weather that reads exactly like a measurement.
@@ -523,8 +575,8 @@ describe('daylight', () => {
     },
     daily: {
       ...FORECAST_PAYLOAD.daily,
-      sunrise: ['2026-07-25T05:12'],
-      sunset: ['2026-07-25T21:03'],
+      sunrise: ['2026-07-25T05:12', '2026-07-26T05:14'],
+      sunset: ['2026-07-25T21:03', '2026-07-26T21:01'],
     },
   };
 
@@ -536,6 +588,24 @@ describe('daylight', () => {
 
     const body = (await res.json()) as { hours: { time: string; isDay: boolean }[] };
     expect(body.hours.map((hour) => hour.isDay)).toEqual([false, true, false]);
+  });
+
+  // Day one's sun window drew a moon beside every hour of the next day, midday included.
+  it("marks tomorrow's hours against tomorrow's sun times", async () => {
+    const twoDays = {
+      ...WITH_SUN,
+      hourly: {
+        time: ['2026-07-25T12:00', '2026-07-25T22:00', '2026-07-26T12:00', '2026-07-26T22:00'],
+        temperature_2m: [20, 13, 21, 14],
+        weather_code: [0, 0, 0, 0],
+      },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    const body = (await res.json()) as { hours: { isDay: boolean }[] };
+    expect(body.hours.map((hour) => hour.isDay)).toEqual([true, false, true, false]);
   });
 
   it('asks the provider for the sun times it needs to do that', async () => {

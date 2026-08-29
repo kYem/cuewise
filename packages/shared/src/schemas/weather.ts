@@ -41,6 +41,7 @@ export const weatherForecastSchema = z.object({
   }),
   high: z.number(),
   low: z.number(),
+  tomorrow: z.optional(z.object({ high: z.number(), low: z.number() })),
   hours: z.array(weatherHourSchema),
 });
 assertNoDrift<z.infer<typeof weatherForecastSchema>, WeatherForecast>();

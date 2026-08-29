@@ -107,23 +107,49 @@ function firstNumber(value: unknown): number | null {
   return Array.isArray(value) ? readNumber(value[0]) : null;
 }
 
-function firstString(value: unknown): string | null {
-  if (!Array.isArray(value) || typeof value[0] !== 'string') {
-    return null;
+function secondNumber(value: unknown): number | null {
+  return Array.isArray(value) ? readNumber(value[1]) : null;
+}
+
+interface SunWindow {
+  sunrise: string;
+  sunset: string;
+}
+
+/**
+ * Sun windows keyed by their own local date. The forecast spans two days, and judging
+ * tomorrow's hours against today's window drew a moon beside every one of them.
+ */
+function readSunWindows(daily: OpenMeteoForecast['daily']): Map<string, SunWindow> {
+  const windows = new Map<string, SunWindow>();
+  const sunrises = daily?.sunrise;
+  const sunsets = daily?.sunset;
+  if (!Array.isArray(sunrises) || !Array.isArray(sunsets)) {
+    return windows;
   }
-  return value[0];
+  for (let i = 0; i < sunrises.length; i++) {
+    const sunrise = sunrises[i];
+    const sunset = sunsets[i];
+    if (typeof sunrise !== 'string' || typeof sunset !== 'string') {
+      continue;
+    }
+    windows.set(sunrise.slice(0, 10), { sunrise, sunset });
+  }
+  return windows;
 }
 
 /**
  * Daylight for one hourly stamp. Every stamp here is local to the same place and in the
- * same format, so string comparison is the whole calculation. Unknown sun times default
- * to daylight — the strip has to draw something, and a sun is the neutral choice.
+ * same format, so string comparison is the whole calculation. A day with no sun times —
+ * the poles, or a provider that omitted them — defaults to daylight: the strip has to draw
+ * something, and a sun is the neutral choice.
  */
-function isDaylight(time: string, sunrise: string | null, sunset: string | null): boolean {
-  if (sunrise === null || sunset === null) {
+function isDaylight(time: string, windows: Map<string, SunWindow>): boolean {
+  const window = windows.get(time.slice(0, 10));
+  if (window === undefined) {
     return true;
   }
-  return time >= sunrise && time < sunset;
+  return time >= window.sunrise && time < window.sunset;
 }
 
 /**
@@ -135,11 +161,7 @@ function currentIsDaylight(payload: OpenMeteoForecast, timezone: string): boolea
   if (flag !== null) {
     return flag === 1;
   }
-  return isDaylight(
-    toLocalIso(new Date(), timezone),
-    firstString(payload.daily?.sunrise),
-    firstString(payload.daily?.sunset)
-  );
+  return isDaylight(toLocalIso(new Date(), timezone), readSunWindows(payload.daily));
 }
 
 /** Zips the parallel hourly arrays into records, dropping any incomplete slot. */
@@ -153,8 +175,7 @@ function normalizeHours(
   if (!Array.isArray(times) || !Array.isArray(temperatures)) {
     return [];
   }
-  const sunrise = firstString(daily?.sunrise);
-  const sunset = firstString(daily?.sunset);
+  const windows = readSunWindows(daily);
   const hours: WeatherHour[] = [];
   for (let i = 0; i < times.length; i++) {
     const time = times[i];
@@ -166,10 +187,19 @@ function normalizeHours(
       time,
       temperature,
       condition: mapWmoCode(Array.isArray(codes) ? codes[i] : undefined),
-      isDay: isDaylight(time, sunrise, sunset),
+      isDay: isDaylight(time, windows),
     });
   }
   return hours;
+}
+
+/** The provider's first hourly day, which is the one `high` and `low` describe. */
+function firstDayOf(hours: WeatherHour[]): WeatherHour[] {
+  if (hours.length === 0) {
+    return [];
+  }
+  const date = hours[0].time.slice(0, 10);
+  return hours.filter((hour) => hour.time.slice(0, 10) === date);
 }
 
 /** Null for an empty day — `Math.max()` of nothing is -Infinity, not a temperature. */
@@ -196,14 +226,17 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   const hours = normalizeHours(payload.hourly, payload.daily);
   // Deriving from the hourly range is fine; falling back to the current temperature is
   // not — H === L === now is fabricated weather that reads as measured.
-  const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(hours, Math.max);
-  const low = firstNumber(payload.daily?.temperature_2m_min) ?? hourlyExtreme(hours, Math.min);
+  const today = firstDayOf(hours);
+  const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(today, Math.max);
+  const low = firstNumber(payload.daily?.temperature_2m_min) ?? hourlyExtreme(today, Math.min);
   if (high === null || low === null) {
     return null;
   }
+  const tomorrowHigh = secondNumber(payload.daily?.temperature_2m_max);
+  const tomorrowLow = secondNumber(payload.daily?.temperature_2m_min);
   const timezone = typeof payload.timezone === 'string' ? payload.timezone : 'UTC';
   const isDay = currentIsDaylight(payload, timezone);
-  return {
+  const forecast: WeatherForecast = {
     units,
     timezone,
     current: {
@@ -216,6 +249,12 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     low,
     hours,
   };
+  // Left off entirely when the provider sent one day, so a client can tell "no tomorrow
+  // here" from a tomorrow we made up.
+  if (tomorrowHigh !== null && tomorrowLow !== null) {
+    forecast.tomorrow = { high: tomorrowHigh, low: tomorrowLow };
+  }
+  return forecast;
 }
 
 function buildForecastUrl(lat: number, lon: number, units: WeatherUnits): string {
@@ -225,7 +264,8 @@ function buildForecastUrl(lat: number, lon: number, units: WeatherUnits): string
   url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
   url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
-  url.searchParams.set('forecast_days', '1');
+  // Two, so the popover's strip can cross midnight instead of emptying out every evening.
+  url.searchParams.set('forecast_days', '2');
   // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's IP,
   // so one cached body is correct for everyone asking about this place.
   url.searchParams.set('timezone', 'auto');
