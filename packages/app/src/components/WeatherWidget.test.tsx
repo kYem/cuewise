@@ -200,6 +200,21 @@ describe('the popover', () => {
     expect(screen.getByText('The weather service is unavailable right now')).toBeInTheDocument();
   });
 
+  // The age is the more actionable of the two: a background refresh now fails silently, so
+  // without it the chip shows an unqualified hours-old number.
+  it('shows how old the reading is even when the last refresh failed', () => {
+    mockWeatherStore({
+      error: 'The weather service is unavailable right now',
+      lastFetch: new Date(Date.now() - 8 * 60_000).toISOString(),
+    });
+
+    render(<WeatherWidget />);
+    open();
+
+    expect(screen.getByText('The weather service is unavailable right now')).toBeInTheDocument();
+    expect(screen.getByText('Updated 8 min ago')).toBeInTheDocument();
+  });
+
   it('refreshes on demand', () => {
     // Pin the scale: under an en-US locale 'auto' resolves imperial and the units effect
     // would fire a second, unrelated refresh.
@@ -342,7 +357,43 @@ describe('a reading left standing', () => {
       vi.advanceTimersByTime(60_000);
     });
 
-    expect(store.refresh).toHaveBeenCalledWith({ silent: true, unitsPreference: 'metric' });
+    expect(store.refresh).toHaveBeenCalledExactlyOnceWith({
+      silent: true,
+      unitsPreference: 'metric',
+    });
+  });
+
+  it('stands down while the chip is off', async () => {
+    vi.useFakeTimers();
+    mockSettings({ showWeather: false, weatherUnits: 'metric' });
+    const store = mockWeatherStore({
+      lastFetch: new Date(Date.now() - (WEATHER_STALE_MS + 60_000)).toISOString(),
+    });
+
+    render(<WeatherWidget />);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(store.refresh).not.toHaveBeenCalled();
+  });
+
+  // The store would dedupe this into the running request, and the hook would have counted
+  // an attempt it never made.
+  it('stands down while a refresh is already running', async () => {
+    vi.useFakeTimers();
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
+    const store = mockWeatherStore({
+      isFetching: true,
+      lastFetch: new Date(Date.now() - (WEATHER_STALE_MS + 60_000)).toISOString(),
+    });
+
+    render(<WeatherWidget />);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(store.refresh).not.toHaveBeenCalled();
   });
 
   it('leaves a fresh reading alone', async () => {

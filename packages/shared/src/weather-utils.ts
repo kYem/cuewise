@@ -16,7 +16,7 @@ export const MAX_FORECAST_HOURS = 5;
 /** Past this the strip stops answering "what do the next few hours look like". */
 export const FORECAST_HORIZON_HOURS = 12;
 
-/** A reading older than this is refetched — on mount, and while the app stays open. */
+/** A reading past this age is stale; consumers decide when to act on that. */
 export const WEATHER_STALE_MS = 30 * 60 * 1000;
 
 /**

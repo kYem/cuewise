@@ -167,7 +167,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     // of leaving a permanent skeleton.
     const location = isWeatherLocation(stored.location) ? stored.location : null;
     const snapshot = isWeatherSnapshot(stored.snapshot) ? stored.snapshot : null;
-    // The timestamp is validated too: an unparseable one makes every staleness check
+    // The timestamp is validated too: an unparseable one makes the check below
     // `NaN > threshold` — false — so the reading would never refresh again.
     const lastFetch = snapshot === null || !isTimestamp(stored.lastFetch) ? null : stored.lastFetch;
     if (stored.snapshot !== null && snapshot === null) {
@@ -175,6 +175,9 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     }
     if (stored.location !== null && location === null) {
       logger.warn('Discarded an unreadable stored weather location');
+    }
+    if (snapshot !== null && !isTimestamp(stored.lastFetch)) {
+      logger.warn('Discarded an unreadable stored weather timestamp');
     }
     set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {

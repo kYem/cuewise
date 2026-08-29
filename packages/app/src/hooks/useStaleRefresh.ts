@@ -4,15 +4,15 @@ import { useEffect, useRef } from 'react';
 const CHECK_INTERVAL_MS = 60_000;
 
 /**
- * Fires the callback once a reading has aged past `staleMs`, while the app stays open —
- * mounting is otherwise the only thing that ever re-reads it. Checks on an interval and on
- * tab foregrounding, since a backgrounded tab throttles intervals and sleep suspends them.
+ * Fires the callback once a reading has aged past `staleMs`, checking on an interval and on
+ * tab foregrounding — a backgrounded tab throttles intervals and sleep suspends them.
  *
- * Skips a hidden tab: refreshing what nobody is looking at spends provider quota for
- * nothing. A failed attempt leaves the reading stale and so leaves the trigger armed, hence
- * one attempt per window rather than one per check.
+ * Skips a hidden tab: refreshing what nobody is looking at spends quota for nothing. Retries
+ * at most once per `staleMs` measured from its own last attempt, since a callback that fails
+ * leaves the reading stale and so leaves the trigger armed.
  *
- * @param lastFetch - ISO timestamp of the reading, or null before the first has landed.
+ * @param lastFetch - ISO timestamp of the reading, or null to stand down: nothing fetched
+ * yet, or the caller is switched off.
  */
 export function useStaleRefresh(
   lastFetch: string | null,
@@ -29,6 +29,9 @@ export function useStaleRefresh(
     }
     const taken = Date.parse(lastFetch);
     if (Number.isNaN(taken)) {
+      // Standing down beats refreshing once a window forever on a reading we cannot date,
+      // but reaching here means a caller passed a timestamp it never validated.
+      logger.warn('Stale refresh stood down: unparseable timestamp', { lastFetch });
       return;
     }
     const check = () => {
