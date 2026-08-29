@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
+import { featureRequestUrl } from '../utils/feedback-url';
 import { SETTINGS_SECTIONS, type SettingsSection } from './settings/SettingsSections';
 import { planSettingsSideEffects } from './settings/settings-apply';
 import { settingsMatch } from './settings/settings-match';
@@ -243,7 +244,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
                 </a>
               </div>
               <a
-                href="https://github.com/kYem/cuewise/discussions"
+                href={featureRequestUrl({ source: 'settings' })}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary transition-colors hover:underline"

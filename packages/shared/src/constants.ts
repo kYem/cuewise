@@ -326,6 +326,7 @@ export const APP_LINKS = {
   website: 'https://cuewise.app/',
   changelog: 'https://github.com/kYem/cuewise/blob/main/apps/browser-extension/CHANGELOG.md',
   github: 'https://github.com/kYem/cuewise',
+  featureRequest: 'https://cuewise.app/feedback/',
 } as const;
 
 // Reminder category display names
