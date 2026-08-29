@@ -73,6 +73,9 @@ describe('weatherSnapshotSchema', () => {
     // Both are rendered in the chip, and the predicate this replaced checked them by hand.
     ['a non-numeric high', { high: 'hot' }],
     ['a non-numeric low', { low: null }],
+    // Optional, so nothing else would notice this line narrowing or disappearing.
+    ['a non-numeric tomorrow high', { tomorrow: { high: 'hot', low: 8 } }],
+    ['a tomorrow missing its low', { tomorrow: { high: 20 } }],
     ['an unrecognised current condition', current({ condition: 'x' })],
     ['a non-boolean current isDay', current({ isDay: 1 })],
     [
@@ -92,6 +95,12 @@ describe('weatherSnapshotSchema', () => {
     ['a non-numeric longitude', place({ longitude: '-0.1278' })],
   ])('rejects %s', (_label, overrides) => {
     expect(weatherSnapshotSchema.safeParse({ ...SNAPSHOT, ...overrides }).success).toBe(false);
+  });
+
+  it('accepts a reading that carries tomorrow', () => {
+    const withTomorrow = { ...SNAPSHOT, tomorrow: { high: 19, low: 11 } };
+
+    expect(weatherSnapshotSchema.safeParse(withTomorrow).success).toBe(true);
   });
 
   // The forecast tolerates a missing "feels like" — the provider omits it for some places —

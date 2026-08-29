@@ -204,6 +204,79 @@ describe('POST /v1/weather', () => {
     expect(res.status).toBe(503);
   });
 
+  it('asks for two forecast days when the client asks for them', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13', days: '2' }), env);
+
+    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('2');
+  });
+
+  // A client that predates the rolling strip spreads its five picks across every hour it is
+  // sent, so an unasked-for second day would render as an afternoon followed by a 3 AM.
+  it('keeps to a single day for a client that does not ask', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('1');
+  });
+
+  it("returns tomorrow's high and low, which the popover rolls over to at end of day", async () => {
+    const twoDays = {
+      ...FORECAST_PAYLOAD,
+      daily: { temperature_2m_max: [21.4, 24.8], temperature_2m_min: [11.2, 13.6] },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
+
+    const res = await app.request(
+      '/v1/weather',
+      post({ lat: '51.5', lon: '-0.13', days: '2' }),
+      env
+    );
+
+    expect(await res.json()).toMatchObject({
+      high: 21.4,
+      low: 11.2,
+      tomorrow: { high: 24.8, low: 13.6 },
+    });
+  });
+
+  it('omits tomorrow when only one of the two daily extremes has a second day', async () => {
+    const partial = {
+      ...FORECAST_PAYLOAD,
+      daily: { temperature_2m_max: [21.4, 24.8], temperature_2m_min: [11.2] },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(partial).fetch });
+
+    const res = await app.request(
+      '/v1/weather',
+      post({ lat: '51.5', lon: '-0.13', days: '2' }),
+      env
+    );
+
+    expect(await res.json()).not.toHaveProperty('tomorrow');
+  });
+
+  it('reads days sent as a JSON number, not only as a string', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13', days: 2 }), env);
+
+    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('2');
+  });
+
+  it('omits tomorrow rather than inventing one when the provider sends a single day', async () => {
+    const app = createApp({ weatherUpstream: stubUpstream(FORECAST_PAYLOAD).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    expect(await res.json()).not.toHaveProperty('tomorrow');
+  });
+
   it('answers 503 when the provider payload is unusable', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
 
@@ -220,6 +293,28 @@ describe('POST /v1/weather', () => {
     const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(await res.json()).toMatchObject({ high: 14.1, low: 13.2 });
+  });
+
+  // An unscoped extreme would report tomorrow's heat as today's high.
+  it("keeps that fallback on today's hours when the payload also carries tomorrow's", async () => {
+    const { daily: _omitted, ...withoutDaily } = FORECAST_PAYLOAD;
+    const twoDays = {
+      ...withoutDaily,
+      hourly: {
+        time: ['2026-07-25T12:00', '2026-07-25T18:00', '2026-07-26T12:00'],
+        temperature_2m: [18, 16, 31],
+        weather_code: [0, 0, 0],
+      },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
+
+    const res = await app.request(
+      '/v1/weather',
+      post({ lat: '51.5', lon: '-0.13', days: '2' }),
+      env
+    );
+
+    expect(await res.json()).toMatchObject({ high: 18, low: 16 });
   });
 
   // H === L === current is fabricated weather that reads exactly like a measurement.
@@ -523,8 +618,8 @@ describe('daylight', () => {
     },
     daily: {
       ...FORECAST_PAYLOAD.daily,
-      sunrise: ['2026-07-25T05:12'],
-      sunset: ['2026-07-25T21:03'],
+      sunrise: ['2026-07-25T05:12', '2026-07-26T05:14'],
+      sunset: ['2026-07-25T21:03', '2026-07-26T21:01'],
     },
   };
 
@@ -538,6 +633,23 @@ describe('daylight', () => {
     expect(body.hours.map((hour) => hour.isDay)).toEqual([false, true, false]);
   });
 
+  it("marks tomorrow's hours against tomorrow's sun times", async () => {
+    const twoDays = {
+      ...WITH_SUN,
+      hourly: {
+        time: ['2026-07-25T12:00', '2026-07-25T22:00', '2026-07-26T12:00', '2026-07-26T22:00'],
+        temperature_2m: [20, 13, 21, 14],
+        weather_code: [0, 0, 0, 0],
+      },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    const body = (await res.json()) as { hours: { isDay: boolean }[] };
+    expect(body.hours.map((hour) => hour.isDay)).toEqual([true, false, true, false]);
+  });
+
   it('asks the provider for the sun times it needs to do that', async () => {
     const upstream = stubUpstream(WITH_SUN);
     const app = createApp({ weatherUpstream: upstream.fetch });
@@ -545,6 +657,20 @@ describe('daylight', () => {
     await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
     expect(new URL(upstream.urls[0]).searchParams.get('daily')).toContain('sunrise,sunset');
+  });
+
+  // Open-Meteo answers null for both at the poles, where the sun does not cross the horizon.
+  it('treats a polar day as daylight rather than keying hours against "null"', async () => {
+    const polar = {
+      ...WITH_SUN,
+      daily: { ...WITH_SUN.daily, sunrise: [null], sunset: [null] },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(polar).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '78.22', lon: '15.65' }), env);
+
+    const body = (await res.json()) as { hours: { isDay: boolean }[] };
+    expect(body.hours.every((hour) => hour.isDay)).toBe(true);
   });
 
   it('treats hours as daylight when the provider sends no sun times', async () => {
@@ -570,6 +696,24 @@ describe('daylight', () => {
 
     const body = (await res.json()) as { current: { isDay: boolean } };
     expect(body.current.isDay).toBe(expected);
+    vi.useRealTimers();
+  });
+
+  // The reply is cached for ten minutes, so a single-day payload can be served after the
+  // location's own midnight — the date it carries is then yesterday's.
+  it('falls back to the nearest sun window it has when that day is not in the payload', async () => {
+    vi.setSystemTime(new Date('2026-07-25T23:00:00Z'));
+    const oneDay = {
+      ...WITH_SUN,
+      current: { ...WITH_SUN.current, is_day: '0' },
+      daily: { ...WITH_SUN.daily, sunrise: ['2026-07-25T05:12'], sunset: ['2026-07-25T21:03'] },
+    };
+    const app = createApp({ weatherUpstream: stubUpstream(oneDay).fetch });
+
+    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+
+    const body = (await res.json()) as { current: { isDay: boolean } };
+    expect(body.current.isDay).toBe(false);
     vi.useRealTimers();
   });
 

@@ -107,23 +107,52 @@ function firstNumber(value: unknown): number | null {
   return Array.isArray(value) ? readNumber(value[0]) : null;
 }
 
-function firstString(value: unknown): string | null {
-  if (!Array.isArray(value) || typeof value[0] !== 'string') {
-    return null;
-  }
-  return value[0];
+function secondNumber(value: unknown): number | null {
+  return Array.isArray(value) ? readNumber(value[1]) : null;
+}
+
+interface SunWindow {
+  sunrise: string;
+  sunset: string;
 }
 
 /**
- * Daylight for one hourly stamp. Every stamp here is local to the same place and in the
- * same format, so string comparison is the whole calculation. Unknown sun times default
- * to daylight — the strip has to draw something, and a sun is the neutral choice.
+ * Sun windows keyed by their own local date: a forecast may carry two, and judging the
+ * second day's hours against the first day's window called every one of them night.
  */
-function isDaylight(time: string, sunrise: string | null, sunset: string | null): boolean {
-  if (sunrise === null || sunset === null) {
+function readSunWindows(daily: OpenMeteoForecast['daily']): Map<string, SunWindow> {
+  const windows = new Map<string, SunWindow>();
+  const sunrises = daily?.sunrise;
+  const sunsets = daily?.sunset;
+  if (!Array.isArray(sunrises) || !Array.isArray(sunsets)) {
+    return windows;
+  }
+  for (let i = 0; i < sunrises.length; i++) {
+    const sunrise = sunrises[i];
+    const sunset = sunsets[i];
+    if (typeof sunrise !== 'string' || typeof sunset !== 'string') {
+      continue;
+    }
+    windows.set(sunrise.slice(0, 10), { sunrise, sunset });
+  }
+  return windows;
+}
+
+/**
+ * Daylight for one hourly stamp, judged against its own day's window — or the nearest one the
+ * payload carried, since a reply cached across the location's midnight asks about a day it
+ * does not describe, and sun times move only minutes between days. A payload with no window
+ * at all (the poles, or a provider that omitted them) defaults to daylight: the strip has to
+ * draw something, and a sun is the neutral choice.
+ */
+function isDaylight(time: string, windows: Map<string, SunWindow>): boolean {
+  const window = windows.get(time.slice(0, 10)) ?? Array.from(windows.values()).pop();
+  if (window === undefined) {
     return true;
   }
-  return time >= sunrise && time < sunset;
+  // Clock-only, so a window borrowed from a neighbouring date still compares.
+  const clock = time.slice(11);
+  return clock >= window.sunrise.slice(11) && clock < window.sunset.slice(11);
 }
 
 /**
@@ -135,11 +164,7 @@ function currentIsDaylight(payload: OpenMeteoForecast, timezone: string): boolea
   if (flag !== null) {
     return flag === 1;
   }
-  return isDaylight(
-    toLocalIso(new Date(), timezone),
-    firstString(payload.daily?.sunrise),
-    firstString(payload.daily?.sunset)
-  );
+  return isDaylight(toLocalIso(new Date(), timezone), readSunWindows(payload.daily));
 }
 
 /** Zips the parallel hourly arrays into records, dropping any incomplete slot. */
@@ -153,8 +178,7 @@ function normalizeHours(
   if (!Array.isArray(times) || !Array.isArray(temperatures)) {
     return [];
   }
-  const sunrise = firstString(daily?.sunrise);
-  const sunset = firstString(daily?.sunset);
+  const windows = readSunWindows(daily);
   const hours: WeatherHour[] = [];
   for (let i = 0; i < times.length; i++) {
     const time = times[i];
@@ -166,10 +190,19 @@ function normalizeHours(
       time,
       temperature,
       condition: mapWmoCode(Array.isArray(codes) ? codes[i] : undefined),
-      isDay: isDaylight(time, sunrise, sunset),
+      isDay: isDaylight(time, windows),
     });
   }
   return hours;
+}
+
+/** The first hourly day, which is the one `high` and `low` describe when `daily` is absent. */
+function firstDayOf(hours: WeatherHour[]): WeatherHour[] {
+  if (hours.length === 0) {
+    return [];
+  }
+  const date = hours[0].time.slice(0, 10);
+  return hours.filter((hour) => hour.time.slice(0, 10) === date);
 }
 
 /** Null for an empty day — `Math.max()` of nothing is -Infinity, not a temperature. */
@@ -194,16 +227,19 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     return null;
   }
   const hours = normalizeHours(payload.hourly, payload.daily);
+  const today = firstDayOf(hours);
   // Deriving from the hourly range is fine; falling back to the current temperature is
   // not — H === L === now is fabricated weather that reads as measured.
-  const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(hours, Math.max);
-  const low = firstNumber(payload.daily?.temperature_2m_min) ?? hourlyExtreme(hours, Math.min);
+  const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(today, Math.max);
+  const low = firstNumber(payload.daily?.temperature_2m_min) ?? hourlyExtreme(today, Math.min);
   if (high === null || low === null) {
     return null;
   }
+  const tomorrowHigh = secondNumber(payload.daily?.temperature_2m_max);
+  const tomorrowLow = secondNumber(payload.daily?.temperature_2m_min);
   const timezone = typeof payload.timezone === 'string' ? payload.timezone : 'UTC';
   const isDay = currentIsDaylight(payload, timezone);
-  return {
+  const forecast: WeatherForecast = {
     units,
     timezone,
     current: {
@@ -216,16 +252,22 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
     low,
     hours,
   };
+  // Both extremes or nothing, and no hourly fallback: a client has to be able to tell "no
+  // tomorrow here" from a tomorrow we made up.
+  if (tomorrowHigh !== null && tomorrowLow !== null) {
+    forecast.tomorrow = { high: tomorrowHigh, low: tomorrowLow };
+  }
+  return forecast;
 }
 
-function buildForecastUrl(lat: number, lon: number, units: WeatherUnits): string {
+function buildForecastUrl(lat: number, lon: number, units: WeatherUnits, days: number): string {
   const url = new URL(FORECAST_ENDPOINT);
   url.searchParams.set('latitude', String(lat));
   url.searchParams.set('longitude', String(lon));
   url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
   url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
-  url.searchParams.set('forecast_days', '1');
+  url.searchParams.set('forecast_days', String(days));
   // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's IP,
   // so one cached body is correct for everyone asking about this place.
   url.searchParams.set('timezone', 'auto');
@@ -351,6 +393,10 @@ export function registerWeatherRoutes(
       });
     }
     const units = parseUnits(readParam(body?.units));
+    // Opt-in, and one day by default: a client that predates the rolling strip samples
+    // across every hour it is sent, so a second day it never asked for renders as an
+    // afternoon followed by a 3 AM, the labels carrying no date to explain it.
+    const days = readParam(body?.days) === '2' ? 2 : 1;
     // Rounded again even though the client already does: a request that arrives by any
     // other route must not get finer coordinates forwarded upstream than one that doesn't.
     const lat = roundCoordinate(latitude);
@@ -358,7 +404,7 @@ export function registerWeatherRoutes(
 
     const raw = await fetchUpstream(
       deps.weatherUpstream,
-      buildForecastUrl(lat, lon, units),
+      buildForecastUrl(lat, lon, units, days),
       FORECAST_CACHE_SECONDS
     );
     if (raw === null) {

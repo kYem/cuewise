@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { hours, LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
 import { mockSettings, mockWeatherStore } from './__fixtures__/weather-widget.fixtures';
 import { WeatherWidget } from './WeatherWidget';
 
@@ -321,6 +321,50 @@ describe('the forecast strip', () => {
     fireEvent.click(screen.getByRole('button'));
 
     expect(screen.getByText('15')).toBeInTheDocument();
+  });
+});
+
+describe("the popover's high and low", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function openAt(now: string, overrides: Parameters<typeof snapshot>[1]): void {
+    vi.setSystemTime(new Date(now));
+    mockWeatherStore({ snapshot: snapshot(LONDON, { timezone: 'UTC', ...overrides }) });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /weather in london/i }));
+  }
+
+  it("rolls over to tomorrow's once the reading has no hours of today left", () => {
+    openAt('2026-07-25T23:30:00Z', {
+      hours: [...hours('2026-07-25'), ...hours('2026-07-26')],
+      tomorrow: { high: 26, low: 14 },
+    });
+
+    expect(screen.getByText('H 26°')).toBeInTheDocument();
+    expect(screen.getByText('L 14°')).toBeInTheDocument();
+    expect(screen.getByText('Tomorrow')).toBeInTheDocument();
+  });
+
+  it("stays on today's while the strip still shows hours of today", () => {
+    openAt('2026-07-25T21:30:00Z', {
+      hours: [...hours('2026-07-25'), ...hours('2026-07-26')],
+      tomorrow: { high: 26, low: 14 },
+    });
+
+    expect(screen.getByText('H 21°')).toBeInTheDocument();
+    expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument();
+  });
+
+  it("stays on today's when the reading carries no tomorrow", () => {
+    openAt('2026-07-25T23:30:00Z', {
+      hours: [...hours('2026-07-25'), ...hours('2026-07-26')],
+    });
+
+    expect(screen.getByText('H 21°')).toBeInTheDocument();
+    expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument();
   });
 });
 

@@ -2,6 +2,7 @@ import {
   formatForecastHour,
   formatTemperature,
   formatWeatherAge,
+  resolveDayRange,
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
@@ -78,7 +79,9 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
 
   const { location, current } = snapshot;
   const Icon = conditionIcon(current.condition, current.isDay);
-  const hours = sampleForecastHours(snapshot.hours, toLocalIso(new Date(), snapshot.timezone));
+  const nowLocal = toLocalIso(new Date(), snapshot.timezone);
+  const hours = sampleForecastHours(snapshot.hours, nowLocal);
+  const range = resolveDayRange(snapshot, nowLocal);
   const age = formatWeatherAge(lastFetch);
 
   return (
@@ -120,8 +123,9 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
           </div>
         </div>
         <div className="text-right text-xs font-medium text-primary">
-          <div>H {formatTemperature(snapshot.high)}</div>
-          <div className="text-secondary">L {formatTemperature(snapshot.low)}</div>
+          {range.isTomorrow && <div className="text-[10px] text-secondary">Tomorrow</div>}
+          <div>H {formatTemperature(range.high)}</div>
+          <div className="text-secondary">L {formatTemperature(range.low)}</div>
         </div>
       </div>
 

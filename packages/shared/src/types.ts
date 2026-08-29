@@ -370,7 +370,12 @@ export interface WeatherCurrent {
   isDay: boolean;
 }
 
-// `hours` is the whole local day, not a sample: sampling depends on the current minute,
+export interface WeatherDayRange {
+  high: number;
+  low: number;
+}
+
+// `hours` is one or two whole local days, not a sample: sampling depends on the current minute,
 // which would make every edge-cached response stale a minute after it was stored.
 export interface WeatherForecast {
   units: WeatherUnits;
@@ -378,6 +383,9 @@ export interface WeatherForecast {
   current: WeatherCurrent;
   high: number;
   low: number;
+  // Optional so a reading cached before this field existed — or one from a proxy not yet
+  // redeployed — still validates instead of blanking the widget until the next fetch.
+  tomorrow?: WeatherDayRange;
   hours: WeatherHour[];
 }
 

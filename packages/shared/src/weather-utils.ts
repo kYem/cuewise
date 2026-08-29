@@ -1,6 +1,7 @@
 import type {
   TimeFormat,
   WeatherConditionKind,
+  WeatherForecast,
   WeatherHour,
   WeatherUnits,
   WeatherUnitsPreference,
@@ -11,6 +12,9 @@ const IMPERIAL_REGIONS = ['US', 'LR', 'MM'];
 
 /** More needs a scroller, which stops the popover being glanceable. */
 export const MAX_FORECAST_HOURS = 5;
+
+/** Past this the strip stops answering "what do the next few hours look like". */
+export const FORECAST_HORIZON_HOURS = 12;
 
 /**
  * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
@@ -109,10 +113,11 @@ function readRegion(tag: string): string | null {
 }
 
 /**
- * Up to `max` hours from the rest of the day, evenly spread and always including the last
- * so the sample spans to end of day. Returns fewer late in the day, and none once the
- * final hour has passed.
- * @param hours - The location's whole local day, ascending.
+ * Up to `max` hours from the next `FORECAST_HORIZON_HOURS`, evenly spread and always
+ * including the last so the sample spans the window. The window crosses midnight — pinning
+ * it to the rest of today emptied the strip out every evening. Returns fewer as the payload
+ * runs out — an older single-day proxy, or a reading gone stale.
+ * @param hours - The location's local hours, ascending, today and tomorrow.
  * @param nowLocalIso - "Now" in the *location's* zone, not the device's.
  */
 export function sampleForecastHours(
@@ -127,13 +132,16 @@ export function sampleForecastHours(
   // the fall-back day, where the provider repeats a local hour: the popover keys its rows
   // on this stamp, so a duplicate would collide. Keep the first of each.
   const seen = new Set<string>();
-  const remaining = hours.filter((hour) => {
+  const upcoming = hours.filter((hour) => {
     if (hour.time <= nowLocalIso || seen.has(hour.time)) {
       return false;
     }
     seen.add(hour.time);
     return true;
   });
+  // Hourly stamps, so the count is the horizon. Spreading over everything the payload holds
+  // would stretch a two-day reading into a two-day strip.
+  const remaining = upcoming.slice(0, FORECAST_HORIZON_HOURS);
   if (remaining.length <= max) {
     return remaining;
   }
@@ -146,6 +154,43 @@ export function sampleForecastHours(
     picked.push(remaining[Math.round(i * step)]);
   }
   return picked;
+}
+
+/**
+ * Which day the popover's high and low belong to. Today's, until the reading has no hours of
+ * today left to show — past that, today's high is history and tomorrow's is what the strip is
+ * about. Once the reading's second day is the day it now is, that range is simply today's, so
+ * the label comes off. Anything the reading does not cover — no tomorrow, an unresolvable
+ * zone, or a reading left standing past both its days — keeps today's, which the popover's
+ * age line is there to qualify.
+ * @param nowLocalIso - "Now" in the *location's* zone, not the device's.
+ */
+export function resolveDayRange(
+  forecast: Pick<WeatherForecast, 'high' | 'low' | 'tomorrow' | 'hours'>,
+  nowLocalIso: string
+): { high: number; low: number; isTomorrow: boolean } {
+  const today = { high: forecast.high, low: forecast.low, isTomorrow: false };
+  const tomorrow = forecast.tomorrow;
+  const first = forecast.hours[0];
+  if (tomorrow === undefined || first === undefined) {
+    return today;
+  }
+  const firstDate = first.time.slice(0, 10);
+  const nowDate = nowLocalIso.slice(0, 10);
+  const second = forecast.hours.find((hour) => hour.time.slice(0, 10) > firstDate);
+  if (second !== undefined && nowDate === second.time.slice(0, 10)) {
+    return { high: tomorrow.high, low: tomorrow.low, isTomorrow: false };
+  }
+  if (nowDate !== firstDate) {
+    return today;
+  }
+  const moreToday = forecast.hours.some(
+    (hour) => hour.time > nowLocalIso && hour.time.slice(0, 10) === nowDate
+  );
+  if (moreToday) {
+    return today;
+  }
+  return { high: tomorrow.high, low: tomorrow.low, isTomorrow: true };
 }
 
 /**

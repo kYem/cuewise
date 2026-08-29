@@ -167,6 +167,8 @@ export async function fetchForecast(
     lat: String(roundCoordinate(location.latitude)),
     lon: String(roundCoordinate(location.longitude)),
     units,
+    // The strip spans midnight, so it needs tomorrow's hours as well as the rest of today's.
+    days: '2',
   });
   if (!isForecast(raw)) {
     throw new WeatherRequestError('The weather service returned an unexpected response');

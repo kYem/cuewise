@@ -6,6 +6,7 @@ import {
   formatWeatherAge,
   MAX_FORECAST_HOURS,
   mapWmoCode,
+  resolveDayRange,
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
@@ -19,6 +20,10 @@ function dayOfHours(date = '2026-07-25'): WeatherHour[] {
     condition: 'clear' as const,
     isDay: hour >= 6 && hour < 21,
   }));
+}
+
+function twoDaysOfHours(): WeatherHour[] {
+  return [...dayOfHours('2026-07-25'), ...dayOfHours('2026-07-26')];
 }
 
 describe('mapWmoCode', () => {
@@ -86,23 +91,45 @@ describe('sampleForecastHours', () => {
     expect(picked.every((hour) => hour.time > '2026-07-25T06:00')).toBe(true);
   });
 
-  it('always includes the last hour of the day so the sample spans to the end', () => {
-    const picked = sampleForecastHours(dayOfHours(), '2026-07-25T06:30');
-    expect(picked[picked.length - 1].time).toBe('2026-07-25T23:00');
+  it('reaches the far end of the window so the sample spans it', () => {
+    const picked = sampleForecastHours(twoDaysOfHours(), '2026-07-25T06:30');
+    expect(picked[picked.length - 1].time).toBe('2026-07-25T18:00');
   });
 
-  it('spreads the sample evenly rather than clustering near now', () => {
-    const picked = sampleForecastHours(dayOfHours(), '2026-07-25T00:30');
+  it('crosses midnight rather than emptying out at the end of the day', () => {
+    const picked = sampleForecastHours(twoDaysOfHours(), '2026-07-25T23:30');
     expect(picked.map((hour) => hour.time)).toEqual([
-      '2026-07-25T01:00',
-      '2026-07-25T07:00',
-      '2026-07-25T12:00',
-      '2026-07-25T18:00',
-      '2026-07-25T23:00',
+      '2026-07-26T00:00',
+      '2026-07-26T03:00',
+      '2026-07-26T06:00',
+      '2026-07-26T08:00',
+      '2026-07-26T11:00',
     ]);
   });
 
-  it('returns fewer than the maximum late in the day', () => {
+  it('stays full through the evening, spanning both days', () => {
+    const picked = sampleForecastHours(twoDaysOfHours(), '2026-07-25T22:00');
+    expect(picked.map((hour) => hour.time)).toEqual([
+      '2026-07-25T23:00',
+      '2026-07-26T02:00',
+      '2026-07-26T05:00',
+      '2026-07-26T07:00',
+      '2026-07-26T10:00',
+    ]);
+  });
+
+  it('spreads the sample evenly rather than clustering near now', () => {
+    const picked = sampleForecastHours(twoDaysOfHours(), '2026-07-25T00:30');
+    expect(picked.map((hour) => hour.time)).toEqual([
+      '2026-07-25T01:00',
+      '2026-07-25T04:00',
+      '2026-07-25T07:00',
+      '2026-07-25T09:00',
+      '2026-07-25T12:00',
+    ]);
+  });
+
+  it('returns fewer than the maximum when the payload stops at the end of today', () => {
     const picked = sampleForecastHours(dayOfHours(), '2026-07-25T22:00');
     expect(picked.map((hour) => hour.time)).toEqual(['2026-07-25T23:00']);
   });
@@ -270,5 +297,71 @@ describe('sampleForecastHours across a DST fall-back day', () => {
     const picked = sampleForecastHours(repeated, '2026-11-01T00:30', 3);
 
     expect(new Set(picked.map((hour) => hour.time)).size).toBe(picked.length);
+  });
+});
+
+describe('resolveDayRange', () => {
+  const reading = {
+    high: 21,
+    low: 11,
+    tomorrow: { high: 26, low: 14 },
+    hours: twoDaysOfHours(),
+  };
+
+  it("keeps today's range while hours of today are still ahead", () => {
+    expect(resolveDayRange(reading, '2026-07-25T22:30')).toEqual({
+      high: 21,
+      low: 11,
+      isTomorrow: false,
+    });
+  });
+
+  it("switches to tomorrow's once none are", () => {
+    expect(resolveDayRange(reading, '2026-07-25T23:30')).toEqual({
+      high: 26,
+      low: 14,
+      isTomorrow: true,
+    });
+  });
+
+  // A tab left open across midnight: the reading's second day is the day it is now.
+  it('drops the label once midnight has passed since the reading', () => {
+    expect(resolveDayRange(reading, '2026-07-26T00:10')).toEqual({
+      high: 26,
+      low: 14,
+      isTomorrow: false,
+    });
+  });
+
+  // A pinned tab or a suspended laptop: nothing refetches on its own, so the reading can
+  // outlive both the days it describes.
+  it('keeps to the reading when now is past every day it covers', () => {
+    expect(resolveDayRange(reading, '2026-07-29T10:00')).toEqual({
+      high: 21,
+      low: 11,
+      isTomorrow: false,
+    });
+  });
+
+  it('keeps to the reading when the zone could not be resolved at all', () => {
+    expect(resolveDayRange(reading, '')).toEqual({ high: 21, low: 11, isTomorrow: false });
+  });
+
+  it("keeps today's when the reading carries no tomorrow", () => {
+    const { tomorrow: _absent, ...noTomorrow } = reading;
+
+    expect(resolveDayRange(noTomorrow, '2026-07-25T23:30')).toEqual({
+      high: 21,
+      low: 11,
+      isTomorrow: false,
+    });
+  });
+
+  it("keeps today's when the reading has no hours to place the day by", () => {
+    expect(resolveDayRange({ ...reading, hours: [] }, '2026-07-25T23:30')).toEqual({
+      high: 21,
+      low: 11,
+      isTomorrow: false,
+    });
   });
 });

@@ -59,7 +59,12 @@ describe('fetchForecast', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).not.toContain('lat');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({ lat: '51.51', lon: '-0.13', units: 'imperial' });
+    expect(JSON.parse(init.body)).toEqual({
+      lat: '51.51',
+      lon: '-0.13',
+      units: 'imperial',
+      days: '2',
+    });
   });
 
   // A city centroid loses nothing at ~1km, and the proxy rounds to the same 2dp, so this
