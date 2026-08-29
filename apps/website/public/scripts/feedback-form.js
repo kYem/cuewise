@@ -9,17 +9,6 @@ const SEND_TIMEOUT_MS = 15000;
 // first, short enough that nobody is stranded with text they cannot resend.
 const RETRY_UNLOCK_MS = 20000;
 
-// AbortSignal.timeout is unavailable in the WebKit the macOS shell runs on older systems, and
-// no signal at all means a hung request never settles and the button never comes back.
-function timeoutSignal(ms) {
-  if (typeof AbortSignal.timeout === 'function') {
-    return AbortSignal.timeout(ms);
-  }
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), ms);
-  return controller.signal;
-}
-
 if (
   form === null ||
   thanks === null ||
@@ -61,12 +50,21 @@ if (
       source: params.get('source') || undefined,
     };
 
+    // Our own flag, not the rejection's name: WebKit aborts an AbortSignal.timeout with
+    // AbortError, so reading the name silently skips this branch in Safari.
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, SEND_TIMEOUT_MS);
+
     try {
       const response = await fetch('/api/feedback/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: timeoutSignal(SEND_TIMEOUT_MS),
+        signal: controller.signal,
       });
       if (response.ok) {
         form.hidden = true;
@@ -81,7 +79,7 @@ if (
       }
     } catch (error) {
       console.error('Feature request failed to send', error);
-      if (error?.name === 'TimeoutError') {
+      if (timedOut) {
         // Held down, not locked: the send may still land, but nobody should be left unable to try.
         showError('Still sending — give it a moment before sending again.', false);
         setTimeout(() => {
@@ -90,6 +88,8 @@ if (
       } else {
         showError();
       }
+    } finally {
+      clearTimeout(timer);
     }
   });
 

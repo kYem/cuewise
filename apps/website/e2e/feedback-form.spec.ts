@@ -69,6 +69,23 @@ test('keeps the support address reachable on every failure', async ({ page }) =>
   await expect(page.locator('#form-error a[href^="mailto:"]')).toBeVisible();
 });
 
+test('holds the button down over a timeout, then gives it back', async ({ page }) => {
+  // The send may still land, so the button is held rather than freed — but never for good.
+  // Real waits: the client aborts at 15s and unlocks 20s later, so this spec is slow by nature.
+  test.setTimeout(90_000);
+  await page.route(API, () => {
+    // Deliberately never fulfilled: this is what a hung request looks like.
+  });
+
+  await fillAndSubmit(page);
+
+  await expect(page.locator('#form-error')).toContainText('Still sending', { timeout: 25_000 });
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Send request' })).toBeEnabled({
+    timeout: 30_000,
+  });
+});
+
 test('confirms a sent request in place', async ({ page }) => {
   await page.route(API, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' })

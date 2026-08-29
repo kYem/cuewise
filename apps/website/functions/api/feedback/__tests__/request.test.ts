@@ -244,6 +244,27 @@ describe('handleFeatureRequest', () => {
     expect(body.error).toContain('longer than 2000');
   });
 
+  it('shows the address as typed, so a rewrite cannot send a reply to the wrong mailbox', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: 'kes @gmail.com' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('kes @gmail.com');
+  });
+
+  it('treats an empty optional field as absent, not as a value it scrubbed away', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, version: '', source: '' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('Version: unknown\n');
+    expect(sentEmail(fetchMock).text).toContain('Source: unknown\n');
+  });
+
   it('does not retry a 422 when there was no address to blame', async () => {
     const fetchMock = stubResendFetch(422);
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);

@@ -26,7 +26,15 @@ const DETAILS_MAX_LENGTH = 2000;
 const EMAIL_MAX_LENGTH = 254;
 const MAX_REJECTED_ECHO = 40;
 
-/** Allowlist, not a strip: a newline here forges a second "Reply to:" line into the body. */
+/** The body is line-oriented, so a newline in any echoed value forges a line of its own. */
+function singleLine(value: string, max: number): string {
+  return value.replace(/[\r\n]+/g, ' ').slice(0, max);
+}
+
+/**
+ * Allowlist for values we only need to recognise, never reproduce. Not used on the address: a
+ * rewritten one reads as valid, and an operator could reply to a mailbox nobody typed.
+ */
 function echoSafe(value: string, max: number): string {
   return value.replace(/[^\w.+@-]/g, '').slice(0, max);
 }
@@ -128,6 +136,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     if (value === undefined || value === null || value === '') {
       return 'unknown';
     }
+
     if (typeof value !== 'string') {
       return `unknown (rejected: ${typeof value})`;
     }
@@ -149,7 +158,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   if (replyAddress !== null) {
     replyLine = replyAddress;
   } else if (rawEmail.length > 0) {
-    replyLine = `(unusable address given: ${echoSafe(rawEmail, EMAIL_MAX_LENGTH)})`;
+    replyLine = `(unusable address given: ${singleLine(rawEmail, EMAIL_MAX_LENGTH)})`;
   }
 
   const lines = [
