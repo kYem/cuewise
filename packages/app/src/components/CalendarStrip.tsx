@@ -23,12 +23,12 @@ interface CalendarStripProps {
   width?: keyof typeof WIDTHS;
 }
 
-// Per-variant color classes (module-level so they aren't rebuilt each render).
-// 'overlay' keeps the immersive white-on-dark glass look; 'surface' uses theme
-// tokens so the strip is readable on light themes.
 /** Short enough that a returning tab is current, long enough that tab-flicking is free. */
 const CALENDAR_STALE_MS = 2 * 60_000;
 
+// Per-variant color classes (module-level so they aren't rebuilt each render).
+// 'overlay' keeps the immersive white-on-dark glass look; 'surface' uses theme
+// tokens so the strip is readable on light themes.
 const SURFACE_TOKENS = {
   card: 'bg-surface/80 backdrop-blur-sm border-border text-primary',
   icon: 'text-secondary',

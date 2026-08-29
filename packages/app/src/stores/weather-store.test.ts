@@ -627,7 +627,7 @@ describe('a stored timestamp we cannot trust', () => {
   // An unreadable stamp reads stale to nothing — neither the check at mount nor the widget's
   // own timer — so a reading kept beside it would never refresh again.
   it('is treated as no timestamp at all, so the reading refreshes', async () => {
-    getWeatherStateMock.mockResolvedValue(undatedState() as never);
+    getWeatherStateMock.mockResolvedValue(undatedState());
 
     await useWeatherStore.getState().initialize();
 
@@ -635,7 +635,7 @@ describe('a stored timestamp we cannot trust', () => {
   });
 
   it('takes the reading down with it rather than showing it as current', async () => {
-    getWeatherStateMock.mockResolvedValue(undatedState() as never);
+    getWeatherStateMock.mockResolvedValue(undatedState());
     // Without the rejection the refetch lands and puts a snapshot straight back.
     fetchForecastMock.mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
 
@@ -647,7 +647,7 @@ describe('a stored timestamp we cannot trust', () => {
 
   it('says which value it could not use', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    getWeatherStateMock.mockResolvedValue(undatedState() as never);
+    getWeatherStateMock.mockResolvedValue(undatedState());
 
     await useWeatherStore.getState().initialize();
 
