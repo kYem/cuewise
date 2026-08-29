@@ -493,6 +493,21 @@ describe('a stored reading that no longer matches the shape', () => {
     logged.mockRestore();
   });
 
+  // setLocation persists the city before the first fetch, so a reading that is simply not
+  // there yet is ordinary — reporting it as discarded would cry corruption on every tab.
+  it('stays quiet about the reading a freshly picked city has not fetched yet', async () => {
+    const logged = vi.spyOn(logger, 'error');
+    getWeatherStateMock.mockResolvedValue({
+      location: LONDON,
+      snapshot: null,
+      lastFetch: null,
+    } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(logged).not.toHaveBeenCalled();
+  });
+
   it('keeps a reading that is merely missing an optional field', async () => {
     const reading = snapshot();
     const withoutApparent = {
