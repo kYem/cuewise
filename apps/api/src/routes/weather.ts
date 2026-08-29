@@ -257,15 +257,14 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   return forecast;
 }
 
-function buildForecastUrl(lat: number, lon: number, units: WeatherUnits): string {
+function buildForecastUrl(lat: number, lon: number, units: WeatherUnits, days: number): string {
   const url = new URL(FORECAST_ENDPOINT);
   url.searchParams.set('latitude', String(lat));
   url.searchParams.set('longitude', String(lon));
   url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
   url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
-  // Two, so the popover's strip can cross midnight instead of emptying out every evening.
-  url.searchParams.set('forecast_days', '2');
+  url.searchParams.set('forecast_days', String(days));
   // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's IP,
   // so one cached body is correct for everyone asking about this place.
   url.searchParams.set('timezone', 'auto');
@@ -391,6 +390,10 @@ export function registerWeatherRoutes(
       });
     }
     const units = parseUnits(readParam(body?.units));
+    // Opt-in, and one day by default: a client that predates the rolling strip samples
+    // across every hour it is sent, so a second day it never asked for would render as
+    // hours running backwards.
+    const days = readParam(body?.days) === '2' ? 2 : 1;
     // Rounded again even though the client already does: a request that arrives by any
     // other route must not get finer coordinates forwarded upstream than one that doesn't.
     const lat = roundCoordinate(latitude);
@@ -398,7 +401,7 @@ export function registerWeatherRoutes(
 
     const raw = await fetchUpstream(
       deps.weatherUpstream,
-      buildForecastUrl(lat, lon, units),
+      buildForecastUrl(lat, lon, units, days),
       FORECAST_CACHE_SECONDS
     );
     if (raw === null) {

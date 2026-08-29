@@ -204,13 +204,24 @@ describe('POST /v1/weather', () => {
     expect(res.status).toBe(503);
   });
 
-  it('asks for two forecast days so the strip can cross midnight', async () => {
+  it('asks for two forecast days when the client asks for them', async () => {
+    const upstream = stubUpstream(FORECAST_PAYLOAD);
+    const app = createApp({ weatherUpstream: upstream.fetch });
+
+    await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13', days: '2' }), env);
+
+    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('2');
+  });
+
+  // A client that predates the rolling strip spreads its five picks across every hour it is
+  // sent, so an unasked-for second day would render as an afternoon followed by a 3 AM.
+  it('keeps to a single day for a client that does not ask', async () => {
     const upstream = stubUpstream(FORECAST_PAYLOAD);
     const app = createApp({ weatherUpstream: upstream.fetch });
 
     await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
-    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('2');
+    expect(new URL(upstream.urls[0]).searchParams.get('forecast_days')).toBe('1');
   });
 
   it("returns tomorrow's high and low, which the popover rolls over to at end of day", async () => {
@@ -220,7 +231,11 @@ describe('POST /v1/weather', () => {
     };
     const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
 
-    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+    const res = await app.request(
+      '/v1/weather',
+      post({ lat: '51.5', lon: '-0.13', days: '2' }),
+      env
+    );
 
     expect(await res.json()).toMatchObject({
       high: 21.4,
