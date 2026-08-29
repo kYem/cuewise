@@ -71,6 +71,11 @@ export function freshState(now = Date.now()): WeatherState {
   };
 }
 
+/** A stored state whose reading cannot be dated, so it cannot be presented as current. */
+export function undatedState(): WeatherState {
+  return { ...freshState(), lastFetch: 'whenever' };
+}
+
 /** A stored state whose reading is past the staleness threshold. */
 export function staleState(now = Date.now()): WeatherState {
   return {

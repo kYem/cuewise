@@ -9,6 +9,7 @@ import {
   LONDON,
   snapshot,
   staleState,
+  undatedState,
   VILNIUS,
 } from './__fixtures__/weather-store.fixtures';
 import { useWeatherStore } from './weather-store';
@@ -592,38 +593,51 @@ describe('overlapping refreshes', () => {
 });
 
 describe('a stored timestamp that cannot be read', () => {
-  // Date.parse(NaN) makes the mount-time comparison false, so the reading would be pinned
-  // forever — the same permanent-skeleton failure the shape guards exist to prevent.
+  // An unreadable stamp reads stale to nothing — neither the check at mount nor the widget's
+  // own timer — so a reading kept beside it would never refresh again.
   it('is treated as no timestamp at all, so the reading refreshes', async () => {
-    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+    getWeatherStateMock.mockResolvedValue(undatedState() as never);
 
     await useWeatherStore.getState().initialize();
 
     expect(fetchForecastMock).toHaveBeenCalledTimes(1);
   });
 
-  // Undated, it has no age line to qualify it and the widget's own staleness timer never
-  // arms — so it would sit on the new tab as though it were current.
   it('takes the reading down with it rather than showing it as current', async () => {
-    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+    getWeatherStateMock.mockResolvedValue(undatedState() as never);
+    // Without the rejection the refetch lands and puts a snapshot straight back.
     fetchForecastMock.mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
 
     await useWeatherStore.getState().initialize();
 
     expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(useWeatherStore.getState().location).toEqual(LONDON);
   });
 
-  it('says which value it could not read', async () => {
+  it('says which value it could not use', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: 'whenever' } as never);
+    getWeatherStateMock.mockResolvedValue(undatedState() as never);
 
     await useWeatherStore.getState().initialize();
 
     expect(warnSpy).toHaveBeenCalledWith(
-      'Discarded a stored weather reading with an unreadable timestamp',
+      'Discarded a stored weather reading with an unusable timestamp',
       { lastFetch: 'whenever' }
     );
     warnSpy.mockRestore();
+  });
+
+  // A clock set forward when the reading was written, then corrected: every staleness check
+  // subtracts it from now, so it would read as fresh for as long as the skew lasts.
+  it('drops a stamp from the future, which would otherwise never age out', async () => {
+    const ahead = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: ahead } as never);
+    fetchForecastMock.mockRejectedValueOnce(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).toBeNull();
+    expect(fetchForecastMock).toHaveBeenCalledTimes(1);
   });
 });
 

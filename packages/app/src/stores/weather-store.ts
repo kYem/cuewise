@@ -69,8 +69,20 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
+/** Slack for a clock a little ahead of ours; past that it is a skew, not a rounding. */
+const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+
+/**
+ * Rejects a stamp from the future as well as an unparseable one: both staleness checks
+ * subtract it from now, so a future one reads as fresh forever, and the age line vouches for
+ * it with "Updated just now".
+ */
 function isTimestamp(value: unknown): value is string {
-  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && parsed <= Date.now() + CLOCK_SKEW_TOLERANCE_MS;
 }
 
 /** A lost cache entry only costs one extra fetch, so log and move on. */
@@ -153,7 +165,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       return;
     }
     // A clear or a pick landed while this read was in flight, so everything it carries is
-    // stale — including the shape warnings below, which would blame the wrong thing.
+    // stale — including the warnings below, which would blame the wrong thing.
     if (get().epoch !== epoch) {
       set({ initialized: true });
       return;
@@ -162,13 +174,10 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       set({ initialized: true });
       return;
     }
-    // Anything that no longer matches the shape is dropped rather than rendered. The
-    // reading's `lastFetch` goes with it, so the staleness check below refetches instead
-    // of leaving a permanent skeleton.
+    // A reading and its timestamp are kept or dropped together: either alone leaves the
+    // check below with nothing to age out, so it would render untouched for good.
     const location = isWeatherLocation(stored.location) ? stored.location : null;
     const readable = isWeatherSnapshot(stored.snapshot);
-    // A reading goes with its timestamp: undated, it has no age line to qualify it, the
-    // check below reads `NaN > threshold` as false, and the chip presents it as current.
     const dated = isTimestamp(stored.lastFetch);
     const snapshot = readable && dated ? stored.snapshot : null;
     const lastFetch = snapshot === null ? null : stored.lastFetch;
@@ -178,8 +187,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (stored.location !== null && location === null) {
       logger.warn('Discarded an unreadable stored weather location');
     }
-    if (stored.snapshot !== null && readable && !dated) {
-      logger.warn('Discarded a stored weather reading with an unreadable timestamp', {
+    if (readable && !dated) {
+      logger.warn('Discarded a stored weather reading with an unusable timestamp', {
         lastFetch: stored.lastFetch,
       });
     }

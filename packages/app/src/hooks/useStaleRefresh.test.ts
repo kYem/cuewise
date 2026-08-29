@@ -89,6 +89,30 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledTimes(2);
   });
 
+  // The widget flips this input to null on every fetch, so the attempt clock has to outlive
+  // the effect that set it — otherwise a failing endpoint is retried every minute.
+  it('keeps its attempt clock across a stand-down and re-arm', async () => {
+    const onStale = vi.fn();
+    const reading = readingFrom(31);
+    const { rerender } = renderHook<void, { at: string | null }>(
+      ({ at }) => useStaleRefresh(at, WINDOW_MS, onStale),
+      { initialProps: { at: reading } }
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(onStale).toHaveBeenCalledOnce();
+
+    rerender({ at: null });
+    rerender({ at: reading });
+    await act(async () => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+
+    expect(onStale).toHaveBeenCalledOnce();
+  });
+
   it('re-arms against the reading that replaces the one it refreshed', async () => {
     const onStale = vi.fn();
     const { rerender } = renderHook(

@@ -192,8 +192,8 @@ export const WeatherWidget: React.FC = () => {
     unitsRef.current = unitsPreference;
   }, [unitsPreference]);
 
-  // The hook counts an attempt when it calls, and the store drops an identical request on
-  // the floor — so a collision with a live fetch would burn the retry window on nothing.
+  // The hook counts an attempt when it calls, and the store drops a request matching the
+  // running one — so that collision would burn the retry window on nothing.
   useStaleRefresh(showWeather && !isFetching ? lastFetch : null, WEATHER_STALE_MS, () =>
     refresh({ silent: true, unitsPreference })
   );
