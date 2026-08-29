@@ -4,6 +4,14 @@ export interface Env {
   RESEND_API_KEY: string;
 }
 
+export interface ResendEmail {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  reply_to?: string[];
+}
+
 interface RequestPayload {
   area?: unknown;
   details?: unknown;
@@ -18,9 +26,11 @@ const DETAILS_MAX_LENGTH = 2000;
 const EMAIL_MAX_LENGTH = 254;
 const VERSION_PATTERN = /^[\d.]{1,20}$/;
 const SOURCE_PATTERN = /^[a-z-]{1,32}$/;
-// Looser than HTML5 type="email" in some places and stricter in others; a rejected address
-// costs the reply, never the request.
+// Deliberately disagrees with HTML5 type="email": stricter, in that a dot is required.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// The status Resend uses for a field it will not accept. Anything else (429, 401, 5xx) is about
+// us or the service, and re-sending only burns rate budget or duplicates a queued email.
+const FIELD_REJECTED = 422;
 
 function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
@@ -29,45 +39,69 @@ function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
+/** Progressive enhancement: the form posts natively whenever its script has not run. */
+function seeOther(path: string): Response {
+  return new Response(null, { status: 303, headers: { Location: path } });
+}
+
+async function readPayload(request: Request): Promise<unknown> {
+  const contentType = request.headers.get('Content-Type') ?? '';
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    return Object.fromEntries(await request.formData());
+  }
+  return request.json();
+}
+
 export async function handleFeatureRequest(request: Request, env: Env): Promise<Response> {
+  const nativeSubmit = (request.headers.get('Content-Type') ?? '').includes(
+    'application/x-www-form-urlencoded'
+  );
+  const fail = (status: number, error: string): Response =>
+    nativeSubmit ? seeOther('/feedback/?failed=1') : json(status, { error });
+
   if (!env.RESEND_API_KEY) {
     console.error('Resend env var missing');
-    return json(500, { error: 'Feature requests are temporarily unavailable' });
+    return fail(500, 'Feature requests are temporarily unavailable');
   }
 
   let payload: unknown;
   try {
-    payload = await request.json();
+    payload = await readPayload(request);
   } catch {
-    return json(400, { error: 'Invalid request body' });
+    return fail(400, 'Invalid request body');
   }
 
   if (typeof payload !== 'object' || payload === null) {
-    return json(400, { error: 'Invalid request body' });
+    return fail(400, 'Invalid request body');
   }
 
   const requestPayload = payload as RequestPayload;
 
-  if (typeof requestPayload.trap === 'string' && requestPayload.trap.trim().length > 0) {
-    // Logged, not silent: a honeypot that misfires on a real person is undetectable otherwise.
+  const trap = requestPayload.trap;
+  if (trap !== undefined && trap !== null && String(trap).trim().length > 0) {
+    // The trap's own contents are what separate a bot from a password-manager misfire.
     console.warn('Feature request dropped by honeypot', {
+      trapLooksLikeEmail: EMAIL_PATTERN.test(String(trap)),
+      trapLength: String(trap).length,
       detailsLength: typeof requestPayload.details === 'string' ? requestPayload.details.length : 0,
     });
     // Reported as success so a bot learns nothing.
-    return json(200, { success: true });
+    return nativeSubmit ? seeOther('/feedback/?sent=1') : json(200, { success: true });
   }
 
   if (typeof requestPayload.area !== 'string' || !isFeedbackArea(requestPayload.area)) {
-    return json(400, { error: 'Invalid request' });
+    return fail(400, 'Invalid request');
   }
+  const area = requestPayload.area;
 
   if (
     typeof requestPayload.details !== 'string' ||
     requestPayload.details.trim().length === 0 ||
     requestPayload.details.length > DETAILS_MAX_LENGTH
   ) {
-    return json(400, { error: 'Invalid request' });
+    return fail(400, 'Invalid request');
   }
+  const details = requestPayload.details;
 
   // Sanitized, never rejected: a malformed optional field must not cost us the request.
   const version =
@@ -82,10 +116,9 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
 
   const rawEmail = typeof requestPayload.email === 'string' ? requestPayload.email : '';
   const replyAddress =
-    EMAIL_PATTERN.test(rawEmail) && rawEmail.length <= EMAIL_MAX_LENGTH ? rawEmail : null;
+    rawEmail.length <= EMAIL_MAX_LENGTH && EMAIL_PATTERN.test(rawEmail) ? rawEmail : null;
 
-  // An address we cannot use is still worth showing: dropping it silently is indistinguishable
-  // from someone choosing to stay anonymous, and a typo is answerable by hand.
+  // Printed even when unusable: dropping it silently is indistinguishable from staying anonymous.
   let replyLine = '(none given)';
   if (replyAddress !== null) {
     replyLine = replyAddress;
@@ -94,52 +127,56 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   }
 
   const lines = [
-    `Area: ${requestPayload.area}`,
+    `Area: ${area}`,
     `Version: ${version}`,
     `Source: ${source}`,
     `Reply to: ${replyLine}`,
     '',
-    requestPayload.details,
+    details,
   ];
 
-  const send = (withReplyTo: boolean): Promise<Response> =>
-    fetch('https://api.resend.com/emails', {
+  // Same key on both attempts, so a retry after a lost response cannot deliver twice.
+  const idempotencyKey = crypto.randomUUID();
+  const send = (reply: string | null): Promise<Response> => {
+    const email: ResendEmail = {
+      from: 'Cuewise Feedback <feedback@cuewise.app>',
+      to: ['support@cuewise.app'],
+      subject: `Feature request: ${area}`,
+      text: lines.join('\n'),
+      ...(reply !== null ? { reply_to: [reply] } : {}),
+    };
+    return fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
       },
-      body: JSON.stringify({
-        from: 'Cuewise Feedback <feedback@cuewise.app>',
-        to: ['support@cuewise.app'],
-        subject: `Feature request: ${requestPayload.area}`,
-        text: lines.join('\n'),
-        ...(withReplyTo && replyAddress !== null ? { reply_to: [replyAddress] } : {}),
-      }),
+      body: JSON.stringify(email),
     });
+  };
 
   try {
-    let response = await send(true);
+    let response = await send(replyAddress);
 
-    // The address is already in the body text, so retrying without it loses nothing — and an
-    // address Resend refuses must not cost the request behind it.
-    if (!response.ok && replyAddress !== null) {
+    // The address is already in the body text, so retrying without it loses nothing.
+    if (response.status === FIELD_REJECTED && replyAddress !== null) {
       const detail = await response.text().catch(() => '<unreadable>');
       // console.error is the standard log sink for Pages Functions (@cuewise/shared logger is not a dependency here).
-      console.error('Resend feature request send failed, retrying without reply_to', detail);
-      response = await send(false);
+      console.error('Resend rejected a field, retrying without reply_to', response.status, detail);
+      response = await send(null);
     }
 
     if (response.ok) {
-      return json(200, { success: true });
+      return nativeSubmit ? seeOther('/feedback/?sent=1') : json(200, { success: true });
     }
 
     const detail = await response.text().catch(() => '<unreadable>');
     console.error('Resend feature request send failed', response.status, detail);
-    return json(502, { error: 'Could not send your request — please email us instead' });
+    return fail(502, 'Could not send your request — please email us instead');
   } catch (error) {
     console.error('Resend feature request failed', error);
-    return json(502, { error: 'Could not send your request — please email us instead' });
+    return fail(502, 'Could not send your request — please email us instead');
   }
 }
 

@@ -6,14 +6,19 @@ const submitBtn = document.getElementById('submit-btn');
 const SEND_TIMEOUT_MS = 15000;
 
 if (form === null || thanks === null || errorNote === null || submitBtn === null) {
-  // Without this the page still "works": the form falls back to a native submit, which would
-  // put the request and the email address in the URL.
   console.error('Feedback form wiring missing', { form, thanks, errorNote, submitBtn });
 } else {
   const params = new URLSearchParams(window.location.search);
 
-  // Registered before the preselect below, so a throw there cannot leave the form submitting
-  // natively.
+  // Set by the handler's 303 when the form posted natively, before this script ran.
+  if (params.get('sent') === '1') {
+    form.hidden = true;
+    thanks.hidden = false;
+  }
+  if (params.get('failed') === '1') {
+    errorNote.hidden = false;
+  }
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     submitBtn.disabled = true;
@@ -43,7 +48,8 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
         errorNote.hidden = false;
         submitBtn.disabled = false;
       }
-    } catch {
+    } catch (error) {
+      console.error('Feature request failed to send', error);
       errorNote.hidden = false;
       submitBtn.disabled = false;
     }

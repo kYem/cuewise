@@ -1,7 +1,4 @@
-/**
- * Shared by the form page and the API handler — both are in this package's tsconfig, so a radio
- * the handler would 400 cannot be rendered. Drift here costs a user their typed-out request.
- */
+/** The handler validates against this same list; a page-only value renders a radio that 400s. */
 export const FEEDBACK_AREAS = [
   { value: 'widgets', label: 'A widget for the home screen' },
   { value: 'goals', label: 'Goals & tasks' },
@@ -14,8 +11,9 @@ export const FEEDBACK_AREAS = [
 
 export type FeedbackArea = (typeof FEEDBACK_AREAS)[number]['value'];
 
-const AREA_VALUES: readonly string[] = FEEDBACK_AREAS.map((area) => area.value);
+// Unannotated on purpose: widening to string[] would let a stray member through unchecked.
+const AREA_VALUES = FEEDBACK_AREAS.map((area) => area.value);
 
 export function isFeedbackArea(value: string): value is FeedbackArea {
-  return AREA_VALUES.includes(value);
+  return AREA_VALUES.some((area) => area === value);
 }

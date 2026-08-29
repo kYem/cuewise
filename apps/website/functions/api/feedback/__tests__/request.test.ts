@@ -3,6 +3,7 @@ import { FEEDBACK_AREAS } from '../../../../src/lib/feedback-areas';
 import { handleFeatureRequest } from '../request';
 import {
   emptyEnv,
+  makeNativeFormRequest,
   makeRequestFeatureRequest,
   sentEmail,
   sentRequest,
@@ -67,6 +68,27 @@ describe('handleFeatureRequest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('sends when the honeypot is present but empty, which is every real submission', async () => {
+    const fetchMock = stubResendFetch(200);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, trap: '' }),
+      testEnv
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores the old honeypot name, which is what password managers autofill', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, website: 'https://autofilled.example' }),
+      testEnv
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('sends the request and echoes the area in the subject', async () => {
     const fetchMock = stubResendFetch(200);
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
@@ -112,6 +134,17 @@ describe('handleFeatureRequest', () => {
     );
 
     expect(sentEmail(fetchMock).text).toContain('kes@gmail');
+    expect(sentEmail(fetchMock).reply_to).toBeUndefined();
+  });
+
+  it('reuses one idempotency key across the retry, so a lost response cannot deliver twice', async () => {
+    const fetchMock = stubResendFetch(422);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: 'someone@example.com' }),
+      testEnv
+    );
+
+    expect(sentRequest(fetchMock, 0).idempotencyKey).toBe(sentRequest(fetchMock, 1).idempotencyKey);
   });
 
   it('addresses the support inbox with the configured key', async () => {
@@ -187,10 +220,72 @@ describe('handleFeatureRequest', () => {
     expect(sentEmail(fetchMock).subject).toContain(area);
   });
 
+  it('echoes a valid version, so a request can be read against what they saw', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, version: '1.25.0' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('Version: 1.25.0');
+  });
+
+  it('accepts details at exactly the cap, which is what the textarea allows', async () => {
+    const fetchMock = stubResendFetch(200);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, details: 'x'.repeat(2000) }),
+      testEnv
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never lets an oversized address reach reply_to', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: `${'x'.repeat(250)}@example.com` }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).reply_to).toBeUndefined();
+  });
+
+  it('sends from the verified domain, which Resend also rejects on', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
+    expect(sentEmail(fetchMock).from).toContain('feedback@cuewise.app');
+  });
+
   it('returns 502 when Resend rejects the send', async () => {
-    stubResendFetch(500);
+    const fetchMock = stubResendFetch(500);
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
     expect(response.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a failure that is not about the address, which would burn rate budget', async () => {
+    const fetchMock = stubResendFetch(429);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: 'someone@example.com' }),
+      testEnv
+    );
+
+    expect(response.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries at most once when the second attempt also fails', async () => {
+    const fetchMock = stubResendFetch(422);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, email: 'someone@example.com' }),
+      testEnv
+    );
+
+    expect(response.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('retries without reply_to when Resend refuses the address, rather than losing the request', async () => {
@@ -206,6 +301,7 @@ describe('handleFeatureRequest', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sentEmail(fetchMock, 1).reply_to).toBeUndefined();
     expect(sentEmail(fetchMock, 1).text).toContain('someone@example.com');
   });
@@ -214,5 +310,34 @@ describe('handleFeatureRequest', () => {
     stubResendFetchRejection();
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
     expect(response.status).toBe(502);
+  });
+
+  describe('native form post, for a submit that beat the script', () => {
+    it('accepts a form-encoded body and sends it', async () => {
+      const fetchMock = stubResendFetch(200);
+      const response = await handleFeatureRequest(makeNativeFormRequest(validRequest), testEnv);
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get('Location')).toBe('/feedback/?sent=1');
+      expect(sentEmail(fetchMock).text).toContain('A master list of tasks');
+    });
+
+    it('redirects rather than answering a navigation with raw JSON', async () => {
+      const response = await handleFeatureRequest(
+        makeNativeFormRequest({ ...validRequest, area: 'aliens' }),
+        testEnv
+      );
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get('Location')).toBe('/feedback/?failed=1');
+    });
+
+    it('keeps answering fetch submissions with JSON', async () => {
+      stubResendFetch(200);
+      const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ success: true });
+    });
   });
 });

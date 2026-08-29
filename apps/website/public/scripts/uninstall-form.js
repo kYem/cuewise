@@ -36,4 +36,11 @@ if (form !== null && thanks !== null && errorNote !== null && submitBtn !== null
       submitBtn.disabled = false;
     }
   });
+
+  // Carried across so an uninstall-sourced feature request is not filed as Version: unknown.
+  const requestFeatureLink = document.getElementById('request-feature-link');
+  const pageVersion = new URLSearchParams(window.location.search).get('v');
+  if (requestFeatureLink !== null && pageVersion !== null) {
+    requestFeatureLink.href = `/feedback/?source=uninstall&v=${encodeURIComponent(pageVersion)}`;
+  }
 }
