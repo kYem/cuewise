@@ -25,6 +25,11 @@ interface RequestPayload {
 const DETAILS_MAX_LENGTH = 2000;
 const EMAIL_MAX_LENGTH = 254;
 const MAX_REJECTED_ECHO = 40;
+
+/** Allowlist, not a strip: a newline here forges a second "Reply to:" line into the body. */
+function echoSafe(value: string, max: number): string {
+  return value.replace(/[^\w.+@-]/g, '').slice(0, max);
+}
 const VERSION_PATTERN = /^[\d.]{1,20}$/;
 const SOURCE_PATTERN = /^[a-z-]{1,32}$/;
 // Diverges from HTML5 type="email": a dot is required, so kes@gmail is unusable here.
@@ -39,10 +44,7 @@ function json(status: number, body: Record<string, unknown>): Response {
   });
 }
 
-/**
- * Progressive enhancement: the form posts natively whenever its script has not run. The outcome
- * is a served page rather than a query flag, so it reads the same with scripting off.
- */
+// Must match the built pages: src/pages/feedback/{sent,failed}.astro, trailingSlash 'always'.
 function seeOther(outcome: 'sent' | 'failed'): Response {
   return new Response(null, { status: 303, headers: { Location: `/feedback/${outcome}/` } });
 }
@@ -104,8 +106,16 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     requestPayload.details.trim().length === 0 ||
     requestPayload.details.length > DETAILS_MAX_LENGTH
   ) {
-    // The only 400 reachable from the form: `required` accepts a string of spaces.
-    return fail(400, 'Please tell us what you would like Cuewise to do — that came through empty.');
+    // `required` accepts a string of spaces.
+    const tooLong =
+      typeof requestPayload.details === 'string' &&
+      requestPayload.details.length > DETAILS_MAX_LENGTH;
+    return fail(
+      400,
+      tooLong
+        ? `That is longer than ${DETAILS_MAX_LENGTH} characters — please trim it and send again.`
+        : 'Please tell us what you would like Cuewise to do — that came through empty.'
+    );
   }
   const details = requestPayload.details;
 
@@ -119,13 +129,12 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
       return 'unknown';
     }
     if (typeof value !== 'string') {
-      return 'unknown (rejected: non-string)';
+      return `unknown (rejected: ${typeof value})`;
     }
-    // Strips the newline that would otherwise forge extra "Reply to:"-style lines into the body.
-    const preview = value.replace(/[^\w.+-]/g, '').slice(0, MAX_REJECTED_ECHO);
+    const preview = echoSafe(value, MAX_REJECTED_ECHO);
     return preview.length > 0
       ? `unknown (rejected: ${preview})`
-      : `unknown (rejected: ${value.length} unprintable chars)`;
+      : `unknown (rejected: ${value.length} non-ascii chars)`;
   };
 
   const version = describe(requestPayload.version, VERSION_PATTERN);
@@ -140,8 +149,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   if (replyAddress !== null) {
     replyLine = replyAddress;
   } else if (rawEmail.length > 0) {
-    const shown = rawEmail.replace(/[\r\n]+/g, ' ').slice(0, EMAIL_MAX_LENGTH);
-    replyLine = `(unusable address given: ${shown})`;
+    replyLine = `(unusable address given: ${echoSafe(rawEmail, EMAIL_MAX_LENGTH)})`;
   }
 
   const lines = [

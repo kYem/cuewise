@@ -188,6 +188,49 @@ describe('handleFeatureRequest', () => {
     expect(body.error).toContain('email us instead');
   });
 
+  it('sends when the honeypot holds only whitespace, which autofill can leave behind', async () => {
+    const fetchMock = stubResendFetch(200);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, trap: '   ' }),
+      testEnv
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the type of a non-string it rejected, rather than throwing on it', async () => {
+    const fetchMock = stubResendFetch(200);
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, version: 3, source: ['a'] }),
+      testEnv
+    );
+
+    expect(response.status).toBe(200);
+    expect(sentEmail(fetchMock).text).toContain('Version: unknown (rejected: number)');
+    expect(sentEmail(fetchMock).text).toContain('Source: unknown (rejected: object)');
+  });
+
+  it('counts a value that survives no scrubbing, so it cannot read as nothing sent', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, version: '日本語です' }),
+      testEnv
+    );
+
+    expect(sentEmail(fetchMock).text).toContain('Version: unknown (rejected: 5 non-ascii chars)');
+  });
+
+  it('says the description was too long, rather than calling it empty', async () => {
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, details: 'x'.repeat(2001) }),
+      testEnv
+    );
+    const body = (await response.json()) as { error?: string };
+
+    expect(body.error).toContain('longer than 2000');
+  });
+
   it('does not retry a 422 when there was no address to blame', async () => {
     const fetchMock = stubResendFetch(422);
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
@@ -381,7 +424,11 @@ describe('handleFeatureRequest', () => {
   it('returns 502 when the request to Resend throws', async () => {
     stubResendFetchRejection();
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+    const body = (await response.json()) as { error?: string };
+
     expect(response.status).toBe(502);
+    // Same string as the non-ok path: the client renders it verbatim, so they must not drift.
+    expect(body.error).toContain('email us instead');
   });
 
   describe('native form post, for a submit that beat the script', () => {

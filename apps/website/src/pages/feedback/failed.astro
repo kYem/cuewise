@@ -10,22 +10,15 @@ import { SITE } from '../../lib/site';
       <div class="wrap">
         <h1>That didn't send.</h1>
         <p class="hero-sub">
-          Your request did not reach us, so it is worth another go — or email it straight to
-          <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a> and it will land either way.
+          Your request did not reach us. Press Back and what you typed will still be there — or
+          email it straight to <a href={`mailto:${SITE.supportEmail}`}>{SITE.supportEmail}</a> and
+          it will land either way.
         </p>
-        <div class="outcome-links">
-          <a class="btn btn-primary" href="/feedback/">Try again</a>
+        <div class="hero-cta">
+          <a class="btn btn-ghost" href="/feedback/">Start a new one</a>
         </div>
       </div>
     </section>
   </main>
 </Base>
 
-<style>
-  .outcome-links {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-top: 24px;
-  }
-</style>

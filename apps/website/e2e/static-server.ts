@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
@@ -32,6 +32,11 @@ export function resolveWithinDist(distDir: string, urlPath: string): string | nu
   const candidate = resolve(root, relative);
   if (candidate !== root && !candidate.startsWith(root + sep)) {
     return null;
+  }
+
+  // trailingSlash: 'always' means every page is a directory; /feedback/ is /feedback/index.html.
+  if (existsSync(candidate) && statSync(candidate).isDirectory()) {
+    return resolve(candidate, 'index.html');
   }
 
   // Cloudflare Pages "clean URLs": /player resolves to /player.html on disk.

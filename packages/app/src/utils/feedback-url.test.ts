@@ -16,9 +16,9 @@ describe('featureRequestUrl', () => {
   it('emits a version the request handler will accept, not one it files as unknown', () => {
     const url = new URL(featureRequestUrl({ source: 'settings' }));
 
-    // Mirrors VERSION_PATTERN in apps/website/functions/api/feedback/request.ts — a prerelease
-    // version would otherwise ship and file every request as Version: unknown.
+    // Mirrors VERSION_PATTERN in apps/website/functions/api/feedback/request.ts.
     expect(url.searchParams.get('v')).toMatch(/^[\d.]{1,20}$/);
+    expect(url.searchParams.get('v')).toBe(__APP_VERSION__);
   });
 
   it('keeps the trailing slash, so the deep link does not cost a redirect hop', () => {
