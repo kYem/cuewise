@@ -133,7 +133,7 @@ describe('initialize', () => {
   });
 
   it('does not blame the shape for a read it discarded as stale', async () => {
-    const warned = vi.spyOn(logger, 'warn');
+    const logged = vi.spyOn(logger, 'error');
     const pending = deferred<ReturnType<typeof freshState>>();
     getWeatherStateMock.mockReturnValueOnce(pending.promise);
 
@@ -142,7 +142,7 @@ describe('initialize', () => {
     pending.release({ ...freshState(), snapshot: { ...snapshot(), current: undefined } } as never);
     await stale;
 
-    expect(warned).not.toHaveBeenCalled();
+    expect(logged).not.toHaveBeenCalled();
   });
 
   it('does not refetch a reading that is still fresh', async () => {

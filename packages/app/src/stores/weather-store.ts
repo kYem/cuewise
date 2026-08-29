@@ -165,7 +165,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       return;
     }
     // A clear or a pick landed while this read was in flight, so everything it carries is
-    // stale — including the warnings below, which would blame the wrong thing.
+    // stale — including the discards below, which would blame the wrong thing.
     if (get().epoch !== epoch) {
       set({ initialized: true });
       return;

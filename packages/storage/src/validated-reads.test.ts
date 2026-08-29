@@ -221,7 +221,7 @@ describe('a stored value that no longer matches its shape', () => {
 
   // The store salvages the location separately from the reading; validating the
   // wrapper here would take the saved city with a bad reading.
-  it('leaves the weather blob for the store to salvage per field', async () => {
+  it('leaves the weather blob for the store to salvage', async () => {
     const stored = { location: { id: 'l1' }, snapshot: 'unreadable', lastFetch: null };
     configurePlatform({ storage: storeHolding({ weather: stored }) });
 
