@@ -225,8 +225,8 @@ export function formatTemperature(value: number): string {
 }
 
 /**
- * How old a reading is, in words. The popover shows it whenever there is no error to show
- * in its place, so a cached reading is never passed off as current.
+ * How old a reading is, in words. The popover shows it beside any error, so a cached
+ * reading is never passed off as current.
  */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   if (lastFetch === null) {

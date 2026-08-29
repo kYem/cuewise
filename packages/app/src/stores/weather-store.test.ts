@@ -627,6 +627,16 @@ describe('a stored timestamp that cannot be read', () => {
     warnSpy.mockRestore();
   });
 
+  it('keeps a stamp a few seconds ahead, which is our own clock stepping back', async () => {
+    const barelyAhead = new Date(Date.now() + 10_000).toISOString();
+    getWeatherStateMock.mockResolvedValue({ ...freshState(), lastFetch: barelyAhead } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(useWeatherStore.getState().snapshot).not.toBeNull();
+    expect(fetchForecastMock).not.toHaveBeenCalled();
+  });
+
   // A clock set forward when the reading was written, then corrected: every staleness check
   // subtracts it from now, so it would read as fresh for as long as the skew lasts.
   it('drops a stamp from the future, which would otherwise never age out', async () => {

@@ -57,16 +57,22 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledOnce();
   });
 
-  it('stays put while the tab is hidden', async () => {
+  it('stays put while the tab is hidden, having spent nothing by the time it returns', async () => {
     hideTab(true);
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(60), WINDOW_MS, onStale));
 
     await act(async () => {
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    expect(onStale).not.toHaveBeenCalled();
+
+    hideTab(false);
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
     });
 
-    expect(onStale).not.toHaveBeenCalled();
+    expect(onStale).toHaveBeenCalledOnce();
   });
 
   it('waits another window after an attempt that changed nothing', async () => {
@@ -109,8 +115,12 @@ describe('useStaleRefresh', () => {
     await act(async () => {
       vi.advanceTimersByTime(10 * 60_000);
     });
-
     expect(onStale).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      vi.advanceTimersByTime(WINDOW_MS);
+    });
+    expect(onStale).toHaveBeenCalledTimes(2);
   });
 
   it('re-arms against the reading that replaces the one it refreshed', async () => {

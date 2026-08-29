@@ -69,13 +69,13 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
-/** Slack for a clock a little ahead of ours; past that it is a skew, not a rounding. */
+/** Slack for our own clock stepping back a little after a reading was written. */
 const CLOCK_SKEW_TOLERANCE_MS = 60_000;
 
 /**
  * Rejects a stamp from the future as well as an unparseable one: both staleness checks
- * subtract it from now, so a future one reads as fresh forever, and the age line vouches for
- * it with "Updated just now".
+ * subtract it from now, so a future one reads as fresh for as long as the skew lasts, and the
+ * age line vouches for it with "Updated just now".
  */
 function isTimestamp(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -174,8 +174,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       set({ initialized: true });
       return;
     }
-    // A reading and its timestamp are kept or dropped together: either alone leaves the
-    // check below with nothing to age out, so it would render untouched for good.
+    // Dropped together: an undated reading shows no age and arms no refresh timer, so one
+    // failed refetch would leave it on screen as though it were current.
     const location = isWeatherLocation(stored.location) ? stored.location : null;
     const readable = isWeatherSnapshot(stored.snapshot);
     const dated = isTimestamp(stored.lastFetch);
