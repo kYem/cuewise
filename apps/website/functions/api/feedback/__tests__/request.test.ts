@@ -23,6 +23,19 @@ afterEach(() => {
 });
 
 describe('handleFeatureRequest', () => {
+  it.each([
+    [makeRequestFeatureRequest(validRequest), emptyEnv],
+    [makeRequestFeatureRequest('not-json'), testEnv],
+    [makeRequestFeatureRequest({ ...validRequest, area: 'aliens' }), testEnv],
+    [makeRequestFeatureRequest({ ...validRequest, details: '  ' }), testEnv],
+    [makeRequestFeatureRequest({ ...validRequest, details: 'x'.repeat(2001) }), testEnv],
+  ])('ends every refusal as a sentence, since the form appends a contact line after it', async (request, env) => {
+    const response = await handleFeatureRequest(request, env);
+    const body = (await response.json()) as { error?: string };
+
+    expect(body.error).toMatch(/[.!?]$/);
+  });
+
   it('returns 500 when the Resend key is missing', async () => {
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), emptyEnv);
     expect(response.status).toBe(500);

@@ -66,7 +66,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
 
   if (!env.RESEND_API_KEY) {
     console.error('Resend env var missing');
-    return fail(500, 'Feature requests are temporarily unavailable');
+    return fail(500, 'Feature requests are temporarily unavailable.');
   }
 
   let payload: unknown;
@@ -75,11 +75,11 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   } catch (error) {
     // Content-Type included: an enctype change makes every submission fail here at once.
     console.error('Feature request body unreadable', request.headers.get('Content-Type'), error);
-    return fail(400, 'Invalid request body');
+    return fail(400, 'Invalid request body.');
   }
 
   if (typeof payload !== 'object' || payload === null) {
-    return fail(400, 'Invalid request body');
+    return fail(400, 'Invalid request body.');
   }
 
   const requestPayload = payload as RequestPayload;
@@ -97,7 +97,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   }
 
   if (typeof requestPayload.area !== 'string' || !isFeedbackArea(requestPayload.area)) {
-    return fail(400, 'Invalid request');
+    return fail(400, 'Pick a part of Cuewise and send again.');
   }
   const area = requestPayload.area;
 

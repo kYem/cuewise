@@ -61,11 +61,12 @@ test('keeps the support address reachable on every failure', async ({ page }) =>
 
   await fillAndSubmit(page);
 
-  // Both halves: the anchor alone is static markup and would pass even if the message vanished.
-  await expect(page.locator('#form-error')).toContainText('Could not send your request');
+  // Asserted across the reason/contact seam: Astro drops a whitespace-only node between tags,
+  // and either half alone still passes when the two are jammed together.
+  await expect(page.locator('#form-error')).toContainText(
+    'Could not send your request just now. You can always email us at support@cuewise.app'
+  );
   await expect(page.locator('#form-error a[href^="mailto:"]')).toBeVisible();
-  // The address must not be jammed against the word before it — Astro drops a newline there.
-  await expect(page.locator('#form-error')).toContainText('email us at support@cuewise.app');
 });
 
 test('confirms a sent request in place', async ({ page }) => {
