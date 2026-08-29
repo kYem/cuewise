@@ -11,6 +11,7 @@ import ReactDOM from 'react-dom/client';
 import { AppWrapper } from './AppWrapper';
 import { GlowOverlay } from './glow/GlowOverlay';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
+import { installExternalLinks } from './platform/external-links';
 import { createTauriOAuthDriver } from './platform/oauth-driver';
 import { initPosture } from './posture/posture-controller';
 import { createDirectSyncController } from './sync/direct-sync-controller';
@@ -47,6 +48,12 @@ if (window.location.hash === '#glow') {
     // block webview fetch to api.cuewise.app.
     httpFetch: inTauri ? tauriFetch : (url, init) => fetch(url, init),
   });
+
+  // Only under Tauri: in a browser `target="_blank"` already works, and the shell plugin
+  // is not there to call.
+  if (inTauri) {
+    installExternalLinks();
+  }
 
   // The Rust core owns the timers; when one fires it emits `scheduler://fire` and
   // we deliver the reminder here (the webview stays alive behind the tray). This
