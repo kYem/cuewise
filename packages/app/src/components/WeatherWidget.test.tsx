@@ -1,8 +1,12 @@
-import { WEATHER_STALE_MS } from '@cuewise/shared';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hours, LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
-import { mockSettings, mockWeatherStore } from './__fixtures__/weather-widget.fixtures';
+import {
+  mockSettings,
+  mockWeatherStore,
+  setFetching,
+  staleReading,
+} from './__fixtures__/weather-widget.fixtures';
 import { WeatherWidget } from './WeatherWidget';
 
 vi.mock('../stores/weather-store', () => ({ useWeatherStore: vi.fn() }));
@@ -343,29 +347,31 @@ describe('the forecast strip', () => {
 });
 
 describe('a reading left standing', () => {
-  function staleReading(): string {
-    return new Date(Date.now() - (WEATHER_STALE_MS + 60_000)).toISOString();
-  }
-
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-15T12:00:00'));
+    // 'auto' resolves imperial under an en-US locale, and the units effect would then fire a
+    // refresh of its own that these tests would read as the timer's.
+    mockSettings({ showWeather: true, weatherUnits: 'metric' });
   });
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it('refreshes itself once it ages past the staleness window', async () => {
-    mockSettings({ showWeather: true, weatherUnits: 'metric' });
     const store = mockWeatherStore({
       lastFetch: staleReading(),
     });
 
     render(<WeatherWidget />);
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(store.refresh).toHaveBeenCalledExactlyOnceWith({
       silent: true,
@@ -380,43 +386,33 @@ describe('a reading left standing', () => {
     });
 
     render(<WeatherWidget />);
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(store.refresh).not.toHaveBeenCalled();
   });
 
   it('picks the timer back up once the running refresh finishes', async () => {
-    mockSettings({ showWeather: true, weatherUnits: 'metric' });
     const store = mockWeatherStore({
       isFetching: true,
       lastFetch: staleReading(),
     });
 
     const { rerender } = render(<WeatherWidget />);
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
     expect(store.refresh).not.toHaveBeenCalled();
 
-    store.inFlight = null;
+    setFetching(store, false);
     rerender(<WeatherWidget />);
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(store.refresh).toHaveBeenCalledOnce();
   });
 
   it('leaves a fresh reading alone', async () => {
-    mockSettings({ showWeather: true, weatherUnits: 'metric' });
     const store = mockWeatherStore({ lastFetch: new Date().toISOString() });
 
     render(<WeatherWidget />);
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(store.refresh).not.toHaveBeenCalled();
   });

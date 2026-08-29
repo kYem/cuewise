@@ -38,7 +38,9 @@ export function useStaleRefresh(
         return;
       }
       const now = Date.now();
-      if (now - taken <= staleMs || now - lastAttemptRef.current <= staleMs) {
+      const readingIsFresh = now - taken <= staleMs;
+      const retriedRecently = now - lastAttemptRef.current <= staleMs;
+      if (readingIsFresh || retriedRecently) {
         return;
       }
       lastAttemptRef.current = now;

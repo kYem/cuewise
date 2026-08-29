@@ -192,11 +192,11 @@ export const WeatherWidget: React.FC = () => {
     unitsRef.current = unitsPreference;
   }, [unitsPreference]);
 
-  // The hook counts an attempt when it calls, and the store drops a request matching the
-  // running one — so that collision would burn the retry window on nothing.
-  useStaleRefresh(showWeather && !isFetching ? lastFetch : null, WEATHER_STALE_MS, () =>
-    refresh({ silent: true, unitsPreference })
-  );
+  // Null stands the timer down: the chip is off, or a fetch is already running. The hook
+  // counts an attempt when it calls and the store drops a request matching the running one,
+  // so that collision would burn the retry window on nothing.
+  const readingToAge = showWeather && !isFetching ? lastFetch : null;
+  useStaleRefresh(readingToAge, WEATHER_STALE_MS, () => refresh({ silent: true, unitsPreference }));
 
   // Reads the preference off a ref so changing units doesn't re-run the storage load;
   // the effect below owns that case.

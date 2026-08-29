@@ -174,25 +174,28 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
       set({ initialized: true });
       return;
     }
-    const location = isWeatherLocation(stored.location) ? stored.location : null;
-    // Dropped together: an undated reading shows no age and arms no refresh timer, so one
-    // failed refetch would leave it on screen as though it were current.
+    // error, not warn, on every discard below: the shipped logLevel is 'error', and a city
+    // or a reading disappearing is where an "it forgot my weather" report starts.
     const readable = isWeatherSnapshot(stored.snapshot);
     const dated = isTimestamp(stored.lastFetch);
-    const snapshot = readable && dated ? stored.snapshot : null;
-    const lastFetch = snapshot === null ? null : stored.lastFetch;
-    // error, not warn: the shipped logLevel is 'error', and a city or a reading disappearing
-    // is where an "it forgot my weather" report starts.
+    // An undated reading shows no age and arms no refresh timer, so one failed refetch would
+    // leave it on screen as though it were current. Kept or dropped as one.
+    const usable = readable && dated;
+    const snapshot = usable ? stored.snapshot : null;
+    const lastFetch = usable ? stored.lastFetch : null;
     if (stored.snapshot !== null && !readable) {
       logger.error('Discarded an unreadable stored weather reading');
-    }
-    if (stored.location !== null && location === null) {
-      logger.error('Discarded an unreadable stored weather location');
     }
     if (readable && !dated) {
       logger.error('Discarded a stored weather reading with an unusable timestamp', {
         lastFetch: stored.lastFetch,
       });
+    }
+
+    const placed = isWeatherLocation(stored.location);
+    const location = placed ? stored.location : null;
+    if (stored.location !== null && !placed) {
+      logger.error('Discarded an unreadable stored weather location');
     }
     set({ location, snapshot, lastFetch, initialized: true });
     if (location === null) {

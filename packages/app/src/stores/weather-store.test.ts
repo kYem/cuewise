@@ -133,7 +133,7 @@ describe('initialize', () => {
   });
 
   it('does not blame the shape for a read it discarded as stale', async () => {
-    const logged = vi.spyOn(logger, 'error');
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const pending = deferred<ReturnType<typeof freshState>>();
     getWeatherStateMock.mockReturnValueOnce(pending.promise);
 
@@ -172,15 +172,11 @@ describe('initialize', () => {
   });
 
   it('does not fetch when a location was never chosen', async () => {
-    const logged = vi.spyOn(logger, 'error');
     getWeatherStateMock.mockResolvedValue({ location: null, snapshot: null, lastFetch: null });
 
     await useWeatherStore.getState().initialize();
 
     expect(fetchForecastMock).not.toHaveBeenCalled();
-    // The same blob `clearLocation` writes, so blaming it on a corrupt city would fire on
-    // every tab of anyone who removed theirs.
-    expect(logged).not.toHaveBeenCalled();
   });
 
   it('never toasts when the mount refresh fails', async () => {
@@ -469,7 +465,6 @@ describe('a stored reading that no longer matches the shape', () => {
     expect(useWeatherStore.getState().location).toEqual(LONDON);
     // error, not warn, or the reason never reaches a default install.
     expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather reading');
-    logged.mockRestore();
   });
 
   it('is refetched instead of leaving a permanent skeleton', async () => {
@@ -494,22 +489,6 @@ describe('a stored reading that no longer matches the shape', () => {
     expect(useWeatherStore.getState().location).toBeNull();
     expect(fetchForecastMock).not.toHaveBeenCalled();
     expect(logged).toHaveBeenCalledWith('Discarded an unreadable stored weather location');
-    logged.mockRestore();
-  });
-
-  // setLocation persists the city before the first fetch, so a reading that is simply not
-  // there yet is ordinary — reporting it as discarded would cry corruption on every tab.
-  it('stays quiet about the reading a freshly picked city has not fetched yet', async () => {
-    const logged = vi.spyOn(logger, 'error');
-    getWeatherStateMock.mockResolvedValue({
-      location: LONDON,
-      snapshot: null,
-      lastFetch: null,
-    } as never);
-
-    await useWeatherStore.getState().initialize();
-
-    expect(logged).not.toHaveBeenCalled();
   });
 
   it('keeps a reading that is merely missing an optional field', async () => {
@@ -556,7 +535,7 @@ describe('what a refresh actually persists', () => {
     const quotaError = { type: 'quota_exceeded' as const, message: 'Storage is full' };
     setWeatherStateMock.mockResolvedValue({ success: false, error: quotaError });
     useWeatherStore.setState({ location: LONDON });
-    const logged = vi.spyOn(logger, 'error');
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await useWeatherStore.getState().refresh({ unitsPreference: 'metric' });
 
@@ -618,7 +597,33 @@ describe('overlapping refreshes', () => {
   });
 });
 
-describe('a stored timestamp that cannot be read', () => {
+// setLocation and clearLocation both persist a blob with no reading in it, so an empty one
+// is ordinary — reporting it as discarded would cry corruption on every tab.
+describe('a stored blob that is merely empty', () => {
+  it('stays quiet about the reading a freshly picked city has not fetched yet', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getWeatherStateMock.mockResolvedValue({
+      location: LONDON,
+      snapshot: null,
+      lastFetch: null,
+    } as never);
+
+    await useWeatherStore.getState().initialize();
+
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet about the city a removal took away', async () => {
+    const logged = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getWeatherStateMock.mockResolvedValue({ location: null, snapshot: null, lastFetch: null });
+
+    await useWeatherStore.getState().initialize();
+
+    expect(logged).not.toHaveBeenCalled();
+  });
+});
+
+describe('a stored timestamp we cannot trust', () => {
   // An unreadable stamp reads stale to nothing — neither the check at mount nor the widget's
   // own timer — so a reading kept beside it would never refresh again.
   it('is treated as no timestamp at all, so the reading refreshes', async () => {
@@ -650,7 +655,6 @@ describe('a stored timestamp that cannot be read', () => {
       'Discarded a stored weather reading with an unusable timestamp',
       { lastFetch: 'whenever' }
     );
-    errorSpy.mockRestore();
   });
 
   it('keeps a stamp a few seconds ahead, which is our own clock stepping back', async () => {

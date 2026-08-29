@@ -1,9 +1,10 @@
-import type {
-  WeatherForecast,
-  WeatherHour,
-  WeatherLocation,
-  WeatherSnapshot,
-  WeatherState,
+import {
+  WEATHER_STALE_MS,
+  type WeatherForecast,
+  type WeatherHour,
+  type WeatherLocation,
+  type WeatherSnapshot,
+  type WeatherState,
 } from '@cuewise/shared';
 
 export const LONDON: WeatherLocation = {
@@ -81,7 +82,7 @@ export function staleState(now = Date.now()): WeatherState {
   return {
     location: LONDON,
     snapshot: snapshot(),
-    lastFetch: new Date(now - 60 * 60 * 1000).toISOString(),
+    lastFetch: new Date(now - (WEATHER_STALE_MS + 60_000)).toISOString(),
   };
 }
 

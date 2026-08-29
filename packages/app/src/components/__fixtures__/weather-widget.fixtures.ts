@@ -1,6 +1,7 @@
 import {
   DEFAULT_SETTINGS,
   type Settings,
+  WEATHER_STALE_MS,
   type WeatherLocation,
   type WeatherSnapshot,
 } from '@cuewise/shared';
@@ -43,6 +44,16 @@ export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
   };
   vi.mocked(useWeatherStore).mockImplementation(createSelectorMock(state));
   return state;
+}
+
+/** A reading the staleness timer must act on. */
+export function staleReading(): string {
+  return new Date(Date.now() - (WEATHER_STALE_MS + 60_000)).toISOString();
+}
+
+/** Flips the in-flight slot without re-mocking, which would hand back a fresh refresh spy. */
+export function setFetching(state: ReturnType<typeof mockWeatherStore>, fetching: boolean): void {
+  state.inFlight = fetching ? { id: 1, epoch: 0, units: 'metric' as const } : null;
 }
 
 export function mockSettings(overrides: Partial<Settings> = {}) {

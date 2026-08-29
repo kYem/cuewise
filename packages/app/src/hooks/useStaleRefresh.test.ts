@@ -19,6 +19,18 @@ describe('useStaleRefresh', () => {
     return new Date(Date.now() - minutes * 60_000).toISOString();
   }
 
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
+
+  async function foreground(): Promise<void> {
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+  }
+
   function hideTab(hidden: boolean): void {
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(hidden);
   }
@@ -27,9 +39,7 @@ describe('useStaleRefresh', () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(30), WINDOW_MS, onStale));
 
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(onStale).toHaveBeenCalledOnce();
   });
@@ -38,9 +48,7 @@ describe('useStaleRefresh', () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(5), WINDOW_MS, onStale));
 
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(onStale).not.toHaveBeenCalled();
   });
@@ -62,15 +70,11 @@ describe('useStaleRefresh', () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(60), WINDOW_MS, onStale));
 
-    await act(async () => {
-      vi.advanceTimersByTime(10 * 60_000);
-    });
+    await advance(10 * 60_000);
     expect(onStale).not.toHaveBeenCalled();
 
     hideTab(false);
-    await act(async () => {
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
+    await foreground();
 
     expect(onStale).toHaveBeenCalledOnce();
   });
@@ -79,19 +83,13 @@ describe('useStaleRefresh', () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(31), WINDOW_MS, onStale));
 
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
     expect(onStale).toHaveBeenCalledOnce();
 
-    await act(async () => {
-      vi.advanceTimersByTime(10 * 60_000);
-    });
+    await advance(10 * 60_000);
     expect(onStale).toHaveBeenCalledOnce();
 
-    await act(async () => {
-      vi.advanceTimersByTime(WINDOW_MS);
-    });
+    await advance(WINDOW_MS);
     expect(onStale).toHaveBeenCalledTimes(2);
   });
 
@@ -105,21 +103,15 @@ describe('useStaleRefresh', () => {
       { initialProps: { at: reading } }
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
     expect(onStale).toHaveBeenCalledOnce();
 
     rerender({ at: null });
     rerender({ at: reading });
-    await act(async () => {
-      vi.advanceTimersByTime(10 * 60_000);
-    });
+    await advance(10 * 60_000);
     expect(onStale).toHaveBeenCalledOnce();
 
-    await act(async () => {
-      vi.advanceTimersByTime(WINDOW_MS);
-    });
+    await advance(WINDOW_MS);
     expect(onStale).toHaveBeenCalledTimes(2);
   });
 
@@ -130,26 +122,18 @@ describe('useStaleRefresh', () => {
       { initialProps: { at: readingFrom(31) } }
     );
 
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
     expect(onStale).toHaveBeenCalledOnce();
 
     // The replacement has to land well after the attempt, or the two windows expire
     // together and a hook still measuring its first reading looks identical.
-    await act(async () => {
-      vi.advanceTimersByTime(20 * 60_000);
-    });
+    await advance(20 * 60_000);
     rerender({ at: new Date().toISOString() });
 
-    await act(async () => {
-      vi.advanceTimersByTime(15 * 60_000);
-    });
+    await advance(15 * 60_000);
     expect(onStale).toHaveBeenCalledOnce();
 
-    await act(async () => {
-      vi.advanceTimersByTime(WINDOW_MS);
-    });
+    await advance(WINDOW_MS);
     expect(onStale).toHaveBeenCalledTimes(2);
   });
 
@@ -163,9 +147,7 @@ describe('useStaleRefresh', () => {
     );
 
     rerender({ cb: second });
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledOnce();
@@ -176,15 +158,12 @@ describe('useStaleRefresh', () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh('not a timestamp', WINDOW_MS, onStale));
 
-    await act(async () => {
-      vi.advanceTimersByTime(WINDOW_MS);
-    });
+    await advance(WINDOW_MS);
 
     expect(onStale).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledWith('Stale refresh stood down: unparseable timestamp', {
       lastFetch: 'not a timestamp',
     });
-    errorSpy.mockRestore();
   });
 
   it('does nothing before the first reading has landed', async () => {
@@ -201,7 +180,6 @@ describe('useStaleRefresh', () => {
     // Null is the ordinary state — chip off, or a fetch running — so falling through to the
     // unparseable branch would log an error on every tab.
     expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
   });
 
   it('logs instead of leaking when the callback rejects', async () => {
@@ -211,12 +189,9 @@ describe('useStaleRefresh', () => {
     });
     renderHook(() => useStaleRefresh(readingFrom(31), WINDOW_MS, onStale));
 
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
+    await advance(60_000);
 
     expect(errorSpy).toHaveBeenCalledWith('Stale-refresh callback failed', expect.any(Error));
-    errorSpy.mockRestore();
   });
 
   it('stops checking after unmount', async () => {
