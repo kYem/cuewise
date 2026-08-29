@@ -5,8 +5,7 @@ const submitBtn = document.getElementById('submit-btn');
 const errorReason = document.getElementById('form-error-reason');
 
 const SEND_TIMEOUT_MS = 15000;
-// How long the button stays down after a timeout: long enough that an in-flight send lands
-// first, short enough that nobody is stranded with text they cannot resend.
+// Long enough that a send still in flight lands before a retry could duplicate it.
 const RETRY_UNLOCK_MS = 20000;
 
 if (
@@ -80,7 +79,6 @@ if (
     } catch (error) {
       console.error('Feature request failed to send', error);
       if (timedOut) {
-        // Held down, not locked: the send may still land, but nobody should be left unable to try.
         showError('Still sending — give it a moment before sending again.', false);
         setTimeout(() => {
           submitBtn.disabled = false;

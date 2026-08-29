@@ -109,12 +109,12 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   }
   const area = requestPayload.area;
 
+  // `required` accepts a string of spaces.
   if (
     typeof requestPayload.details !== 'string' ||
     requestPayload.details.trim().length === 0 ||
     requestPayload.details.length > DETAILS_MAX_LENGTH
   ) {
-    // `required` accepts a string of spaces.
     const tooLong =
       typeof requestPayload.details === 'string' &&
       requestPayload.details.length > DETAILS_MAX_LENGTH;

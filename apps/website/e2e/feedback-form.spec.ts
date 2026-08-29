@@ -5,9 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import { startSite } from './static-server';
 
-// The form's script is the one file here no unit test can reach — it is served as a static asset
-// so CSP script-src stays 'self'. startSite applies the real middleware headers, so this also
-// proves the script loads under the shipped CSP rather than being silently blocked.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(ROOT, 'dist');
@@ -19,6 +16,7 @@ let server: Server;
 
 test.beforeAll(async () => {
   execFileSync('pnpm', ['--filter', '@cuewise/website', 'build'], { cwd: ROOT, stdio: 'inherit' });
+  // Real middleware headers, so a CSP that blocked the form's script would fail these.
   server = await startSite(DIST_DIR, PORT);
 });
 

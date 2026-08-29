@@ -34,7 +34,7 @@ export function resolveWithinDist(distDir: string, urlPath: string): string | nu
     return null;
   }
 
-  // trailingSlash: 'always' means every page is a directory; /feedback/ is /feedback/index.html.
+  // Astro's default build.format writes a directory per page; /feedback/ is /feedback/index.html.
   if (existsSync(candidate) && statSync(candidate).isDirectory()) {
     return resolve(candidate, 'index.html');
   }
