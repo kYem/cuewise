@@ -40,16 +40,11 @@ function json(status: number, body: Record<string, unknown>): Response {
 }
 
 /**
- * Progressive enhancement: the form posts natively whenever its script has not run. The referring
- * query string rides along, or the retry loses the source and version it was opened with.
+ * Progressive enhancement: the form posts natively whenever its script has not run. The outcome
+ * is a served page rather than a query flag, so it reads the same with scripting off.
  */
-function seeOther(request: Request, outcome: 'sent' | 'failed'): Response {
-  const params = new URLSearchParams(new URL(request.url).search);
-  params.set(outcome, '1');
-  return new Response(null, {
-    status: 303,
-    headers: { Location: `/feedback/?${params.toString()}` },
-  });
+function seeOther(outcome: 'sent' | 'failed'): Response {
+  return new Response(null, { status: 303, headers: { Location: `/feedback/${outcome}/` } });
 }
 
 async function readPayload(request: Request): Promise<unknown> {
@@ -65,7 +60,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     'application/x-www-form-urlencoded'
   );
   const fail = (status: number, error: string): Response =>
-    nativeSubmit ? seeOther(request, 'failed') : json(status, { error });
+    nativeSubmit ? seeOther('failed') : json(status, { error });
 
   if (!env.RESEND_API_KEY) {
     console.error('Resend env var missing');
@@ -96,7 +91,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
       detailsLength: typeof requestPayload.details === 'string' ? requestPayload.details.length : 0,
     });
     // Reported as success so a bot learns nothing.
-    return nativeSubmit ? seeOther(request, 'sent') : json(200, { success: true });
+    return nativeSubmit ? seeOther('sent') : json(200, { success: true });
   }
 
   if (typeof requestPayload.area !== 'string' || !isFeedbackArea(requestPayload.area)) {
@@ -109,24 +104,28 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     requestPayload.details.trim().length === 0 ||
     requestPayload.details.length > DETAILS_MAX_LENGTH
   ) {
-    return fail(400, 'Invalid request');
+    // The only 400 reachable from the form: `required` accepts a string of spaces.
+    return fail(400, 'Please tell us what you would like Cuewise to do — that came through empty.');
   }
   const details = requestPayload.details;
 
-  // Sanitized, never rejected: a malformed optional field must not cost us the request. Reported
-  // rather than erased, or a whole channel (a prerelease version, a renamed source) reads as
-  // never-wired instead of rejected.
+  // Sanitized, never rejected: a malformed optional field must not cost us the request, but it is
+  // echoed rather than erased, or a prerelease channel reads as never-wired instead of rejected.
   const describe = (value: unknown, pattern: RegExp): string => {
     if (typeof value === 'string' && pattern.test(value)) {
       return value;
     }
-    if (typeof value === 'string' && value.length > 0) {
-      // Scrubbed to a version/slug charset: enough to recognise 1.26.0-beta.1, never enough to
-      // carry markup or a newline into a field we told the reader was sanitized.
-      const preview = value.replace(/[^\w.+-]/g, '').slice(0, MAX_REJECTED_ECHO);
-      return `unknown (rejected: ${preview})`;
+    if (value === undefined || value === null || value === '') {
+      return 'unknown';
     }
-    return 'unknown';
+    if (typeof value !== 'string') {
+      return 'unknown (rejected: non-string)';
+    }
+    // Strips the newline that would otherwise forge extra "Reply to:"-style lines into the body.
+    const preview = value.replace(/[^\w.+-]/g, '').slice(0, MAX_REJECTED_ECHO);
+    return preview.length > 0
+      ? `unknown (rejected: ${preview})`
+      : `unknown (rejected: ${value.length} unprintable chars)`;
   };
 
   const version = describe(requestPayload.version, VERSION_PATTERN);
@@ -141,7 +140,8 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
   if (replyAddress !== null) {
     replyLine = replyAddress;
   } else if (rawEmail.length > 0) {
-    replyLine = `(unusable address given: ${rawEmail.slice(0, EMAIL_MAX_LENGTH)})`;
+    const shown = rawEmail.replace(/[\r\n]+/g, ' ').slice(0, EMAIL_MAX_LENGTH);
+    replyLine = `(unusable address given: ${shown})`;
   }
 
   const lines = [
@@ -183,7 +183,7 @@ export async function handleFeatureRequest(request: Request, env: Env): Promise<
     }
 
     if (response.ok) {
-      return nativeSubmit ? seeOther(request, 'sent') : json(200, { success: true });
+      return nativeSubmit ? seeOther('sent') : json(200, { success: true });
     }
 
     const detail = await response.text().catch(() => '<unreadable>');

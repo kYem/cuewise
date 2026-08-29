@@ -164,6 +164,66 @@ describe('handleFeatureRequest', () => {
 
     expect(sentRequest(fetchMock).email.to).toEqual(['support@cuewise.app']);
     expect(sentRequest(fetchMock).authorization).toBe('Bearer test-api-key');
+    expect(sentRequest(fetchMock).url).toBe('https://api.resend.com/emails');
+    expect(sentRequest(fetchMock).method).toBe('POST');
+    expect(sentRequest(fetchMock).contentType).toBe('application/json');
+  });
+
+  it('names the empty description, rather than telling them the site is broken', async () => {
+    const response = await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, details: '   ' }),
+      testEnv
+    );
+    const body = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('came through empty');
+  });
+
+  it('answers a failed send with the message the form shows', async () => {
+    stubResendFetch(500);
+    const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+    const body = (await response.json()) as { error?: string };
+
+    expect(body.error).toContain('email us instead');
+  });
+
+  it('does not retry a 422 when there was no address to blame', async () => {
+    const fetchMock = stubResendFetch(422);
+    const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), testEnv);
+
+    expect(response.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an unusable address on one bounded line, so it cannot forge another', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({
+        ...validRequest,
+        email: `x\nReply to: attacker@example.com\n${'y'.repeat(400)}`,
+      }),
+      testEnv
+    );
+
+    const replyLines = sentEmail(fetchMock)
+      .text.split('\n')
+      .filter((line) => line.startsWith('Reply to:'));
+    expect(replyLines).toHaveLength(1);
+    expect(replyLines[0].length).toBeLessThan(300);
+  });
+
+  it('caps how much of a rejected value a stranger can write into the inbox', async () => {
+    const fetchMock = stubResendFetch(200);
+    await handleFeatureRequest(
+      makeRequestFeatureRequest({ ...validRequest, version: '9'.repeat(300) }),
+      testEnv
+    );
+
+    const versionLine = sentEmail(fetchMock)
+      .text.split('\n')
+      .find((line) => line.startsWith('Version:'));
+    expect(versionLine?.length).toBeLessThan(80);
   });
 
   it('records where the request was raised from, so widget asks are separable', async () => {
@@ -173,7 +233,7 @@ describe('handleFeatureRequest', () => {
       testEnv
     );
 
-    expect(sentEmail(fetchMock).text).toContain('widget-picker');
+    expect(sentEmail(fetchMock).text).toContain('Source: widget-picker');
   });
 
   it('does not claim a source it was never given, which would poison the split', async () => {
@@ -183,7 +243,7 @@ describe('handleFeatureRequest', () => {
     expect(sentEmail(fetchMock).text).toContain('Source: unknown');
   });
 
-  it('drops a source that could never be one of ours', async () => {
+  it('echoes a rejected source scrubbed to a slug charset', async () => {
     const fetchMock = stubResendFetch(200);
     await handleFeatureRequest(
       makeRequestFeatureRequest({ ...validRequest, source: '../../etc/passwd' }),
@@ -193,7 +253,7 @@ describe('handleFeatureRequest', () => {
     expect(sentEmail(fetchMock).text).toContain('Source: unknown');
   });
 
-  it('never echoes an attacker-supplied version, which arrives straight off the query string', async () => {
+  it('strips markup from a rejected version before echoing it', async () => {
     const fetchMock = stubResendFetch(200);
     await handleFeatureRequest(
       makeRequestFeatureRequest({ ...validRequest, version: '<script>alert(1)</script>' }),
@@ -330,7 +390,7 @@ describe('handleFeatureRequest', () => {
       const response = await handleFeatureRequest(makeNativeFormRequest(validRequest), testEnv);
 
       expect(response.status).toBe(303);
-      expect(response.headers.get('Location')).toBe('/feedback/?sent=1');
+      expect(response.headers.get('Location')).toBe('/feedback/sent/');
       expect(sentEmail(fetchMock).text).toContain('A master list of tasks');
     });
 
@@ -341,20 +401,19 @@ describe('handleFeatureRequest', () => {
       );
 
       expect(response.status).toBe(303);
-      expect(response.headers.get('Location')).toBe('/feedback/?failed=1');
+      expect(response.headers.get('Location')).toBe('/feedback/failed/');
     });
 
-    it('carries the referring query back, or the retry loses its source and version', async () => {
-      stubResendFetch(200);
+    it('answers a honeypot hit the same way it answers a success', async () => {
+      const fetchMock = stubResendFetch(200);
       const response = await handleFeatureRequest(
-        makeNativeFormRequest(validRequest, '?source=uninstall&v=1.25.0'),
+        makeNativeFormRequest({ ...validRequest, trap: 'http://spam.example' }),
         testEnv
       );
 
-      const location = response.headers.get('Location') ?? '';
-      expect(location).toContain('source=uninstall');
-      expect(location).toContain('v=1.25.0');
-      expect(location).toContain('sent=1');
+      expect(response.status).toBe(303);
+      expect(response.headers.get('Location')).toBe('/feedback/sent/');
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('keeps answering fetch submissions with JSON', async () => {

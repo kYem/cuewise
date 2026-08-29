@@ -13,24 +13,15 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
   // must not re-parse markup.
   const defaultErrorNodes = Array.from(errorNote.childNodes).map((node) => node.cloneNode(true));
 
-  const showError = (message) => {
+  const showError = (message, allowRetry = true) => {
     if (message === undefined) {
       errorNote.replaceChildren(...defaultErrorNodes.map((node) => node.cloneNode(true)));
     } else {
       errorNote.textContent = message;
     }
     errorNote.hidden = false;
-    submitBtn.disabled = false;
+    submitBtn.disabled = !allowRetry;
   };
-
-  // Set by the handler's 303 when the form posted natively, before this script ran.
-  if (params.get('sent') === '1') {
-    form.hidden = true;
-    thanks.hidden = false;
-  }
-  if (params.get('failed') === '1') {
-    showError();
-  }
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -52,7 +43,9 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+        ...(typeof AbortSignal.timeout === 'function'
+          ? { signal: AbortSignal.timeout(SEND_TIMEOUT_MS) }
+          : {}),
       });
       if (response.ok) {
         form.hidden = true;
@@ -61,15 +54,17 @@ if (form === null || thanks === null || errorNote === null || submitBtn === null
         // The handler distinguishes "you typed nothing" from "we are down"; one static
         // string sends the first case to email support about a form that works.
         const failure = await response.json().catch(() => null);
-        showError(failure?.error);
+        showError(
+          typeof failure?.error === 'string' && failure.error.length > 0 ? failure.error : undefined
+        );
       }
     } catch (error) {
       console.error('Feature request failed to send', error);
-      showError(
-        error?.name === 'TimeoutError'
-          ? 'Taking too long — check with us before resending.'
-          : undefined
-      );
+      if (error?.name === 'TimeoutError') {
+        showError('Still sending — check with us before you send this again.', false);
+      } else {
+        showError();
+      }
     }
   });
 

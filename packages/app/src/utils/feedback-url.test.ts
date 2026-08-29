@@ -13,10 +13,12 @@ describe('featureRequestUrl', () => {
     expect(url.searchParams.get('source')).toBe('settings');
   });
 
-  it('carries the running version, so a request can be read against what they saw', () => {
+  it('emits a version the request handler will accept, not one it files as unknown', () => {
     const url = new URL(featureRequestUrl({ source: 'settings' }));
 
-    expect(url.searchParams.get('v')).toBe(__APP_VERSION__);
+    // Mirrors VERSION_PATTERN in apps/website/functions/api/feedback/request.ts — a prerelease
+    // version would otherwise ship and file every request as Version: unknown.
+    expect(url.searchParams.get('v')).toMatch(/^[\d.]{1,20}$/);
   });
 
   it('keeps the trailing slash, so the deep link does not cost a redirect hop', () => {

@@ -9,8 +9,8 @@ export const emptyEnv = {
   RESEND_API_KEY: '',
 };
 
-export function makeNativeFormRequest(fields: Record<string, string>, search = ''): Request {
-  return new Request(`https://cuewise.app/api/feedback/request${search}`, {
+export function makeNativeFormRequest(fields: Record<string, string>): Request {
+  return new Request('https://cuewise.app/api/feedback/request', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(fields).toString(),
@@ -45,6 +45,9 @@ export const validRequest = {
 };
 
 interface SentRequest {
+  url: string;
+  method: string;
+  contentType: string;
   authorization: string;
   email: ResendEmail;
 }
@@ -54,8 +57,11 @@ export function sentRequest(fetchMock: ReturnType<typeof vi.fn>, call = 0): Sent
   if (fetchMock.mock.calls.length <= call) {
     throw new Error(`Expected at least ${call + 1} send(s), got ${fetchMock.mock.calls.length}`);
   }
-  const [, init] = fetchMock.mock.calls[call];
+  const [url, init] = fetchMock.mock.calls[call];
   return {
+    url: String(url),
+    method: String(init.method),
+    contentType: String(init.headers['Content-Type']),
     authorization: String(init.headers.Authorization),
     email: JSON.parse(String(init.body)) as ResendEmail,
   };
