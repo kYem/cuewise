@@ -115,8 +115,6 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledOnce();
   });
 
-  // Sleep advances the wall clock while the monotonic one stays put, so a limiter reading only
-  // the latter would hold the refresh shut for the whole nap.
   it('refreshes on waking from sleep even though an attempt landed just before it', async () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(31), WINDOW_MS, onStale));

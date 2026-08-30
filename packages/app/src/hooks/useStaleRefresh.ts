@@ -6,8 +6,7 @@ const CHECK_INTERVAL_MS = 60_000;
 /**
  * Fires the callback once a reading has aged past `staleMs`, or is stamped so far ahead that the
  * clock must have stepped back. Checks on an interval and on tab foregrounding, because a
- * backgrounded tab throttles intervals and sleep suspends them, and skips a hidden tab. Retries
- * at most once per `staleMs` measured from its own last attempt.
+ * backgrounded tab throttles intervals and sleep suspends them.
  *
  * @param lastFetch - ISO timestamp of the reading, or null to stand down.
  */
@@ -18,8 +17,6 @@ export function useStaleRefresh(
 ): void {
   const callbackRef = useRef(onStale);
   callbackRef.current = onStale;
-  // Both clocks, because neither alone measures elapsed time: a sentinel of 0 would read as
-  // "attempted at page load", so the window starts spent.
   const lastAttemptRef = useRef({
     mono: Number.NEGATIVE_INFINITY,
     wall: Number.NEGATIVE_INFINITY,
@@ -51,8 +48,8 @@ export function useStaleRefresh(
         });
       }
       const readingIsFresh = age !== null && age <= staleMs;
-      // Sleep freezes the monotonic clock while wall time runs on; a step back does the reverse.
-      // Only when both call the window unspent is it really unspent.
+      // Sleep freezes the monotonic clock while wall time runs on; a step back does the reverse,
+      // so suppress only when both agree the attempt was recent.
       const monoGap = performance.now() - lastAttemptRef.current.mono;
       const wallGap = now - lastAttemptRef.current.wall;
       const retriedRecently = monoGap <= staleMs && wallGap <= staleMs;
