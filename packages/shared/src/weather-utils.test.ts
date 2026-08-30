@@ -217,8 +217,8 @@ describe('formatWeatherAge', () => {
     expect(formatWeatherAge(null, now)).toBeNull();
   });
 
-  it('returns null for an unparseable timestamp rather than NaN', () => {
-    expect(formatWeatherAge('not a date', now)).toBeNull();
+  it('says the time is unknown for an unparseable timestamp rather than showing NaN', () => {
+    expect(formatWeatherAge('not a date', now)).toBe('Updated at an unknown time');
   });
 
   it('reports a fresh reading as just now', () => {
@@ -242,8 +242,8 @@ describe('formatWeatherAge', () => {
     expect(at('2026-07-25T12:00:30Z')).toBe('Updated just now');
   });
 
-  it('shows no age for a stamp far enough ahead to mean the clock stepped back', () => {
-    expect(at('2026-07-25T12:30:00Z')).toBeNull();
+  it('admits the age is unknown for a stamp far enough ahead to mean the clock stepped back', () => {
+    expect(at('2026-07-25T12:30:00Z')).toBe('Updated at an unknown time');
   });
 });
 
@@ -266,7 +266,7 @@ describe('weatherAgeMs', () => {
     expect(weatherAgeMs('2026-07-25T12:00:30Z', now)).toBe(0);
   });
 
-  // Naming the tolerance here makes it a contract; the constant itself is private.
+  // A literal, not the exported constant: importing it would let the tolerance move unnoticed.
   it.each([
     ['at the edge of the tolerance', 60_000, 0],
     ['a millisecond past it', 60_001, null],

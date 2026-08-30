@@ -1,6 +1,7 @@
 ---
 '@cuewise/browser-extension': patch
 '@cuewise/macos': patch
+'@cuewise/shared': patch
 '@cuewise/app': patch
 ---
 

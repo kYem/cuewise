@@ -1,15 +1,14 @@
-import { logger, weatherAgeMs } from '@cuewise/shared';
+import { CLOCK_SKEW_TOLERANCE_MS, logger, weatherAgeMs } from '@cuewise/shared';
 import { useEffect, useRef } from 'react';
 
 const CHECK_INTERVAL_MS = 60_000;
 
 /**
- * Fires the callback once a reading has aged past `staleMs`, checking on an interval and on
- * tab foregrounding — a backgrounded tab throttles intervals and sleep suspends them.
- *
- * Skips a hidden tab: refreshing what nobody is looking at spends quota for nothing. Retries
- * at most once per `staleMs` measured from its own last attempt, since a callback that fails
- * leaves the reading stale and so leaves the trigger armed.
+ * Fires the callback once a reading has aged past `staleMs`, or is stamped so far ahead that the
+ * clock must have stepped back. Checks on an interval and on tab foregrounding — a backgrounded
+ * tab throttles intervals and sleep suspends them — and skips a hidden tab, since refreshing what
+ * nobody is looking at spends quota for nothing. Retries at most once per `staleMs`, because a
+ * callback that fails leaves the reading stale and so leaves the trigger armed.
  *
  * @param lastFetch - ISO timestamp of the reading, or null to stand down.
  */
@@ -27,8 +26,8 @@ export function useStaleRefresh(
       return;
     }
     if (Number.isNaN(Date.parse(lastFetch))) {
-      // Standing down beats refreshing once a window forever on a reading we cannot date.
-      // Reaching here is a caller's bug, and the shipped logLevel is 'error'.
+      // An unparseable stamp never resolves, unlike a future one, so standing down beats
+      // refreshing once a window forever. Reaching here is a caller's bug.
       logger.error('Stale refresh stood down: unparseable timestamp', { lastFetch });
       return;
     }
@@ -37,13 +36,13 @@ export function useStaleRefresh(
         return;
       }
       const now = Date.now();
-      // Null here can only mean a stamp ahead of now, the parse having already succeeded above:
-      // the clock stepped back, so the age is unknowable until a refetch dates the reading again.
+      // Null can only be a future stamp here; the unparseable case stood down above.
       const age = weatherAgeMs(lastFetch, new Date(now));
       const readingIsFresh = age !== null && age <= staleMs;
-      // The attempt clock took the same backward step, so it needs the same guard.
-      const retriedRecently =
-        now >= lastAttemptRef.current && now - lastAttemptRef.current <= staleMs;
+      // A step back strands the attempt clock ahead of now, so it gets the reading's tolerance:
+      // without it every sub-minute correction reopens a window that should stay shut.
+      const sinceAttempt = now - lastAttemptRef.current;
+      const retriedRecently = sinceAttempt >= -CLOCK_SKEW_TOLERANCE_MS && sinceAttempt <= staleMs;
       if (readingIsFresh || retriedRecently) {
         return;
       }

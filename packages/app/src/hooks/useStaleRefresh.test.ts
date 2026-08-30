@@ -98,8 +98,6 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledTimes(2);
   });
 
-  // The attempt clock lands in the future alongside the reading, so measuring against it
-  // unguarded reads as "retried recently" and stands the refresh down for the whole step.
   it('still refreshes when the clock steps back after an attempt', async () => {
     const onStale = vi.fn();
     const { rerender } = renderHook(
@@ -111,10 +109,26 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledOnce();
 
     vi.setSystemTime(new Date(Date.now() - 60 * 60_000));
-    rerender({ at: readingStampedAhead(5) });
+    rerender({ at: readingFrom(31) });
+    await foreground();
+    expect(onStale).toHaveBeenCalledTimes(2);
+
+    // The attempt must re-arm on the stepped-back timeline, or the step buys a refresh a minute.
+    await advance(10 * 60_000);
+    expect(onStale).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the retry window shut across a correction smaller than the skew tolerance', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingFrom(31), WINDOW_MS, onStale));
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    vi.setSystemTime(new Date(Date.now() - 200));
     await foreground();
 
-    expect(onStale).toHaveBeenCalledTimes(2);
+    expect(onStale).toHaveBeenCalledOnce();
   });
 
   it('fires on foregrounding a tab that slept past the window', async () => {
