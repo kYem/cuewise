@@ -221,6 +221,19 @@ describe('the popover', () => {
     expect(screen.queryByText(/^Updated/)).not.toBeInTheDocument();
   });
 
+  it('leaves out the age when the clock stepped back past the reading', () => {
+    mockWeatherStore({
+      lastFetch: new Date(Date.now() + 30 * 60_000).toISOString(),
+      error: 'The weather service is unavailable right now',
+    });
+
+    render(<WeatherWidget />);
+    open();
+
+    expect(screen.getByText('The weather service is unavailable right now')).toBeInTheDocument();
+    expect(screen.queryByText(/^Updated/)).not.toBeInTheDocument();
+  });
+
   it('refreshes on demand', () => {
     // Pin the scale: under an en-US locale 'auto' resolves imperial and the units effect
     // would fire a second, unrelated refresh.

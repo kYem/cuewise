@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { logger, weatherAgeMs } from '@cuewise/shared';
 import { useEffect, useRef } from 'react';
 
 const CHECK_INTERVAL_MS = 60_000;
@@ -26,8 +26,7 @@ export function useStaleRefresh(
     if (lastFetch === null) {
       return;
     }
-    const taken = Date.parse(lastFetch);
-    if (Number.isNaN(taken)) {
+    if (Number.isNaN(Date.parse(lastFetch))) {
       // Standing down beats refreshing once a window forever on a reading we cannot date.
       // Reaching here is a caller's bug, and the shipped logLevel is 'error'.
       logger.error('Stale refresh stood down: unparseable timestamp', { lastFetch });
@@ -38,10 +37,13 @@ export function useStaleRefresh(
         return;
       }
       const now = Date.now();
-      // A stamp ahead of now dates the reading from a clock that has since stepped back, so its
-      // age is unknown — refetching is the only way to learn it. Freshness would be permanent.
-      const readingIsFresh = now >= taken && now - taken <= staleMs;
-      const retriedRecently = now - lastAttemptRef.current <= staleMs;
+      // Null here can only mean a stamp ahead of now, the parse having already succeeded above:
+      // the clock stepped back, so the age is unknowable until a refetch dates the reading again.
+      const age = weatherAgeMs(lastFetch, new Date(now));
+      const readingIsFresh = age !== null && age <= staleMs;
+      // The attempt clock took the same backward step, so it needs the same guard.
+      const retriedRecently =
+        now >= lastAttemptRef.current && now - lastAttemptRef.current <= staleMs;
       if (readingIsFresh || retriedRecently) {
         return;
       }

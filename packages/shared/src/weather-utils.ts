@@ -23,12 +23,8 @@ export const WEATHER_STALE_MS = 30 * 60 * 1000;
 const CLOCK_SKEW_TOLERANCE_MS = 60_000;
 
 /**
- * How old a reading is, or null when its stamp cannot be trusted: unparseable, or far enough
- * ahead of now that our clock must have stepped back since it was written. Every "is this
- * reading still good" question goes through here, so they cannot drift apart again.
- *
- * A future stamp inside the tolerance clamps to 0 instead of being rejected, so ordinary jitter
- * around a fresh write does not throw the reading away.
+ * How old a reading is, or null once its stamp sits far enough ahead that the clock must have
+ * stepped back: the age is then unknowable, so callers refetch rather than assume it is fresh.
  */
 export function weatherAgeMs(lastFetch: string | null, now: Date = new Date()): number | null {
   if (lastFetch === null) {
@@ -251,8 +247,8 @@ export function formatTemperature(value: number): string {
 }
 
 /**
- * How old a reading is, in words. The popover shows it even when there is an error, so a
- * cached reading is never passed off as current.
+ * How old a reading is, in words, or null when its stamp cannot be dated. The popover shows it
+ * alongside any error, so a datable reading is never passed off as current.
  */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   const age = weatherAgeMs(lastFetch, now);

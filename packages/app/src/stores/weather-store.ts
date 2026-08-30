@@ -70,7 +70,6 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
-/** A stored value is a usable stamp only if a reading can still be dated from it. */
 function isTimestamp(value: unknown): value is string {
   return typeof value === 'string' && weatherAgeMs(value) !== null;
 }

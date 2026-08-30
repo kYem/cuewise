@@ -265,6 +265,16 @@ describe('weatherAgeMs', () => {
   it('clamps a stamp within the skew tolerance to zero rather than rejecting it', () => {
     expect(weatherAgeMs('2026-07-25T12:00:30Z', now)).toBe(0);
   });
+
+  // Naming the tolerance here makes it a contract; the constant itself is private.
+  it.each([
+    ['at the edge of the tolerance', 60_000, 0],
+    ['a millisecond past it', 60_001, null],
+  ])('dates a stamp %s', (_label, msAhead, expected) => {
+    const ahead = new Date(now.getTime() + msAhead).toISOString();
+
+    expect(weatherAgeMs(ahead, now)).toBe(expected);
+  });
 });
 
 describe('formatForecastHour', () => {

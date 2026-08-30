@@ -19,6 +19,10 @@ describe('useStaleRefresh', () => {
     return new Date(Date.now() - minutes * 60_000).toISOString();
   }
 
+  function readingStampedAhead(minutes: number): string {
+    return new Date(Date.now() + minutes * 60_000).toISOString();
+  }
+
   async function advance(ms: number): Promise<void> {
     await act(async () => {
       vi.advanceTimersByTime(ms);
@@ -53,15 +57,64 @@ describe('useStaleRefresh', () => {
     expect(onStale).not.toHaveBeenCalled();
   });
 
-  // A backward clock step leaves the reading dated ahead of now, which subtracts to a negative
-  // age and would otherwise read as inside the window for as long as the step lasts.
-  it('refreshes a reading stamped ahead of now instead of trusting it indefinitely', async () => {
+  it('refreshes a reading stamped ahead of now', async () => {
     const onStale = vi.fn();
-    renderHook(() => useStaleRefresh(readingFrom(-120), WINDOW_MS, onStale));
+    renderHook(() => useStaleRefresh(readingStampedAhead(120), WINDOW_MS, onStale));
 
     await advance(60_000);
 
     expect(onStale).toHaveBeenCalledOnce();
+  });
+
+  it('leaves a reading stamped inside the skew tolerance alone', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingStampedAhead(0.5), WINDOW_MS, onStale));
+
+    await foreground();
+
+    expect(onStale).not.toHaveBeenCalled();
+  });
+
+  it('refreshes a reading stamped past the skew tolerance', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingStampedAhead(1.5), WINDOW_MS, onStale));
+
+    await foreground();
+
+    expect(onStale).toHaveBeenCalledOnce();
+  });
+
+  it('waits another window before refreshing a future-stamped reading again', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingStampedAhead(120), WINDOW_MS, onStale));
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    await advance(10 * 60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    await advance(WINDOW_MS);
+    expect(onStale).toHaveBeenCalledTimes(2);
+  });
+
+  // The attempt clock lands in the future alongside the reading, so measuring against it
+  // unguarded reads as "retried recently" and stands the refresh down for the whole step.
+  it('still refreshes when the clock steps back after an attempt', async () => {
+    const onStale = vi.fn();
+    const { rerender } = renderHook(
+      ({ at }: { at: string }) => useStaleRefresh(at, WINDOW_MS, onStale),
+      { initialProps: { at: readingFrom(31) } }
+    );
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    vi.setSystemTime(new Date(Date.now() - 60 * 60_000));
+    rerender({ at: readingStampedAhead(5) });
+    await foreground();
+
+    expect(onStale).toHaveBeenCalledTimes(2);
   });
 
   it('fires on foregrounding a tab that slept past the window', async () => {
