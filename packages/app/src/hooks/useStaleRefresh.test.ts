@@ -53,6 +53,17 @@ describe('useStaleRefresh', () => {
     expect(onStale).not.toHaveBeenCalled();
   });
 
+  // A backward clock step leaves the reading dated ahead of now, which subtracts to a negative
+  // age and would otherwise read as inside the window for as long as the step lasts.
+  it('refreshes a reading stamped ahead of now instead of trusting it indefinitely', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingFrom(-120), WINDOW_MS, onStale));
+
+    await advance(60_000);
+
+    expect(onStale).toHaveBeenCalledOnce();
+  });
+
   it('fires on foregrounding a tab that slept past the window', async () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingFrom(5), WINDOW_MS, onStale));

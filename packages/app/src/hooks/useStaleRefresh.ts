@@ -38,7 +38,9 @@ export function useStaleRefresh(
         return;
       }
       const now = Date.now();
-      const readingIsFresh = now - taken <= staleMs;
+      // A stamp ahead of now dates the reading from a clock that has since stepped back, so its
+      // age is unknown — refetching is the only way to learn it. Freshness would be permanent.
+      const readingIsFresh = now >= taken && now - taken <= staleMs;
       const retriedRecently = now - lastAttemptRef.current <= staleMs;
       if (readingIsFresh || retriedRecently) {
         return;

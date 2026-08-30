@@ -19,6 +19,32 @@ export const FORECAST_HORIZON_HOURS = 12;
 /** A reading past this age is stale; consumers decide when to act on that. */
 export const WEATHER_STALE_MS = 30 * 60 * 1000;
 
+/** Slack for our own clock stepping back a little after a reading was written. */
+const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+
+/**
+ * How old a reading is, or null when its stamp cannot be trusted: unparseable, or far enough
+ * ahead of now that our clock must have stepped back since it was written. Every "is this
+ * reading still good" question goes through here, so they cannot drift apart again.
+ *
+ * A future stamp inside the tolerance clamps to 0 instead of being rejected, so ordinary jitter
+ * around a fresh write does not throw the reading away.
+ */
+export function weatherAgeMs(lastFetch: string | null, now: Date = new Date()): number | null {
+  if (lastFetch === null) {
+    return null;
+  }
+  const taken = Date.parse(lastFetch);
+  if (Number.isNaN(taken)) {
+    return null;
+  }
+  const age = now.getTime() - taken;
+  if (age < -CLOCK_SKEW_TOLERANCE_MS) {
+    return null;
+  }
+  return Math.max(age, 0);
+}
+
 /**
  * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
  * so this costs no accuracy. Shared rather than duplicated: the client rounds so precise
@@ -229,14 +255,11 @@ export function formatTemperature(value: number): string {
  * cached reading is never passed off as current.
  */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
-  if (lastFetch === null) {
+  const age = weatherAgeMs(lastFetch, now);
+  if (age === null) {
     return null;
   }
-  const then = Date.parse(lastFetch);
-  if (Number.isNaN(then)) {
-    return null;
-  }
-  const minutes = Math.floor((now.getTime() - then) / 60_000);
+  const minutes = Math.floor(age / 60_000);
   if (minutes < 1) {
     return 'Updated just now';
   }

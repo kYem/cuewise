@@ -7,6 +7,7 @@ import {
   type WeatherState,
   type WeatherUnits,
   type WeatherUnitsPreference,
+  weatherAgeMs,
 } from '@cuewise/shared';
 import { getWeatherState, setWeatherState } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -69,20 +70,9 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
-/** Slack for our own clock stepping back a little after a reading was written. */
-const CLOCK_SKEW_TOLERANCE_MS = 60_000;
-
-/**
- * Rejects a stamp from the future as well as an unparseable one: both staleness checks
- * subtract it from now, so a future one reads as fresh for as long as the skew lasts, and the
- * age line vouches for it with "Updated just now".
- */
+/** A stored value is a usable stamp only if a reading can still be dated from it. */
 function isTimestamp(value: unknown): value is string {
-  if (typeof value !== 'string') {
-    return false;
-  }
-  const parsed = Date.parse(value);
-  return !Number.isNaN(parsed) && parsed <= Date.now() + CLOCK_SKEW_TOLERANCE_MS;
+  return typeof value === 'string' && weatherAgeMs(value) !== null;
 }
 
 /** A lost cache entry only costs one extra fetch, so log and move on. */
@@ -201,7 +191,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (location === null) {
       return;
     }
-    const isStale = lastFetch === null || Date.now() - Date.parse(lastFetch) > WEATHER_STALE_MS;
+    const age = weatherAgeMs(lastFetch);
+    const isStale = age === null || age > WEATHER_STALE_MS;
     if (isStale) {
       await get().refresh({ silent: true, unitsPreference });
     }
