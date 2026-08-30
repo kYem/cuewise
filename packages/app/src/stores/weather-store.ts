@@ -173,8 +173,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
 
     const readable = isWeatherSnapshot(stored.snapshot);
     const dated = isTimestamp(stored.lastFetch);
-    // Kept only while it is readable, dated, and still has the city it describes: undated it
-    // shows no age, and orphaned it arms a refresh that returns the moment it sees no city.
+    // Kept only while it is readable, dated, and still has the city it describes: orphaned, it
+    // arms a refresh that returns the moment it sees no city.
     const usable = readable && dated && location !== null;
     const snapshot = usable ? stored.snapshot : null;
     const lastFetch = usable ? stored.lastFetch : null;

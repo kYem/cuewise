@@ -20,11 +20,11 @@ export const FORECAST_HORIZON_HOURS = 12;
 export const WEATHER_STALE_MS = 30 * 60 * 1000;
 
 /** Slack for our own clock stepping back a little after a reading was written. */
-export const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+const CLOCK_SKEW_TOLERANCE_MS = 60_000;
 
 /**
- * How old a reading is, or null once its stamp sits far enough ahead that the clock must have
- * stepped back — the age is unknowable from that point, not merely zero.
+ * null when the age is unknowable — no stamp, an unparseable one, or one so far ahead that the
+ * clock must have stepped back. Unknowable rather than zero, which is why it is not clamped.
  */
 export function weatherAgeMs(lastFetch: string | null, now: Date = new Date()): number | null {
   if (lastFetch === null) {
@@ -247,16 +247,16 @@ export function formatTemperature(value: number): string {
 }
 
 /**
- * How old a reading is, in words; null only when there is no reading to date. The popover shows
- * it alongside any error, so a cached reading is never passed off as current.
+ * In words; null only when there is no reading. The popover shows this beside any error, so a
+ * cached reading is never passed off as current.
  */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   if (lastFetch === null) {
     return null;
   }
   const age = weatherAgeMs(lastFetch, now);
-  // Saying so beats saying nothing: the popover hides the line on null, which would leave the
-  // temperature standing unqualified exactly when it is least trustworthy.
+  // The popover hides this line on null, leaving the temperature unqualified exactly when it is
+  // least trustworthy.
   if (age === null) {
     return 'Updated at an unknown time';
   }

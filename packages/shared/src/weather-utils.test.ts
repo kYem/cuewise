@@ -266,7 +266,7 @@ describe('weatherAgeMs', () => {
     expect(weatherAgeMs('2026-07-25T12:00:30Z', now)).toBe(0);
   });
 
-  // A literal, not the exported constant: importing it would let the tolerance move unnoticed.
+  // Naming the tolerance here makes it a contract; the constant itself is private.
   it.each([
     ['at the edge of the tolerance', 60_000, 0],
     ['a millisecond past it', 60_001, null],

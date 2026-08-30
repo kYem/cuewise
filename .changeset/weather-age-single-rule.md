@@ -5,4 +5,4 @@
 '@cuewise/app': patch
 ---
 
-A weather reading is no longer stuck showing "Updated just now" after the clock steps back; it refreshes instead.
+A weather reading whose age the clock has made unknowable now says so and refreshes, instead of claiming it was updated just now.

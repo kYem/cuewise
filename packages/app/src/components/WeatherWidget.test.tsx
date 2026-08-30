@@ -231,6 +231,19 @@ describe('the popover', () => {
     expect(screen.getByText('Updated at an unknown time')).toBeInTheDocument();
   });
 
+  it('keeps the unknown age beside a failed refresh rather than showing the error alone', () => {
+    mockWeatherStore({
+      lastFetch: futureStampedReading(),
+      error: 'The weather service is unavailable right now',
+    });
+
+    render(<WeatherWidget />);
+    open();
+
+    expect(screen.getByText('The weather service is unavailable right now')).toBeInTheDocument();
+    expect(screen.getByText('Updated at an unknown time')).toBeInTheDocument();
+  });
+
   it('refreshes on demand', () => {
     // Pin the scale: under an en-US locale 'auto' resolves imperial and the units effect
     // would fire a second, unrelated refresh.
