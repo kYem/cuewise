@@ -51,7 +51,7 @@ export function staleReading(): string {
   return new Date(Date.now() - (WEATHER_STALE_MS + 60_000)).toISOString();
 }
 
-/** A reading left stamped ahead of now by a clock that stepped back under it. */
+/** Far enough ahead to clear the skew tolerance, so the age reads as unknowable. */
 export function futureStampedReading(): string {
   return new Date(Date.now() + 30 * 60_000).toISOString();
 }

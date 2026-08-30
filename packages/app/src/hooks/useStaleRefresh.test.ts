@@ -66,7 +66,7 @@ describe('useStaleRefresh', () => {
     expect(onStale).toHaveBeenCalledOnce();
   });
 
-  it('leaves a reading stamped inside the skew tolerance alone', async () => {
+  it('leaves a reading stamped a few seconds ahead alone', async () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingStampedAhead(0.5), WINDOW_MS, onStale));
 
@@ -75,7 +75,7 @@ describe('useStaleRefresh', () => {
     expect(onStale).not.toHaveBeenCalled();
   });
 
-  it('refreshes a reading stamped past the skew tolerance', async () => {
+  it('refreshes a reading stamped further ahead than a clock wobble explains', async () => {
     const onStale = vi.fn();
     renderHook(() => useStaleRefresh(readingStampedAhead(1.5), WINDOW_MS, onStale));
 
@@ -113,6 +113,63 @@ describe('useStaleRefresh', () => {
     await foreground();
 
     expect(onStale).toHaveBeenCalledOnce();
+  });
+
+  // Sleep advances the wall clock while the monotonic one stays put, so a limiter reading only
+  // the latter would hold the refresh shut for the whole nap.
+  it('refreshes on waking from sleep even though an attempt landed just before it', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingFrom(31), WINDOW_MS, onStale));
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      vi.setSystemTime(new Date(Date.now() + 8 * 60 * 60_000));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(onStale).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds the retry shut for a full window after an attempt, then opens it', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingFrom(31), WINDOW_MS, onStale));
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    await advance(WINDOW_MS);
+    expect(onStale).toHaveBeenCalledOnce();
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves a reading that is exactly one window old alone', async () => {
+    const onStale = vi.fn();
+    renderHook(() => useStaleRefresh(readingFrom(29), WINDOW_MS, onStale));
+
+    await advance(60_000);
+    expect(onStale).not.toHaveBeenCalled();
+
+    await advance(60_000);
+    expect(onStale).toHaveBeenCalledOnce();
+  });
+
+  it('says a reading is stamped ahead of the clock once, not every minute', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const lastFetch = readingStampedAhead(120);
+    renderHook(() => useStaleRefresh(lastFetch, WINDOW_MS, vi.fn()));
+
+    await advance(60_000);
+    const noticedAt = new Date().toISOString();
+    await advance(2 * 60_000);
+
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith(
+      'Weather reading is stamped ahead of now; the clock stepped back',
+      { lastFetch, now: noticedAt }
+    );
   });
 
   it('refreshes a stale reading one real window after a clock step, not one stepped window', async () => {

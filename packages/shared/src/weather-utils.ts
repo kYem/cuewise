@@ -23,8 +23,8 @@ export const WEATHER_STALE_MS = 30 * 60 * 1000;
 const CLOCK_SKEW_TOLERANCE_MS = 60_000;
 
 /**
- * null when the age is unknowable — no stamp, an unparseable one, or one so far ahead that the
- * clock must have stepped back. Unknowable rather than zero, which is why it is not clamped.
+ * null when the age is unknowable: no stamp, an unparseable one, or one far enough ahead that
+ * the clock must have stepped back.
  */
 export function weatherAgeMs(lastFetch: string | null, now: Date = new Date()): number | null {
   if (lastFetch === null) {
@@ -246,17 +246,14 @@ export function formatTemperature(value: number): string {
   return `${Math.round(value)}°`;
 }
 
-/**
- * In words; null only when there is no reading. The popover shows this beside any error, so a
- * cached reading is never passed off as current.
- */
+/** In words; null only when there is no reading at all. */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   if (lastFetch === null) {
     return null;
   }
   const age = weatherAgeMs(lastFetch, now);
-  // The popover hides this line on null, leaving the temperature unqualified exactly when it is
-  // least trustworthy.
+  // Returning null would hide the popover's age line exactly when the temperature is least
+  // worth trusting.
   if (age === null) {
     return 'Updated at an unknown time';
   }
