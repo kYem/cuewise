@@ -7,6 +7,7 @@ import {
   type WeatherState,
   type WeatherUnits,
   type WeatherUnitsPreference,
+  weatherAgeMs,
 } from '@cuewise/shared';
 import { getWeatherState, setWeatherState } from '@cuewise/storage';
 import { create } from 'zustand';
@@ -69,20 +70,8 @@ interface WeatherStore {
   clearSearch: () => void;
 }
 
-/** Slack for our own clock stepping back a little after a reading was written. */
-const CLOCK_SKEW_TOLERANCE_MS = 60_000;
-
-/**
- * Rejects a stamp from the future as well as an unparseable one: both staleness checks
- * subtract it from now, so a future one reads as fresh for as long as the skew lasts, and the
- * age line vouches for it with "Updated just now".
- */
 function isTimestamp(value: unknown): value is string {
-  if (typeof value !== 'string') {
-    return false;
-  }
-  const parsed = Date.parse(value);
-  return !Number.isNaN(parsed) && parsed <= Date.now() + CLOCK_SKEW_TOLERANCE_MS;
+  return typeof value === 'string' && weatherAgeMs(value) !== null;
 }
 
 /** A lost cache entry only costs one extra fetch, so log and move on. */
@@ -184,8 +173,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
 
     const readable = isWeatherSnapshot(stored.snapshot);
     const dated = isTimestamp(stored.lastFetch);
-    // Kept only while it is readable, dated, and still has the city it describes: undated it
-    // shows no age, and orphaned it arms a refresh that returns the moment it sees no city.
+    // A reading kept without its city arms a refresh that returns the moment it sees no location.
     const usable = readable && dated && location !== null;
     const snapshot = usable ? stored.snapshot : null;
     const lastFetch = usable ? stored.lastFetch : null;
@@ -201,7 +189,8 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     if (location === null) {
       return;
     }
-    const isStale = lastFetch === null || Date.now() - Date.parse(lastFetch) > WEATHER_STALE_MS;
+    const age = weatherAgeMs(lastFetch);
+    const isStale = age === null || age > WEATHER_STALE_MS;
     if (isStale) {
       await get().refresh({ silent: true, unitsPreference });
     }

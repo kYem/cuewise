@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hours, LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
 import {
+  futureStampedReading,
   mockSettings,
   mockWeatherStore,
   setFetching,
@@ -219,6 +220,28 @@ describe('the popover', () => {
 
     expect(screen.getByText('The weather service is unavailable right now')).toBeInTheDocument();
     expect(screen.queryByText(/^Updated/)).not.toBeInTheDocument();
+  });
+
+  it('admits the age is unknown when the clock stepped back past the reading', () => {
+    mockWeatherStore({ lastFetch: futureStampedReading(), error: null });
+
+    render(<WeatherWidget />);
+    open();
+
+    expect(screen.getByText('Updated at an unknown time')).toBeInTheDocument();
+  });
+
+  it('keeps the unknown age beside a failed refresh rather than showing the error alone', () => {
+    mockWeatherStore({
+      lastFetch: futureStampedReading(),
+      error: 'The weather service is unavailable right now',
+    });
+
+    render(<WeatherWidget />);
+    open();
+
+    expect(screen.getByText('The weather service is unavailable right now')).toBeInTheDocument();
+    expect(screen.getByText('Updated at an unknown time')).toBeInTheDocument();
   });
 
   it('refreshes on demand', () => {

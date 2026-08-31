@@ -19,6 +19,28 @@ export const FORECAST_HORIZON_HOURS = 12;
 /** A reading past this age is stale; consumers decide when to act on that. */
 export const WEATHER_STALE_MS = 30 * 60 * 1000;
 
+/** Slack for our own clock stepping back a little after a reading was written. */
+const CLOCK_SKEW_TOLERANCE_MS = 60_000;
+
+/**
+ * null when the age is unknowable: no stamp, an unparseable one, or one far enough ahead that
+ * the clock must have stepped back.
+ */
+export function weatherAgeMs(lastFetch: string | null, now: Date = new Date()): number | null {
+  if (lastFetch === null) {
+    return null;
+  }
+  const taken = Date.parse(lastFetch);
+  if (Number.isNaN(taken)) {
+    return null;
+  }
+  const age = now.getTime() - taken;
+  if (age < -CLOCK_SKEW_TOLERANCE_MS) {
+    return null;
+  }
+  return Math.max(age, 0);
+}
+
 /**
  * ~1km. Open-Meteo snaps to its own model grid regardless (51.51,-0.13 returns 51.5,-0.25),
  * so this costs no accuracy. Shared rather than duplicated: the client rounds so precise
@@ -224,19 +246,18 @@ export function formatTemperature(value: number): string {
   return `${Math.round(value)}°`;
 }
 
-/**
- * How old a reading is, in words. The popover shows it even when there is an error, so a
- * cached reading is never passed off as current.
- */
+/** In words; null only when there is no reading at all. */
 export function formatWeatherAge(lastFetch: string | null, now: Date = new Date()): string | null {
   if (lastFetch === null) {
     return null;
   }
-  const then = Date.parse(lastFetch);
-  if (Number.isNaN(then)) {
-    return null;
+  const age = weatherAgeMs(lastFetch, now);
+  // Returning null would hide the popover's age line exactly when the temperature is least
+  // worth trusting.
+  if (age === null) {
+    return 'Updated at an unknown time';
   }
-  const minutes = Math.floor((now.getTime() - then) / 60_000);
+  const minutes = Math.floor(age / 60_000);
   if (minutes < 1) {
     return 'Updated just now';
   }

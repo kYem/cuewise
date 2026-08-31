@@ -10,6 +10,7 @@ import {
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
+  weatherAgeMs,
 } from './weather-utils';
 
 /** A whole local day of hours, 00:00–23:00, so sampling can be exercised at any point in it. */
@@ -216,8 +217,8 @@ describe('formatWeatherAge', () => {
     expect(formatWeatherAge(null, now)).toBeNull();
   });
 
-  it('returns null for an unparseable timestamp rather than NaN', () => {
-    expect(formatWeatherAge('not a date', now)).toBeNull();
+  it('says the time is unknown for an unparseable timestamp rather than showing NaN', () => {
+    expect(formatWeatherAge('not a date', now)).toBe('Updated at an unknown time');
   });
 
   it('reports a fresh reading as just now', () => {
@@ -237,8 +238,42 @@ describe('formatWeatherAge', () => {
     expect(at('2026-07-24T12:00:00Z')).toBe('Updated yesterday');
   });
 
-  it('treats a future timestamp as just now', () => {
-    expect(at('2026-07-25T12:30:00Z')).toBe('Updated just now');
+  it('treats a stamp a few seconds ahead as just now', () => {
+    expect(at('2026-07-25T12:00:30Z')).toBe('Updated just now');
+  });
+
+  it('admits the age is unknown for a stamp far enough ahead to mean the clock stepped back', () => {
+    expect(at('2026-07-25T12:30:00Z')).toBe('Updated at an unknown time');
+  });
+});
+
+describe('weatherAgeMs', () => {
+  const now = new Date('2026-07-25T12:00:00Z');
+
+  it('measures the age of a past reading', () => {
+    expect(weatherAgeMs('2026-07-25T11:30:00Z', now)).toBe(30 * 60_000);
+  });
+
+  it.each([
+    ['no reading yet', null],
+    ['an unparseable stamp', 'not a date'],
+    ['a stamp beyond the skew tolerance', '2026-07-25T12:30:00Z'],
+  ])('returns null for %s', (_label, lastFetch) => {
+    expect(weatherAgeMs(lastFetch, now)).toBeNull();
+  });
+
+  it('clamps a stamp within the skew tolerance to zero rather than rejecting it', () => {
+    expect(weatherAgeMs('2026-07-25T12:00:30Z', now)).toBe(0);
+  });
+
+  // Naming the tolerance here makes it a contract; the constant itself is private.
+  it.each([
+    ['at the edge of the tolerance', 60_000, 0],
+    ['a millisecond past it', 60_001, null],
+  ])('dates a stamp %s', (_label, msAhead, expected) => {
+    const ahead = new Date(now.getTime() + msAhead).toISOString();
+
+    expect(weatherAgeMs(ahead, now)).toBe(expected);
   });
 });
 

@@ -1,15 +1,12 @@
-import { logger } from '@cuewise/shared';
+import { logger, weatherAgeMs } from '@cuewise/shared';
 import { useEffect, useRef } from 'react';
 
 const CHECK_INTERVAL_MS = 60_000;
 
 /**
- * Fires the callback once a reading has aged past `staleMs`, checking on an interval and on
- * tab foregrounding — a backgrounded tab throttles intervals and sleep suspends them.
- *
- * Skips a hidden tab: refreshing what nobody is looking at spends quota for nothing. Retries
- * at most once per `staleMs` measured from its own last attempt, since a callback that fails
- * leaves the reading stale and so leaves the trigger armed.
+ * Fires the callback once a reading has aged past `staleMs`, or is stamped so far ahead that the
+ * clock must have stepped back. Checks on an interval and on tab foregrounding, because a
+ * backgrounded tab throttles intervals and sleep suspends them.
  *
  * @param lastFetch - ISO timestamp of the reading, or null to stand down.
  */
@@ -20,16 +17,19 @@ export function useStaleRefresh(
 ): void {
   const callbackRef = useRef(onStale);
   callbackRef.current = onStale;
-  const lastAttemptRef = useRef(0);
+  const lastAttemptRef = useRef({
+    mono: Number.NEGATIVE_INFINITY,
+    wall: Number.NEGATIVE_INFINITY,
+  });
+  const loggedStepRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (lastFetch === null) {
       return;
     }
-    const taken = Date.parse(lastFetch);
-    if (Number.isNaN(taken)) {
-      // Standing down beats refreshing once a window forever on a reading we cannot date.
-      // Reaching here is a caller's bug, and the shipped logLevel is 'error'.
+    if (Number.isNaN(Date.parse(lastFetch))) {
+      // An unparseable stamp never resolves, unlike a future one, so standing down beats
+      // refreshing once a window forever.
       logger.error('Stale refresh stood down: unparseable timestamp', { lastFetch });
       return;
     }
@@ -38,12 +38,25 @@ export function useStaleRefresh(
         return;
       }
       const now = Date.now();
-      const readingIsFresh = now - taken <= staleMs;
-      const retriedRecently = now - lastAttemptRef.current <= staleMs;
+      // Null can only be a future stamp here; the unparseable case stood down above.
+      const age = weatherAgeMs(lastFetch, new Date(now));
+      if (age === null && loggedStepRef.current !== lastFetch) {
+        loggedStepRef.current = lastFetch;
+        logger.error('Weather reading is stamped ahead of now; the clock stepped back', {
+          lastFetch,
+          now: new Date(now).toISOString(),
+        });
+      }
+      const readingIsFresh = age !== null && age <= staleMs;
+      // Sleep freezes the monotonic clock while wall time runs on; a step back does the reverse,
+      // so suppress only when both agree the attempt was recent.
+      const monoGap = performance.now() - lastAttemptRef.current.mono;
+      const wallGap = now - lastAttemptRef.current.wall;
+      const retriedRecently = monoGap <= staleMs && wallGap <= staleMs;
       if (readingIsFresh || retriedRecently) {
         return;
       }
-      lastAttemptRef.current = now;
+      lastAttemptRef.current = { mono: performance.now(), wall: now };
       Promise.resolve()
         .then(() => callbackRef.current())
         .catch((error) => {
