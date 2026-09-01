@@ -1,5 +1,15 @@
 # @cuewise/sync-engine
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [a2e35dc]
+- Updated dependencies [9786286]
+  - @cuewise/shared@1.25.1
+  - @cuewise/storage@1.25.1
+  - @cuewise/sync-client@0.2.1
+
 ## 0.3.0
 
 ### Minor Changes
