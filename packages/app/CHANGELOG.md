@@ -1,5 +1,18 @@
 # @cuewise/app
 
+## 1.23.1
+
+### Patch Changes
+
+- a2e35dc: Requesting a feature no longer needs a GitHub account — Settings now links to a short form on cuewise.app.
+- 9786286: The weather popover's hourly strip now rolls into tomorrow instead of emptying out at the end of the day, and a window left open refreshes itself rather than keeping the reading it started with. A reading whose age can no longer be trusted says so and refreshes, instead of claiming it was updated just now — as does the calendar strip when its own last-sync time is unreadable.
+- Updated dependencies [a2e35dc]
+- Updated dependencies [9786286]
+  - @cuewise/shared@1.25.1
+  - @cuewise/storage@1.25.1
+  - @cuewise/sync-engine@0.3.1
+  - @cuewise/ui@1.25.1
+
 ## 1.23.0
 
 ### Minor Changes
