@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress; install + lint + type-check + test + build reach only npm + GitHub.
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with:
           egress-policy: block
           disable-sudo: true
@@ -141,7 +141,7 @@ jobs:
       - name: Harden runner
         # macOS GitHub-hosted runners only get harden-runner's audit (monitor-only)
         # mode — no eBPF-based egress blocking exists there, so this can't `block`.
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with:
           egress-policy: audit
 
@@ -196,7 +196,7 @@ jobs:
       - name: Harden runner
         # Endpoints traced from real CI run 29178832429. csp.spec.ts/smoke.spec.ts
         # now stub every off-origin request, so only job infra remains below.
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with:
           egress-policy: block
           disable-sudo: false

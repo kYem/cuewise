@@ -41,7 +41,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress (builds + attests the published artifact).
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with:
           egress-policy: block
           disable-sudo: true
@@ -131,7 +131,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress (creates the GitHub release).
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with:
           egress-policy: block
           disable-sudo: true
@@ -218,7 +218,7 @@ jobs:
     steps:
       - name: Harden runner
         # Block egress (holds the store tokens).
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2
         with:
           egress-policy: block
           disable-sudo: true
