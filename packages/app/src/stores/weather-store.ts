@@ -62,6 +62,13 @@ interface WeatherStore {
     unitsPreference?: WeatherUnitsPreference
   ) => Promise<void>;
   clearLocation: () => Promise<void>;
+  // The automatic refreshes — mount-time staleness and the widget's timer — share one budget.
+  // It lives on the store because `initialize` runs on every route change and a failed refresh
+  // leaves the stamp stale, so a bound held in a component would make route bouncing an
+  // unlimited tap on a provider that rate-limits. A manual refresh is the user asking, and is
+  // not bounded.
+  lastAutoRefreshAt: { mono: number; wall: number };
+  refreshIfDue: (unitsPreference?: WeatherUnitsPreference) => Promise<void>;
   refresh: (options?: {
     silent?: boolean;
     unitsPreference?: WeatherUnitsPreference;
@@ -137,6 +144,7 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
   searchedFor: null,
   epoch: 0,
   initialized: false,
+  lastAutoRefreshAt: { mono: Number.NEGATIVE_INFINITY, wall: Number.NEGATIVE_INFINITY },
 
   initialize: async (unitsPreference) => {
     // Re-runs whenever weather is switched back on, and the city control stays mounted
@@ -192,8 +200,23 @@ export const useWeatherStore = create<WeatherStore>((set, get) => ({
     const age = weatherAgeMs(lastFetch);
     const isStale = age === null || age > WEATHER_STALE_MS;
     if (isStale) {
-      await get().refresh({ silent: true, unitsPreference });
+      await get().refreshIfDue(unitsPreference);
     }
+  },
+
+  refreshIfDue: async (unitsPreference) => {
+    const spent = get().lastAutoRefreshAt;
+    const now = Date.now();
+    const mono = performance.now();
+    // Sleep freezes the monotonic clock while wall time runs on, and a step back does the
+    // reverse, so the budget counts as spent only while both clocks agree it was recent.
+    if (mono - spent.mono <= WEATHER_STALE_MS && now - spent.wall <= WEATHER_STALE_MS) {
+      return;
+    }
+    // Stamped before the request, not after: a failure that left the reading stale would
+    // otherwise hand the next mount another free attempt.
+    set({ lastAutoRefreshAt: { mono, wall: now } });
+    await get().refresh({ silent: true, unitsPreference });
   },
 
   setLocation: async (location, unitsPreference) => {

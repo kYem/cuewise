@@ -39,6 +39,7 @@ export function mockWeatherStore(overrides: WeatherStoreOverrides = {}) {
     setLocation: vi.fn(),
     clearLocation: vi.fn(),
     refresh: vi.fn(),
+    refreshIfDue: vi.fn(),
     search: vi.fn(),
     clearSearch: vi.fn(),
   };
