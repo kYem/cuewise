@@ -19,9 +19,12 @@ minimumReleaseAgeExclude:
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
 # the minimumReleaseAge cooldown above.
 overrides:
+  # Each pin lifts one lagging parent past an advisory; pulling any of them fails `pnpm audit`.
+  # miniflare (via wrangler) holds 7.28.0; only the miniflare 5 alphas have moved on.
   undici@7: 7.29.0
+  # yaml-language-server holds 2.7.1; even its latest stops at 2.8.3, the first patched release.
   yaml@2: 2.9.0
-  # astro and miniflare pin 0.34; 0.35 carries the libvips CVE fixes (GHSA batch 2026-07-25).
+  # miniflare holds 0.34.5; 0.35 carries the libvips CVE fixes (GHSA batch 2026-07-25).
   sharp@0.34: 0.35.3
 
 allowBuilds:
