@@ -30,7 +30,7 @@
     "@commitlint/config-conventional": "^20.2.0",
     "@types/node": "catalog:",
     "husky": "^9.1.7",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.12",
     "turbo": "catalog:",
     "typescript": "catalog:"
   },

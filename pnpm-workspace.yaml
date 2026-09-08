@@ -21,7 +21,6 @@ minimumReleaseAgeExclude:
 overrides:
   undici@7: 7.29.0
   yaml@2: 2.9.0
-  esbuild@0.27: 0.28.1
   # astro and miniflare pin 0.34; 0.35 carries the libvips CVE fixes (GHSA batch 2026-07-25).
   sharp@0.34: 0.35.3
 
