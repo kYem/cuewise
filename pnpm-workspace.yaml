@@ -19,13 +19,8 @@ minimumReleaseAgeExclude:
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
 # the minimumReleaseAge cooldown above.
 overrides:
-  # Each pin lifts one lagging parent past an advisory; pulling any of them fails `pnpm audit`.
-  # miniflare (via wrangler) holds 7.28.0; only the miniflare 5 alphas have moved on.
-  undici@7: 7.29.0
   # yaml-language-server holds 2.7.1; even its latest stops at 2.8.3, the first patched release.
   yaml@2: 2.9.0
-  # miniflare holds 0.34.5; 0.35 carries the libvips CVE fixes (GHSA batch 2026-07-25).
-  sharp@0.34: 0.35.3
 
 allowBuilds:
   esbuild: true
@@ -36,7 +31,7 @@ catalog:
   '@astrojs/check': ^0.9.4
   '@astrojs/sitemap': ^3.2.0
   '@biomejs/biome': ^2.5.3
-  '@cloudflare/vitest-pool-workers': ^0.18.0
+  '@cloudflare/vitest-pool-workers': ^0.22.0
   '@cloudflare/workers-types': ^4.20250620.0
   '@crxjs/vite-plugin': ^2.7.1
   '@tailwindcss/postcss': ^4.1.18
@@ -70,7 +65,7 @@ catalog:
   typescript: ^7.0.2
   vite: ^8.1.3
   vitest: 4.1.9
-  wrangler: ^4.20.0
+  wrangler: ^4.124.0
   zod: ^4.4.3
   zustand: 5.0.14
 
