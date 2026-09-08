@@ -180,6 +180,7 @@ export const WeatherWidget: React.FC = () => {
   const isFetching = useWeatherStore((state) => state.inFlight !== null);
   const initialize = useWeatherStore((state) => state.initialize);
   const refresh = useWeatherStore((state) => state.refresh);
+  const refreshIfDue = useWeatherStore((state) => state.refreshIfDue);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const unitsRef = useRef(unitsPreference);
@@ -195,7 +196,9 @@ export const WeatherWidget: React.FC = () => {
   // Null stands the timer down: no reading yet, chip off, or a fetch running — the last
   // because the store drops a matching request and the hook would count it as its attempt.
   const readingToAge = showWeather && !isFetching ? lastFetch : null;
-  useStaleRefresh(readingToAge, WEATHER_STALE_MS, () => refresh({ silent: true, unitsPreference }));
+  // Through the store, so this timer and the mount refresh spend one budget that outlives the
+  // route changes remounting this widget.
+  useStaleRefresh(readingToAge, WEATHER_STALE_MS, () => refreshIfDue(unitsPreference));
 
   // Reads the preference off a ref so changing units doesn't re-run the storage load;
   // the effect below owns that case.

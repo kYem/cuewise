@@ -53,6 +53,7 @@ function resetStore(): void {
     searchedFor: null,
     epoch: 0,
     initialized: false,
+    lastAutoRefreshAt: { mono: Number.NEGATIVE_INFINITY, wall: Number.NEGATIVE_INFINITY },
   });
 }
 
@@ -184,6 +185,32 @@ describe('initialize', () => {
     fetchForecastMock.mockRejectedValue(new weatherApi.WeatherUnavailableError());
 
     await useWeatherStore.getState().initialize();
+
+    expect(errorToastMock).not.toHaveBeenCalled();
+    expect(useWeatherStore.getState().error).not.toBeNull();
+  });
+
+  // Every hop to #pomodoro and back unmounts the widget and calls initialize again. A failed
+  // refresh leaves the stored stamp stale, so without a bound that outlives the mount, route
+  // bouncing is an unlimited request tap against an endpoint that rate-limits.
+  it('spends one request across repeated mounts while the provider is failing', async () => {
+    getWeatherStateMock.mockResolvedValue(staleState());
+    fetchForecastMock.mockRejectedValue(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().initialize();
+    await useWeatherStore.getState().initialize();
+
+    expect(fetchForecastMock).toHaveBeenCalledTimes(1);
+  });
+
+  // The budget's refreshes are automatic, so a failure must not toast — the popover's error
+  // line is where it belongs.
+  it('spends the budget silently', async () => {
+    useWeatherStore.setState({ location: LONDON });
+    fetchForecastMock.mockRejectedValue(new weatherApi.WeatherUnavailableError());
+
+    await useWeatherStore.getState().refreshIfDue('metric');
 
     expect(errorToastMock).not.toHaveBeenCalled();
     expect(useWeatherStore.getState().error).not.toBeNull();

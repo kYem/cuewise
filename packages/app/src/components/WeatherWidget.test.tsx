@@ -396,10 +396,7 @@ describe('a reading left standing', () => {
     render(<WeatherWidget />);
     await advance(60_000);
 
-    expect(store.refresh).toHaveBeenCalledExactlyOnceWith({
-      silent: true,
-      unitsPreference: 'metric',
-    });
+    expect(store.refreshIfDue).toHaveBeenCalledExactlyOnceWith('metric');
   });
 
   it('stands down while the chip is off', async () => {
@@ -428,7 +425,7 @@ describe('a reading left standing', () => {
     rerender(<WeatherWidget />);
     await advance(60_000);
 
-    expect(store.refresh).toHaveBeenCalledOnce();
+    expect(store.refreshIfDue).toHaveBeenCalledOnce();
   });
 
   it('leaves a fresh reading alone', async () => {
