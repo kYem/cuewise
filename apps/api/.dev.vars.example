@@ -3,3 +3,8 @@ STATE_SIGNING_KEY=dev-only-not-a-secret
 DEV_FAKE_AUTH=1
 # Pair for the Google server-bounce (macOS sign-in); use the real web-client secret to test it.
 GOOGLE_CLIENT_SECRET=dev-only-placeholder
+# Encrypts third-party provider grants at rest. 32 bytes, base64url (43 chars).
+PROVIDER_TOKEN_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+# Pair for the Notion integration; create one at https://app.notion.com/developers/connections
+NOTION_CLIENT_ID=
+NOTION_CLIENT_SECRET=

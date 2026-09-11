@@ -41,6 +41,7 @@ D1 tables (`migrations/0001_init.sql`, plus later numbered migrations):
 | `auth_codes` | `code_hash` (PK), `payload` (JSON), `expires_at`, `used_at`, `code_challenge` | The server-bounce one-time exchange codes (Apple and Google, also hash-only; `payload.provider` records which). 60s TTL; `code_challenge` binds it to a PKCE verifier. `consumeAuthCode` DELETEs the row (single-use + PII gone at once), so `used_at` is now vestigial. |
 | `records` | `(user_id, collection, entity_id)` (PK), `seq`, `ciphertext`, `deleted`, `client_updated_at`, `server_received_at` | See below. |
 | `key_envelopes` | `(user_id, kind)` (PK), `envelope`, `updated_at` | ENG-44 E2E key material, client-wrapped — `envelope` is opaque, the server never reads it. |
+| `provider_tokens` | `(user_id, provider)` (PK), `ciphertext`, `iv`, `workspace`, `database_id`, `data_source_id`, `created_at` | **The one table the ciphertext-only guarantee does not cover** — a third-party token is useless to us encrypted under a key only the client holds, so the Worker must be able to read it. AES-GCM under `PROVIDER_TOKEN_KEY` (a Worker secret, deliberately *not* the user's sync key). Kept out of `records` so the guarantee stays literally true of sync data. One row per (user, provider); reconnecting replaces it. `data_source_id` is the table actually queried — Notion's schema lives on the data source, not the database containing it. |
 | `pairings` | `id` (PK), `user_id`, `requester_session_id`, `requester_commitment`, `requester_public_key`, `requester_nonce`, `approver_session_id`, `approver_public_key`, `envelope`, `created_at`, `expires_at` | ENG-50 transient device-pairing relay rows — 10 min TTL, one live request per requester session. Commit-then-reveal (2026-08-09 spec amendment): the requester posts only `requester_commitment` up front; `requester_public_key`/`requester_nonce` fill in only once revealed, which the server refuses before `approver_public_key` is committed. All of `requester_commitment`/`requester_public_key`/`approver_public_key`/`requester_nonce`/`envelope` are opaque, purged by the daily cron alongside tombstones. |
 
 **`records` is upsert-per-entity, not append-only history.** The primary key is the entity's identity, so pushing an update to an entity `ON CONFLICT ... DO UPDATE`s the same row in place — one row per entity ever synced, storage bounded regardless of edit count. A delete sets `deleted = 1` (tombstone) rather than removing the row, because a physically-deleted row would be invisible to `WHERE seq > ?`, and a device that pulls after the delete would never learn the entity is gone. A daily cron (`worker.ts` `scheduled()` → `purgeTombstones`) reclaims tombstones older than `TOMBSTONE_RETENTION_MS` (= `SESSION_TTL_MS`, 90 days): a device idle that long is logged out and re-bootstraps from `since=0`, so it never needed the tombstone. This makes re-bootstrapping from `since=0` after a logout a client contract ENG-45 must honor: a client that resumes from a persisted stale cursor after re-login — or one that pushes but never pulls for 90+ days — could miss a purged delete.
@@ -88,6 +89,13 @@ All endpoints are under `/v1`.
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, and key envelopes | Yes |
 | `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units, days}`. `days: 2` opts into tomorrow's hours and `tomorrow` high/low; anything else answers one day (back-compat — see the note in `weather.ts`) | No |
 | `POST` | `/v1/weather/search` | City lookup proxy, `{q}` | No |
+| `GET` | `/v1/integrations/notion/start` | Begin connecting Notion. Answers `{authorizeUrl}` as JSON, **not a 302** — a browser redirect carries no Bearer token, so `userId` rides inside the HMAC-signed `state` instead | Yes |
+| `GET` | `/v1/integrations/notion/callback` | Notion's redirect target. Exchanges the code server-side, stores the encrypted grant, returns the `cuewise://` interstitial | No |
+| `GET` | `/v1/integrations/notion/tables` | The data sources the user shared during consent, for them to pick from | Yes |
+| `PUT` | `/v1/integrations/notion/selection` | Validate and remember the picked table, `{dataSourceId}`. 422 unless it has a status with a `Complete` group or a `Done` checkbox | Yes |
+| `GET` | `/v1/integrations/notion/items` | The mirrored rows as `{pageId, text, done}`. No Notion content is persisted — this proxies | Yes |
+| `PATCH` | `/v1/integrations/notion/items/:pageId` | Write completion only, `{done}` | Yes |
+| `DELETE` | `/v1/integrations/notion` | Drop the stored grant | Yes |
 
 **Why `/v1/export` ships the key envelopes** (ENG-54): records are ciphertext, so an export without
 the wrapped data key is undecryptable even by a user holding their recovery code — an exit hatch that
@@ -149,6 +157,9 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 | `invalid_key_envelope` | 400 | `PUT /v1/keys/recovery` body missing/empty/non-string `envelope`, or over `MAX_ENVELOPE_BYTES` (1024) |
 | `key_envelope_exists` | 409 | `PUT /v1/keys/recovery` with `ifAbsent:true` when the caller already has an envelope stored — create-only, never overwrites |
 | `resync_required` | 409 | `GET /v1/changes`'s `since` predates the purged-tombstone watermark — client must resync from `since=0` |
+| `provider_not_connected` | 404 | No grant for that provider, or no table picked yet |
+| `provider_reauth_required` | 401 | The third-party grant died. Distinct from `invalid_token`, which is about the caller's own session — here the session is fine and only the provider connection needs redoing. The stored grant is dropped when this is answered |
+| `provider_schema_unusable` | 422 | The chosen table has no status with a `Complete` group and no `Done` checkbox. Also answered at read time, so a renamed property prompts instead of silently never completing anything |
 | `not_found` | 404 | No route matched |
 | `internal` | 500 | Unhandled exception, upstream (JWKS) outage, or a config fault (empty signing key / client-id) |
 | `upstream_unavailable` | 503 | Weather/geocoding provider is down, timed out, or answered with something we cannot read — retryable, and distinct from `internal` so a client can tell "they are broken" from "we are" |
@@ -199,9 +210,11 @@ Tests are **co-located** (`foo.ts` next to `foo.test.ts`) — e.g. `src/crypto-u
 ```bash
 npx wrangler d1 create cuewise-sync
 # paste the returned database_id into wrangler.jsonc, replacing the 00000000... placeholder
-npx wrangler d1 migrations apply cuewise-sync --remote
+npx wrangler d1 migrations apply cuewise-sync --remote   # must precede any deploy that reads a new table
 npx wrangler secret put STATE_SIGNING_KEY
 npx wrangler secret put GOOGLE_CLIENT_SECRET   # pairs with the GOOGLE_OAUTH_CLIENT_ID var
+npx wrangler secret put PROVIDER_TOKEN_KEY     # 32 random bytes, base64url — encrypts provider grants
+npx wrangler secret put NOTION_CLIENT_SECRET   # pairs with the NOTION_CLIENT_ID var
 # also fill in GOOGLE_CLIENT_IDS / GOOGLE_OAUTH_CLIENT_ID / APPLE_CLIENT_ID / PUBLIC_BASE_URL /
 # ALLOWED_RETURN_URIS as plain `vars` in wrangler.jsonc
 npx wrangler deploy
