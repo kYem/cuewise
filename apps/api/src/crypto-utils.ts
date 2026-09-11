@@ -19,10 +19,14 @@ export function base64UrlEncodeString(value: string): string {
   return base64UrlEncode(encoder.encode(value));
 }
 
+// The buffer parameter is explicit because WebCrypto's BufferSource rejects ArrayBufferLike,
+// which is what a bare `Uint8Array` return annotation widens to.
+export function base64UrlDecodeBytes(value: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(base64UrlDecode(value), (ch) => ch.charCodeAt(0));
+}
+
 export function base64UrlDecodeString(value: string): string {
-  const binary = base64UrlDecode(value);
-  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-  return decoder.decode(bytes);
+  return decoder.decode(base64UrlDecodeBytes(value));
 }
 
 export function randomToken(): string {
@@ -144,7 +148,7 @@ export async function verifyState(state: string, key: string): Promise<VerifySta
     return { ok: false, reason: 'key_unavailable' };
   }
   try {
-    const signatureBytes = Uint8Array.from(base64UrlDecode(signature), (ch) => ch.charCodeAt(0));
+    const signatureBytes = base64UrlDecodeBytes(signature);
     const valid = await crypto.subtle.verify(
       'HMAC',
       cryptoKey,
@@ -162,4 +166,48 @@ export async function verifyState(state: string, key: string): Promise<VerifySta
     logger.warn('verifyState: state could not be decoded');
     return { ok: false, reason: 'undecodable' };
   }
+}
+
+const PROVIDER_KEY_BYTES = 32;
+const IV_BYTES = 12;
+
+/**
+ * AES-GCM under a Worker secret, for third-party provider tokens. Deliberately not the user's
+ * sync key: the Worker has to read these to call the provider, which is the one place the
+ * ciphertext-only guarantee cannot reach.
+ */
+async function importSecretKey(rawKey: string): Promise<CryptoKey> {
+  const bytes = base64UrlDecodeBytes(rawKey);
+  if (bytes.length !== PROVIDER_KEY_BYTES) {
+    throw new Error(`provider token key must decode to 32 bytes, got ${bytes.length}`);
+  }
+  return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+export async function encryptSecret(
+  plaintext: string,
+  rawKey: string
+): Promise<{ ciphertext: string; iv: string }> {
+  const key = await importSecretKey(rawKey);
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const sealed = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoder.encode(plaintext)
+  );
+  return { ciphertext: base64UrlEncode(new Uint8Array(sealed)), iv: base64UrlEncode(iv) };
+}
+
+export async function decryptSecret(
+  ciphertext: string,
+  iv: string,
+  rawKey: string
+): Promise<string> {
+  const key = await importSecretKey(rawKey);
+  const opened = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64UrlDecodeBytes(iv) },
+    key,
+    base64UrlDecodeBytes(ciphertext)
+  );
+  return decoder.decode(opened);
 }
