@@ -23,6 +23,7 @@ import {
   PAIRING_TTL_MS,
   type PairingForRequester,
   type PendingPairing,
+  type ProviderConnection,
   type PushRecord,
   type Session,
   StorageQuotaExceededError,
@@ -406,6 +407,7 @@ export class D1SyncStore implements SyncStore {
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM pairings WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM provider_tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
   }
@@ -471,6 +473,70 @@ export class D1SyncStore implements SyncStore {
       .bind(userId, kind, envelope, this.now())
       .run();
     return (result.meta.changes ?? 0) > 0;
+  }
+
+  async putProviderConnection(userId: string, connection: ProviderConnection): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO provider_tokens
+           (user_id, provider, ciphertext, iv, workspace, database_id, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (user_id, provider) DO UPDATE SET
+           ciphertext = excluded.ciphertext,
+           iv = excluded.iv,
+           workspace = excluded.workspace,
+           database_id = excluded.database_id,
+           data_source_id = excluded.data_source_id`
+      )
+      .bind(
+        userId,
+        connection.provider,
+        connection.ciphertext,
+        connection.iv,
+        connection.workspace,
+        connection.databaseId,
+        connection.dataSourceId,
+        this.now()
+      )
+      .run();
+  }
+
+  async getProviderConnection(
+    userId: string,
+    provider: string
+  ): Promise<ProviderConnection | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT provider, ciphertext, iv, workspace, database_id, data_source_id
+           FROM provider_tokens WHERE user_id = ? AND provider = ?`
+      )
+      .bind(userId, provider)
+      .first<{
+        provider: string;
+        ciphertext: string;
+        iv: string;
+        workspace: string | null;
+        database_id: string | null;
+        data_source_id: string | null;
+      }>();
+    if (row === null) {
+      return null;
+    }
+    return {
+      provider: row.provider,
+      ciphertext: row.ciphertext,
+      iv: row.iv,
+      workspace: row.workspace,
+      databaseId: row.database_id,
+      dataSourceId: row.data_source_id,
+    };
+  }
+
+  async deleteProviderConnection(userId: string, provider: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ?')
+      .bind(userId, provider)
+      .run();
   }
 
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
