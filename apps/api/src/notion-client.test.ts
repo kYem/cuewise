@@ -132,6 +132,58 @@ describe('listDataSources', () => {
   });
 });
 
+// Shapes here were checked against the live API on 2026-09-11: results carry
+// `object: 'data_source'`, a string `id`, `title[].plain_text`, and `in_trash`.
+describe('searchDataSources', () => {
+  it('filters for data sources and reads the rich-text title', async () => {
+    const notion = client((url, init) => {
+      expect(url).toBe('https://api.notion.com/v1/search');
+      expect(JSON.parse(String(init.body))).toMatchObject({
+        filter: { property: 'object', value: 'data_source' },
+      });
+      return Response.json({
+        results: [
+          {
+            object: 'data_source',
+            id: 'ds1',
+            title: [{ plain_text: 'Current ' }, { plain_text: 'Goals' }],
+            in_trash: false,
+          },
+        ],
+      });
+    });
+
+    await expect(notion.searchDataSources('tok')).resolves.toEqual([
+      { id: 'ds1', name: 'Current Goals' },
+    ]);
+  });
+
+  it('omits trashed tables, so the picker cannot offer one on its way out', async () => {
+    const notion = client(() =>
+      Response.json({
+        results: [
+          { id: 'ds1', title: [{ plain_text: 'Live' }], in_trash: false },
+          { id: 'ds2', title: [{ plain_text: 'Binned' }], in_trash: true },
+        ],
+      })
+    );
+
+    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'Live' }]);
+  });
+
+  it('falls back to the id for an untitled table', async () => {
+    const notion = client(() => Response.json({ results: [{ id: 'ds1', title: [] }] }));
+
+    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'ds1' }]);
+  });
+
+  it('maps a revoked grant to an auth fault', async () => {
+    const notion = client(() => Response.json({ code: 'unauthorized' }, { status: 401 }));
+
+    await expect(notion.searchDataSources('tok')).rejects.toBeInstanceOf(NotionAuthError);
+  });
+});
+
 describe('getDataSource', () => {
   it('returns the property schema', async () => {
     const notion = client((url) => {

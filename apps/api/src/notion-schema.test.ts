@@ -7,7 +7,9 @@ import {
   rowTitle,
 } from './notion-schema';
 
-// Mirrors a real Notion task schema: custom Complete sub-statuses, so a name match would fail here.
+// Mirrors a real Notion task schema, group names verified against the live API on
+// 2026-09-11 ('To-do' / 'In Progress' / 'Complete'). Custom Complete sub-statuses here, so a
+// name match on the options would fail.
 const statusSchema = {
   Status: {
     id: 'p1',
@@ -21,7 +23,7 @@ const statusSchema = {
       ],
       groups: [
         { id: 'g1', name: 'To-do', color: 'default', option_ids: ['o1'] },
-        { id: 'g2', name: 'In progress', color: 'blue', option_ids: ['o2'] },
+        { id: 'g2', name: 'In Progress', color: 'blue', option_ids: ['o2'] },
         { id: 'g3', name: 'Complete', color: 'green', option_ids: ['o3', 'o4'] },
       ],
     },

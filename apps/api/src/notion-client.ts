@@ -60,7 +60,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-/** A searched data source names itself in a rich-text `title` array, not a plain string. */
+/**
+ * A searched data source names itself in a rich-text `title` array, not a plain string.
+ * Verified against the live API (2026-09-11): results carry `object: 'data_source'`, a string
+ * `id`, and `title[].plain_text`.
+ */
 function dataSourceTitle(item: Record<string, unknown>): string {
   if (!Array.isArray(item.title)) {
     return typeof item.id === 'string' ? item.id : '';
@@ -185,6 +189,11 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       return results.flatMap((entry) => {
         const item = asRecord(entry);
         if (item === null || typeof item.id !== 'string') {
+          return [];
+        }
+        // Search returns trashed tables too; offering one would let someone connect a table
+        // that is on its way to deletion.
+        if (item.in_trash === true) {
           return [];
         }
         return [{ id: item.id, name: dataSourceTitle(item) }];
