@@ -31,6 +31,12 @@ export interface NotionDataSource {
 export interface NotionClient {
   exchangeCode(code: string): Promise<{ accessToken: string; workspace: string | null }>;
   listDataSources(accessToken: string, databaseId: string): Promise<NotionDataSource[]>;
+  /**
+   * The tables the user shared during consent. Needed because the token response names none of
+   * them — page access is granted in Notion's own UI, so candidates are only discoverable after
+   * the grant exists. This is what makes connecting two phases rather than one.
+   */
+  searchDataSources(accessToken: string): Promise<NotionDataSource[]>;
   getDataSource(accessToken: string, dataSourceId: string): Promise<Record<string, unknown>>;
   queryRows(
     accessToken: string,
@@ -52,6 +58,26 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+/** A searched data source names itself in a rich-text `title` array, not a plain string. */
+function dataSourceTitle(item: Record<string, unknown>): string {
+  if (!Array.isArray(item.title)) {
+    return typeof item.id === 'string' ? item.id : '';
+  }
+  const text = item.title
+    .map((piece) => {
+      const part = asRecord(piece);
+      if (part === null || typeof part.plain_text !== 'string') {
+        return '';
+      }
+      return part.plain_text;
+    })
+    .join('');
+  if (text === '') {
+    return typeof item.id === 'string' ? item.id : '';
+  }
+  return text;
 }
 
 /**
@@ -140,6 +166,28 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         }
         const name = typeof item.name === 'string' ? item.name : item.id;
         return [{ id: item.id, name }];
+      });
+    },
+
+    async searchDataSources(accessToken) {
+      const body = await call('/search', `Bearer ${accessToken}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          filter: { property: 'object', value: 'data_source' },
+          page_size: PAGE_SIZE,
+        }),
+      });
+      const record = asRecord(body);
+      const results = record === null ? null : record.results;
+      if (!Array.isArray(results)) {
+        return [];
+      }
+      return results.flatMap((entry) => {
+        const item = asRecord(entry);
+        if (item === null || typeof item.id !== 'string') {
+          return [];
+        }
+        return [{ id: item.id, name: dataSourceTitle(item) }];
       });
     },
 

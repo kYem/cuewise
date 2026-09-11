@@ -14,6 +14,15 @@ const PROBLEM_DEFS = {
   not_found: { status: 404, title: 'Not found' },
   pairing_not_found: { status: 404, title: 'No such pairing request.' },
   pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },
+  provider_not_connected: { status: 404, title: 'No connection for that provider.' },
+  // Distinct from `invalid_token`, which is about the caller's own Cuewise session: here the
+  // session is fine and the third-party grant is what died, so the client must reconnect that
+  // provider rather than sign in again.
+  provider_reauth_required: { status: 401, title: 'The provider connection is no longer valid.' },
+  provider_schema_unusable: {
+    status: 422,
+    title: 'That table has no status with a Complete group, and no Done checkbox.',
+  },
   internal: { status: 500, title: 'Internal error' },
   // Distinct from `internal` so a client can tell "provider is down, retry later" from
   // "we're broken".
