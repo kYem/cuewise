@@ -102,6 +102,73 @@ describe('GET /v1/integrations/notion/items', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
+  it('renews an expired grant and retries, rather than making the user reconnect', async () => {
+    let attempt = 0;
+    const queryRows = vi.fn(async (token: string) => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw new NotionAuthError('expired');
+      }
+      return [{ pageId: 'pg1', text: 'after refresh', done: false, token }].map(
+        ({ pageId, text, done }) => ({ pageId, text, done })
+      );
+    });
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+
+    const res = await app(stubNotionClient({ queryRows })).request(
+      '/v1/integrations/notion/items',
+      { headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      items: [{ pageId: 'pg1', text: 'after refresh' }],
+    });
+    // The grant survives, and the renewed token replaced the stored one.
+    const stored = await store.getProviderConnection(userId, 'notion');
+    expect(stored).not.toBeNull();
+    expect(queryRows).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up when there is no refresh token to renew with', async () => {
+    const refreshGrant = vi.fn(async () => {
+      throw new Error('must not be called without a stored refresh token');
+    });
+    const queryRows = vi.fn(async () => {
+      throw new NotionAuthError('revoked');
+    });
+    const { headers } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ queryRows, refreshGrant })).request(
+      '/v1/integrations/notion/items',
+      { headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(401);
+    expect(refreshGrant).not.toHaveBeenCalled();
+  });
+
+  it('drops the grant when the renewal itself is rejected', async () => {
+    const queryRows = vi.fn(async () => {
+      throw new NotionAuthError('expired');
+    });
+    const refreshGrant = vi.fn(async () => {
+      throw new NotionAuthError('refresh token no longer valid');
+    });
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+
+    const res = await app(stubNotionClient({ queryRows, refreshGrant })).request(
+      '/v1/integrations/notion/items',
+      { headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(401);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
   it('keeps the grant when notion is merely unavailable', async () => {
     const queryRows = vi.fn(async () => {
       throw new NotionUnavailableError('down');

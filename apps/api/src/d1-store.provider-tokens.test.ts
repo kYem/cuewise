@@ -8,6 +8,8 @@ function connection(overrides: Partial<Parameters<D1SyncStore['putProviderConnec
     provider: 'notion',
     ciphertext: 'ct',
     iv: 'iv',
+    refreshCiphertext: null,
+    refreshIv: null,
     workspace: 'Acme',
     databaseId: 'db1',
     dataSourceId: 'ds1',

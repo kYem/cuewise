@@ -39,6 +39,7 @@ describe('exchangeCode', () => {
 
     await expect(notion.exchangeCode('code-1')).resolves.toEqual({
       accessToken: 'tok',
+      refreshToken: null,
       workspace: 'Acme',
     });
   });
@@ -94,8 +95,58 @@ describe('exchangeCode', () => {
 
     await expect(notion.exchangeCode('c')).resolves.toEqual({
       accessToken: 'tok',
+      refreshToken: null,
       workspace: null,
     });
+  });
+});
+
+describe('refresh and revoke', () => {
+  it('reads a refresh token when notion issues one', async () => {
+    const notion = client(() =>
+      Response.json({ access_token: 'tok', refresh_token: 'refresh-1', workspace_name: 'Acme' })
+    );
+
+    await expect(notion.exchangeCode('c')).resolves.toEqual({
+      accessToken: 'tok',
+      refreshToken: 'refresh-1',
+      workspace: 'Acme',
+    });
+  });
+
+  it('treats an explicitly null refresh token as none', async () => {
+    const notion = client(() => Response.json({ access_token: 'tok', refresh_token: null }));
+
+    await expect(notion.exchangeCode('c')).resolves.toMatchObject({ refreshToken: null });
+  });
+
+  it('renews a grant with basic auth and the refresh grant type', async () => {
+    const notion = client((url, init) => {
+      expect(url).toBe('https://api.notion.com/v1/oauth/token');
+      expect(new Headers(init.headers).get('Authorization')).toBe(`Basic ${btoa('cid:csecret')}`);
+      expect(JSON.parse(String(init.body))).toEqual({
+        grant_type: 'refresh_token',
+        refresh_token: 'refresh-1',
+      });
+      return Response.json({ access_token: 'tok-2', refresh_token: 'refresh-2' });
+    });
+
+    await expect(notion.refreshGrant('refresh-1')).resolves.toEqual({
+      accessToken: 'tok-2',
+      refreshToken: 'refresh-2',
+      workspace: null,
+    });
+  });
+
+  it('revokes with basic auth and the token in the body', async () => {
+    const notion = client((url, init) => {
+      expect(url).toBe('https://api.notion.com/v1/oauth/revoke');
+      expect(new Headers(init.headers).get('Authorization')).toBe(`Basic ${btoa('cid:csecret')}`);
+      expect(JSON.parse(String(init.body))).toEqual({ token: 'tok' });
+      return Response.json({ request_id: 'r1' });
+    });
+
+    await expect(notion.revokeToken('tok')).resolves.toBeUndefined();
   });
 });
 
@@ -224,6 +275,72 @@ describe('queryRows', () => {
     await expect(notion.queryRows('tok', 'ds1', checkboxProperty)).resolves.toEqual([
       { pageId: 'pg1', text: 'Write the plan', done: true },
     ]);
+  });
+
+  it('asks only for pages, so a wiki cannot return its tables as rows', async () => {
+    const notion = client((_url, init) => {
+      expect(JSON.parse(String(init.body))).toMatchObject({ result_type: 'page' });
+      return Response.json({ results: [] });
+    });
+
+    await notion.queryRows('tok', 'ds1', checkboxProperty);
+  });
+
+  it('follows next_cursor, so a table past one page is not silently truncated', async () => {
+    const bodies: unknown[] = [];
+    let call = 0;
+    const notion = client((_url, init) => {
+      bodies.push(JSON.parse(String(init.body)));
+      call += 1;
+      if (call === 1) {
+        return Response.json({
+          results: [{ id: 'pg1', properties: { Done: { type: 'checkbox', checkbox: false } } }],
+          has_more: true,
+          next_cursor: 'cursor-2',
+        });
+      }
+      return Response.json({
+        results: [{ id: 'pg2', properties: { Done: { type: 'checkbox', checkbox: true } } }],
+        has_more: false,
+        next_cursor: null,
+      });
+    });
+
+    const items = await notion.queryRows('tok', 'ds1', checkboxProperty);
+
+    expect(items.map((i) => i.pageId)).toEqual(['pg1', 'pg2']);
+    expect(bodies[1]).toMatchObject({ start_cursor: 'cursor-2' });
+  });
+
+  it('stops at the page bound rather than following an endless cursor', async () => {
+    let calls = 0;
+    const notion = client(() => {
+      calls += 1;
+      return Response.json({
+        results: [
+          { id: `pg${calls}`, properties: { Done: { type: 'checkbox', checkbox: false } } },
+        ],
+        has_more: true,
+        next_cursor: `cursor-${calls + 1}`,
+      });
+    });
+
+    const items = await notion.queryRows('tok', 'ds1', checkboxProperty);
+
+    expect(calls).toBe(5);
+    expect(items).toHaveLength(5);
+  });
+
+  it('stops when has_more is true but no cursor came back', async () => {
+    let calls = 0;
+    const notion = client(() => {
+      calls += 1;
+      return Response.json({ results: [], has_more: true, next_cursor: null });
+    });
+
+    await notion.queryRows('tok', 'ds1', checkboxProperty);
+
+    expect(calls).toBe(1);
   });
 
   it('answers an empty list when notion returns no results array', async () => {

@@ -479,11 +479,14 @@ export class D1SyncStore implements SyncStore {
     await this.db
       .prepare(
         `INSERT INTO provider_tokens
-           (user_id, provider, ciphertext, iv, workspace, database_id, data_source_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
+            workspace, database_id, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (user_id, provider) DO UPDATE SET
            ciphertext = excluded.ciphertext,
            iv = excluded.iv,
+           refresh_ciphertext = excluded.refresh_ciphertext,
+           refresh_iv = excluded.refresh_iv,
            workspace = excluded.workspace,
            database_id = excluded.database_id,
            data_source_id = excluded.data_source_id`
@@ -493,6 +496,8 @@ export class D1SyncStore implements SyncStore {
         connection.provider,
         connection.ciphertext,
         connection.iv,
+        connection.refreshCiphertext,
+        connection.refreshIv,
         connection.workspace,
         connection.databaseId,
         connection.dataSourceId,
@@ -507,7 +512,8 @@ export class D1SyncStore implements SyncStore {
   ): Promise<ProviderConnection | null> {
     const row = await this.db
       .prepare(
-        `SELECT provider, ciphertext, iv, workspace, database_id, data_source_id
+        `SELECT provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
+                workspace, database_id, data_source_id
            FROM provider_tokens WHERE user_id = ? AND provider = ?`
       )
       .bind(userId, provider)
@@ -515,6 +521,8 @@ export class D1SyncStore implements SyncStore {
         provider: string;
         ciphertext: string;
         iv: string;
+        refresh_ciphertext: string | null;
+        refresh_iv: string | null;
         workspace: string | null;
         database_id: string | null;
         data_source_id: string | null;
@@ -526,6 +534,8 @@ export class D1SyncStore implements SyncStore {
       provider: row.provider,
       ciphertext: row.ciphertext,
       iv: row.iv,
+      refreshCiphertext: row.refresh_ciphertext,
+      refreshIv: row.refresh_iv,
       workspace: row.workspace,
       databaseId: row.database_id,
       dataSourceId: row.data_source_id,

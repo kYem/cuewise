@@ -8,6 +8,8 @@ import { signedInToken } from './api-test-helpers.fixtures';
 /** 43 base64url chars decode to the 32 bytes AES-GCM needs. */
 export const TEST_PROVIDER_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 export const TEST_ACCESS_TOKEN = 'notion-access-token';
+export const TEST_REFRESH_TOKEN = 'notion-refresh-token';
+export const TEST_REFRESHED_TOKEN = 'notion-access-token-v2';
 
 export function notionEnv(overrides: Record<string, string> = {}) {
   return {
@@ -25,7 +27,17 @@ export function notionEnv(overrides: Record<string, string> = {}) {
 /** Every method stubbed so a test overrides only the call it is about. */
 export function stubNotionClient(overrides: Partial<NotionClient> = {}): NotionClient {
   return {
-    exchangeCode: vi.fn(async () => ({ accessToken: TEST_ACCESS_TOKEN, workspace: 'Acme' })),
+    exchangeCode: vi.fn(async () => ({
+      accessToken: TEST_ACCESS_TOKEN,
+      refreshToken: null,
+      workspace: 'Acme',
+    })),
+    refreshGrant: vi.fn(async () => ({
+      accessToken: TEST_REFRESHED_TOKEN,
+      refreshToken: TEST_REFRESH_TOKEN,
+      workspace: 'Acme',
+    })),
+    revokeToken: vi.fn(async () => undefined),
     listDataSources: vi.fn(async () => [{ id: 'ds1', name: 'Tasks' }]),
     searchDataSources: vi.fn(async () => [{ id: 'ds1', name: 'Tasks' }]),
     getDataSource: vi.fn(async () => ({ Done: { id: 'p', type: 'checkbox', checkbox: {} } })),
@@ -47,15 +59,21 @@ interface ConnectedUser {
  * the callback landing and the user picking a table.
  */
 export async function connectedNotionUser(
-  options: { dataSourceId?: string | null } = {}
+  options: { dataSourceId?: string | null; withRefreshToken?: boolean } = {}
 ): Promise<ConnectedUser> {
   const store = new D1SyncStore(env.DB);
   const { token, userId } = await signedInToken(store);
   const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+  const refresh =
+    options.withRefreshToken === true
+      ? await encryptSecret(TEST_REFRESH_TOKEN, TEST_PROVIDER_KEY)
+      : null;
   await store.putProviderConnection(userId, {
     provider: 'notion',
     ciphertext: sealed.ciphertext,
     iv: sealed.iv,
+    refreshCiphertext: refresh === null ? null : refresh.ciphertext,
+    refreshIv: refresh === null ? null : refresh.iv,
     workspace: 'Acme',
     databaseId: null,
     dataSourceId: options.dataSourceId === undefined ? 'ds1' : options.dataSourceId,

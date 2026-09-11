@@ -70,6 +70,10 @@ export interface ProviderConnection {
   provider: string;
   ciphertext: string;
   iv: string;
+  // Null when the provider issued no refresh token, which for Notion means the access token is
+  // long-lived. When present, a 401 is worth one refresh attempt before dropping the grant.
+  refreshCiphertext: string | null;
+  refreshIv: string | null;
   workspace: string | null;
   databaseId: string | null;
   dataSourceId: string | null;

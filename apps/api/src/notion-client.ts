@@ -9,6 +9,9 @@ export const NOTION_VERSION = '2026-03-11';
 const NOTION_API = 'https://api.notion.com/v1';
 const REQUEST_TIMEOUT_MS = 15_000;
 const PAGE_SIZE = 100;
+// 5 pages = 500 rows. Notion rate-limits around 3 req/s, so this also bounds how much of that
+// budget one read can spend.
+const MAX_QUERY_PAGES = 5;
 
 /** The user's grant is unusable — revoked, expired, or never valid. The route answers 401. */
 export class NotionAuthError extends Error {}
@@ -28,8 +31,20 @@ export interface NotionDataSource {
   name: string;
 }
 
+export interface NotionGrant {
+  accessToken: string;
+  // `string | null` because that is exactly how Notion's token response declares it. Null means
+  // the access token is long-lived; a value means it can expire and this is how to renew it.
+  refreshToken: string | null;
+  workspace: string | null;
+}
+
 export interface NotionClient {
-  exchangeCode(code: string): Promise<{ accessToken: string; workspace: string | null }>;
+  exchangeCode(code: string): Promise<NotionGrant>;
+  /** Trades a refresh token for a fresh grant. Notion may rotate the refresh token too. */
+  refreshGrant(refreshToken: string): Promise<NotionGrant>;
+  /** Best-effort: tells Notion to forget the grant, so disconnecting is not just local. */
+  revokeToken(accessToken: string): Promise<void>;
   listDataSources(accessToken: string, databaseId: string): Promise<NotionDataSource[]>;
   /**
    * The tables the user shared during consent. Needed because the token response names none of
@@ -135,25 +150,55 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     return body;
   }
 
+  function basicAuth(): string {
+    return `Basic ${btoa(`${env.NOTION_CLIENT_ID}:${env.NOTION_CLIENT_SECRET}`)}`;
+  }
+
+  function toGrant(body: unknown): NotionGrant {
+    const record = asRecord(body);
+    const accessToken = record === null ? null : record.access_token;
+    if (typeof accessToken !== 'string' || accessToken === '') {
+      throw new NotionUnavailableError('notion returned no access token');
+    }
+    const rawRefresh = record === null ? null : record.refresh_token;
+    return {
+      accessToken,
+      refreshToken: typeof rawRefresh === 'string' && rawRefresh !== '' ? rawRefresh : null,
+      workspace:
+        record !== null && typeof record.workspace_name === 'string' ? record.workspace_name : null,
+    };
+  }
+
   return {
     async exchangeCode(code) {
-      const basic = btoa(`${env.NOTION_CLIENT_ID}:${env.NOTION_CLIENT_SECRET}`);
-      const body = await call('/oauth/token', `Basic ${basic}`, {
+      return toGrant(
+        await call('/oauth/token', basicAuth(), {
+          method: 'POST',
+          body: JSON.stringify({
+            grant_type: 'authorization_code',
+            code,
+            // Required here: it was set in the authorize URL, and the connection has more than
+            // one redirect URI registered.
+            redirect_uri: `${env.PUBLIC_BASE_URL}/v1/integrations/notion/callback`,
+          }),
+        })
+      );
+    },
+
+    async refreshGrant(refreshToken) {
+      return toGrant(
+        await call('/oauth/token', basicAuth(), {
+          method: 'POST',
+          body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+        })
+      );
+    },
+
+    async revokeToken(accessToken) {
+      await call('/oauth/revoke', basicAuth(), {
         method: 'POST',
-        body: JSON.stringify({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: `${env.PUBLIC_BASE_URL}/v1/integrations/notion/callback`,
-        }),
+        body: JSON.stringify({ token: accessToken }),
       });
-      const record = asRecord(body);
-      const accessToken = record === null ? null : record.access_token;
-      if (typeof accessToken !== 'string' || accessToken === '') {
-        throw new NotionUnavailableError('notion returned no access token');
-      }
-      const workspace =
-        record !== null && typeof record.workspace_name === 'string' ? record.workspace_name : null;
-      return { accessToken, workspace };
     },
 
     async listDataSources(accessToken, databaseId) {
@@ -211,23 +256,45 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     },
 
     async queryRows(accessToken, dataSourceId, property) {
-      const body = await call(`/data_sources/${dataSourceId}/query`, `Bearer ${accessToken}`, {
-        method: 'POST',
-        body: JSON.stringify({ page_size: PAGE_SIZE }),
-      });
-      const record = asRecord(body);
-      const results = record === null ? null : record.results;
-      if (!Array.isArray(results)) {
-        return [];
-      }
-      return results.flatMap((entry) => {
-        const row = asRecord(entry);
-        if (row === null || typeof row.id !== 'string' || asRecord(row.properties) === null) {
-          return [];
+      const items: NotionItem[] = [];
+      let cursor: string | null = null;
+      // Bounded rather than "until has_more is false": a table with 50k rows must not be able to
+      // hold a Worker invocation open, and a task list past this many is not a task list.
+      for (let page = 0; page < MAX_QUERY_PAGES; page += 1) {
+        const body = await call(`/data_sources/${dataSourceId}/query`, `Bearer ${accessToken}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            page_size: PAGE_SIZE,
+            // Without this a wiki returns its nested data sources alongside its pages, and a
+            // data source carries `id` and `properties` too — so it would mirror as a task.
+            result_type: 'page',
+            ...(cursor === null ? {} : { start_cursor: cursor }),
+          }),
+        });
+        const record = asRecord(body);
+        const results = record === null ? null : record.results;
+        if (!Array.isArray(results)) {
+          break;
         }
-        const page = row as unknown as NotionPage;
-        return [{ pageId: page.id, text: rowTitle(page), done: isRowDone(page, property) }];
-      });
+        for (const entry of results) {
+          const row = asRecord(entry);
+          if (row === null || typeof row.id !== 'string' || asRecord(row.properties) === null) {
+            continue;
+          }
+          const notionPage = row as unknown as NotionPage;
+          items.push({
+            pageId: notionPage.id,
+            text: rowTitle(notionPage),
+            done: isRowDone(notionPage, property),
+          });
+        }
+        const next = record === null ? null : record.next_cursor;
+        if (record?.has_more !== true || typeof next !== 'string') {
+          break;
+        }
+        cursor = next;
+      }
+      return items;
     },
 
     async setCompletion(accessToken, pageId, done, property) {

@@ -82,6 +82,62 @@ async function openConnection(
   return { connection, accessToken };
 }
 
+async function sealGrant(
+  grant: { accessToken: string; refreshToken: string | null },
+  key: string
+): Promise<Pick<ProviderConnection, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>> {
+  const access = await encryptSecret(grant.accessToken, key);
+  if (grant.refreshToken === null) {
+    return {
+      ciphertext: access.ciphertext,
+      iv: access.iv,
+      refreshCiphertext: null,
+      refreshIv: null,
+    };
+  }
+  const refresh = await encryptSecret(grant.refreshToken, key);
+  return {
+    ciphertext: access.ciphertext,
+    iv: access.iv,
+    refreshCiphertext: refresh.ciphertext,
+    refreshIv: refresh.iv,
+  };
+}
+
+/**
+ * Runs `attempt` with the stored access token; on an auth fault, renews once with the stored
+ * refresh token and runs it again. Notion declares `refresh_token` as nullable and documents no
+ * `expires_in`, so whether a grant expires cannot be known up front — retrying on the 401 covers
+ * both behaviours and needs no scheduler. A connection with no refresh token, or a renewal that
+ * itself fails, falls through to `providerProblem`, which drops the grant.
+ */
+async function withFreshToken<T>(
+  open: OpenConnection,
+  client: NotionClient,
+  store: SyncStore,
+  userId: string,
+  env: Env,
+  attempt: (accessToken: string) => Promise<T>
+): Promise<T> {
+  try {
+    return await attempt(open.accessToken);
+  } catch (error) {
+    const { refreshCiphertext, refreshIv } = open.connection;
+    if (!(error instanceof NotionAuthError) || refreshCiphertext === null || refreshIv === null) {
+      throw error;
+    }
+    const refreshToken = await decryptSecret(refreshCiphertext, refreshIv, env.PROVIDER_TOKEN_KEY);
+    const grant = await client.refreshGrant(refreshToken);
+    const sealed = await sealGrant(grant, env.PROVIDER_TOKEN_KEY);
+    await store.putProviderConnection(userId, {
+      ...open.connection,
+      ...sealed,
+      workspace: grant.workspace ?? open.connection.workspace,
+    });
+    return attempt(grant.accessToken);
+  }
+}
+
 /**
  * Maps a provider failure onto our error contract. An auth fault also drops the stored grant:
  * a revoked token can never recover, so keeping it would leave the UI offering a connection
@@ -185,15 +241,14 @@ export function registerNotionRoutes(
       return returnToApp(state.returnUri, 'server_error');
     }
     try {
-      const { accessToken, workspace } = await client(c.env).exchangeCode(code);
-      const sealed = await encryptSecret(accessToken, c.env.PROVIDER_TOKEN_KEY);
+      const grant = await client(c.env).exchangeCode(code);
+      const sealed = await sealGrant(grant, c.env.PROVIDER_TOKEN_KEY);
       // Stored without a table: which one to mirror is a separate choice the user has not made
       // yet, because Notion's token response names none of the pages they shared.
       await deps.storeFactory(c.env.DB).putProviderConnection(state.userId, {
         provider: PROVIDER,
-        ciphertext: sealed.ciphertext,
-        iv: sealed.iv,
-        workspace,
+        ...sealed,
+        workspace: grant.workspace,
         databaseId: null,
         dataSourceId: null,
       });
@@ -218,7 +273,9 @@ export function registerNotionRoutes(
     }
     let tables: NotionDataSource[];
     try {
-      tables = await client(c.env).searchDataSources(open.accessToken);
+      tables = await withFreshToken(open, client(c.env), store, userId, c.env, (token) =>
+        client(c.env).searchDataSources(token)
+      );
     } catch (error) {
       return providerProblem(error, store, userId);
     }
@@ -249,7 +306,9 @@ export function registerNotionRoutes(
     }
     let property: CompletionProperty | null;
     try {
-      const schema = await client(c.env).getDataSource(open.accessToken, dataSourceId);
+      const schema = await withFreshToken(open, client(c.env), store, userId, c.env, (token) =>
+        client(c.env).getDataSource(token, dataSourceId)
+      );
       property = findCompletionProperty(schema);
     } catch (error) {
       return providerProblem(error, store, userId);
@@ -275,12 +334,24 @@ export function registerNotionRoutes(
     try {
       // The schema is re-read every time rather than cached: a renamed property must surface as
       // a prompt, and a stale cached shape would instead write completion into the wrong field.
-      const schema = await client(c.env).getDataSource(open.accessToken, dataSourceId);
-      const property = findCompletionProperty(schema);
-      if (property === null) {
+      const items = await withFreshToken(
+        open,
+        client(c.env),
+        store,
+        userId,
+        c.env,
+        async (token) => {
+          const schema = await client(c.env).getDataSource(token, dataSourceId);
+          const property = findCompletionProperty(schema);
+          if (property === null) {
+            return null;
+          }
+          return client(c.env).queryRows(token, dataSourceId, property);
+        }
+      );
+      if (items === null) {
         return problem('provider_schema_unusable');
       }
-      const items = await client(c.env).queryRows(open.accessToken, dataSourceId, property);
       return c.json({ workspace: open.connection.workspace, items });
     } catch (error) {
       return providerProblem(error, store, userId);
@@ -308,30 +379,46 @@ export function registerNotionRoutes(
       return problem('provider_not_connected');
     }
     try {
-      const schema = await client(c.env).getDataSource(
-        open.accessToken,
-        open.connection.dataSourceId
+      const dataSourceId = open.connection.dataSourceId;
+      const pageId = c.req.param('pageId');
+      const wrote = await withFreshToken(
+        open,
+        client(c.env),
+        store,
+        userId,
+        c.env,
+        async (token) => {
+          const schema = await client(c.env).getDataSource(token, dataSourceId);
+          const property = findCompletionProperty(schema);
+          if (property === null) {
+            return false;
+          }
+          await client(c.env).setCompletion(token, pageId, done, property);
+          return true;
+        }
       );
-      const property = findCompletionProperty(schema);
-      if (property === null) {
+      if (!wrote) {
         return problem('provider_schema_unusable');
       }
-      await client(c.env).setCompletion(open.accessToken, c.req.param('pageId'), done, property);
     } catch (error) {
       return providerProblem(error, store, userId);
     }
     return c.body(null, 204);
   });
 
-  // Drops our copy of the grant. Revoking it at Notion as well needs their revocation endpoint
-  // confirmed against a real integration; until then the user can remove access in Notion's own
-  // connection settings, and the token we hold is gone either way.
   app.delete('/v1/integrations/notion', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
-    const existing = await store.getProviderConnection(userId, PROVIDER);
-    if (existing === null) {
+    const open = await openConnection(store, userId, c.env);
+    if (open === null) {
       return problem('provider_not_connected');
+    }
+    // Best-effort revocation: the user asked to disconnect, so our row goes either way. Failing
+    // the request because Notion is unreachable would leave them unable to disconnect at all.
+    try {
+      await client(c.env).revokeToken(open.accessToken);
+    } catch (error) {
+      logger.error('Could not revoke the Notion grant upstream; removing our copy anyway', error);
     }
     await store.deleteProviderConnection(userId, PROVIDER);
     return c.body(null, 204);

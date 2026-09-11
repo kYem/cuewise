@@ -77,7 +77,11 @@ describe('GET /v1/integrations/notion/start', () => {
 
 describe('GET /v1/integrations/notion/callback', () => {
   it('refuses a forged state without exchanging the code', async () => {
-    const exchangeCode = vi.fn(async () => ({ accessToken: 'tok', workspace: null }));
+    const exchangeCode = vi.fn(async () => ({
+      accessToken: 'tok',
+      refreshToken: null,
+      workspace: null,
+    }));
 
     const res = await app(stubNotionClient({ exchangeCode })).request(
       '/v1/integrations/notion/callback?code=c&state=forged',
@@ -302,6 +306,36 @@ describe('DELETE /v1/integrations/notion', () => {
     );
 
     expect(res.status).toBe(404);
+  });
+
+  it('revokes at notion as well as dropping our copy', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ revokeToken })).request(
+      '/v1/integrations/notion',
+      { method: 'DELETE', headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(204);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('still disconnects when revocation fails, so notion being down cannot trap the user', async () => {
+    const revokeToken = vi.fn(async () => {
+      throw new Error('notion unreachable');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ revokeToken })).request(
+      '/v1/integrations/notion',
+      { method: 'DELETE', headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(204);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
   it('drops the stored grant', async () => {
