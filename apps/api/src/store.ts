@@ -61,6 +61,24 @@ export class StorageQuotaExceededError extends Error {
   }
 }
 
+/**
+ * A stored third-party grant. `ciphertext`/`iv` are the provider's access token under
+ * PROVIDER_TOKEN_KEY; the ids record which table the connection points at, since Notion's
+ * schema lives on the data source rather than the database that contains it.
+ */
+export interface ProviderConnection {
+  provider: string;
+  ciphertext: string;
+  iv: string;
+  // Null when the provider issued no refresh token, which for Notion means the access token is
+  // long-lived. When present, a 401 is worth one refresh attempt before dropping the grant.
+  refreshCiphertext: string | null;
+  refreshIv: string | null;
+  workspace: string | null;
+  databaseId: string | null;
+  dataSourceId: string | null;
+}
+
 export interface SyncStore {
   findOrCreateUser(identity: Identity): Promise<string>;
   // The provider-verified email for the account-details UI; null when none was ever verified
@@ -100,6 +118,12 @@ export interface SyncStore {
   // Create-only: inserts iff no (userId, kind) row exists yet. Returns false (no-op) when one
   // already does — the caller maps that to a 409, closing the "two devices both generate a key" race.
   putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean>;
+  // Third-party OAuth grants. Unlike every method above, these hold something the server can
+  // read — a provider token is useless to us encrypted under a key only the client holds. One
+  // row per (user, provider); reconnecting replaces it rather than accumulating grants.
+  putProviderConnection(userId: string, connection: ProviderConnection): Promise<void>;
+  getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
+  deleteProviderConnection(userId: string, provider: string): Promise<void>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(
