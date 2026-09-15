@@ -129,7 +129,28 @@ describe('App background gate', () => {
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
     // Applied AND visible — a layer stuck at opacity-0 renders the photo invisible.
     await waitFor(() => expect(photoLayer().className).toContain('opacity-100'));
-    expect(vi.mocked(preloadImage)).toHaveBeenCalledWith(PHOTO, 5000);
+    expect(vi.mocked(preloadImage)).toHaveBeenCalledWith(PHOTO, 60_000);
+  });
+
+  it('waits out a slow photo rather than abandoning it, the deadline having already unblocked the page', async () => {
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
+    // Lands at 30s; rejects first if the caller's limit is shorter, as the real one does.
+    vi.mocked(preloadImage).mockImplementation(
+      (url: string, timeout = 10_000) =>
+        new Promise((resolve, reject) => {
+          const landed = setTimeout(() => resolve(url), 30_000);
+          setTimeout(() => {
+            clearTimeout(landed);
+            reject(new Error('Image load timeout'));
+          }, timeout);
+        })
+    );
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await waitFor(() => expect(photoLayer().className).toContain('opacity-100'));
   });
 
   // This layer is the only one painting the photo, so it is the only place the readability
@@ -165,17 +186,18 @@ describe('App background gate', () => {
     vi.mocked(preloadImages).mockResolvedValue(undefined);
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
     vi.mocked(preloadImage).mockRejectedValue(new Error('Failed to load image'));
-    const warn = vi.spyOn(logger, 'warn');
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     render(<App />);
 
     await vi.advanceTimersByTimeAsync(100);
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
     expect(hasPhotoApplied()).toBe(false);
-    // Asserting the log is what stops this catch quietly regressing to `catch {}`.
+    // At the shipped level, not warn: this catch is the only trace a blocked CDN leaves.
     await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith(
+      expect(error).toHaveBeenCalledWith(
         expect.stringContaining('Background image failed to load'),
+        expect.anything(),
         expect.objectContaining({ source: PHOTO })
       )
     );
@@ -187,17 +209,18 @@ describe('App background gate', () => {
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(ownPhoto);
     vi.mocked(isUnsplashUrl).mockReturnValue(false);
     vi.mocked(preloadImage).mockRejectedValue(new Error('Failed to load image'));
-    const warn = vi.spyOn(logger, 'warn');
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     render(<App />);
 
     await vi.advanceTimersByTimeAsync(100);
-    await waitFor(() => expect(warn).toHaveBeenCalled());
-    expect(warn).toHaveBeenCalledWith(
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(error).toHaveBeenCalledWith(
       expect.any(String),
+      expect.anything(),
       expect.objectContaining({ source: 'custom-background' })
     );
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret');
+    expect(JSON.stringify(error.mock.calls)).not.toContain('secret');
   });
 
   it('still shows the photo when it arrives after the deadline', async () => {

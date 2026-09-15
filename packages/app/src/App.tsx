@@ -34,8 +34,11 @@ import { isUnsplashUrl, preloadImage } from './utils/unsplash';
 
 /** Show the app over the gradient fallback rather than wait on a decorative photo. */
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
-/** Bounds one image load; the gradient is a fine outcome, so don't wait the 10s default. */
-const BACKGROUND_LOAD_TIMEOUT_MS = 5000;
+/**
+ * Long, because the reveal deadline above already unblocks the page: this only has to outlast a
+ * slow link, and giving up early is what left a tab on the gradient until it was refreshed.
+ */
+const BACKGROUND_LOAD_TIMEOUT_MS = 60_000;
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
@@ -155,10 +158,9 @@ function App({ extraSections, syncController }: AppProps = {}) {
           setBackgroundImage(imageUrl);
         }
       } catch (error) {
-        // Decorative, so no toast — but warn, since a custom image reaches here unvalidated.
+        // Decorative, so no toast — but error, since warn is invisible at the shipped level.
         // Never log a custom background: it's a data URL of the user's own picture.
-        logger.warn('Background image failed to load; keeping the gradient', {
-          error,
+        logger.error('Background image failed to load; keeping the gradient', error, {
           source: isUnsplashUrl(imageUrl) ? imageUrl : 'custom-background',
         });
       }

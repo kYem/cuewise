@@ -1,7 +1,7 @@
 import type { FocusImageCategory } from '@cuewise/shared';
 import { logger } from '@cuewise/shared';
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
-import { loadImageWithFallback, preloadImage } from './unsplash';
+import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
 /**
  * Daily background cache.
@@ -56,7 +56,11 @@ async function resolveDailyBackground(category: FocusImageCategory): Promise<str
   if (stored) {
     try {
       return await preloadImage(stored.url, 8000);
-    } catch {
+    } catch (error) {
+      // Slow is not dead: the request is still running, and it was validated when stored.
+      if (error instanceof ImageLoadTimeoutError) {
+        return stored.url;
+      }
       // Stored image no longer loads (e.g. 404) — fall through and replace it.
     }
   }
@@ -66,7 +70,8 @@ async function resolveDailyBackground(category: FocusImageCategory): Promise<str
     await setDailyBackground(url, category);
     return url;
   } catch (error) {
-    logger.warn('No background image could be loaded; showing the solid fallback', { error });
+    // error, not warn: at the shipped level this is the only trace a blocked CDN leaves.
+    logger.error('No background image could be loaded; showing the solid fallback', error);
     return null;
   }
 }

@@ -99,7 +99,7 @@ export function getUnsplashUrl(category: FocusImageCategory): string {
  * Uses random selection but avoids immediate repeats.
  * @param category - The image category
  * @param index - Optional index for specific image (default: random)
- * @returns Direct Unsplash CDN image URL with cache-busting
+ * @returns Direct Unsplash CDN image URL
  */
 export function getRandomImageUrl(category: FocusImageCategory, index?: number): string {
   const images = CURATED_PHOTOS[category];
@@ -118,9 +118,17 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
   }
 
   const imageId = images[selectedIndex].id;
-  // Add timestamp for cache-busting to ensure fresh requests
-  const timestamp = Date.now();
-  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format&t=${timestamp}`;
+  // No cache-buster: the photo behind an id never changes, and a URL nobody has requested
+  // before misses the CDN edge and forces an origin transform.
+  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
+}
+
+/** A timeout means slow, not dead — the request is left running so the image still lands. */
+export class ImageLoadTimeoutError extends Error {
+  constructor() {
+    super('Image load timeout');
+    this.name = 'ImageLoadTimeoutError';
+  }
 }
 
 /**
@@ -133,8 +141,7 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const timeoutId = setTimeout(() => {
-      img.src = ''; // Cancel loading
-      reject(new Error('Image load timeout'));
+      reject(new ImageLoadTimeoutError());
     }, timeout);
 
     img.onload = () => {
@@ -152,23 +159,23 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
 }
 
 /**
- * Load an image from our curated collection with retry support.
- * Tries multiple images if one fails to load.
+ * Load an image from our curated collection, moving on to another only when one is dead.
  * @param category - The image category
  * @returns Promise that resolves with a working image URL
  */
 export async function loadImageWithFallback(category: FocusImageCategory): Promise<string> {
   const images = CURATED_PHOTOS[category];
 
-  // Try up to 3 different images if loading fails
   for (let attempt = 0; attempt < Math.min(3, images.length); attempt++) {
+    const imageUrl = getRandomImageUrl(category);
     try {
-      const imageUrl = getRandomImageUrl(category);
       return await preloadImage(imageUrl, 8000);
-    } catch {
-      // Continue to next image
+    } catch (error) {
+      // A slow image is still coming; a second download beside it would only slow both.
+      if (error instanceof ImageLoadTimeoutError) {
+        return imageUrl;
+      }
     }
   }
-  // All attempts failed - component should show solid color
   throw new Error('All image sources failed');
 }

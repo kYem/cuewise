@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPhotoCredit, loadImageWithFallback, preloadImage } from './unsplash';
+import {
+  getPhotoCredit,
+  getRandomImageUrl,
+  ImageLoadTimeoutError,
+  loadImageWithFallback,
+  preloadImage,
+} from './unsplash';
 import { CURATED_PHOTOS } from './unsplash-catalog';
 
 // Controllable Image stand-in: jsdom never fires load events, so tests trigger
@@ -21,6 +27,12 @@ function lastImage(): MockImage {
   }
   return img;
 }
+
+describe('getRandomImageUrl', () => {
+  it('carries no cache-buster, so the CDN edge can serve the photo it already holds', () => {
+    expect(getRandomImageUrl('nature', 0)).not.toMatch(/[?&]t=/);
+  });
+});
 
 describe('preloadImage', () => {
   beforeEach(() => {
@@ -51,6 +63,24 @@ describe('preloadImage', () => {
     const expectation = expect(promise).rejects.toThrow('Image load timeout');
     await vi.advanceTimersByTimeAsync(5000);
     await expectation;
+  });
+
+  it('rejects a timeout with an error callers can tell apart from a dead image', async () => {
+    vi.useFakeTimers();
+    const promise = preloadImage('https://img/slow.jpg', 5000);
+    const expectation = expect(promise).rejects.toBeInstanceOf(ImageLoadTimeoutError);
+    await vi.advanceTimersByTimeAsync(5000);
+    await expectation;
+  });
+
+  it('leaves the request running after a timeout, so a slow image still reaches the cache', async () => {
+    vi.useFakeTimers();
+    const promise = preloadImage('https://img/slow.jpg', 5000);
+    const expectation = expect(promise).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(5000);
+    await expectation;
+
+    expect(lastImage().src).toBe('https://img/slow.jpg');
   });
 });
 
@@ -130,6 +160,16 @@ describe('loadImageWithFallback', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('keeps a slow image rather than starting a second download beside it', async () => {
+    vi.useFakeTimers();
+    const promise = loadImageWithFallback('nature');
+    await vi.advanceTimersByTimeAsync(8000);
+
+    expect(MockImage.instances).toHaveLength(1);
+    await expect(promise).resolves.toBe(lastImage().src);
   });
 
   it('throws after every image attempt fails', async () => {
