@@ -56,9 +56,9 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const backgroundDim = useSettingsStore(selectBackgroundDim);
   const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
-  // A slow load from before a category change or a refresh click must not land on top of
-  // whatever replaced it; the effect's cancel flag cannot see a refresh.
-  const latestRequestRef = useRef<string | null>(null);
+  // Newest request wins, in either direction: a refresh and an effect load can each outlive the
+  // other, and the effect's cancel flag cannot see a refresh. Claimed before the first await.
+  const latestRequestRef = useRef(0);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isRefreshingBackground, setIsRefreshingBackground] = useState(false);
   const customBackground = useBackgroundStore((s) => s.customBackground);
@@ -135,16 +135,17 @@ function App({ extraSections, syncController }: AppProps = {}) {
     let cancelled = false;
 
     const loadBackground = async () => {
-      // Unbounded from here: its own retries can stack to ~32s, which is what the
-      // reveal deadline above exists to survive.
+      const requestId = ++latestRequestRef.current;
+      // Unbounded from here: one slow fresh pick can run ~30s, which is what the reveal
+      // deadline above exists to survive.
       await preloadImages(settings.focusModeImageCategory);
 
       if (cancelled) {
         return;
       }
 
-      // preloadImages has already spent the retry budget; re-running the fallback here
-      // would stack another ~24s onto a failure that is usually a blocked CDN.
+      // preloadImages has already spent its budget; re-running the fallback here would stack
+      // another ~30s onto a failure that is usually a blocked CDN.
       const imageUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
       if (!imageUrl) {
         setImageLoaded(true);
@@ -152,20 +153,19 @@ function App({ extraSections, syncController }: AppProps = {}) {
       }
 
       // Load fully before swapping in, so the fade-in never shows a half-painted image.
-      latestRequestRef.current = imageUrl;
       try {
         await preloadImage(imageUrl, BACKGROUND_LOAD_TIMEOUT_MS);
-        if (!cancelled && latestRequestRef.current === imageUrl) {
+        if (!cancelled && latestRequestRef.current === requestId) {
           setBackgroundImage(imageUrl);
         }
       } catch (error) {
         // Torn down or superseded means nobody is waiting on this one, so it is not a failure.
-        if (!cancelled && latestRequestRef.current === imageUrl) {
+        if (!cancelled && latestRequestRef.current === requestId) {
           // Decorative, so no toast — but error, since warn is invisible at the shipped level.
           // Never log a custom background: it's a data URL of the user's own picture.
           const message =
             error instanceof ImageLoadTimeoutError
-              ? 'Background image still loading past the limit; keeping the gradient'
+              ? 'Background image still loading past the limit; this tab will not apply it'
               : 'Background image failed to load; keeping the gradient';
           logger.error(message, error, {
             source: isUnsplashUrl(imageUrl) ? imageUrl : 'custom-background',
@@ -191,10 +191,10 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
   const handleRefreshBackground = async () => {
     setIsRefreshingBackground(true);
+    const requestId = ++latestRequestRef.current;
     const url = await refreshBackground(settings.focusModeImageCategory);
     // A null url means nothing fresh loaded — leave the current background in place.
-    if (url !== null) {
-      latestRequestRef.current = url;
+    if (url !== null && latestRequestRef.current === requestId) {
       setBackgroundImage(url);
     }
     setIsRefreshingBackground(false);

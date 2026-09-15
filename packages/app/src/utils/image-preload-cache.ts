@@ -3,10 +3,7 @@ import { logger } from '@cuewise/shared';
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
 import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
-/**
- * Daily background cache. A URL is verified to load before it is persisted, so a stored one
- * is trusted until it proves dead (404) — merely slow, it is kept while the download finishes.
- */
+/** A URL is verified to load before it is persisted, so a stored one can be trusted until it proves dead. */
 
 interface PreloadCache {
   currentUrl: string | null;
@@ -42,10 +39,8 @@ const cache: PreloadCache = {
 };
 
 /**
- * Resolve today's daily background to a URL verified to load. A persisted
- * background is validated first — an image Unsplash has since removed must not
- * stick — and if it's missing or dead, a fresh validated image is picked and
- * persisted in its place. Returns null only if every source fails.
+ * A stored photo is revalidated rather than trusted — one Unsplash has since removed must not
+ * stick for the day. Null only when every source fails.
  */
 async function resolveDailyBackground(category: FocusImageCategory): Promise<string | null> {
   const stored = await getDailyBackground(category);
@@ -115,7 +110,6 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
  * Pick a fresh background on demand, replacing today's. Unlike preloadImages this
  * skips the persisted image entirely — the point is to move past it. The current
  * background is left untouched if nothing new loads, so a refresh can't blank the page.
- * @returns The new URL, or null if no fresh image could be loaded.
  */
 export async function refreshBackground(category: FocusImageCategory): Promise<string | null> {
   // The UI hides the refresh control over a custom image; guard here too so the

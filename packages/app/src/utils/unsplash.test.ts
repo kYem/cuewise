@@ -178,17 +178,17 @@ describe('loadImageWithFallback', () => {
     await expect(promise).resolves.toBe(lastImage().src);
   });
 
-  it('gives up on a pick that outlasts its budget, without a rival beside it', async () => {
+  it('gives up on a pick that outlasts its budget, saying so, without a rival beside it', async () => {
     vi.useFakeTimers();
     const promise = loadImageWithFallback('nature');
-    const expectation = expect(promise).rejects.toThrow('All image sources failed');
+    const expectation = expect(promise).rejects.toThrow(/still loading/);
     await vi.advanceTimersByTimeAsync(30_000);
-    await expectation;
 
     expect(MockImage.instances).toHaveLength(1);
+    await expectation;
   });
 
-  it('throws after every image attempt fails', async () => {
+  it('throws naming every pick it tried once all of them are dead', async () => {
     const promise = loadImageWithFallback('nature');
     let settled = false;
     promise.catch(() => {
@@ -203,7 +203,7 @@ describe('loadImageWithFallback', () => {
       MockImage.instances.at(-1)?.onerror?.();
     }
 
-    await expect(promise).rejects.toThrow('All image sources failed');
+    await expect(promise).rejects.toThrow(/photo-.*photo-.*photo-/);
   });
 });
 

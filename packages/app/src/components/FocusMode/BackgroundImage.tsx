@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { useEffect, useState } from 'react';
 import { getBackgroundFilterStyle } from '../../utils/background-filter';
@@ -36,7 +37,8 @@ export function BackgroundImage({ url, isLoading, dim, blur }: BackgroundImagePr
     };
 
     img.onerror = () => {
-      // Keep previous image on error
+      // The previous image stays up, which on screen looks like nothing happened.
+      logger.error('Focus mode background failed to load; keeping the previous one', { url });
       setIsTransitioning(false);
     };
 

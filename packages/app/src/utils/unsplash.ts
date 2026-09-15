@@ -130,10 +130,7 @@ export class ImageLoadTimeoutError extends Error {
   }
 }
 
-/**
- * Resolves with the URL once it loads. A timeout rejects with ImageLoadTimeoutError but leaves
- * the request running — slow is not dead — so a caller may keep showing the URL.
- */
+/** A timeout rejects with ImageLoadTimeoutError but leaves the request running, so a slow image still lands. */
 export function preloadImage(url: string, timeout = 10000): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -155,22 +152,32 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
   });
 }
 
-// Generous, because the page is already revealed over the gradient: this only has to outlast a
-// slow link, and a second download started beside a slow one would only slow both.
+// Generous, because the page is already revealed: this only has to outlast a slow link, and a
+// second download started beside a slow one would only slow both.
 const FRESH_PICK_TIMEOUT_MS = 30_000;
 
 /** Load an image from our curated collection, moving on to another only when one is dead. */
 export async function loadImageWithFallback(category: FocusImageCategory): Promise<string> {
   const images = CURATED_PHOTOS[category];
+  const tried: string[] = [];
+  let lastError: unknown;
 
   for (let attempt = 0; attempt < Math.min(3, images.length); attempt++) {
+    const imageUrl = getRandomImageUrl(category);
+    tried.push(imageUrl);
     try {
-      return await preloadImage(getRandomImageUrl(category), FRESH_PICK_TIMEOUT_MS);
+      return await preloadImage(imageUrl, FRESH_PICK_TIMEOUT_MS);
     } catch (error) {
+      // Slow and dead need telling apart downstream: one points at the link, the other at the CDN.
       if (error instanceof ImageLoadTimeoutError) {
-        break;
+        throw new Error(`A ${category} pick is still loading after ${FRESH_PICK_TIMEOUT_MS}ms`, {
+          cause: error,
+        });
       }
+      lastError = error;
     }
   }
-  throw new Error('All image sources failed');
+  throw new Error(`Every ${category} pick failed to load: ${tried.join(', ')}`, {
+    cause: lastError,
+  });
 }
