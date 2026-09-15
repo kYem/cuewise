@@ -123,7 +123,6 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
   return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
 }
 
-/** A timeout means slow, not dead — the request is left running so the image still lands. */
 export class ImageLoadTimeoutError extends Error {
   constructor() {
     super('Image load timeout');
@@ -132,10 +131,8 @@ export class ImageLoadTimeoutError extends Error {
 }
 
 /**
- * Preload an image and return a promise that resolves when loaded.
- * @param url - The image URL to preload
- * @param timeout - Timeout in milliseconds (default 10000)
- * @returns Promise that resolves with the URL when loaded, or rejects on error/timeout
+ * Resolves with the URL once it loads. A timeout rejects with ImageLoadTimeoutError but leaves
+ * the request running — slow is not dead — so a caller may keep showing the URL.
  */
 export function preloadImage(url: string, timeout = 10000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -158,22 +155,20 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
   });
 }
 
-/**
- * Load an image from our curated collection, moving on to another only when one is dead.
- * @param category - The image category
- * @returns Promise that resolves with a working image URL
- */
+// Generous, because the page is already revealed over the gradient: this only has to outlast a
+// slow link, and a second download started beside a slow one would only slow both.
+const FRESH_PICK_TIMEOUT_MS = 30_000;
+
+/** Load an image from our curated collection, moving on to another only when one is dead. */
 export async function loadImageWithFallback(category: FocusImageCategory): Promise<string> {
   const images = CURATED_PHOTOS[category];
 
   for (let attempt = 0; attempt < Math.min(3, images.length); attempt++) {
-    const imageUrl = getRandomImageUrl(category);
     try {
-      return await preloadImage(imageUrl, 8000);
+      return await preloadImage(getRandomImageUrl(category), FRESH_PICK_TIMEOUT_MS);
     } catch (error) {
-      // A slow image is still coming; a second download beside it would only slow both.
       if (error instanceof ImageLoadTimeoutError) {
-        return imageUrl;
+        break;
       }
     }
   }

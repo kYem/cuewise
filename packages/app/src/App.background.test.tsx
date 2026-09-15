@@ -11,17 +11,21 @@ vi.mock('./utils/image-preload-cache', () => ({
   setCustomBackgroundOverride: vi.fn(),
   getCustomBackgroundOverride: vi.fn(() => null),
 }));
-vi.mock('./utils/unsplash', () => ({
-  loadImageWithFallback: vi.fn(() => new Promise<string>(() => undefined)),
-  // App.tsx loads through this; without it the happy path throws "not a function".
-  preloadImage: vi.fn((url: string) => Promise.resolve(url)),
-  getPhotoCredit: vi.fn(() => ({
-    photographer: null,
-    photographerUrl: null,
-    sourceUrl: 'https://unsplash.com',
-  })),
-  isUnsplashUrl: vi.fn(() => true),
-}));
+vi.mock('./utils/unsplash', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/unsplash')>();
+  return {
+    ImageLoadTimeoutError: actual.ImageLoadTimeoutError,
+    loadImageWithFallback: vi.fn(() => new Promise<string>(() => undefined)),
+    // App.tsx loads through this; without it the happy path throws "not a function".
+    preloadImage: vi.fn((url: string) => Promise.resolve(url)),
+    getPhotoCredit: vi.fn(() => ({
+      photographer: null,
+      photographerUrl: null,
+      sourceUrl: 'https://unsplash.com',
+    })),
+    isUnsplashUrl: vi.fn(() => true),
+  };
+});
 
 import {
   hasPhotoApplied,
@@ -32,8 +36,12 @@ import {
 import App from './App';
 import { useBackgroundStore } from './stores/background-store';
 import { useSettingsStore } from './stores/settings-store';
-import { getPreloadedCurrentUrl, preloadImages } from './utils/image-preload-cache';
-import { isUnsplashUrl, preloadImage } from './utils/unsplash';
+import {
+  getPreloadedCurrentUrl,
+  preloadImages,
+  refreshBackground,
+} from './utils/image-preload-cache';
+import { ImageLoadTimeoutError, isUnsplashUrl, preloadImage } from './utils/unsplash';
 
 /** Mirrors BACKGROUND_REVEAL_DEADLINE_MS in App.tsx; raising it there must fail these. */
 const REVEAL_DEADLINE_MS = 1500;
@@ -142,7 +150,7 @@ describe('App background gate', () => {
           const landed = setTimeout(() => resolve(url), 30_000);
           setTimeout(() => {
             clearTimeout(landed);
-            reject(new Error('Image load timeout'));
+            reject(new ImageLoadTimeoutError());
           }, timeout);
         })
     );
@@ -151,6 +159,80 @@ describe('App background gate', () => {
     await vi.advanceTimersByTimeAsync(30_000);
 
     await waitFor(() => expect(photoLayer().className).toContain('opacity-100'));
+  });
+
+  it('reports a photo that outlasts the limit as still loading, not failed, and leaves the gradient', async () => {
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
+    vi.mocked(preloadImage).mockRejectedValue(new ImageLoadTimeoutError());
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(100);
+
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('still loading'),
+        expect.any(ImageLoadTimeoutError),
+        expect.objectContaining({ source: PHOTO })
+      )
+    );
+    expect(hasPhotoApplied()).toBe(false);
+  });
+
+  it('stays quiet about a load the user has already switched away from', async () => {
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
+    vi.mocked(preloadImage).mockImplementation(
+      () =>
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Failed to load image')), 1000)
+        )
+    );
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(100);
+    act(() => {
+      useSettingsStore.setState((state) => ({
+        settings: { ...state.settings, colorTheme: 'purple' },
+      }));
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the photo a refresh chose over one an earlier load delivers later', async () => {
+    const first = 'https://images.unsplash.com/photo-first';
+    const slow = 'https://images.unsplash.com/photo-slow';
+    const chosen = 'https://images.unsplash.com/photo-chosen';
+    vi.mocked(preloadImages).mockResolvedValue(undefined);
+    vi.mocked(getPreloadedCurrentUrl).mockReturnValueOnce(first).mockReturnValue(slow);
+    vi.mocked(preloadImage).mockImplementation((url: string) =>
+      url === slow
+        ? new Promise((resolve) => setTimeout(() => resolve(url), 30_000))
+        : Promise.resolve(url)
+    );
+    vi.mocked(refreshBackground).mockResolvedValue(chosen);
+    window.location.hash = '';
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(100);
+    await waitFor(() => expect(photoLayer().style.backgroundImage).toContain(first));
+    act(() => {
+      useSettingsStore.setState((state) => ({
+        settings: { ...state.settings, focusModeImageCategory: 'ocean' },
+      }));
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    await act(async () => {
+      screen.getByRole('button', { name: 'New background' }).click();
+    });
+    await waitFor(() => expect(photoLayer().style.backgroundImage).toContain(chosen));
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(photoLayer().style.backgroundImage).toContain(chosen);
   });
 
   // This layer is the only one painting the photo, so it is the only place the readability
@@ -193,7 +275,6 @@ describe('App background gate', () => {
     await vi.advanceTimersByTimeAsync(100);
     await waitFor(() => expect(contentWrapper().className).toContain('opacity-100'));
     expect(hasPhotoApplied()).toBe(false);
-    // At the shipped level, not warn: this catch is the only trace a blocked CDN leaves.
     await waitFor(() =>
       expect(error).toHaveBeenCalledWith(
         expect.stringContaining('Background image failed to load'),

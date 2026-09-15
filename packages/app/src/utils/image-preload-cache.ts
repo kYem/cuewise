@@ -4,12 +4,8 @@ import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
 import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
 /**
- * Daily background cache.
- *
- * The background image changes once per day and is persisted to Chrome storage,
- * then restored on app load. The URL is verified to load before it's cached or
- * persisted, so an image that no longer loads (404) is never stored — it's
- * replaced with a working one instead.
+ * Daily background cache. A URL is verified to load before it is persisted, so a stored one
+ * is trusted until it proves dead (404) — merely slow, it is kept while the download finishes.
  */
 
 interface PreloadCache {
