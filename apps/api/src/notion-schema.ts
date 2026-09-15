@@ -1,35 +1,37 @@
-/**
- * Everything that knows the shape of Notion's properties. Pure — no I/O — so the awkward part
- * of this integration is testable without a network, and a Notion schema change lands in one file.
- */
+// Pure property-shape reading, so the schema logic is testable without a network.
 
 // Notion files status options into named groups. The GROUP name is the contract, not the option
 // names: a user whose Complete group holds "Shipped" and "Archived" needs no configuration.
 const COMPLETE_GROUP = 'Complete';
 const TODO_GROUP = 'To-do';
-// The alternative for simple setups. A checkbox cannot express "in progress", which is why
-// Notion's own task templates use a status property and this is the fallback, not the default.
+// Fallback for schemas with no status property at all.
 const CHECKBOX_NAME = 'Done';
 
 export type CompletionProperty =
   | {
       kind: 'status';
       name: string;
+      // Non-empty by construction; [0] is what a write uses.
       completeOptionIds: string[];
-      firstCompleteOptionId: string;
-      // Null when the schema has no To-do group, which makes un-completing impossible to express.
-      firstTodoOptionId: string | null;
+      // Empty when the schema has no To-do group, which makes un-completing impossible to express.
+      todoOptionIds: string[];
     }
   | { kind: 'checkbox'; name: string };
 
+/** What to PATCH onto a page. Total: a property that cannot express `done` yields null. */
+export type CompletionWrite =
+  | { kind: 'checkbox'; name: string; checkbox: boolean }
+  | { kind: 'status'; name: string; optionId: string };
+
+// A page's property VALUES (`status: {id}`), as opposed to a data source's property SCHEMAS
+// (`status: {options, groups}`). Same outer shape, different contents — the brand keeps
+// findCompletionProperty from being handed a page by mistake.
+export type PropertySchemas = Record<string, unknown> & { readonly __brand: 'PropertySchemas' };
+export type PropertyValues = Record<string, unknown> & { readonly __brand: 'PropertyValues' };
+
 export interface NotionPage {
   id: string;
-  properties: Record<string, unknown>;
-}
-
-export interface NotionDataSourceRef {
-  id: string;
-  name: string;
+  properties: PropertyValues;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -56,23 +58,19 @@ function groupOptionIds(groups: unknown, groupName: string): string[] {
   return [];
 }
 
-/** One data source is unambiguous; several is a question only the user can answer. */
-export function pickDataSource<T extends NotionDataSourceRef>(dataSources: T[]): T | null {
-  if (dataSources.length === 1) {
-    return dataSources[0];
-  }
-  return null;
-}
-
-/** Status wins over a checkbox when a schema somehow has both — it carries more meaning. */
-export function findCompletionProperty(
-  properties: Record<string, unknown>
-): CompletionProperty | null {
+/**
+ * A status property always wins, and a status property whose groups do not match refuses rather
+ * than falling through: a renamed or localized Complete group would otherwise read completion
+ * from an unused checkbox — every task not-done, every write invisible — with no prompt.
+ */
+export function findCompletionProperty(properties: PropertySchemas): CompletionProperty | null {
+  let sawStatus = false;
   for (const [name, value] of Object.entries(properties)) {
     const property = asRecord(value);
     if (property === null || property.type !== 'status') {
       continue;
     }
+    sawStatus = true;
     const status = asRecord(property.status);
     if (status === null) {
       continue;
@@ -81,20 +79,35 @@ export function findCompletionProperty(
     if (completeOptionIds.length === 0) {
       continue;
     }
-    const todoOptionIds = groupOptionIds(status.groups, TODO_GROUP);
     return {
       kind: 'status',
       name,
       completeOptionIds,
-      firstCompleteOptionId: completeOptionIds[0],
-      firstTodoOptionId: todoOptionIds.length > 0 ? todoOptionIds[0] : null,
+      todoOptionIds: groupOptionIds(status.groups, TODO_GROUP),
     };
+  }
+  if (sawStatus) {
+    return null;
   }
   const checkbox = asRecord(properties[CHECKBOX_NAME]);
   if (checkbox !== null && checkbox.type === 'checkbox') {
     return { kind: 'checkbox', name: CHECKBOX_NAME };
   }
   return null;
+}
+
+export function completionWrite(
+  property: CompletionProperty,
+  done: boolean
+): CompletionWrite | null {
+  if (property.kind === 'checkbox') {
+    return { kind: 'checkbox', name: property.name, checkbox: done };
+  }
+  const optionId = done ? property.completeOptionIds[0] : property.todoOptionIds[0];
+  if (optionId === undefined) {
+    return null;
+  }
+  return { kind: 'status', name: property.name, optionId };
 }
 
 export function isRowDone(page: NotionPage, property: CompletionProperty): boolean {

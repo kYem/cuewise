@@ -27,6 +27,8 @@
     // Dev/test default (this file is also the test + `wrangler dev` env). The production
     // deploy overrides this to https://api.cuewise.app via the `deploy` script's --var.
     "PUBLIC_BASE_URL": "http://localhost:8787",
+    // Fails closed while empty: /v1/integrations/notion/start answers 500 until provisioned.
+    "NOTION_CLIENT_ID": "",
     "ALLOWED_RETURN_URIS": "cuewise://auth",
     // Comma-separated browser origins allowed CORS access (e.g. https://app.cuewise.app once
     // the web app ships). Empty by default — the extension and Tauri clients need no CORS.

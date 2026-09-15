@@ -84,6 +84,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/integrations/notion/start', auth);
   app.use('/v1/integrations/notion/tables', auth);
   app.use('/v1/integrations/notion/selection', auth);
+  app.use('/v1/integrations/notion/claim', auth);
   app.use('/v1/integrations/notion/items/*', auth);
 
   const perTokenRateLimit = rateLimit((env) => resolved.storeFactory(env.DB), {
@@ -100,6 +101,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/integrations/notion/start', perTokenRateLimit);
   app.use('/v1/integrations/notion/tables', perTokenRateLimit);
   app.use('/v1/integrations/notion/selection', perTokenRateLimit);
+  app.use('/v1/integrations/notion/claim', perTokenRateLimit);
   app.use('/v1/integrations/notion/items/*', perTokenRateLimit);
 
   // Unauthenticated, so only an IP-keyed limiter applies here.
@@ -109,6 +111,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
   app.use('/v1/auth/google/start', authSurfaceRateLimit);
   app.use('/v1/auth/google/callback', authSurfaceRateLimit);
+  app.use('/v1/integrations/notion/callback', authSurfaceRateLimit);
   // Separate instances, because counters are per-middleware and these three surfaces fail
   // differently: sign-in must never be locked out by weather traffic, and a forecast is
   // fetched at most twice an hour per device while a search fires as the user types. One

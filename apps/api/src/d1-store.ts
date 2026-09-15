@@ -25,6 +25,7 @@ import {
   type PendingPairing,
   type ProviderConnection,
   type PushRecord,
+  type SealedGrant,
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
@@ -480,15 +481,14 @@ export class D1SyncStore implements SyncStore {
       .prepare(
         `INSERT INTO provider_tokens
            (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
-            workspace, database_id, data_source_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            workspace, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (user_id, provider) DO UPDATE SET
            ciphertext = excluded.ciphertext,
            iv = excluded.iv,
            refresh_ciphertext = excluded.refresh_ciphertext,
            refresh_iv = excluded.refresh_iv,
            workspace = excluded.workspace,
-           database_id = excluded.database_id,
            data_source_id = excluded.data_source_id`
       )
       .bind(
@@ -499,7 +499,6 @@ export class D1SyncStore implements SyncStore {
         connection.refreshCiphertext,
         connection.refreshIv,
         connection.workspace,
-        connection.databaseId,
         connection.dataSourceId,
         this.now()
       )
@@ -512,8 +511,7 @@ export class D1SyncStore implements SyncStore {
   ): Promise<ProviderConnection | null> {
     const row = await this.db
       .prepare(
-        `SELECT provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
-                workspace, database_id, data_source_id
+        `SELECT provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id
            FROM provider_tokens WHERE user_id = ? AND provider = ?`
       )
       .bind(userId, provider)
@@ -524,7 +522,6 @@ export class D1SyncStore implements SyncStore {
         refresh_ciphertext: string | null;
         refresh_iv: string | null;
         workspace: string | null;
-        database_id: string | null;
         data_source_id: string | null;
       }>();
     if (row === null) {
@@ -537,9 +534,44 @@ export class D1SyncStore implements SyncStore {
       refreshCiphertext: row.refresh_ciphertext,
       refreshIv: row.refresh_iv,
       workspace: row.workspace,
-      databaseId: row.database_id,
       dataSourceId: row.data_source_id,
     };
+  }
+
+  async updateProviderTokens(
+    userId: string,
+    provider: string,
+    tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
+  ): Promise<void> {
+    // COALESCE keeps the stored refresh pair when the renewal carried none.
+    await this.db
+      .prepare(
+        `UPDATE provider_tokens
+            SET ciphertext = ?, iv = ?,
+                refresh_ciphertext = COALESCE(?, refresh_ciphertext),
+                refresh_iv = COALESCE(?, refresh_iv)
+          WHERE user_id = ? AND provider = ?`
+      )
+      .bind(
+        tokens.ciphertext,
+        tokens.iv,
+        tokens.refreshCiphertext,
+        tokens.refreshIv,
+        userId,
+        provider
+      )
+      .run();
+  }
+
+  async setProviderDataSource(
+    userId: string,
+    provider: string,
+    dataSourceId: string
+  ): Promise<void> {
+    await this.db
+      .prepare('UPDATE provider_tokens SET data_source_id = ? WHERE user_id = ? AND provider = ?')
+      .bind(dataSourceId, userId, provider)
+      .run();
   }
 
   async deleteProviderConnection(userId: string, provider: string): Promise<void> {

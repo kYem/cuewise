@@ -11,7 +11,6 @@ function connection(overrides: Partial<Parameters<D1SyncStore['putProviderConnec
     refreshCiphertext: null,
     refreshIv: null,
     workspace: 'Acme',
-    databaseId: 'db1',
     dataSourceId: 'ds1',
     ...overrides,
   };
@@ -37,13 +36,10 @@ describe('provider connections', () => {
   });
 
   it('keeps the nullable columns null rather than coercing them to strings', async () => {
-    await store.putProviderConnection(
-      userId,
-      connection({ workspace: null, databaseId: null, dataSourceId: null })
-    );
+    await store.putProviderConnection(userId, connection({ workspace: null, dataSourceId: null }));
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ workspace: null, databaseId: null, dataSourceId: null })
+      connection({ workspace: null, dataSourceId: null })
     );
   });
 
@@ -87,6 +83,72 @@ describe('provider connections', () => {
   it('takes the connection with the account, so a delete leaves no grant behind', async () => {
     await store.putProviderConnection(userId, connection());
     await store.deleteUser(userId);
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('updateProviderTokens replaces the access pair and keeps a refresh pair the renewal omitted', async () => {
+    await store.putProviderConnection(
+      userId,
+      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+    );
+
+    await store.updateProviderTokens(userId, 'notion', {
+      ciphertext: 'ct-2',
+      iv: 'iv-2',
+      refreshCiphertext: null,
+      refreshIv: null,
+    });
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      ciphertext: 'ct-2',
+      iv: 'iv-2',
+      refreshCiphertext: 'r-ct',
+      refreshIv: 'r-iv',
+      dataSourceId: 'ds1',
+    });
+  });
+
+  it('updateProviderTokens rotates the refresh pair when the renewal carried one', async () => {
+    await store.putProviderConnection(
+      userId,
+      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+    );
+
+    await store.updateProviderTokens(userId, 'notion', {
+      ciphertext: 'ct-2',
+      iv: 'iv-2',
+      refreshCiphertext: 'r-ct-2',
+      refreshIv: 'r-iv-2',
+    });
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      refreshCiphertext: 'r-ct-2',
+      refreshIv: 'r-iv-2',
+    });
+  });
+
+  it('setProviderDataSource touches only the selection, never the tokens', async () => {
+    await store.putProviderConnection(
+      userId,
+      connection({ dataSourceId: null, refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+    );
+
+    await store.setProviderDataSource(userId, 'notion', 'ds9');
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection({ dataSourceId: 'ds9', refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+    );
+  });
+
+  it('narrow writers are no-ops for an account with no grant', async () => {
+    await store.setProviderDataSource(userId, 'notion', 'ds1');
+    await store.updateProviderTokens(userId, 'notion', {
+      ciphertext: 'ct',
+      iv: 'iv',
+      refreshCiphertext: null,
+      refreshIv: null,
+    });
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });

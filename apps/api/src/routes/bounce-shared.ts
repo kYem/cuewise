@@ -1,6 +1,31 @@
 import { logger } from '@cuewise/shared';
 import { randomToken } from '../crypto-utils';
 import type { Env } from '../env';
+import type { ValidationIssue } from '../problem-details';
+
+const MIN_CODE_VERIFIER_LENGTH = 43;
+const MAX_CODE_VERIFIER_LENGTH = 128;
+export const CODE_VERIFIER_RE = new RegExp(
+  `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
+);
+
+/** Picks the most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides pass/fail. */
+export function codeVerifierIssue(value: unknown): ValidationIssue {
+  const pointer = '/codeVerifier';
+  if (typeof value !== 'string' || value === '') {
+    return { pointer, detail: 'required non-empty string' };
+  }
+  if (value.length < MIN_CODE_VERIFIER_LENGTH) {
+    return { pointer, detail: `must be at least ${MIN_CODE_VERIFIER_LENGTH} characters` };
+  }
+  if (value.length > MAX_CODE_VERIFIER_LENGTH) {
+    return { pointer, detail: `must not exceed ${MAX_CODE_VERIFIER_LENGTH} characters` };
+  }
+  return {
+    pointer,
+    detail: 'must contain only characters from the unreserved set [A-Za-z0-9._~-]',
+  };
+}
 
 // S256 PKCE challenges are always exactly 43 base64url characters (a 32-byte SHA-256 digest).
 export const CODE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;

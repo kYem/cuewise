@@ -23,6 +23,12 @@ const PROBLEM_DEFS = {
     status: 422,
     title: 'That table has no status with a Complete group, and no Done checkbox.',
   },
+  // Connected, but the picker step has not happened. Distinct from not_connected so the client
+  // shows the table picker rather than the connect button.
+  provider_table_unselected: { status: 409, title: 'No table has been chosen yet.' },
+  // The chosen table was deleted or un-shared. Terminal for that selection — retrying will not
+  // clear it, so the client sends the user back to the picker.
+  provider_table_unavailable: { status: 404, title: 'The connected table is no longer reachable.' },
   internal: { status: 500, title: 'Internal error' },
   // Distinct from `internal` so a client can tell "provider is down, retry later" from
   // "we're broken".

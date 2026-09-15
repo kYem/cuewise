@@ -1,17 +1,22 @@
 import type { Env } from './env';
-import { type CompletionProperty, isRowDone, type NotionPage, rowTitle } from './notion-schema';
+import {
+  type CompletionProperty,
+  type CompletionWrite,
+  isRowDone,
+  type NotionPage,
+  type PropertySchemas,
+  type PropertyValues,
+  rowTitle,
+} from './notion-schema';
 
-/**
- * Pinned deliberately. `2025-09-03` is the floor — the release that split a database into a
- * container plus data sources — and an implicit "latest" would migrate that model under us.
- */
+// Must stay >= 2025-09-03, the release that split a database into a container plus data
+// sources; this code assumes that model.
 export const NOTION_VERSION = '2026-03-11';
 const NOTION_API = 'https://api.notion.com/v1';
 const REQUEST_TIMEOUT_MS = 15_000;
-const PAGE_SIZE = 100;
-// 5 pages = 500 rows. Notion rate-limits around 3 req/s, so this also bounds how much of that
-// budget one read can spend.
-const MAX_QUERY_PAGES = 5;
+export const PAGE_SIZE = 100;
+// Bounded so a 50k-row table cannot hold a Worker invocation open; 500 rows is past any task list.
+export const MAX_QUERY_PAGES = 5;
 
 /** The user's grant is unusable — revoked, expired, or never valid. The route answers 401. */
 export class NotionAuthError extends Error {}
@@ -19,11 +24,20 @@ export class NotionAuthError extends Error {}
 export class NotionConfigError extends Error {}
 /** Notion is down, rate-limiting, or unreadable. Retryable, and not a fault of ours. */
 export class NotionUnavailableError extends Error {}
+/** The table or page is gone or un-shared. Terminal for that selection — the user re-picks. */
+export class NotionResourceError extends Error {}
 
 export interface NotionItem {
   pageId: string;
   text: string;
   done: boolean;
+}
+
+export interface NotionRows {
+  items: NotionItem[];
+  // True when the page bound stopped the read, so the client can say "and more" rather than
+  // presenting a partial list as the whole table.
+  truncated: boolean;
 }
 
 export interface NotionDataSource {
@@ -45,25 +59,19 @@ export interface NotionClient {
   refreshGrant(refreshToken: string): Promise<NotionGrant>;
   /** Best-effort: tells Notion to forget the grant, so disconnecting is not just local. */
   revokeToken(accessToken: string): Promise<void>;
-  listDataSources(accessToken: string, databaseId: string): Promise<NotionDataSource[]>;
   /**
    * The tables the user shared during consent. Needed because the token response names none of
    * them — page access is granted in Notion's own UI, so candidates are only discoverable after
    * the grant exists. This is what makes connecting two phases rather than one.
    */
   searchDataSources(accessToken: string): Promise<NotionDataSource[]>;
-  getDataSource(accessToken: string, dataSourceId: string): Promise<Record<string, unknown>>;
+  getPropertySchemas(accessToken: string, dataSourceId: string): Promise<PropertySchemas>;
   queryRows(
     accessToken: string,
     dataSourceId: string,
     property: CompletionProperty
-  ): Promise<NotionItem[]>;
-  setCompletion(
-    accessToken: string,
-    pageId: string,
-    done: boolean,
-    property: CompletionProperty
-  ): Promise<void>;
+  ): Promise<NotionRows>;
+  setCompletion(accessToken: string, pageId: string, write: CompletionWrite): Promise<void>;
 }
 
 type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC_BASE_URL'>;
@@ -107,11 +115,16 @@ function classify(status: number, body: unknown): Error {
   const record = asRecord(body);
   const raw = record === null ? '' : (record.error ?? record.code);
   const code = typeof raw === 'string' ? raw : '';
-  if (code === 'invalid_client' || code === 'unauthorized_client' || status === 403) {
+  if (code === 'invalid_client' || code === 'unauthorized_client') {
     return new NotionConfigError(`notion rejected our client (${status}, ${code || 'no code'})`);
   }
   if (status === 401 || code === 'invalid_grant' || code === 'unauthorized') {
     return new NotionAuthError(`notion grant is unusable (${status}, ${code || 'no code'})`);
+  }
+  // 403 restricted_resource is the user un-sharing; 404 object_not_found is a deleted table.
+  // Neither is ours to fix and neither clears on retry.
+  if (status === 403 || status === 404) {
+    return new NotionResourceError(`notion resource unreachable (${status}, ${code || 'no code'})`);
   }
   return new NotionUnavailableError(`notion answered ${status} (${code || 'no code'})`);
 }
@@ -133,19 +146,26 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-    } catch {
-      // A network fault or timeout. Deliberately not reported as a config fault: retrying is
-      // the right response, and the cause carries nothing a log should hold.
-      throw new NotionUnavailableError('notion request did not complete');
+    } catch (error) {
+      // error.name separates a timeout from a DNS fault from a TypeError we caused; none of
+      // those carry a secret. weather.ts logs the same field for the same reason.
+      const name = error instanceof Error ? error.name : 'unknown';
+      throw new NotionUnavailableError(`notion request did not complete (${name})`);
     }
     let body: unknown = null;
+    let readable = true;
     try {
       body = await response.json();
     } catch {
-      body = null;
+      readable = false;
     }
     if (!response.ok) {
       throw classify(response.status, body);
+    }
+    // A 200 we cannot parse is an outage, not an empty result — reporting it as "no rows" would
+    // tell the user they have nothing to do.
+    if (!readable) {
+      throw new NotionUnavailableError('notion answered 200 with an unreadable body');
     }
     return body;
   }
@@ -201,23 +221,6 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       });
     },
 
-    async listDataSources(accessToken, databaseId) {
-      const body = await call(`/databases/${databaseId}`, `Bearer ${accessToken}`);
-      const record = asRecord(body);
-      const dataSources = record === null ? null : record.data_sources;
-      if (!Array.isArray(dataSources)) {
-        return [];
-      }
-      return dataSources.flatMap((entry) => {
-        const item = asRecord(entry);
-        if (item === null || typeof item.id !== 'string') {
-          return [];
-        }
-        const name = typeof item.name === 'string' ? item.name : item.id;
-        return [{ id: item.id, name }];
-      });
-    },
-
     async searchDataSources(accessToken) {
       const body = await call('/search', `Bearer ${accessToken}`, {
         method: 'POST',
@@ -245,23 +248,26 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       });
     },
 
-    async getDataSource(accessToken, dataSourceId) {
-      const body = await call(`/data_sources/${dataSourceId}`, `Bearer ${accessToken}`);
+    async getPropertySchemas(accessToken, dataSourceId) {
+      const body = await call(
+        `/data_sources/${encodeURIComponent(dataSourceId)}`,
+        `Bearer ${accessToken}`
+      );
       const record = asRecord(body);
       const properties = record === null ? null : asRecord(record.properties);
       if (properties === null) {
         throw new NotionUnavailableError('notion data source carried no readable schema');
       }
-      return properties;
+      return properties as PropertySchemas;
     },
 
     async queryRows(accessToken, dataSourceId, property) {
       const items: NotionItem[] = [];
       let cursor: string | null = null;
-      // Bounded rather than "until has_more is false": a table with 50k rows must not be able to
-      // hold a Worker invocation open, and a task list past this many is not a task list.
+      let truncated = false;
       for (let page = 0; page < MAX_QUERY_PAGES; page += 1) {
-        const body = await call(`/data_sources/${dataSourceId}/query`, `Bearer ${accessToken}`, {
+        const path = `/data_sources/${encodeURIComponent(dataSourceId)}/query`;
+        const body = await call(path, `Bearer ${accessToken}`, {
           method: 'POST',
           body: JSON.stringify({
             page_size: PAGE_SIZE,
@@ -274,14 +280,15 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         const record = asRecord(body);
         const results = record === null ? null : record.results;
         if (!Array.isArray(results)) {
-          break;
+          throw new NotionUnavailableError('notion query answered without a results array');
         }
         for (const entry of results) {
           const row = asRecord(entry);
-          if (row === null || typeof row.id !== 'string' || asRecord(row.properties) === null) {
+          const properties = row === null ? null : asRecord(row.properties);
+          if (row === null || typeof row.id !== 'string' || properties === null) {
             continue;
           }
-          const notionPage = row as unknown as NotionPage;
+          const notionPage: NotionPage = { id: row.id, properties: properties as PropertyValues };
           items.push({
             pageId: notionPage.id,
             text: rowTitle(notionPage),
@@ -290,27 +297,20 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         }
         const next = record === null ? null : record.next_cursor;
         if (record?.has_more !== true || typeof next !== 'string') {
-          break;
+          return { items, truncated: false };
         }
         cursor = next;
+        truncated = true;
       }
-      return items;
+      return { items, truncated };
     },
 
-    async setCompletion(accessToken, pageId, done, property) {
-      let value: Record<string, unknown>;
-      if (property.kind === 'checkbox') {
-        value = { [property.name]: { checkbox: done } };
-      } else {
-        // Writing a null option id would clear the status instead of moving it, which reads as
-        // "no status" rather than "not done" — so refuse rather than silently mangle their row.
-        const optionId = done ? property.firstCompleteOptionId : property.firstTodoOptionId;
-        if (optionId === null) {
-          throw new NotionConfigError('data source has no To-do group to un-complete into');
-        }
-        value = { [property.name]: { status: { id: optionId } } };
-      }
-      await call(`/pages/${pageId}`, `Bearer ${accessToken}`, {
+    async setCompletion(accessToken, pageId, write) {
+      const value =
+        write.kind === 'checkbox'
+          ? { [write.name]: { checkbox: write.checkbox } }
+          : { [write.name]: { status: { id: write.optionId } } };
+      await call(`/pages/${encodeURIComponent(pageId)}`, `Bearer ${accessToken}`, {
         method: 'PATCH',
         body: JSON.stringify({ properties: value }),
       });

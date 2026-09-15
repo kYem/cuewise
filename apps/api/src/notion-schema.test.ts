@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { asSchemas, checkboxSchema } from './__fixtures__/notion.fixtures';
 import {
   type CompletionProperty,
+  completionWrite,
   findCompletionProperty,
   isRowDone,
-  pickDataSource,
+  type NotionPage,
+  type PropertyValues,
   rowTitle,
 } from './notion-schema';
 
-// Mirrors a real Notion task schema, group names verified against the live API on
-// 2026-09-11 ('To-do' / 'In Progress' / 'Complete'). Custom Complete sub-statuses here, so a
-// name match on the options would fail.
-const statusSchema = {
+// Complete group holds custom option names, so a name match on the options would fail.
+const statusSchema = asSchemas({
   Status: {
     id: 'p1',
     type: 'status',
@@ -28,36 +29,19 @@ const statusSchema = {
       ],
     },
   },
-};
+});
 
-const checkboxSchema = { Done: { id: 'p2', type: 'checkbox', checkbox: {} } };
+function page(properties: Record<string, unknown>): NotionPage {
+  return { id: 'pg1', properties: properties as PropertyValues };
+}
 
-function statusProperty(): CompletionProperty {
-  const property = findCompletionProperty(statusSchema);
+function statusProperty(schema = statusSchema): CompletionProperty {
+  const property = findCompletionProperty(schema);
   if (property === null) {
-    throw new Error('the status fixture must yield a completion property');
+    throw new Error('the fixture must yield a completion property');
   }
   return property;
 }
-
-describe('pickDataSource', () => {
-  it('selects the only data source without asking', () => {
-    expect(pickDataSource([{ id: 'ds1', name: 'Tasks' }])).toEqual({ id: 'ds1', name: 'Tasks' });
-  });
-
-  it('returns null for several, so the caller asks which one', () => {
-    expect(
-      pickDataSource([
-        { id: 'a', name: 'A' },
-        { id: 'b', name: 'B' },
-      ])
-    ).toBeNull();
-  });
-
-  it('returns null when the database exposes none', () => {
-    expect(pickDataSource([])).toBeNull();
-  });
-});
 
 describe('findCompletionProperty', () => {
   it('reads completion from the Complete group rather than option names', () => {
@@ -65,151 +49,204 @@ describe('findCompletionProperty', () => {
       kind: 'status',
       name: 'Status',
       completeOptionIds: ['o3', 'o4'],
-      firstCompleteOptionId: 'o3',
-      firstTodoOptionId: 'o1',
+      todoOptionIds: ['o1'],
     });
   });
 
-  it('accepts a Done checkbox as the simple alternative', () => {
+  it('accepts a Done checkbox when there is no status property at all', () => {
     expect(findCompletionProperty(checkboxSchema)).toEqual({ kind: 'checkbox', name: 'Done' });
   });
 
   it('prefers status when a schema carries both', () => {
-    expect(findCompletionProperty({ ...statusSchema, ...checkboxSchema })?.kind).toBe('status');
+    expect(findCompletionProperty(asSchemas({ ...statusSchema, ...checkboxSchema }))?.kind).toBe(
+      'status'
+    );
   });
 
   it('finds the status property under any name', () => {
-    const renamed = { 'Ship state': statusSchema.Status };
-
-    expect(findCompletionProperty(renamed)?.name).toBe('Ship state');
+    expect(findCompletionProperty(asSchemas({ 'Ship state': statusSchema.Status }))?.name).toBe(
+      'Ship state'
+    );
   });
 
-  it('rejects a status property with no Complete group', () => {
-    const noComplete = {
+  it('refuses a status property with no Complete group', () => {
+    const noComplete = asSchemas({
       Status: {
-        id: 'p1',
         type: 'status',
         status: {
-          options: [{ id: 'o1', name: 'Doing', color: 'blue' }],
-          groups: [{ id: 'g1', name: 'To-do', color: 'default', option_ids: ['o1'] }],
+          options: [{ id: 'o1', name: 'Doing' }],
+          groups: [{ id: 'g1', name: 'To-do', option_ids: ['o1'] }],
         },
       },
-    };
+    });
 
     expect(findCompletionProperty(noComplete)).toBeNull();
   });
 
-  it('rejects a Complete group that exists but holds no options', () => {
-    const emptyComplete = {
+  it('refuses a renamed or localized Complete group even when a Done checkbox exists', () => {
+    // Falling through to the checkbox here would read every task as not-done, silently.
+    const localized = asSchemas({
+      Statut: {
+        type: 'status',
+        status: {
+          options: [{ id: 'o9', name: 'Fait' }],
+          groups: [{ id: 'g9', name: 'Terminé', option_ids: ['o9'] }],
+        },
+      },
+      ...checkboxSchema,
+    });
+
+    expect(findCompletionProperty(localized)).toBeNull();
+  });
+
+  it('skips a groupless status property to reach a good one later in the schema', () => {
+    const skipThenFind = asSchemas({
+      Priority: { type: 'status', status: { options: [], groups: [] } },
+      ...statusSchema,
+    });
+
+    expect(findCompletionProperty(skipThenFind)?.name).toBe('Status');
+  });
+
+  it('refuses a Complete group that exists but holds no options', () => {
+    const emptyComplete = asSchemas({
       Status: {
-        id: 'p1',
         type: 'status',
         status: { options: [], groups: [{ id: 'g3', name: 'Complete', option_ids: [] }] },
       },
-    };
+    });
 
     expect(findCompletionProperty(emptyComplete)).toBeNull();
   });
 
-  it('reports no To-do group rather than inventing one', () => {
-    const noTodo = {
+  it('reports an empty To-do list rather than inventing one', () => {
+    const noTodo = asSchemas({
       Status: {
-        id: 'p1',
         type: 'status',
         status: {
-          options: [{ id: 'o3', name: 'Shipped', color: 'green' }],
+          options: [{ id: 'o3', name: 'Shipped' }],
           groups: [{ id: 'g3', name: 'Complete', option_ids: ['o3'] }],
         },
       },
-    };
+    });
 
-    expect(findCompletionProperty(noTodo)).toMatchObject({ firstTodoOptionId: null });
+    expect(findCompletionProperty(noTodo)).toMatchObject({ todoOptionIds: [] });
   });
 
   it('ignores a checkbox under any other name', () => {
     expect(
-      findCompletionProperty({ Starred: { id: 'p3', type: 'checkbox', checkbox: {} } })
+      findCompletionProperty(asSchemas({ Starred: { type: 'checkbox', checkbox: {} } }))
     ).toBeNull();
   });
 
   it('returns null for an empty schema', () => {
-    expect(findCompletionProperty({})).toBeNull();
+    expect(findCompletionProperty(asSchemas({}))).toBeNull();
   });
 
   it('survives a property whose body is not an object', () => {
-    expect(findCompletionProperty({ Status: null, Done: 'nope' })).toBeNull();
+    expect(findCompletionProperty(asSchemas({ Status: null, Done: 'nope' }))).toBeNull();
+  });
+});
+
+describe('completionWrite', () => {
+  it('writes the first Complete option when completing', () => {
+    expect(completionWrite(statusProperty(), true)).toEqual({
+      kind: 'status',
+      name: 'Status',
+      optionId: 'o3',
+    });
+  });
+
+  it('writes the first To-do option when un-completing', () => {
+    expect(completionWrite(statusProperty(), false)).toEqual({
+      kind: 'status',
+      name: 'Status',
+      optionId: 'o1',
+    });
+  });
+
+  it('yields null for un-completing a table with no To-do group, rather than a cleared status', () => {
+    const noTodo = asSchemas({
+      Status: {
+        type: 'status',
+        status: {
+          options: [{ id: 'o3', name: 'Shipped' }],
+          groups: [{ id: 'g3', name: 'Complete', option_ids: ['o3'] }],
+        },
+      },
+    });
+
+    expect(completionWrite(statusProperty(noTodo), false)).toBeNull();
+    expect(completionWrite(statusProperty(noTodo), true)).toEqual({
+      kind: 'status',
+      name: 'Status',
+      optionId: 'o3',
+    });
+  });
+
+  it('writes a boolean for a checkbox', () => {
+    expect(completionWrite({ kind: 'checkbox', name: 'Done' }, true)).toEqual({
+      kind: 'checkbox',
+      name: 'Done',
+      checkbox: true,
+    });
   });
 });
 
 describe('isRowDone', () => {
   it('is done when the option belongs to the Complete group', () => {
-    const page = {
-      id: 'pg1',
-      properties: { Status: { type: 'status', status: { id: 'o4', name: 'Archived' } } },
-    };
-
-    expect(isRowDone(page, statusProperty())).toBe(true);
+    expect(
+      isRowDone(page({ Status: { status: { id: 'o4', name: 'Archived' } } }), statusProperty())
+    ).toBe(true);
   });
 
   it('is not done for an in-progress option', () => {
-    const page = {
-      id: 'pg1',
-      properties: { Status: { type: 'status', status: { id: 'o2', name: 'In progress' } } },
-    };
-
-    expect(isRowDone(page, statusProperty())).toBe(false);
+    expect(
+      isRowDone(page({ Status: { status: { id: 'o2', name: 'In progress' } } }), statusProperty())
+    ).toBe(false);
   });
 
   it('treats a cleared status as not done', () => {
-    const page = { id: 'pg1', properties: { Status: { type: 'status', status: null } } };
-
-    expect(isRowDone(page, statusProperty())).toBe(false);
+    expect(isRowDone(page({ Status: { status: null } }), statusProperty())).toBe(false);
   });
 
   it('treats a missing property as not done rather than throwing', () => {
-    expect(isRowDone({ id: 'pg1', properties: {} }, statusProperty())).toBe(false);
+    expect(isRowDone(page({}), statusProperty())).toBe(false);
   });
 
   it('reads a checkbox directly', () => {
-    const page = { id: 'pg1', properties: { Done: { type: 'checkbox', checkbox: true } } };
-
-    expect(isRowDone(page, { kind: 'checkbox', name: 'Done' })).toBe(true);
+    expect(isRowDone(page({ Done: { checkbox: true } }), { kind: 'checkbox', name: 'Done' })).toBe(
+      true
+    );
   });
 
-  // These two are the point of the whole design: completion follows the GROUP, so an option's
-  // own name must carry no weight. A name-matching implementation passes every other test here.
   it('is done for a Complete-group option whose name does not sound finished', () => {
-    const perverse = {
+    const perverse = asSchemas({
       Status: {
-        id: 'p1',
         type: 'status',
         status: {
-          options: [{ id: 'o9', name: 'Backlog', color: 'gray' }],
+          options: [{ id: 'o9', name: 'Backlog' }],
           groups: [{ id: 'g3', name: 'Complete', option_ids: ['o9'] }],
         },
       },
-    };
-    const property = findCompletionProperty(perverse);
-    if (property === null) {
-      throw new Error('the perverse fixture must yield a completion property');
-    }
-    const page = {
-      id: 'pg1',
-      properties: { Status: { type: 'status', status: { id: 'o9', name: 'Backlog' } } },
-    };
+    });
 
-    expect(isRowDone(page, property)).toBe(true);
+    expect(
+      isRowDone(
+        page({ Status: { status: { id: 'o9', name: 'Backlog' } } }),
+        statusProperty(perverse)
+      )
+    ).toBe(true);
   });
 
   it('is not done for a To-do-group option literally named Done', () => {
-    const trap = {
+    const trap = asSchemas({
       Status: {
-        id: 'p1',
         type: 'status',
         status: {
           options: [
-            { id: 'o1', name: 'Done', color: 'default' },
-            { id: 'o2', name: 'Truly finished', color: 'green' },
+            { id: 'o1', name: 'Done' },
+            { id: 'o2', name: 'Truly finished' },
           ],
           groups: [
             { id: 'g1', name: 'To-do', option_ids: ['o1'] },
@@ -217,56 +254,40 @@ describe('isRowDone', () => {
           ],
         },
       },
-    };
-    const property = findCompletionProperty(trap);
-    if (property === null) {
-      throw new Error('the trap fixture must yield a completion property');
-    }
-    const page = {
-      id: 'pg1',
-      properties: { Status: { type: 'status', status: { id: 'o1', name: 'Done' } } },
-    };
+    });
 
-    expect(isRowDone(page, property)).toBe(false);
+    expect(
+      isRowDone(page({ Status: { status: { id: 'o1', name: 'Done' } } }), statusProperty(trap))
+    ).toBe(false);
   });
 
   it('requires the checkbox to be exactly true, not merely truthy', () => {
-    const page = { id: 'pg1', properties: { Done: { type: 'checkbox', checkbox: 'yes' } } };
-
-    expect(isRowDone(page, { kind: 'checkbox', name: 'Done' })).toBe(false);
+    expect(isRowDone(page({ Done: { checkbox: 'yes' } }), { kind: 'checkbox', name: 'Done' })).toBe(
+      false
+    );
   });
 });
 
 describe('rowTitle', () => {
   it('joins the title fragments', () => {
-    const page = {
-      id: 'pg1',
-      properties: {
-        Name: { type: 'title', title: [{ plain_text: 'Ship ' }, { plain_text: 'the thing' }] },
-      },
-    };
-
-    expect(rowTitle(page)).toBe('Ship the thing');
+    expect(
+      rowTitle(
+        page({
+          Name: { type: 'title', title: [{ plain_text: 'Ship ' }, { plain_text: 'the thing' }] },
+        })
+      )
+    ).toBe('Ship the thing');
   });
 
   it('finds the title under any property name', () => {
-    const page = {
-      id: 'pg1',
-      properties: { Task: { type: 'title', title: [{ plain_text: 'x' }] } },
-    };
-
-    expect(rowTitle(page)).toBe('x');
+    expect(rowTitle(page({ Task: { type: 'title', title: [{ plain_text: 'x' }] } }))).toBe('x');
   });
 
   it('answers an empty string for an empty title rather than throwing', () => {
-    const page = { id: 'pg1', properties: { Name: { type: 'title', title: [] } } };
-
-    expect(rowTitle(page)).toBe('');
+    expect(rowTitle(page({ Name: { type: 'title', title: [] } }))).toBe('');
   });
 
   it('answers an empty string when there is no title property at all', () => {
-    const page = { id: 'pg1', properties: { Done: { type: 'checkbox', checkbox: false } } };
-
-    expect(rowTitle(page)).toBe('');
+    expect(rowTitle(page({ Done: { checkbox: false } }))).toBe('');
   });
 });
