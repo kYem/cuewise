@@ -234,7 +234,7 @@ describe('App background gate', () => {
     expect(hasPhotoApplied()).toBe(false);
   });
 
-  describe('when a refresh and a category change overlap', () => {
+  describe('when a refresh overlaps another change', () => {
     const first = 'https://images.unsplash.com/photo-first';
     const ocean = 'https://images.unsplash.com/photo-ocean';
     const chosen = 'https://images.unsplash.com/photo-chosen';
@@ -325,6 +325,49 @@ describe('App background gate', () => {
       await vi.advanceTimersByTimeAsync(40_000);
 
       expect(photoLayer().style.backgroundImage).toContain(ocean);
+    });
+
+    it('lets the category change land while the refresh that interrupted it is still out', async () => {
+      vi.mocked(preloadImages).mockResolvedValue(undefined);
+      vi.mocked(preloadImage).mockImplementation((url: string) =>
+        url === ocean ? settlingAfter(20_000, { resolve: url }) : Promise.resolve(url)
+      );
+      vi.mocked(refreshBackground).mockImplementation(() =>
+        settlingAfter(30_000, { resolve: null })
+      );
+      await renderWithFirstPhoto();
+
+      switchToOcean();
+      await vi.advanceTimersByTimeAsync(100);
+      await clickRefresh();
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(photoLayer().style.backgroundImage).toContain(ocean);
+    });
+
+    it('drops a refresh that lands after the user has left glass, so none is waiting on return', async () => {
+      vi.mocked(preloadImages).mockResolvedValue(undefined);
+      vi.mocked(refreshBackground).mockImplementation(() =>
+        settlingAfter(30_000, { resolve: chosen })
+      );
+      await renderWithFirstPhoto();
+
+      await clickRefresh();
+      act(() => {
+        useSettingsStore.setState((state) => ({
+          settings: { ...state.settings, colorTheme: 'purple' },
+        }));
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
+      act(() => {
+        useSettingsStore.setState((state) => ({
+          settings: { ...state.settings, colorTheme: 'glass' },
+        }));
+      });
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(hasPhotoApplied()).toBe(false);
     });
 
     it('stays quiet about a load a refresh has already superseded', async () => {

@@ -123,7 +123,7 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
   return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
 }
 
-/** A loggable name for a background: a curated URL as-is, a custom one masked — it is the user's own picture. */
+/** Masks a custom background for logging — it is a data URL of the user's own picture. */
 export function describeBackgroundSource(url: string): string {
   return isUnsplashUrl(url) ? url : 'custom-background';
 }

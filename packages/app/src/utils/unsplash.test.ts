@@ -186,6 +186,7 @@ describe('loadImageWithFallback', () => {
 
     expect(MockImage.instances).toHaveLength(1);
     await expectation;
+    await expect(promise).rejects.toThrow(lastImage().src);
   });
 
   it('throws naming every pick it tried once all of them are dead', async () => {

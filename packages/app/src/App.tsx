@@ -56,9 +56,17 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const backgroundDim = useSettingsStore(selectBackgroundDim);
   const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
-  // Newest request wins, in either direction: a refresh and an effect load can each outlive the
-  // other, and the effect's cancel flag cannot see a refresh. Claimed before the first await.
-  const latestRequestRef = useRef(0);
+  // A result applies only if nothing newer has applied yet: a refresh and an effect load can
+  // each outlive the other, and the effect's cancel flag cannot see a refresh. Ids are claimed
+  // before the first await, so "newer" means "asked for later", not "landed later".
+  const nextRequestRef = useRef(0);
+  const appliedRequestRef = useRef(0);
+  const applyBackground = (requestId: number, url: string | null): void => {
+    if (requestId > appliedRequestRef.current) {
+      appliedRequestRef.current = requestId;
+      setBackgroundImage(url);
+    }
+  };
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isRefreshingBackground, setIsRefreshingBackground] = useState(false);
   const customBackground = useBackgroundStore((s) => s.customBackground);
@@ -122,7 +130,8 @@ function App({ extraSections, syncController }: AppProps = {}) {
   // Load background image when glass theme is selected
   useEffect(() => {
     if (!showBackgroundImage) {
-      setBackgroundImage(null);
+      // Leaving glass is itself the newest request, so a refresh still out cannot land later.
+      applyBackground(++nextRequestRef.current, null);
       setImageLoaded(false);
       return;
     }
@@ -135,7 +144,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
     let cancelled = false;
 
     const loadBackground = async () => {
-      const requestId = ++latestRequestRef.current;
+      const requestId = ++nextRequestRef.current;
       // Unbounded from here: one slow fresh pick can run ~30s, which is what the reveal
       // deadline above exists to survive.
       await preloadImages(settings.focusModeImageCategory);
@@ -155,14 +164,13 @@ function App({ extraSections, syncController }: AppProps = {}) {
       // Load fully before swapping in, so the fade-in never shows a half-painted image.
       try {
         await preloadImage(imageUrl, BACKGROUND_LOAD_TIMEOUT_MS);
-        if (!cancelled && latestRequestRef.current === requestId) {
-          setBackgroundImage(imageUrl);
+        if (!cancelled) {
+          applyBackground(requestId, imageUrl);
         }
       } catch (error) {
         // Torn down or superseded means nobody is waiting on this one, so it is not a failure.
-        if (!cancelled && latestRequestRef.current === requestId) {
+        if (!cancelled && requestId > appliedRequestRef.current) {
           // Decorative, so no toast — but error, since warn is invisible at the shipped level.
-          // Never log a custom background: it's a data URL of the user's own picture.
           const message =
             error instanceof ImageLoadTimeoutError
               ? 'Background image still loading past the limit; this tab will not apply it'
@@ -189,15 +197,11 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
   const handleRefreshBackground = async () => {
     setIsRefreshingBackground(true);
-    const requestId = ++latestRequestRef.current;
+    const requestId = ++nextRequestRef.current;
     const url = await refreshBackground(settings.focusModeImageCategory);
-    if (latestRequestRef.current === requestId) {
-      if (url !== null) {
-        setBackgroundImage(url);
-      } else {
-        // Nothing to show, so the load this interrupted regains the right to land.
-        latestRequestRef.current = requestId - 1;
-      }
+    // A null url means nothing fresh loaded — leave the current background in place.
+    if (url !== null) {
+      applyBackground(requestId, url);
     }
     setIsRefreshingBackground(false);
   };
