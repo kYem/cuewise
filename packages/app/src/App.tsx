@@ -56,9 +56,8 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const backgroundDim = useSettingsStore(selectBackgroundDim);
   const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
-  // A result applies only if nothing newer has applied yet: a refresh and an effect load can
-  // each outlive the other, and the effect's cancel flag cannot see a refresh. Ids are claimed
-  // before the first await, so "newer" means "asked for later", not "landed later".
+  // The effect's cancel flag cannot see a refresh, and either load can outlive the other. Ids
+  // are claimed before the first await, so a newer id means asked for later, not landed later.
   const nextRequestRef = useRef(0);
   const appliedRequestRef = useRef(0);
   const applyBackground = (requestId: number, url: string | null): void => {

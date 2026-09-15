@@ -279,6 +279,35 @@ describe('App background gate', () => {
       vi.mocked(preloadImage).mockImplementation((url: string) => Promise.resolve(url));
     });
 
+    it('applies a fresh pick after a plain refresh', async () => {
+      vi.mocked(preloadImages).mockResolvedValue(undefined);
+      vi.mocked(refreshBackground).mockResolvedValue(chosen);
+      await renderWithFirstPhoto();
+
+      await clickRefresh();
+
+      await waitFor(() => expect(photoLayer().style.backgroundImage).toContain(chosen));
+    });
+
+    it('lets the refresh land while the category change that interrupted it is out, then yields', async () => {
+      vi.mocked(preloadImages).mockResolvedValue(undefined);
+      vi.mocked(preloadImage).mockImplementation((url: string) =>
+        url === ocean ? settlingAfter(30_000, { resolve: url }) : Promise.resolve(url)
+      );
+      vi.mocked(refreshBackground).mockImplementation(() =>
+        settlingAfter(5_000, { resolve: chosen })
+      );
+      await renderWithFirstPhoto();
+
+      await clickRefresh();
+      switchToOcean();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(photoLayer().style.backgroundImage).toContain(chosen);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(photoLayer().style.backgroundImage).toContain(ocean);
+    });
+
     it('keeps the refresh when the category resolve it interrupted lands afterwards', async () => {
       vi.mocked(preloadImages).mockImplementation((category) =>
         category === 'ocean' ? settlingAfter(30_000, { resolve: undefined }) : Promise.resolve()
