@@ -2,6 +2,7 @@ import { logger } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { useEffect, useState } from 'react';
 import { getBackgroundFilterStyle } from '../../utils/background-filter';
+import { describeBackgroundSource } from '../../utils/unsplash';
 
 interface BackgroundImageProps {
   url: string | null;
@@ -38,7 +39,9 @@ export function BackgroundImage({ url, isLoading, dim, blur }: BackgroundImagePr
 
     img.onerror = () => {
       // The previous image stays up, which on screen looks like nothing happened.
-      logger.error('Focus mode background failed to load; keeping the previous one', { url });
+      logger.error('Focus mode background failed to load; keeping the previous one', {
+        source: describeBackgroundSource(url),
+      });
       setIsTransitioning(false);
     };
 

@@ -30,7 +30,7 @@ import {
   preloadImages,
   refreshBackground,
 } from './utils/image-preload-cache';
-import { ImageLoadTimeoutError, isUnsplashUrl, preloadImage } from './utils/unsplash';
+import { describeBackgroundSource, ImageLoadTimeoutError, preloadImage } from './utils/unsplash';
 
 /** Show the app over the gradient fallback rather than wait on a decorative photo. */
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
@@ -167,9 +167,7 @@ function App({ extraSections, syncController }: AppProps = {}) {
             error instanceof ImageLoadTimeoutError
               ? 'Background image still loading past the limit; this tab will not apply it'
               : 'Background image failed to load; keeping the gradient';
-          logger.error(message, error, {
-            source: isUnsplashUrl(imageUrl) ? imageUrl : 'custom-background',
-          });
+          logger.error(message, error, { source: describeBackgroundSource(imageUrl) });
         }
       }
       if (!cancelled) {
@@ -193,9 +191,13 @@ function App({ extraSections, syncController }: AppProps = {}) {
     setIsRefreshingBackground(true);
     const requestId = ++latestRequestRef.current;
     const url = await refreshBackground(settings.focusModeImageCategory);
-    // A null url means nothing fresh loaded — leave the current background in place.
-    if (url !== null && latestRequestRef.current === requestId) {
-      setBackgroundImage(url);
+    if (latestRequestRef.current === requestId) {
+      if (url !== null) {
+        setBackgroundImage(url);
+      } else {
+        // Nothing to show, so the load this interrupted regains the right to land.
+        latestRequestRef.current = requestId - 1;
+      }
     }
     setIsRefreshingBackground(false);
   };

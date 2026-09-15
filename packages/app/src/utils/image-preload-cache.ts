@@ -3,8 +3,6 @@ import { logger } from '@cuewise/shared';
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
 import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
-/** A URL is verified to load before it is persisted, so a stored one can be trusted until it proves dead. */
-
 interface PreloadCache {
   currentUrl: string | null;
   category: FocusImageCategory | null;
@@ -40,7 +38,7 @@ const cache: PreloadCache = {
 
 /**
  * A stored photo is revalidated rather than trusted — one Unsplash has since removed must not
- * stick for the day. Null only when every source fails.
+ * stick for the day. Null when no fresh pick lands either.
  */
 async function resolveDailyBackground(category: FocusImageCategory): Promise<string | null> {
   const stored = await getDailyBackground(category);

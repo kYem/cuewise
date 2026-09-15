@@ -25,15 +25,27 @@ describe('BackgroundImage', () => {
     stubImage(undefined, true);
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    render(
-      <BackgroundImage url="https://example.com/dead.jpg" isLoading={false} dim={0} blur={0} />
-    );
+    const dead = 'https://images.unsplash.com/photo-dead';
+    render(<BackgroundImage url={dead} isLoading={false} dim={0} blur={0} />);
 
     await waitFor(() =>
       expect(error).toHaveBeenCalledWith(expect.stringContaining('failed to load'), {
-        url: 'https://example.com/dead.jpg',
+        source: dead,
       })
     );
+  });
+
+  it("never logs a custom background, which is a data URL of the user's own picture", async () => {
+    stubImage(undefined, true);
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    render(
+      <BackgroundImage url="data:image/jpeg;base64,secret" isLoading={false} dim={0} blur={0} />
+    );
+
+    await waitFor(() => expect(error).toHaveBeenCalled());
+    expect(error).toHaveBeenCalledWith(expect.any(String), { source: 'custom-background' });
+    expect(JSON.stringify(error.mock.calls)).not.toContain('secret');
   });
 
   it('applies the readability filter to the image layer when dim and blur are set', async () => {

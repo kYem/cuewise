@@ -123,6 +123,11 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
   return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
 }
 
+/** A loggable name for a background: a curated URL as-is, a custom one masked — it is the user's own picture. */
+export function describeBackgroundSource(url: string): string {
+  return isUnsplashUrl(url) ? url : 'custom-background';
+}
+
 export class ImageLoadTimeoutError extends Error {
   constructor() {
     super('Image load timeout');
@@ -130,7 +135,7 @@ export class ImageLoadTimeoutError extends Error {
   }
 }
 
-/** A timeout rejects with ImageLoadTimeoutError but leaves the request running, so a slow image still lands. */
+/** A timeout rejects but leaves the request running, so a slow image still lands in the cache. */
 export function preloadImage(url: string, timeout = 10000): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -168,11 +173,11 @@ export async function loadImageWithFallback(category: FocusImageCategory): Promi
     try {
       return await preloadImage(imageUrl, FRESH_PICK_TIMEOUT_MS);
     } catch (error) {
-      // Slow and dead need telling apart downstream: one points at the link, the other at the CDN.
       if (error instanceof ImageLoadTimeoutError) {
-        throw new Error(`A ${category} pick is still loading after ${FRESH_PICK_TIMEOUT_MS}ms`, {
-          cause: error,
-        });
+        throw new Error(
+          `Abandoned a ${category} pick still loading after ${FRESH_PICK_TIMEOUT_MS}ms: ${imageUrl}`,
+          { cause: error }
+        );
       }
       lastError = error;
     }
