@@ -8,7 +8,6 @@ import {
   NotionConfigError,
   NotionResourceError,
   NotionUnavailableError,
-  PAGE_SIZE,
 } from './notion-client';
 import type { CompletionProperty } from './notion-schema';
 
@@ -223,6 +222,12 @@ describe('searchDataSources', () => {
     ]);
   });
 
+  it('treats a search answer with no results array as an outage, not an empty list', async () => {
+    const notion = client(() => Response.json({ object: 'list' }));
+
+    await expect(notion.searchDataSources('tok')).rejects.toBeInstanceOf(NotionUnavailableError);
+  });
+
   it('omits trashed tables, so the picker cannot offer one on its way out', async () => {
     const notion = client(() =>
       Response.json({
@@ -269,7 +274,7 @@ describe('queryRows', () => {
       expect(init.method).toBe('POST');
       expect(JSON.parse(String(init.body))).toMatchObject({
         result_type: 'page',
-        page_size: PAGE_SIZE,
+        page_size: 100,
       });
       return Response.json({
         results: [
@@ -289,7 +294,6 @@ describe('queryRows', () => {
       items: [{ pageId: 'pg1', text: 'Write the plan', done: true }],
       truncated: false,
     });
-    expect(PAGE_SIZE).toBe(100);
   });
 
   it('follows next_cursor and keeps asking for pages only on every page', async () => {

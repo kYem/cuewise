@@ -158,7 +158,7 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 | `invalid_key_envelope` | 400 | `PUT /v1/keys/recovery` body missing/empty/non-string `envelope`, or over `MAX_ENVELOPE_BYTES` (1024) |
 | `key_envelope_exists` | 409 | `PUT /v1/keys/recovery` with `ifAbsent:true` when the caller already has an envelope stored — create-only, never overwrites |
 | `resync_required` | 409 | `GET /v1/changes`'s `since` predates the purged-tombstone watermark — client must resync from `since=0` |
-| `provider_not_connected` | 404 | No grant for that provider, or no table picked yet |
+| `provider_not_connected` | 404 | No grant for that provider |
 | `provider_reauth_required` | 401 | The third-party grant died. Distinct from `invalid_token`, which is about the caller's own session — here the session is fine and only the provider connection needs redoing. The stored grant is dropped when this is answered |
 | `provider_schema_unusable` | 422 | The chosen table has no usable completion property: a status property whose groups do not match refuses outright (a renamed or localized `Complete` group must not silently fall through to a checkbox), and un-completing needs a `To-do` group. Also answered at read and write time, so drift prompts instead of silently never completing anything |
 | `provider_table_unselected` | 409 | Connected, but no table picked yet — the client shows the picker |

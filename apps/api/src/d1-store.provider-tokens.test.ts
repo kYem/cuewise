@@ -141,16 +141,59 @@ describe('provider connections', () => {
     );
   });
 
-  it('narrow writers are no-ops for an account with no grant', async () => {
-    await store.setProviderDataSource(userId, 'notion', 'ds1');
-    await store.updateProviderTokens(userId, 'notion', {
-      ciphertext: 'ct',
-      iv: 'iv',
-      refreshCiphertext: null,
-      refreshIv: null,
-    });
+  it('narrow writers answer false for an account with no grant, and write nothing', async () => {
+    await expect(store.setProviderDataSource(userId, 'notion', 'ds1')).resolves.toBe(false);
+    await expect(
+      store.updateProviderTokens(userId, 'notion', {
+        ciphertext: 'ct',
+        iv: 'iv',
+        refreshCiphertext: null,
+        refreshIv: null,
+      })
+    ).resolves.toBe(false);
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('narrow writers answer true when a row was touched', async () => {
+    await store.putProviderConnection(userId, connection());
+
+    await expect(store.setProviderDataSource(userId, 'notion', 'ds9')).resolves.toBe(true);
+  });
+
+  it('putProviderGrant creates a connection with no table chosen', async () => {
+    await store.putProviderGrant(userId, 'notion', {
+      ciphertext: 'ct',
+      iv: 'iv',
+      refreshCiphertext: 'r-ct',
+      refreshIv: 'r-iv',
+      workspace: 'Acme',
+    });
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv', dataSourceId: null })
+    );
+  });
+
+  it('putProviderGrant replaces the tokens but keeps the chosen table, in one statement', async () => {
+    await store.putProviderConnection(userId, connection({ dataSourceId: 'ds-kept' }));
+
+    await store.putProviderGrant(userId, 'notion', {
+      ciphertext: 'ct-2',
+      iv: 'iv-2',
+      refreshCiphertext: null,
+      refreshIv: null,
+      workspace: 'Renamed',
+    });
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection({
+        ciphertext: 'ct-2',
+        iv: 'iv-2',
+        workspace: 'Renamed',
+        dataSourceId: 'ds-kept',
+      })
+    );
   });
 
   it('stamps created_at from the injected clock, not wall time', async () => {

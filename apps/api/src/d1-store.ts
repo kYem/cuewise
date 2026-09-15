@@ -542,9 +542,9 @@ export class D1SyncStore implements SyncStore {
     userId: string,
     provider: string,
     tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
-  ): Promise<void> {
+  ): Promise<boolean> {
     // COALESCE keeps the stored refresh pair when the renewal carried none.
-    await this.db
+    const res = await this.db
       .prepare(
         `UPDATE provider_tokens
             SET ciphertext = ?, iv = ?,
@@ -561,16 +561,46 @@ export class D1SyncStore implements SyncStore {
         provider
       )
       .run();
+    return (res.meta.changes ?? 0) > 0;
   }
 
   async setProviderDataSource(
     userId: string,
     provider: string,
     dataSourceId: string
-  ): Promise<void> {
-    await this.db
+  ): Promise<boolean> {
+    const res = await this.db
       .prepare('UPDATE provider_tokens SET data_source_id = ? WHERE user_id = ? AND provider = ?')
       .bind(dataSourceId, userId, provider)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO provider_tokens
+           (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
+            workspace, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+         ON CONFLICT (user_id, provider) DO UPDATE SET
+           ciphertext = excluded.ciphertext,
+           iv = excluded.iv,
+           refresh_ciphertext = excluded.refresh_ciphertext,
+           refresh_iv = excluded.refresh_iv,
+           workspace = excluded.workspace,
+           data_source_id = provider_tokens.data_source_id`
+      )
+      .bind(
+        userId,
+        provider,
+        grant.ciphertext,
+        grant.iv,
+        grant.refreshCiphertext,
+        grant.refreshIv,
+        grant.workspace,
+        this.now()
+      )
       .run();
   }
 

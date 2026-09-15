@@ -10,6 +10,7 @@ import {
   verifyState,
 } from '../crypto-utils';
 import type { Env } from '../env';
+import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import {
   NotionAuthError,
@@ -58,23 +59,42 @@ function returnWithError(returnUri: string, outcome: ConnectOutcome): Response {
 interface OpenConnection {
   readonly connection: ProviderConnection;
   readonly accessToken: string;
+  // The ciphertext the request is currently relying on. Renewal moves it, so a later auth
+  // fault compares against the renewed value rather than the one the request started with.
+  usedCiphertext: string;
 }
 
+/** null: no grant. A Response: the grant exists but cannot be opened, already answered. */
 async function openConnection(
   store: SyncStore,
   userId: string,
   env: Env
-): Promise<OpenConnection | null> {
+): Promise<OpenConnection | Response | null> {
   const connection = await store.getProviderConnection(userId, PROVIDER);
   if (connection === null) {
     return null;
   }
-  const accessToken = await decryptSecret(
-    connection.ciphertext,
-    connection.iv,
-    env.PROVIDER_TOKEN_KEY
-  );
-  return { connection, accessToken };
+  try {
+    const accessToken = await decryptSecret(
+      connection.ciphertext,
+      connection.iv,
+      env.PROVIDER_TOKEN_KEY
+    );
+    return { connection, accessToken, usedCiphertext: connection.ciphertext };
+  } catch (error) {
+    // A rotated PROVIDER_TOKEN_KEY. The row can never be read again, so it is as dead as a
+    // revoked grant and gets the same answer — otherwise every read 500s until someone notices.
+    logger.error('Stored Notion grant does not decrypt under the current key; dropping it', {
+      userId,
+      reason: error instanceof Error ? error.name : 'unknown',
+    });
+    await store.deleteProviderConnection(userId, PROVIDER);
+    return problem('provider_reauth_required');
+  }
+}
+
+function isResponse(value: OpenConnection | Response | null): value is Response {
+  return value instanceof Response;
 }
 
 async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> {
@@ -108,11 +128,34 @@ async function withFreshToken<T>(
     if (!(error instanceof NotionAuthError) || refreshCiphertext === null || refreshIv === null) {
       throw error;
     }
-    const refreshToken = await decryptSecret(refreshCiphertext, refreshIv, env.PROVIDER_TOKEN_KEY);
-    const grant = await client.refreshGrant(refreshToken);
-    const sealed = await sealGrant(grant, env.PROVIDER_TOKEN_KEY);
-    await store.updateProviderTokens(userId, PROVIDER, sealed);
-    return attempt(grant.accessToken);
+    let renewed: string;
+    try {
+      const refreshToken = await decryptSecret(
+        refreshCiphertext,
+        refreshIv,
+        env.PROVIDER_TOKEN_KEY
+      );
+      const grant = await client.refreshGrant(refreshToken);
+      const sealed = await sealGrant(grant, env.PROVIDER_TOKEN_KEY);
+      const stored = await store.updateProviderTokens(userId, PROVIDER, sealed);
+      if (!stored) {
+        // The row vanished mid-request (a concurrent disconnect). The token just minted is
+        // held by nobody; let it go rather than leave it live at Notion.
+        await client.revokeToken(grant.accessToken).catch(() => undefined);
+        throw new NotionAuthError('grant was removed during renewal');
+      }
+      open.usedCiphertext = sealed.ciphertext;
+      renewed = grant.accessToken;
+    } catch (renewalError) {
+      // Named separately from the primary call's fault: an operator must be able to see that
+      // renewal is what keeps failing.
+      logger.warn('Notion grant renewal failed', {
+        userId,
+        reason: renewalError instanceof Error ? renewalError.message : 'unknown',
+      });
+      throw renewalError;
+    }
+    return attempt(renewed);
   }
 }
 
@@ -125,12 +168,15 @@ async function providerProblem(
   error: unknown,
   store: SyncStore,
   userId: string,
-  usedCiphertext: string | null
+  usedCiphertext: string
 ): Promise<Response> {
   if (error instanceof NotionAuthError) {
     const current = await store.getProviderConnection(userId, PROVIDER);
-    if (current !== null && usedCiphertext !== null && current.ciphertext !== usedCiphertext) {
-      logger.warn('Notion grant was renewed by a concurrent request; not dropping it', { userId });
+    if (current !== null && current.ciphertext !== usedCiphertext) {
+      logger.warn('Notion grant was renewed by a concurrent request; not dropping it', {
+        userId,
+        reason: error.message,
+      });
       return problem('upstream_unavailable', { detail: 'Please retry.' });
     }
     logger.warn('Dropping the Notion grant after an auth fault', { userId, reason: error.message });
@@ -138,6 +184,9 @@ async function providerProblem(
     return problem('provider_reauth_required');
   }
   if (error instanceof NotionResourceError) {
+    // The reason carries restricted_resource vs object_not_found — a capability we lack in
+    // the developer portal looks identical to a deleted table without it.
+    logger.warn('Notion resource unreachable', { userId, reason: error.message });
     return problem('provider_table_unavailable');
   }
   if (error instanceof NotionUnavailableError) {
@@ -238,22 +287,34 @@ export function registerNotionRoutes(
       if (denied === 'access_denied') {
         return returnWithError(state.returnUri, 'access_denied');
       }
-      // Anything else is a fault in our authorize URL or Notion's config, not a user cancel.
-      logger.error('Notion authorize step failed', { error: denied });
+      // temporarily_unavailable / server_error are Notion's outage codes; anything else is a
+      // fault in our authorize URL or integration config. Neither is a user cancel.
+      if (denied === 'temporarily_unavailable' || denied === 'server_error') {
+        logger.warn('Notion authorize step unavailable', { error: denied });
+      } else {
+        logger.error('Notion authorize step failed', { error: denied });
+      }
       return returnWithError(state.returnUri, 'server_error');
     }
     const code = c.req.query('code') ?? '';
     if (code === '' || !credentialsConfigured(c.env)) {
       return returnWithError(state.returnUri, 'server_error');
     }
+    let grant: NotionGrant | null = null;
     try {
-      const grant = await client(c.env).exchangeCode(code);
+      grant = await client(c.env).exchangeCode(code);
       const sealed = await sealGrant(grant, c.env.PROVIDER_TOKEN_KEY);
       const oneTime = await deps
         .storeFactory(c.env.DB)
         .mintAuthCode({ provider: PROVIDER, grant: sealed }, state.codeChallenge);
       return returnWithCode(state.returnUri, oneTime);
     } catch (error) {
+      if (grant !== null) {
+        // Exchanged but never parked: nobody holds this token, so do not leave it live.
+        await client(c.env)
+          .revokeToken(grant.accessToken)
+          .catch(() => undefined);
+      }
       if (error instanceof NotionConfigError) {
         logger.error('Notion rejected our client configuration', error);
         return returnWithError(state.returnUri, 'server_error');
@@ -268,11 +329,9 @@ export function registerNotionRoutes(
   app.post('/v1/integrations/notion/claim', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return problem('invalid_request', { detail: 'Body must be JSON.' });
+    const body = await parseJsonBody(c);
+    if (body instanceof Response) {
+      return body;
     }
     const record = body as { code?: unknown; codeVerifier?: unknown } | null;
     const code = record === null ? undefined : record.code;
@@ -301,20 +360,30 @@ export function registerNotionRoutes(
       logger.warn('Notion claim presented a sign-in code', { userId });
       return problem('invalid_token');
     }
-    // A reconnect keeps the table already chosen; sharing one more page must not un-pick it.
-    const existing = await store.getProviderConnection(userId, PROVIDER);
-    await store.putProviderConnection(userId, {
-      provider: PROVIDER,
-      ...consumed.payload.grant,
-      dataSourceId: existing === null ? null : existing.dataSourceId,
-    });
-    return c.json({ workspace: consumed.payload.grant.workspace });
+    const grant = consumed.payload.grant;
+    try {
+      // Keeps an already-chosen table: sharing one more page must not un-pick it.
+      await store.putProviderGrant(userId, PROVIDER, grant);
+    } catch (error) {
+      // The code is already burned, so this grant can never be claimed again. Revoke it rather
+      // than leave a live token nobody holds, and say so — a retry will only see invalid_token.
+      logger.error('Notion grant lost after its claim code was consumed', error, { userId });
+      const accessToken = await decryptSecret(grant.ciphertext, grant.iv, c.env.PROVIDER_TOKEN_KEY);
+      await client(c.env)
+        .revokeToken(accessToken)
+        .catch(() => undefined);
+      return problem('internal', { detail: 'The connection was not saved; please connect again.' });
+    }
+    return c.json({ workspace: grant.workspace });
   });
 
   app.get('/v1/integrations/notion/tables', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
     const open = await openConnection(store, userId, c.env);
+    if (isResponse(open)) {
+      return open;
+    }
     if (open === null) {
       return problem('provider_not_connected');
     }
@@ -324,7 +393,7 @@ export function registerNotionRoutes(
         client(c.env).searchDataSources(token)
       );
     } catch (error) {
-      return providerProblem(error, store, userId, open.connection.ciphertext);
+      return providerProblem(error, store, userId, open.usedCiphertext);
     }
     return c.json({ workspace: open.connection.workspace, tables });
   });
@@ -332,11 +401,9 @@ export function registerNotionRoutes(
   app.put('/v1/integrations/notion/selection', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return problem('invalid_request', { detail: 'Body must be JSON.' });
+    const body = await parseJsonBody(c);
+    if (body instanceof Response) {
+      return body;
     }
     const record = body as { dataSourceId?: unknown } | null;
     const dataSourceId = record === null ? undefined : record.dataSourceId;
@@ -344,6 +411,9 @@ export function registerNotionRoutes(
       return invalidId('/dataSourceId');
     }
     const open = await openConnection(store, userId, c.env);
+    if (isResponse(open)) {
+      return open;
+    }
     if (open === null) {
       return problem('provider_not_connected');
     }
@@ -354,12 +424,15 @@ export function registerNotionRoutes(
       );
       property = findCompletionProperty(schema);
     } catch (error) {
-      return providerProblem(error, store, userId, open.connection.ciphertext);
+      return providerProblem(error, store, userId, open.usedCiphertext);
     }
     if (property === null) {
       return problem('provider_schema_unusable');
     }
-    await store.setProviderDataSource(userId, PROVIDER, dataSourceId);
+    const stored = await store.setProviderDataSource(userId, PROVIDER, dataSourceId);
+    if (!stored) {
+      return problem('provider_not_connected');
+    }
     return c.json({ dataSourceId, completion: property.kind });
   });
 
@@ -367,6 +440,9 @@ export function registerNotionRoutes(
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
     const open = await openConnection(store, userId, c.env);
+    if (isResponse(open)) {
+      return open;
+    }
     if (open === null) {
       return problem('provider_not_connected');
     }
@@ -400,7 +476,7 @@ export function registerNotionRoutes(
         truncated: result.truncated,
       });
     } catch (error) {
-      return providerProblem(error, store, userId, open.connection.ciphertext);
+      return providerProblem(error, store, userId, open.usedCiphertext);
     }
   });
 
@@ -411,11 +487,9 @@ export function registerNotionRoutes(
     if (!NOTION_ID_RE.test(pageId)) {
       return invalidId('/pageId');
     }
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return problem('invalid_request', { detail: 'Body must be JSON.' });
+    const body = await parseJsonBody(c);
+    if (body instanceof Response) {
+      return body;
     }
     const record = body as { done?: unknown } | null;
     const done = record === null ? undefined : record.done;
@@ -425,6 +499,9 @@ export function registerNotionRoutes(
       });
     }
     const open = await openConnection(store, userId, c.env);
+    if (isResponse(open)) {
+      return open;
+    }
     if (open === null) {
       return problem('provider_not_connected');
     }
@@ -433,33 +510,45 @@ export function registerNotionRoutes(
       return problem('provider_table_unselected');
     }
     try {
-      const wrote = await withFreshToken(
+      const outcome = await withFreshToken(
         open,
         client(c.env),
         store,
         userId,
         c.env,
-        async (token) => {
+        async (token): Promise<'written' | 'unusable' | 'page_gone'> => {
           const schema = await client(c.env).getPropertySchemas(token, dataSourceId);
           const property = findCompletionProperty(schema);
           if (property === null) {
-            return false;
+            return 'unusable';
           }
           // A status table with no To-do group cannot express "not done" — a schema condition
           // the user can fix, so it is refused rather than written as a cleared status.
           const write = completionWrite(property, done);
           if (write === null) {
-            return false;
+            return 'unusable';
           }
-          await client(c.env).setCompletion(token, pageId, write);
-          return true;
+          try {
+            await client(c.env).setCompletion(token, pageId, write);
+          } catch (error) {
+            // A 403/404 on the PAGE means that row is gone or un-shared — not the table. Sending
+            // the user back to the picker for a task someone just deleted would un-pick a good table.
+            if (error instanceof NotionResourceError) {
+              return 'page_gone';
+            }
+            throw error;
+          }
+          return 'written';
         }
       );
-      if (!wrote) {
+      if (outcome === 'unusable') {
         return problem('provider_schema_unusable');
       }
+      if (outcome === 'page_gone') {
+        return problem('not_found', { detail: 'That task no longer exists in Notion.' });
+      }
     } catch (error) {
-      return providerProblem(error, store, userId, open.connection.ciphertext);
+      return providerProblem(error, store, userId, open.usedCiphertext);
     }
     return c.body(null, 204);
   });
@@ -481,10 +570,15 @@ export function registerNotionRoutes(
       );
       await client(c.env).revokeToken(accessToken);
     } catch (error) {
-      logger.warn('Could not revoke the Notion grant upstream; removing our copy anyway', {
-        userId,
-        reason: error instanceof Error ? error.name : 'unknown',
-      });
+      if (error instanceof NotionConfigError) {
+        // Our secret is wrong, so revocation fails for every user — systemic, must be loud.
+        logger.error('Notion revocation is failing on our client configuration', error);
+      } else {
+        logger.warn('Could not revoke the Notion grant upstream; removing our copy anyway', {
+          userId,
+          reason: error instanceof Error ? error.message : 'unknown',
+        });
+      }
     }
     await store.deleteProviderConnection(userId, PROVIDER);
     return c.body(null, 204);

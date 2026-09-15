@@ -136,6 +136,21 @@ describe('GET /v1/integrations/notion/items', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
+  it('drops a grant that no longer decrypts and asks to reconnect, instead of 500ing forever', async () => {
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app().request(
+      ITEMS,
+      { headers },
+      notionEnv({ PROVIDER_TOKEN_KEY: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' })
+    );
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(401);
+    expect(body.code).toBe('provider_reauth_required');
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
   it('prompts to re-validate when the completion property has gone', async () => {
     const getPropertySchemas = vi.fn(async () => asSchemas({ Name: { type: 'title', title: [] } }));
     const { headers } = await connectedNotionUser();
@@ -274,6 +289,39 @@ describe('token renewal', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
+  it('drops the grant when even the renewed token is rejected — its own renewal is not a race', async () => {
+    const queryRows = vi.fn(async () => {
+      throw new NotionAuthError('rejected again');
+    });
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+
+    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(401);
+    expect(body.code).toBe('provider_reauth_required');
+    expect(queryRows).toHaveBeenCalledTimes(2);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('revokes a token minted for a grant that was disconnected during renewal', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+    const queryRows = vi.fn(async () => {
+      await store.deleteProviderConnection(userId, 'notion');
+      throw new NotionAuthError('expired');
+    });
+
+    const res = await app(stubNotionClient({ queryRows, revokeToken })).request(
+      ITEMS,
+      { headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(401);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
+  });
+
   it('does not drop a grant a concurrent request already renewed', async () => {
     // This request's token 401s, but by the time it reacts another request has stored a fresh one.
     const { store, userId, headers } = await connectedNotionUser();
@@ -376,6 +424,35 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     expect(res.status).toBe(422);
     expect(body.code).toBe('provider_schema_unusable');
     expect(setCompletion).not.toHaveBeenCalled();
+  });
+
+  it('answers not_found for a deleted page, without un-picking the table', async () => {
+    const setCompletion = vi.fn(async () => {
+      throw new NotionResourceError('page gone');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await patchDone(headers, true, stubNotionClient({ setCompletion }));
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('not_found');
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceId: TEST_DATA_SOURCE_ID,
+    });
+  });
+
+  it('answers table_unavailable when the table itself is gone', async () => {
+    const getPropertySchemas = vi.fn(async () => {
+      throw new NotionResourceError('table gone');
+    });
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(headers, true, stubNotionClient({ getPropertySchemas }));
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_table_unavailable');
   });
 
   it('rejects a done that is not a boolean rather than coercing it', async () => {

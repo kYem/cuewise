@@ -265,6 +265,8 @@ describe('POST /v1/integrations/notion/claim', () => {
   });
 
   it('binds the grant to the session that claims it — the account is never in the link', async () => {
+    // A second account exists so "landed somewhere" and "landed on the claimer" differ.
+    const bystander = await signedInWithoutNotion();
     const { headers, store, userId } = await signedInWithoutNotion();
     const code = await parkedCode();
 
@@ -272,9 +274,66 @@ describe('POST /v1/integrations/notion/claim', () => {
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ workspace: 'Acme' });
-    const stored = await store.getProviderConnection(userId, 'notion');
-    expect(stored).not.toBeNull();
-    expect(stored?.dataSourceId).toBeNull();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      workspace: 'Acme',
+      dataSourceId: null,
+    });
+    await expect(
+      bystander.store.getProviderConnection(bystander.userId, 'notion')
+    ).resolves.toBeNull();
+  });
+
+  it('rejects an empty code before looking anything up', async () => {
+    const { headers } = await signedInWithoutNotion();
+
+    const res = await claim('', headers);
+    const body = (await res.json()) as { errors: Array<{ pointer: string }> };
+
+    expect(res.status).toBe(400);
+    expect(body.errors[0]?.pointer).toBe('/code');
+  });
+
+  it('rejects a body that is not json', async () => {
+    const { headers } = await signedInWithoutNotion();
+
+    const res = await app().request(
+      '/v1/integrations/notion/claim',
+      { method: 'POST', headers, body: 'not json' },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it('revokes and reports when the grant cannot be saved after the code is burned', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers, store, userId } = await signedInWithoutNotion();
+    const code = await parkedCode(stubNotionClient({ revokeToken }));
+    const failing = new Proxy(store, {
+      get(target, key) {
+        if (key === 'putProviderGrant') {
+          return async () => {
+            throw new Error('D1 write failed');
+          };
+        }
+        return Reflect.get(target, key);
+      },
+    });
+
+    const res = await createApp({
+      notionClientFactory: () => stubNotionClient({ revokeToken }),
+      storeFactory: () => failing,
+    }).request(
+      '/v1/integrations/notion/claim',
+      { method: 'POST', headers, body: JSON.stringify({ code, codeVerifier: TEST_CODE_VERIFIER }) },
+      notionEnv()
+    );
+    const body = (await res.json()) as { detail: string };
+
+    expect(res.status).toBe(500);
+    expect(body.detail).toContain('connect again');
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
   it('stores both tokens encrypted, and the refresh token really is there', async () => {
@@ -332,9 +391,22 @@ describe('POST /v1/integrations/notion/claim', () => {
     expect(res.status).toBe(401);
   });
 
-  it('keeps the chosen table across a reconnect', async () => {
+  it('keeps the chosen table across a reconnect, and replaces the tokens', async () => {
     const { headers, store, userId } = await connectedNotionUser();
+    const before = await store.getProviderConnection(userId, 'notion');
     const code = await parkedCode();
+
+    await claim(code, headers);
+
+    const after = await store.getProviderConnection(userId, 'notion');
+    expect(after?.dataSourceId).toBe(TEST_DATA_SOURCE_ID);
+    expect(after?.ciphertext).not.toBe(before?.ciphertext);
+  });
+
+  it('keeps a selection made while the reconnect was in flight', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+    const code = await parkedCode();
+    await store.setProviderDataSource(userId, 'notion', TEST_DATA_SOURCE_ID);
 
     await claim(code, headers);
 
@@ -504,6 +576,22 @@ describe('PUT /v1/integrations/notion/selection', () => {
       TEST_REFRESHED_TOKEN
     );
     expect(stored.dataSourceId).toBe(TEST_DATA_SOURCE_ID);
+  });
+
+  it('answers not_connected, not success, when the grant vanished mid-request', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+    const getPropertySchemas = vi.fn(async () => {
+      await store.deleteProviderConnection(userId, 'notion');
+      return statusSchema;
+    });
+
+    const res = await select(
+      headers,
+      TEST_DATA_SOURCE_ID,
+      stubNotionClient({ getPropertySchemas })
+    );
+
+    expect(res.status).toBe(404);
   });
 });
 

@@ -135,13 +135,16 @@ export interface SyncStore {
   deleteProviderConnection(userId: string, provider: string): Promise<void>;
   // Narrow writers, so a route never spreads a stale row over columns another request just
   // changed. `null` refresh means "keep the stored one" — a renewal that does not rotate the
-  // refresh token must not erase it. Both are no-ops when no row exists.
+  // refresh token must not erase it. Both answer false when no row exists.
   updateProviderTokens(
     userId: string,
     provider: string,
     tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
-  ): Promise<void>;
-  setProviderDataSource(userId: string, provider: string, dataSourceId: string): Promise<void>;
+  ): Promise<boolean>;
+  setProviderDataSource(userId: string, provider: string, dataSourceId: string): Promise<boolean>;
+  // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
+  // read-then-write window can revert a selection that lands in between.
+  putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(

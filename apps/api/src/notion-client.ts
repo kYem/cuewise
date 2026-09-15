@@ -18,14 +18,23 @@ export const PAGE_SIZE = 100;
 // Bounded so a 50k-row table cannot hold a Worker invocation open; 500 rows is past any task list.
 export const MAX_QUERY_PAGES = 5;
 
+// Each sets `name` so a log line can tell them apart; `extends Error {}` alone reports "Error".
 /** The user's grant is unusable — revoked, expired, or never valid. The route answers 401. */
-export class NotionAuthError extends Error {}
+export class NotionAuthError extends Error {
+  override readonly name = 'NotionAuthError';
+}
 /** Our client id or secret is wrong. Loud: no action by the user can fix it. */
-export class NotionConfigError extends Error {}
+export class NotionConfigError extends Error {
+  override readonly name = 'NotionConfigError';
+}
 /** Notion is down, rate-limiting, or unreadable. Retryable, and not a fault of ours. */
-export class NotionUnavailableError extends Error {}
-/** The table or page is gone or un-shared. Terminal for that selection — the user re-picks. */
-export class NotionResourceError extends Error {}
+export class NotionUnavailableError extends Error {
+  override readonly name = 'NotionUnavailableError';
+}
+/** The table or page is gone or un-shared. Not retryable; the user re-picks or moves on. */
+export class NotionResourceError extends Error {
+  override readonly name = 'NotionResourceError';
+}
 
 export interface NotionItem {
   pageId: string;
@@ -232,7 +241,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       const record = asRecord(body);
       const results = record === null ? null : record.results;
       if (!Array.isArray(results)) {
-        return [];
+        throw new NotionUnavailableError('notion search answered without a results array');
       }
       return results.flatMap((entry) => {
         const item = asRecord(entry);
