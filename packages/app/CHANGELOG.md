@@ -1,5 +1,12 @@
 # @cuewise/app
 
+## 1.23.2
+
+### Patch Changes
+
+- bc13d08: The glass background no longer gives up on a slow connection, so it arrives without a refresh.
+- 2b4de6e: Moving between the new tab and another page no longer lets the weather refresh past its own rate limit while the forecast service is down.
+
 ## 1.23.1
 
 ### Patch Changes

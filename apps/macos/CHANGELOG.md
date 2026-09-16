@@ -1,5 +1,15 @@
 # @cuewise/macos
 
+## 0.8.2
+
+### Patch Changes
+
+- bc13d08: The glass background no longer gives up on a slow connection, so it arrives without a refresh.
+- 2b4de6e: Moving between the new tab and another page no longer lets the weather refresh past its own rate limit while the forecast service is down.
+- Updated dependencies [bc13d08]
+- Updated dependencies [2b4de6e]
+  - @cuewise/app@1.23.2
+
 ## 0.8.1
 
 ### Patch Changes
