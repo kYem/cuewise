@@ -1,16 +1,7 @@
 import type { FocusImageCategory } from '@cuewise/shared';
 import { logger } from '@cuewise/shared';
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
-import { loadImageWithFallback, preloadImage } from './unsplash';
-
-/**
- * Daily background cache.
- *
- * The background image changes once per day and is persisted to Chrome storage,
- * then restored on app load. The URL is verified to load before it's cached or
- * persisted, so an image that no longer loads (404) is never stored — it's
- * replaced with a working one instead.
- */
+import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
 interface PreloadCache {
   currentUrl: string | null;
@@ -45,20 +36,28 @@ const cache: PreloadCache = {
   isInitialized: false,
 };
 
+// Bounds how long callers wait for a stored photo before it is handed back still loading — not
+// how long the photo gets, since a timeout keeps it.
+const STORED_HOLD_MS = 8000;
+
+/** Loads, or is merely slow: the request is still running and it was validated when stored. */
+async function storedStillLoads(url: string): Promise<boolean> {
+  try {
+    await preloadImage(url, STORED_HOLD_MS);
+    return true;
+  } catch (error) {
+    return error instanceof ImageLoadTimeoutError;
+  }
+}
+
 /**
- * Resolve today's daily background to a URL verified to load. A persisted
- * background is validated first — an image Unsplash has since removed must not
- * stick — and if it's missing or dead, a fresh validated image is picked and
- * persisted in its place. Returns null only if every source fails.
+ * A stored photo is revalidated rather than trusted — one Unsplash has since removed must not
+ * stick for the day. Null when no fresh pick lands either.
  */
 async function resolveDailyBackground(category: FocusImageCategory): Promise<string | null> {
   const stored = await getDailyBackground(category);
-  if (stored) {
-    try {
-      return await preloadImage(stored.url, 8000);
-    } catch {
-      // Stored image no longer loads (e.g. 404) — fall through and replace it.
-    }
+  if (stored && (await storedStillLoads(stored.url))) {
+    return stored.url;
   }
 
   try {
@@ -66,7 +65,8 @@ async function resolveDailyBackground(category: FocusImageCategory): Promise<str
     await setDailyBackground(url, category);
     return url;
   } catch (error) {
-    logger.warn('No background image could be loaded; showing the solid fallback', { error });
+    // error, not warn: at the shipped level this is the only trace a blocked CDN leaves.
+    logger.error('No background image could be loaded; showing the solid fallback', error);
     return null;
   }
 }
@@ -114,7 +114,6 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
  * Pick a fresh background on demand, replacing today's. Unlike preloadImages this
  * skips the persisted image entirely — the point is to move past it. The current
  * background is left untouched if nothing new loads, so a refresh can't blank the page.
- * @returns The new URL, or null if no fresh image could be loaded.
  */
 export async function refreshBackground(category: FocusImageCategory): Promise<string | null> {
   // The UI hides the refresh control over a custom image; guard here too so the

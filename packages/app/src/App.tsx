@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
 import { ToastContainer } from '@cuewise/ui';
 import { Coffee } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BackgroundCredit } from './components/BackgroundCredit';
 import { ConceptsPage } from './components/ConceptsPage';
 import { CelebrationOverlay } from './components/celebration/CelebrationOverlay';
@@ -30,12 +30,12 @@ import {
   preloadImages,
   refreshBackground,
 } from './utils/image-preload-cache';
-import { isUnsplashUrl, preloadImage } from './utils/unsplash';
+import { describeBackgroundSource, ImageLoadTimeoutError, preloadImage } from './utils/unsplash';
 
 /** Show the app over the gradient fallback rather than wait on a decorative photo. */
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
-/** Bounds one image load; the gradient is a fine outcome, so don't wait the 10s default. */
-const BACKGROUND_LOAD_TIMEOUT_MS = 5000;
+/** Only has to outlast a slow link; the reveal deadline above already unblocks the page. */
+const BACKGROUND_LOAD_TIMEOUT_MS = 60_000;
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
@@ -56,6 +56,16 @@ function App({ extraSections, syncController }: AppProps = {}) {
   const backgroundDim = useSettingsStore(selectBackgroundDim);
   const backgroundBlur = useSettingsStore(selectBackgroundBlur);
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  // The effect's cancel flag cannot see a refresh, and either load can outlive the other. Ids
+  // are claimed before the first await, so a newer id means asked for later, not landed later.
+  const nextRequestRef = useRef(0);
+  const appliedRequestRef = useRef(0);
+  const applyBackground = (requestId: number, url: string | null): void => {
+    if (requestId > appliedRequestRef.current) {
+      appliedRequestRef.current = requestId;
+      setBackgroundImage(url);
+    }
+  };
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isRefreshingBackground, setIsRefreshingBackground] = useState(false);
   const customBackground = useBackgroundStore((s) => s.customBackground);
@@ -119,7 +129,8 @@ function App({ extraSections, syncController }: AppProps = {}) {
   // Load background image when glass theme is selected
   useEffect(() => {
     if (!showBackgroundImage) {
-      setBackgroundImage(null);
+      // Leaving glass is itself the newest request, so a refresh still out cannot land later.
+      applyBackground(++nextRequestRef.current, null);
       setImageLoaded(false);
       return;
     }
@@ -132,16 +143,17 @@ function App({ extraSections, syncController }: AppProps = {}) {
     let cancelled = false;
 
     const loadBackground = async () => {
-      // Unbounded from here: its own retries can stack to ~32s, which is what the
-      // reveal deadline above exists to survive.
+      const requestId = ++nextRequestRef.current;
+      // Unbounded from here: one slow fresh pick can run ~30s, which is what the reveal
+      // deadline above exists to survive.
       await preloadImages(settings.focusModeImageCategory);
 
       if (cancelled) {
         return;
       }
 
-      // preloadImages has already spent the retry budget; re-running the fallback here
-      // would stack another ~24s onto a failure that is usually a blocked CDN.
+      // preloadImages has already spent its budget; re-running the fallback here would stack
+      // another ~30s onto a failure that is usually a blocked CDN.
       const imageUrl = getPreloadedCurrentUrl(settings.focusModeImageCategory);
       if (!imageUrl) {
         setImageLoaded(true);
@@ -152,15 +164,18 @@ function App({ extraSections, syncController }: AppProps = {}) {
       try {
         await preloadImage(imageUrl, BACKGROUND_LOAD_TIMEOUT_MS);
         if (!cancelled) {
-          setBackgroundImage(imageUrl);
+          applyBackground(requestId, imageUrl);
         }
       } catch (error) {
-        // Decorative, so no toast — but warn, since a custom image reaches here unvalidated.
-        // Never log a custom background: it's a data URL of the user's own picture.
-        logger.warn('Background image failed to load; keeping the gradient', {
-          error,
-          source: isUnsplashUrl(imageUrl) ? imageUrl : 'custom-background',
-        });
+        // Torn down or superseded means nobody is waiting on this one, so it is not a failure.
+        if (!cancelled && requestId > appliedRequestRef.current) {
+          // Decorative, so no toast — but error, since warn is invisible at the shipped level.
+          const message =
+            error instanceof ImageLoadTimeoutError
+              ? 'Background image still loading past the limit; this tab will not apply it'
+              : 'Background image failed to load; keeping the gradient';
+          logger.error(message, error, { source: describeBackgroundSource(imageUrl) });
+        }
       }
       if (!cancelled) {
         setImageLoaded(true);
@@ -181,10 +196,11 @@ function App({ extraSections, syncController }: AppProps = {}) {
 
   const handleRefreshBackground = async () => {
     setIsRefreshingBackground(true);
+    const requestId = ++nextRequestRef.current;
     const url = await refreshBackground(settings.focusModeImageCategory);
     // A null url means nothing fresh loaded — leave the current background in place.
     if (url !== null) {
-      setBackgroundImage(url);
+      applyBackground(requestId, url);
     }
     setIsRefreshingBackground(false);
   };

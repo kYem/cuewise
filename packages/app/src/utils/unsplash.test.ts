@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPhotoCredit, loadImageWithFallback, preloadImage } from './unsplash';
+import {
+  getPhotoCredit,
+  getRandomImageUrl,
+  ImageLoadTimeoutError,
+  loadImageWithFallback,
+  preloadImage,
+} from './unsplash';
 import { CURATED_PHOTOS } from './unsplash-catalog';
 
 // Controllable Image stand-in: jsdom never fires load events, so tests trigger
@@ -21,6 +27,20 @@ function lastImage(): MockImage {
   }
   return img;
 }
+
+describe('getRandomImageUrl', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('gives the same photo the same URL a second later, so the CDN edge can serve it', () => {
+    vi.useFakeTimers();
+    const first = getRandomImageUrl('nature', 0);
+    vi.advanceTimersByTime(1000);
+
+    expect(getRandomImageUrl('nature', 0)).toBe(first);
+  });
+});
 
 describe('preloadImage', () => {
   beforeEach(() => {
@@ -45,12 +65,22 @@ describe('preloadImage', () => {
     await expect(promise).rejects.toThrow('Failed to load image');
   });
 
-  it('rejects when the image neither loads nor errors before the timeout', async () => {
+  it('rejects a stalled image with an error callers can tell apart from a dead one', async () => {
     vi.useFakeTimers();
     const promise = preloadImage('https://img/hang.jpg', 5000);
-    const expectation = expect(promise).rejects.toThrow('Image load timeout');
+    const expectation = expect(promise).rejects.toBeInstanceOf(ImageLoadTimeoutError);
     await vi.advanceTimersByTimeAsync(5000);
     await expectation;
+  });
+
+  it('leaves the request running after a timeout, so a slow image still reaches the cache', async () => {
+    vi.useFakeTimers();
+    const promise = preloadImage('https://img/slow.jpg', 5000);
+    const expectation = expect(promise).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(5000);
+    await expectation;
+
+    expect(lastImage().src).toBe('https://img/slow.jpg');
   });
 });
 
@@ -130,9 +160,36 @@ describe('loadImageWithFallback', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
-  it('throws after every image attempt fails', async () => {
+  it('waits on a slow pick rather than handing it back unseen or starting a rival', async () => {
+    vi.useFakeTimers();
+    let settled = false;
+    const promise = loadImageWithFallback('nature');
+    promise.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(settled).toBe(false);
+    expect(MockImage.instances).toHaveLength(1);
+    lastImage().onload?.();
+    await expect(promise).resolves.toBe(lastImage().src);
+  });
+
+  it('gives up on a pick that outlasts its budget, saying so, without a rival beside it', async () => {
+    vi.useFakeTimers();
+    const promise = loadImageWithFallback('nature');
+    const expectation = expect(promise).rejects.toThrow(/still loading/);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(MockImage.instances).toHaveLength(1);
+    await expectation;
+    await expect(promise).rejects.toThrow(lastImage().src);
+  });
+
+  it('throws naming every pick it tried once all of them are dead', async () => {
     const promise = loadImageWithFallback('nature');
     let settled = false;
     promise.catch(() => {
@@ -147,7 +204,7 @@ describe('loadImageWithFallback', () => {
       MockImage.instances.at(-1)?.onerror?.();
     }
 
-    await expect(promise).rejects.toThrow('All image sources failed');
+    await expect(promise).rejects.toThrow(/photo-.*photo-.*photo-/);
   });
 });
 
