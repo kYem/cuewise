@@ -157,17 +157,17 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
   });
 }
 
-// Generous, because the page is already revealed: this only has to outlast a slow link, and a
-// second download started beside a slow one would only slow both.
+// Shorter than the page's own wait because two callers show a spinner for the duration; long
+// enough to outlast a slow link, since a second download beside a slow one would only slow both.
 const FRESH_PICK_TIMEOUT_MS = 30_000;
+const MAX_PICKS = 3;
 
 /** Load an image from our curated collection, moving on to another only when one is dead. */
 export async function loadImageWithFallback(category: FocusImageCategory): Promise<string> {
-  const images = CURATED_PHOTOS[category];
   const tried: string[] = [];
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < Math.min(3, images.length); attempt++) {
+  for (let attempt = 0; attempt < MAX_PICKS; attempt++) {
     const imageUrl = getRandomImageUrl(category);
     tried.push(imageUrl);
     try {

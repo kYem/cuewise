@@ -4,15 +4,12 @@ vi.mock('@cuewise/storage', () => ({
   getDailyBackground: vi.fn(),
   setDailyBackground: vi.fn(),
 }));
-vi.mock('./unsplash', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./unsplash')>();
-  return {
-    ImageLoadTimeoutError: actual.ImageLoadTimeoutError,
-    getRandomImageUrl: vi.fn(() => 'https://img/random'),
-    loadImageWithFallback: vi.fn(),
-    preloadImage: vi.fn(),
-  };
-});
+vi.mock('./unsplash', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./unsplash')>()),
+  getRandomImageUrl: vi.fn(() => 'https://img/random'),
+  loadImageWithFallback: vi.fn(),
+  preloadImage: vi.fn(),
+}));
 
 import { logger } from '@cuewise/shared';
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';

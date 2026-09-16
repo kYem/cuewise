@@ -36,22 +36,28 @@ const cache: PreloadCache = {
   isInitialized: false,
 };
 
+// Bounds how long callers wait for a stored photo before it is handed back still loading — not
+// how long the photo gets, since a timeout keeps it.
+const STORED_HOLD_MS = 8000;
+
+/** Loads, or is merely slow: the request is still running and it was validated when stored. */
+async function storedStillLoads(url: string): Promise<boolean> {
+  try {
+    await preloadImage(url, STORED_HOLD_MS);
+    return true;
+  } catch (error) {
+    return error instanceof ImageLoadTimeoutError;
+  }
+}
+
 /**
  * A stored photo is revalidated rather than trusted — one Unsplash has since removed must not
  * stick for the day. Null when no fresh pick lands either.
  */
 async function resolveDailyBackground(category: FocusImageCategory): Promise<string | null> {
   const stored = await getDailyBackground(category);
-  if (stored) {
-    try {
-      return await preloadImage(stored.url, 8000);
-    } catch (error) {
-      // Slow is not dead: the request is still running, and it was validated when stored.
-      if (error instanceof ImageLoadTimeoutError) {
-        return stored.url;
-      }
-      // Stored image no longer loads (e.g. 404) — fall through and replace it.
-    }
+  if (stored && (await storedStillLoads(stored.url))) {
+    return stored.url;
   }
 
   try {

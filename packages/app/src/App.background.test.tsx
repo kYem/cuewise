@@ -11,22 +11,11 @@ vi.mock('./utils/image-preload-cache', () => ({
   setCustomBackgroundOverride: vi.fn(),
   getCustomBackgroundOverride: vi.fn(() => null),
 }));
-vi.mock('./utils/unsplash', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/unsplash')>();
-  return {
-    ImageLoadTimeoutError: actual.ImageLoadTimeoutError,
-    describeBackgroundSource: actual.describeBackgroundSource,
-    loadImageWithFallback: vi.fn(() => new Promise<string>(() => undefined)),
-    // App.tsx loads through this; without it the happy path throws "not a function".
-    preloadImage: vi.fn((url: string) => Promise.resolve(url)),
-    getPhotoCredit: vi.fn(() => ({
-      photographer: null,
-      photographerUrl: null,
-      sourceUrl: 'https://unsplash.com',
-    })),
-    isUnsplashUrl: vi.fn(() => true),
-  };
-});
+vi.mock('./utils/unsplash', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./utils/unsplash')>()),
+  loadImageWithFallback: vi.fn(() => new Promise<string>(() => undefined)),
+  preloadImage: vi.fn((url: string) => Promise.resolve(url)),
+}));
 
 import {
   hasPhotoApplied,
@@ -42,7 +31,7 @@ import {
   preloadImages,
   refreshBackground,
 } from './utils/image-preload-cache';
-import { ImageLoadTimeoutError, isUnsplashUrl, preloadImage } from './utils/unsplash';
+import { ImageLoadTimeoutError, preloadImage } from './utils/unsplash';
 
 /** Mirrors BACKGROUND_REVEAL_DEADLINE_MS in App.tsx; raising it there must fail these. */
 const REVEAL_DEADLINE_MS = 1500;
@@ -53,6 +42,31 @@ const realLoadCustomBackground = useBackgroundStore.getState().loadCustomBackgro
 /** The wrapper gating the main content + theme switcher (App.tsx `hideContent`). */
 function contentWrapper(): HTMLElement {
   return screen.getByTestId('app-content');
+}
+
+function resolvingAfter<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+}
+
+function rejectingAfter(ms: number, error: Error): Promise<never> {
+  return new Promise((_, reject) => setTimeout(() => reject(error), ms));
+}
+
+function setColorTheme(theme: 'glass' | 'purple'): void {
+  act(() => {
+    useSettingsStore.setState((state) => ({
+      settings: { ...state.settings, colorTheme: theme },
+    }));
+  });
+}
+
+/** Returning must not itself load a photo, or "nothing waiting" could not be told from "loaded". */
+async function leaveGlassAndReturn(msAway: number): Promise<void> {
+  setColorTheme('purple');
+  await vi.advanceTimersByTimeAsync(msAway);
+  vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
+  setColorTheme('glass');
+  await vi.advanceTimersByTimeAsync(100);
 }
 
 // These tests assume glass is the default theme (DEFAULT_SETTINGS.colorTheme); without it
@@ -66,7 +80,6 @@ describe('App background gate', () => {
     vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(null);
     vi.mocked(preloadImage).mockImplementation((url: string) => Promise.resolve(url));
-    vi.mocked(isUnsplashUrl).mockReturnValue(true);
     useBackgroundStore.setState({
       customBackground: null,
       isLoaded: false,
@@ -185,22 +198,15 @@ describe('App background gate', () => {
   it('stays quiet about a load the user has already switched away from', async () => {
     vi.mocked(preloadImages).mockResolvedValue(undefined);
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
-    vi.mocked(preloadImage).mockImplementation(
-      () =>
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Failed to load image')), 1000)
-        )
+    vi.mocked(preloadImage).mockImplementation(() =>
+      rejectingAfter(1000, new Error('Failed to load image'))
     );
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     render(<App />);
     await vi.advanceTimersByTimeAsync(100);
     expect(vi.mocked(preloadImage)).toHaveBeenLastCalledWith(PHOTO, 60_000);
-    act(() => {
-      useSettingsStore.setState((state) => ({
-        settings: { ...state.settings, colorTheme: 'purple' },
-      }));
-    });
+    setColorTheme('purple');
     expect(screen.queryByTestId('background-photo')).toBeNull();
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -210,26 +216,12 @@ describe('App background gate', () => {
   it('drops a photo that lands after the user has left glass, so none is waiting on return', async () => {
     vi.mocked(preloadImages).mockResolvedValue(undefined);
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(PHOTO);
-    vi.mocked(preloadImage).mockImplementation(
-      (url: string) => new Promise((resolve) => setTimeout(() => resolve(url), 1000))
-    );
+    vi.mocked(preloadImage).mockImplementation((url: string) => resolvingAfter(1000, url));
 
     render(<App />);
     await vi.advanceTimersByTimeAsync(100);
     expect(vi.mocked(preloadImage)).toHaveBeenLastCalledWith(PHOTO, 60_000);
-    act(() => {
-      useSettingsStore.setState((state) => ({
-        settings: { ...state.settings, colorTheme: 'purple' },
-      }));
-    });
-    await vi.advanceTimersByTimeAsync(1000);
-    vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
-    act(() => {
-      useSettingsStore.setState((state) => ({
-        settings: { ...state.settings, colorTheme: 'glass' },
-      }));
-    });
-    await vi.advanceTimersByTimeAsync(100);
+    await leaveGlassAndReturn(1000);
 
     expect(hasPhotoApplied()).toBe(false);
   });
@@ -238,18 +230,6 @@ describe('App background gate', () => {
     const first = 'https://images.unsplash.com/photo-first';
     const ocean = 'https://images.unsplash.com/photo-ocean';
     const chosen = 'https://images.unsplash.com/photo-chosen';
-
-    function settlingAfter<T>(ms: number, outcome: { resolve: T } | { reject: Error }) {
-      return new Promise<T>((resolve, reject) =>
-        setTimeout(() => {
-          if ('resolve' in outcome) {
-            resolve(outcome.resolve);
-          } else {
-            reject(outcome.reject);
-          }
-        }, ms)
-      );
-    }
 
     async function renderWithFirstPhoto(): Promise<void> {
       window.location.hash = '';
@@ -273,14 +253,13 @@ describe('App background gate', () => {
     }
 
     beforeEach(() => {
+      vi.mocked(preloadImages).mockResolvedValue(undefined);
       vi.mocked(getPreloadedCurrentUrl).mockImplementation((category) =>
         category === 'ocean' ? ocean : first
       );
-      vi.mocked(preloadImage).mockImplementation((url: string) => Promise.resolve(url));
     });
 
     it('applies a fresh pick after a plain refresh', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
       vi.mocked(refreshBackground).mockResolvedValue(chosen);
       await renderWithFirstPhoto();
 
@@ -290,27 +269,24 @@ describe('App background gate', () => {
     });
 
     it('lets the refresh land while the category change that interrupted it is out, then yields', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
       vi.mocked(preloadImage).mockImplementation((url: string) =>
-        url === ocean ? settlingAfter(30_000, { resolve: url }) : Promise.resolve(url)
+        url === ocean ? resolvingAfter(3000, url) : Promise.resolve(url)
       );
-      vi.mocked(refreshBackground).mockImplementation(() =>
-        settlingAfter(5_000, { resolve: chosen })
-      );
+      vi.mocked(refreshBackground).mockImplementation(() => resolvingAfter(1000, chosen));
       await renderWithFirstPhoto();
 
       await clickRefresh();
       switchToOcean();
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(1000);
       expect(photoLayer().style.backgroundImage).toContain(chosen);
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(photoLayer().style.backgroundImage).toContain(ocean);
     });
 
     it('keeps the refresh when the category resolve it interrupted lands afterwards', async () => {
       vi.mocked(preloadImages).mockImplementation((category) =>
-        category === 'ocean' ? settlingAfter(30_000, { resolve: undefined }) : Promise.resolve()
+        category === 'ocean' ? resolvingAfter(3000, undefined) : Promise.resolve()
       );
       vi.mocked(refreshBackground).mockResolvedValue(chosen);
       await renderWithFirstPhoto();
@@ -318,93 +294,66 @@ describe('App background gate', () => {
       switchToOcean();
       await clickRefresh();
       await waitFor(() => expect(photoLayer().style.backgroundImage).toContain(chosen));
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(photoLayer().style.backgroundImage).toContain(chosen);
     });
 
     it('keeps the category change when the refresh it interrupted lands afterwards', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
-      vi.mocked(refreshBackground).mockImplementation(() =>
-        settlingAfter(30_000, { resolve: chosen })
-      );
+      vi.mocked(refreshBackground).mockImplementation(() => resolvingAfter(3000, chosen));
       await renderWithFirstPhoto();
 
       await clickRefresh();
       switchToOcean();
       await waitFor(() => expect(photoLayer().style.backgroundImage).toContain(ocean));
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(photoLayer().style.backgroundImage).toContain(ocean);
     });
 
     it('lets the category change land after a refresh that interrupted it came back empty', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
       vi.mocked(preloadImage).mockImplementation((url: string) =>
-        url === ocean ? settlingAfter(40_000, { resolve: url }) : Promise.resolve(url)
+        url === ocean ? resolvingAfter(4000, url) : Promise.resolve(url)
       );
-      vi.mocked(refreshBackground).mockImplementation(() =>
-        settlingAfter(30_000, { resolve: null })
-      );
+      vi.mocked(refreshBackground).mockImplementation(() => resolvingAfter(3000, null));
       await renderWithFirstPhoto();
 
       switchToOcean();
       await vi.advanceTimersByTimeAsync(100);
       await clickRefresh();
-      await vi.advanceTimersByTimeAsync(40_000);
+      await vi.advanceTimersByTimeAsync(4000);
 
       expect(photoLayer().style.backgroundImage).toContain(ocean);
     });
 
     it('lets the category change land while the refresh that interrupted it is still out', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
       vi.mocked(preloadImage).mockImplementation((url: string) =>
-        url === ocean ? settlingAfter(20_000, { resolve: url }) : Promise.resolve(url)
+        url === ocean ? resolvingAfter(2000, url) : Promise.resolve(url)
       );
-      vi.mocked(refreshBackground).mockImplementation(() =>
-        settlingAfter(30_000, { resolve: null })
-      );
+      vi.mocked(refreshBackground).mockImplementation(() => resolvingAfter(3000, null));
       await renderWithFirstPhoto();
 
       switchToOcean();
       await vi.advanceTimersByTimeAsync(100);
       await clickRefresh();
-      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(2000);
 
       expect(photoLayer().style.backgroundImage).toContain(ocean);
     });
 
     it('drops a refresh that lands after the user has left glass, so none is waiting on return', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
-      vi.mocked(refreshBackground).mockImplementation(() =>
-        settlingAfter(30_000, { resolve: chosen })
-      );
+      vi.mocked(refreshBackground).mockImplementation(() => resolvingAfter(3000, chosen));
       await renderWithFirstPhoto();
 
       await clickRefresh();
-      act(() => {
-        useSettingsStore.setState((state) => ({
-          settings: { ...state.settings, colorTheme: 'purple' },
-        }));
-      });
-      await vi.advanceTimersByTimeAsync(30_000);
-      vi.mocked(preloadImages).mockImplementation(() => new Promise<void>(() => undefined));
-      act(() => {
-        useSettingsStore.setState((state) => ({
-          settings: { ...state.settings, colorTheme: 'glass' },
-        }));
-      });
-      await vi.advanceTimersByTimeAsync(100);
+      await leaveGlassAndReturn(3000);
 
       expect(hasPhotoApplied()).toBe(false);
     });
 
     it('stays quiet about a load a refresh has already superseded', async () => {
-      vi.mocked(preloadImages).mockResolvedValue(undefined);
       vi.mocked(preloadImage).mockImplementation((url: string) =>
-        url === ocean
-          ? settlingAfter(30_000, { reject: new ImageLoadTimeoutError() })
-          : Promise.resolve(url)
+        url === ocean ? rejectingAfter(3000, new ImageLoadTimeoutError()) : Promise.resolve(url)
       );
       vi.mocked(refreshBackground).mockResolvedValue(chosen);
       const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -415,7 +364,7 @@ describe('App background gate', () => {
       expect(vi.mocked(preloadImage)).toHaveBeenLastCalledWith(ocean, 60_000);
       await clickRefresh();
       await waitFor(() => expect(photoLayer().style.backgroundImage).toContain(chosen));
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(error).not.toHaveBeenCalled();
     });
@@ -474,7 +423,6 @@ describe('App background gate', () => {
     const ownPhoto = 'data:image/jpeg;base64,secret';
     vi.mocked(preloadImages).mockResolvedValue(undefined);
     vi.mocked(getPreloadedCurrentUrl).mockReturnValue(ownPhoto);
-    vi.mocked(isUnsplashUrl).mockReturnValue(false);
     vi.mocked(preloadImage).mockRejectedValue(new Error('Failed to load image'));
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
