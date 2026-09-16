@@ -9,6 +9,7 @@ import { verifyOrProblem } from '../verifiers';
 import {
   CODE_CHALLENGE_RE,
   isAllowedReturnUri,
+  OAUTH_ERROR_CODE_RE,
   requireStateSigningKey,
   respondWithDeepLink,
   toBounceState,
@@ -46,9 +47,7 @@ const CONFIG_FAULT_ERRORS = new Set([
 async function readOAuthErrorCode(res: Response): Promise<string | null> {
   try {
     const body = (await res.json()) as { error?: unknown };
-    // Enum-shaped values only — anything else is not an RFC 6749 error code and never
-    // reaches a log line.
-    if (typeof body.error === 'string' && /^[a-z_]{1,64}$/.test(body.error)) {
+    if (typeof body.error === 'string' && OAUTH_ERROR_CODE_RE.test(body.error)) {
       return body.error;
     }
     return null;
@@ -128,7 +127,6 @@ function sanitizeOAuthError(error: string): SanitizedOAuthError {
   return 'auth_failed';
 }
 
-/** HTML-escapes an embedded value; deep-link URLs are server-built, but escape regardless. */
 /**
  * Failures after the return URI is proven ours (allowlisted at /start, or HMAC-verified at the
  * callback) ride back to the app so its pending flow settles immediately — a problem+json page

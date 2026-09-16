@@ -3,11 +3,17 @@ import { randomToken } from '../crypto-utils';
 import type { Env } from '../env';
 import type { ValidationIssue } from '../problem-details';
 
+// RFC 7636 §4.1: 43-128 characters from the unreserved set. ASCII-only, so byte length and
+// character length are provably identical.
 const MIN_CODE_VERIFIER_LENGTH = 43;
 const MAX_CODE_VERIFIER_LENGTH = 128;
 export const CODE_VERIFIER_RE = new RegExp(
   `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
 );
+
+// An RFC 6749 error code is enum-shaped. Anything else came from the network and never reaches
+// a log line.
+export const OAUTH_ERROR_CODE_RE = /^[a-z_]{1,64}$/;
 
 /** Picks the most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides pass/fail. */
 export function codeVerifierIssue(value: unknown): ValidationIssue {

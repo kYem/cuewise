@@ -23,6 +23,11 @@ const PROBLEM_DEFS = {
     status: 422,
     title: 'That table has no status with a Complete group, and no Done checkbox.',
   },
+  // The table is usable for reading and completing; only "not done" has nowhere to go.
+  provider_todo_group_missing: {
+    status: 422,
+    title: "That table's status has no To-do group, so a task cannot be marked not done.",
+  },
   // Connected, but the picker step has not happened. Distinct from not_connected so the client
   // shows the table picker rather than the connect button.
   provider_table_unselected: { status: 409, title: 'No table has been chosen yet.' },

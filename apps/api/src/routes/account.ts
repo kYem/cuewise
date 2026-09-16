@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
+import { revokeNotionGrant } from './notion';
 
 export function registerAccountRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
@@ -23,7 +24,9 @@ export function registerAccountRoutes(
 
   app.delete('/v1/account', async (c) => {
     const store = deps.storeFactory(c.env.DB);
-    await store.deleteUser(c.get('userId'));
+    const userId = c.get('userId');
+    await revokeNotionGrant(store, deps.notionClientFactory(c.env), c.env, userId);
+    await store.deleteUser(userId);
     return c.body(null, 204);
   });
 }

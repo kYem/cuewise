@@ -4,6 +4,7 @@ import { encryptSecret, sha256Base64Url } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import type { NotionClient } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
+import type { AuthCodePayload, SealedGrant } from '../store';
 import { signedInToken } from './api-test-helpers.fixtures';
 
 /** 43 base64url chars decode to the 32 bytes AES-GCM needs. */
@@ -60,8 +61,7 @@ export async function testCodeChallenge(): Promise<string> {
 
 /**
  * Every method stubbed so a test overrides only the call it is about. The refresh stub answers
- * `workspace: null`, as the real API does — the route's fallback to the stored name is then
- * exercised by every renewal test rather than hidden by a generous stub.
+ * `workspace: null`, as the real API does.
  */
 export function stubNotionClient(overrides: Partial<NotionClient> = {}): NotionClient {
   return {
@@ -116,14 +116,47 @@ export async function connectedNotionUser(
     options.withRefreshToken === true
       ? await encryptSecret(TEST_REFRESH_TOKEN, TEST_PROVIDER_KEY)
       : null;
-  await user.store.putProviderConnection(user.userId, {
-    provider: 'notion',
+  await user.store.putProviderGrant(user.userId, 'notion', {
     ciphertext: sealed.ciphertext,
     iv: sealed.iv,
     refreshCiphertext: refresh === null ? null : refresh.ciphertext,
     refreshIv: refresh === null ? null : refresh.iv,
     workspace: 'Acme',
-    dataSourceId: options.dataSourceId === undefined ? TEST_DATA_SOURCE_ID : options.dataSourceId,
   });
+  const dataSourceId =
+    options.dataSourceId === undefined ? TEST_DATA_SOURCE_ID : options.dataSourceId;
+  if (dataSourceId !== null) {
+    await user.store.setProviderDataSource(user.userId, 'notion', dataSourceId);
+  }
   return user;
+}
+
+type FailingWrite = 'mintAuthCode' | 'putProviderGrant';
+
+/** A real store whose one named write throws, so a route's cleanup path runs against real rows. */
+export class FailingWriteStore extends D1SyncStore {
+  private readonly failing: FailingWrite;
+
+  constructor(failing: FailingWrite) {
+    super(env.DB);
+    this.failing = failing;
+  }
+
+  override async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
+    if (this.failing === 'mintAuthCode') {
+      throw new Error('D1 write failed');
+    }
+    return super.mintAuthCode(payload, codeChallenge);
+  }
+
+  override async putProviderGrant(
+    userId: string,
+    provider: string,
+    grant: SealedGrant
+  ): Promise<void> {
+    if (this.failing === 'putProviderGrant') {
+      throw new Error('D1 write failed');
+    }
+    return super.putProviderGrant(userId, provider, grant);
+  }
 }

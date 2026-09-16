@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import {
   asSchemas,
   connectedNotionUser,
+  FailingWriteStore,
   notionEnv,
   signedInWithoutNotion,
   statusSchema,
@@ -102,6 +104,8 @@ describe('GET /v1/integrations/notion/start', () => {
     const url = new URL(body.authorizeUrl);
     expect(url.origin + url.pathname).toBe('https://api.notion.com/v1/oauth/authorize');
     expect(url.searchParams.get('client_id')).toBe('cid');
+    expect(url.searchParams.get('response_type')).toBe('code');
+    expect(url.searchParams.get('owner')).toBe('user');
     expect(url.searchParams.get('redirect_uri')).toBe(
       'https://api.example.test/v1/integrations/notion/callback'
     );
@@ -122,6 +126,18 @@ describe('GET /v1/integrations/notion/start', () => {
       `/v1/integrations/notion/start?return_uri=cuewise://auth&code_challenge=${await testCodeChallenge()}`,
       { headers },
       notionEnv({ NOTION_CLIENT_ID: '' })
+    );
+
+    expect(res.status).toBe(500);
+  });
+
+  it('fails closed on a token key that is not 32 bytes, before any flow can start', async () => {
+    const { headers } = await signedInWithoutNotion();
+
+    const res = await app().request(
+      `/v1/integrations/notion/start?return_uri=cuewise://auth&code_challenge=${await testCodeChallenge()}`,
+      { headers },
+      notionEnv({ PROVIDER_TOKEN_KEY: 'short' })
     );
 
     expect(res.status).toBe(500);
@@ -184,6 +200,50 @@ describe('GET /v1/integrations/notion/callback', () => {
 
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(await res.text()).toContain('code=');
+  });
+
+  it('relays a redirect with neither code nor error as ours', async () => {
+    const state = await signedState();
+
+    const res = await app().request(
+      `/v1/integrations/notion/callback?state=${encodeURIComponent(state)}`,
+      {},
+      notionEnv()
+    );
+
+    expect(await res.text()).toContain('error=server_error');
+  });
+
+  it('revokes the exchanged grant when it cannot be parked, so no live token is orphaned', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const state = await signedState();
+
+    const res = await createApp({
+      notionClientFactory: () => stubNotionClient({ revokeToken }),
+      storeFactory: () => new FailingWriteStore('mintAuthCode'),
+    }).request(
+      `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
+      {},
+      notionEnv()
+    );
+
+    expect(await res.text()).toContain('error=connect_failed');
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('logs an authorize error only when it is shaped like an oauth code', async () => {
+    const errorSpy = spyOnLoggerError();
+    const state = await signedState();
+
+    await app().request(
+      `/v1/integrations/notion/callback?error=${encodeURIComponent('<script>x</script>')}&state=${encodeURIComponent(state)}`,
+      {},
+      notionEnv()
+    );
+
+    expect(errorSpy).toHaveBeenCalledWith('Notion authorize step failed', {
+      error: 'unrecognised',
+    });
   });
 
   it('relays a user cancel as access_denied', async () => {
@@ -309,20 +369,10 @@ describe('POST /v1/integrations/notion/claim', () => {
     const revokeToken = vi.fn(async () => undefined);
     const { headers, store, userId } = await signedInWithoutNotion();
     const code = await parkedCode(stubNotionClient({ revokeToken }));
-    const failing = new Proxy(store, {
-      get(target, key) {
-        if (key === 'putProviderGrant') {
-          return async () => {
-            throw new Error('D1 write failed');
-          };
-        }
-        return Reflect.get(target, key);
-      },
-    });
 
     const res = await createApp({
       notionClientFactory: () => stubNotionClient({ revokeToken }),
-      storeFactory: () => failing,
+      storeFactory: () => new FailingWriteStore('putProviderGrant'),
     }).request(
       '/v1/integrations/notion/claim',
       { method: 'POST', headers, body: JSON.stringify({ code, codeVerifier: TEST_CODE_VERIFIER }) },
@@ -353,6 +403,24 @@ describe('POST /v1/integrations/notion/claim', () => {
     await expect(
       decryptSecret(stored.refreshCiphertext, stored.refreshIv, TEST_PROVIDER_KEY)
     ).resolves.toBe(TEST_REFRESH_TOKEN);
+  });
+
+  it('stores a grant that came without a refresh token, leaving both refresh columns null', async () => {
+    const exchangeCode = vi.fn(async () => ({
+      accessToken: TEST_ACCESS_TOKEN,
+      refreshToken: null,
+      workspace: 'Acme',
+    }));
+    const { headers, store, userId } = await signedInWithoutNotion();
+    const code = await parkedCode(stubNotionClient({ exchangeCode }));
+
+    const res = await claim(code, headers);
+
+    expect(res.status).toBe(200);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      refreshCiphertext: null,
+      refreshIv: null,
+    });
   });
 
   it('is single-use: a second claim fails and cannot land the grant on another account', async () => {
@@ -477,6 +545,24 @@ describe('GET /v1/integrations/notion/tables', () => {
       ],
     });
     expect(searchDataSources).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('answers 500, not a picker prompt, when search itself is refused — that is our config', async () => {
+    const errorSpy = spyOnLoggerError();
+    const searchDataSources = vi.fn(async () => {
+      throw new NotionConfigError('notion search is forbidden');
+    });
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await app(stubNotionClient({ searchDataSources })).request(
+      '/v1/integrations/notion/tables',
+      { headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalled();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 });
 
@@ -656,5 +742,84 @@ describe('DELETE /v1/integrations/notion', () => {
 
     expect(res.status).toBe(204);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('logs at error when revocation fails on our own configuration, since every user is affected', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => {
+      throw new NotionConfigError('invalid_client');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ revokeToken })).request(
+      '/v1/integrations/notion',
+      { method: 'DELETE', headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(204);
+    expect(errorSpy).toHaveBeenCalled();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+});
+
+describe('DELETE /v1/account', () => {
+  it('revokes the Notion grant upstream before the row goes with the account', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ revokeToken })).request(
+      '/v1/account',
+      { method: 'DELETE', headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(204);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('still deletes the account when revocation fails', async () => {
+    const revokeToken = vi.fn(async () => {
+      throw new Error('notion unreachable');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ revokeToken })).request(
+      '/v1/account',
+      { method: 'DELETE', headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(204);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+});
+
+describe('per-token rate limiting', () => {
+  it('covers every notion route: after 60 requests the 61st on each is 429', async () => {
+    const { headers } = await connectedNotionUser();
+    const limited = app();
+    const request = (path: string, init: RequestInit = {}) =>
+      limited.request(path, { ...init, headers }, notionEnv());
+
+    for (let i = 0; i < 60; i += 1) {
+      await request('/v1/integrations/notion/tables');
+    }
+
+    const blocked = await Promise.all([
+      request('/v1/integrations/notion/start'),
+      request('/v1/integrations/notion/tables'),
+      request('/v1/integrations/notion/selection', { method: 'PUT', body: '{}' }),
+      request('/v1/integrations/notion/claim', { method: 'POST', body: '{}' }),
+      request('/v1/integrations/notion/items'),
+      request(`/v1/integrations/notion/items/${TEST_DATA_SOURCE_ID}`, {
+        method: 'PATCH',
+        body: '{}',
+      }),
+      request('/v1/integrations/notion', { method: 'DELETE' }),
+    ]);
+
+    expect(blocked.map((res) => res.status)).toEqual([429, 429, 429, 429, 429, 429, 429]);
   });
 });

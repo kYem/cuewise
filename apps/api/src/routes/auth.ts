@@ -38,8 +38,6 @@ function isDevAuthEnabled(env: Env): boolean {
 export const MAX_DEVICE_NAME_LENGTH = MAX_DEVICE_NAME_BYTES;
 // Real ID tokens run 1-2 KB and the bounce one-time codes are 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
-// RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
-// [A-Za-z0-9._~-]. ASCII-only, so byte length and character length are provably identical.
 
 function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];

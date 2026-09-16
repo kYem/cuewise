@@ -231,13 +231,23 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     },
 
     async searchDataSources(accessToken) {
-      const body = await call('/search', `Bearer ${accessToken}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          filter: { property: 'object', value: 'data_source' },
-          page_size: PAGE_SIZE,
-        }),
-      });
+      let body: unknown;
+      try {
+        body = await call('/search', `Bearer ${accessToken}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            filter: { property: 'object', value: 'data_source' },
+            page_size: PAGE_SIZE,
+          }),
+        });
+      } catch (error) {
+        // Search names no resource the user could un-share, so a 403 here is our integration's
+        // capabilities in the developer portal — sending the user back to the picker cannot fix it.
+        if (error instanceof NotionResourceError) {
+          throw new NotionConfigError(`notion search is forbidden (${error.message})`);
+        }
+        throw error;
+      }
       const record = asRecord(body);
       const results = record === null ? null : record.results;
       if (!Array.isArray(results)) {
@@ -273,7 +283,6 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     async queryRows(accessToken, dataSourceId, property) {
       const items: NotionItem[] = [];
       let cursor: string | null = null;
-      let truncated = false;
       for (let page = 0; page < MAX_QUERY_PAGES; page += 1) {
         const path = `/data_sources/${encodeURIComponent(dataSourceId)}/query`;
         const body = await call(path, `Bearer ${accessToken}`, {
@@ -304,14 +313,15 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
             done: isRowDone(notionPage, property),
           });
         }
+        const hasMore = record !== null && record.has_more === true;
         const next = record === null ? null : record.next_cursor;
-        if (record?.has_more !== true || typeof next !== 'string') {
-          return { items, truncated: false };
+        if (!hasMore || typeof next !== 'string') {
+          // has_more with no cursor cannot be followed, but must not read as a complete list.
+          return { items, truncated: hasMore };
         }
         cursor = next;
-        truncated = true;
       }
-      return { items, truncated };
+      return { items, truncated: true };
     },
 
     async setCompletion(accessToken, pageId, write) {

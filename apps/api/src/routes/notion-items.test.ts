@@ -136,7 +136,7 @@ describe('GET /v1/integrations/notion/items', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
-  it('drops a grant that no longer decrypts and asks to reconnect, instead of 500ing forever', async () => {
+  it('asks to reconnect when the grant no longer decrypts, but keeps it — a key put back must find it', async () => {
     const { headers, store, userId } = await connectedNotionUser();
 
     const res = await app().request(
@@ -148,7 +148,32 @@ describe('GET /v1/integrations/notion/items', () => {
 
     expect(res.status).toBe(401);
     expect(body.code).toBe('provider_reauth_required');
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceId: TEST_DATA_SOURCE_ID,
+    });
+  });
+
+  it('fails closed on a malformed key without touching the stored grant', async () => {
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app().request(ITEMS, { headers }, notionEnv({ PROVIDER_TOKEN_KEY: 'short' }));
+
+    expect(res.status).toBe(500);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
+  });
+
+  it('answers not_connected, not reconnect, when the grant was disconnected during the request', async () => {
+    const { headers, store, userId } = await connectedNotionUser();
+    const queryRows = vi.fn(async () => {
+      await store.deleteProviderConnection(userId, 'notion');
+      throw new NotionAuthError('revoked');
+    });
+
+    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_not_connected');
   });
 
   it('prompts to re-validate when the completion property has gone', async () => {
@@ -317,8 +342,10 @@ describe('token renewal', () => {
       { headers },
       notionEnv()
     );
+    const body = (await res.json()) as { code: string };
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_not_connected');
     expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
   });
 
@@ -400,7 +427,7 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     });
   });
 
-  it('answers 422, not 500, when un-completing a table with no To-do group', async () => {
+  it('names the missing To-do group when un-completing, rather than calling the table unusable', async () => {
     const setCompletion = vi.fn(async () => undefined);
     const noTodo = asSchemas({
       Status: {
@@ -422,7 +449,7 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(422);
-    expect(body.code).toBe('provider_schema_unusable');
+    expect(body.code).toBe('provider_todo_group_missing');
     expect(setCompletion).not.toHaveBeenCalled();
   });
 

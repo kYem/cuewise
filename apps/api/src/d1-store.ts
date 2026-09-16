@@ -476,35 +476,6 @@ export class D1SyncStore implements SyncStore {
     return (result.meta.changes ?? 0) > 0;
   }
 
-  async putProviderConnection(userId: string, connection: ProviderConnection): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO provider_tokens
-           (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
-            workspace, data_source_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (user_id, provider) DO UPDATE SET
-           ciphertext = excluded.ciphertext,
-           iv = excluded.iv,
-           refresh_ciphertext = excluded.refresh_ciphertext,
-           refresh_iv = excluded.refresh_iv,
-           workspace = excluded.workspace,
-           data_source_id = excluded.data_source_id`
-      )
-      .bind(
-        userId,
-        connection.provider,
-        connection.ciphertext,
-        connection.iv,
-        connection.refreshCiphertext,
-        connection.refreshIv,
-        connection.workspace,
-        connection.dataSourceId,
-        this.now()
-      )
-      .run();
-  }
-
   async getProviderConnection(
     userId: string,
     provider: string

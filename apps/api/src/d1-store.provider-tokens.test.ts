@@ -2,18 +2,21 @@ import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clockedStore, newUser } from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
+import type { ProviderConnection, SealedGrant } from './store';
 
-function connection(overrides: Partial<Parameters<D1SyncStore['putProviderConnection']>[1]> = {}) {
+function grant(overrides: Partial<SealedGrant> = {}): SealedGrant {
   return {
-    provider: 'notion',
     ciphertext: 'ct',
     iv: 'iv',
     refreshCiphertext: null,
     refreshIv: null,
     workspace: 'Acme',
-    dataSourceId: 'ds1',
     ...overrides,
   };
+}
+
+function connection(overrides: Partial<ProviderConnection> = {}): ProviderConnection {
+  return { provider: 'notion', ...grant(), dataSourceId: null, ...overrides };
 }
 
 describe('provider connections', () => {
@@ -29,48 +32,56 @@ describe('provider connections', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('round-trips a connection', async () => {
-    await store.putProviderConnection(userId, connection());
+  it('putProviderGrant creates a connection with no table chosen', async () => {
+    await store.putProviderGrant(
+      userId,
+      'notion',
+      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+    );
 
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(connection());
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+    );
   });
 
   it('keeps the nullable columns null rather than coercing them to strings', async () => {
-    await store.putProviderConnection(userId, connection({ workspace: null, dataSourceId: null }));
+    await store.putProviderGrant(userId, 'notion', grant({ workspace: null }));
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ workspace: null, dataSourceId: null })
+      connection({ workspace: null })
     );
   });
 
-  it('replaces on reconnect instead of erroring on the primary key', async () => {
-    await store.putProviderConnection(userId, connection({ ciphertext: 'first' }));
-    await store.putProviderConnection(
+  it('putProviderGrant replaces the tokens but keeps the chosen table, in one statement', async () => {
+    await store.putProviderGrant(userId, 'notion', grant());
+    await store.setProviderDataSource(userId, 'notion', 'ds-kept');
+
+    await store.putProviderGrant(
       userId,
-      connection({ ciphertext: 'second', workspace: 'New' })
+      'notion',
+      grant({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed' })
     );
 
-    const found = await store.getProviderConnection(userId, 'notion');
-
-    expect(found?.ciphertext).toBe('second');
-    expect(found?.workspace).toBe('New');
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed', dataSourceId: 'ds-kept' })
+    );
   });
 
   it('scopes reads to the owning user, so another account cannot see the grant', async () => {
     const other = await newUser(store, 'provider-tokens-other');
-    await store.putProviderConnection(userId, connection());
+    await store.putProviderGrant(userId, 'notion', grant());
 
     await expect(store.getProviderConnection(other, 'notion')).resolves.toBeNull();
   });
 
   it('keeps providers independent', async () => {
-    await store.putProviderConnection(userId, connection());
+    await store.putProviderGrant(userId, 'notion', grant());
 
     await expect(store.getProviderConnection(userId, 'outlook')).resolves.toBeNull();
   });
 
   it('deletes one connection', async () => {
-    await store.putProviderConnection(userId, connection());
+    await store.putProviderGrant(userId, 'notion', grant());
     await store.deleteProviderConnection(userId, 'notion');
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
@@ -81,17 +92,19 @@ describe('provider connections', () => {
   });
 
   it('takes the connection with the account, so a delete leaves no grant behind', async () => {
-    await store.putProviderConnection(userId, connection());
+    await store.putProviderGrant(userId, 'notion', grant());
     await store.deleteUser(userId);
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
   it('updateProviderTokens replaces the access pair and keeps a refresh pair the renewal omitted', async () => {
-    await store.putProviderConnection(
+    await store.putProviderGrant(
       userId,
-      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+      'notion',
+      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
     );
+    await store.setProviderDataSource(userId, 'notion', 'ds1');
 
     await store.updateProviderTokens(userId, 'notion', {
       ciphertext: 'ct-2',
@@ -100,19 +113,22 @@ describe('provider connections', () => {
       refreshIv: null,
     });
 
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
-      ciphertext: 'ct-2',
-      iv: 'iv-2',
-      refreshCiphertext: 'r-ct',
-      refreshIv: 'r-iv',
-      dataSourceId: 'ds1',
-    });
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection({
+        ciphertext: 'ct-2',
+        iv: 'iv-2',
+        refreshCiphertext: 'r-ct',
+        refreshIv: 'r-iv',
+        dataSourceId: 'ds1',
+      })
+    );
   });
 
   it('updateProviderTokens rotates the refresh pair when the renewal carried one', async () => {
-    await store.putProviderConnection(
+    await store.putProviderGrant(
       userId,
-      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+      'notion',
+      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
     );
 
     await store.updateProviderTokens(userId, 'notion', {
@@ -129,9 +145,10 @@ describe('provider connections', () => {
   });
 
   it('setProviderDataSource touches only the selection, never the tokens', async () => {
-    await store.putProviderConnection(
+    await store.putProviderGrant(
       userId,
-      connection({ dataSourceId: null, refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+      'notion',
+      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
     );
 
     await store.setProviderDataSource(userId, 'notion', 'ds9');
@@ -156,50 +173,15 @@ describe('provider connections', () => {
   });
 
   it('narrow writers answer true when a row was touched', async () => {
-    await store.putProviderConnection(userId, connection());
+    await store.putProviderGrant(userId, 'notion', grant());
 
     await expect(store.setProviderDataSource(userId, 'notion', 'ds9')).resolves.toBe(true);
-  });
-
-  it('putProviderGrant creates a connection with no table chosen', async () => {
-    await store.putProviderGrant(userId, 'notion', {
-      ciphertext: 'ct',
-      iv: 'iv',
-      refreshCiphertext: 'r-ct',
-      refreshIv: 'r-iv',
-      workspace: 'Acme',
-    });
-
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv', dataSourceId: null })
-    );
-  });
-
-  it('putProviderGrant replaces the tokens but keeps the chosen table, in one statement', async () => {
-    await store.putProviderConnection(userId, connection({ dataSourceId: 'ds-kept' }));
-
-    await store.putProviderGrant(userId, 'notion', {
-      ciphertext: 'ct-2',
-      iv: 'iv-2',
-      refreshCiphertext: null,
-      refreshIv: null,
-      workspace: 'Renamed',
-    });
-
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({
-        ciphertext: 'ct-2',
-        iv: 'iv-2',
-        workspace: 'Renamed',
-        dataSourceId: 'ds-kept',
-      })
-    );
   });
 
   it('stamps created_at from the injected clock, not wall time', async () => {
     const { store: clocked } = clockedStore(1_700_000_000_000);
     const clockedUser = await newUser(clocked, 'provider-tokens-clocked');
-    await clocked.putProviderConnection(clockedUser, connection());
+    await clocked.putProviderGrant(clockedUser, 'notion', grant());
 
     const row = await env.DB.prepare(
       'SELECT created_at FROM provider_tokens WHERE user_id = ? AND provider = ?'

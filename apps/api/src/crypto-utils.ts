@@ -171,6 +171,15 @@ export async function verifyState(state: string, key: string): Promise<VerifySta
 const PROVIDER_KEY_BYTES = 32;
 const IV_BYTES = 12;
 
+/** True when `rawKey` is what encryptSecret/decryptSecret accept: base64url of exactly 32 bytes. */
+export function isSecretKey(rawKey: string): boolean {
+  try {
+    return base64UrlDecodeBytes(rawKey).length === PROVIDER_KEY_BYTES;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * AES-GCM under a Worker secret, for third-party provider tokens. Deliberately not the user's
  * sync key: the Worker has to read these to call the provider, which is the one place the

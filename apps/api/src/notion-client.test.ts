@@ -118,6 +118,13 @@ describe('exchangeCode', () => {
 });
 
 describe('failure classification', () => {
+  it('names each error class, so a log line can tell them apart', () => {
+    expect(new NotionAuthError('x').name).toBe('NotionAuthError');
+    expect(new NotionConfigError('x').name).toBe('NotionConfigError');
+    expect(new NotionUnavailableError('x').name).toBe('NotionUnavailableError');
+    expect(new NotionResourceError('x').name).toBe('NotionResourceError');
+  });
+
   it('maps a network fault to retryable, naming the fault class but nothing sensitive', async () => {
     const failing = vi.fn(() =>
       Promise.reject(new TypeError('bad url'))
@@ -220,6 +227,12 @@ describe('searchDataSources', () => {
     await expect(notion.searchDataSources('tok')).resolves.toEqual([
       { id: 'ds1', name: 'Current Goals' },
     ]);
+  });
+
+  it('treats a forbidden search as our configuration, since search names nothing the user could un-share', async () => {
+    const notion = client(() => Response.json({ code: 'restricted_resource' }, { status: 403 }));
+
+    await expect(notion.searchDataSources('tok')).rejects.toBeInstanceOf(NotionConfigError);
   });
 
   it('treats a search answer with no results array as an outage, not an empty list', async () => {
@@ -337,16 +350,17 @@ describe('queryRows', () => {
     expect(rows.truncated).toBe(true);
   });
 
-  it('stops when has_more is true but no cursor came back', async () => {
+  it('stops when has_more is true but no cursor came back, and still says the list is partial', async () => {
     let calls = 0;
     const notion = client(() => {
       calls += 1;
       return Response.json({ results: [], has_more: true, next_cursor: null });
     });
 
-    await notion.queryRows('tok', 'ds1', checkboxProperty);
+    const rows = await notion.queryRows('tok', 'ds1', checkboxProperty);
 
     expect(calls).toBe(1);
+    expect(rows.truncated).toBe(true);
   });
 
   it('reports a malformed later page as an outage rather than returning the earlier pages', async () => {
