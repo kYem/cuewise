@@ -45,7 +45,7 @@ catalog:
   '@vitejs/plugin-react': ^6.0.3
   '@vitest/ui': 4.1.9
   # Later 7.1.x patches are inside the release cooldown; 7.1.6 clears it on 2026-08-12.
-  astro: 7.1.0
+  astro: 7.2.8
   autoprefixer: ^10.4.23
   clsx: ^2.1.1
   date-fns: ^4.4.0
