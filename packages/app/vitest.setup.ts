@@ -1,5 +1,5 @@
 import { configureLogger, configurePlatform } from '@cuewise/shared';
-import { installChromeStorageMock } from '@cuewise/test-utils/mocks';
+import { fakeNotifier, installChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom';
@@ -43,7 +43,7 @@ beforeEach(() => {
       scheduleAt: async () => {},
       cancel: async () => {},
     },
-    notifier: { notify: async () => {}, clear: async () => {} },
+    notifier: fakeNotifier(),
   });
 });
 

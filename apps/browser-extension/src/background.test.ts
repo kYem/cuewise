@@ -5,7 +5,7 @@ const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
   getRemindersMock: vi.fn(),
   setRemindersMock: vi.fn(),
 }));
-vi.mock('@cuewise/storage', () => ({
+vi.mock('@cuewise/storage', async () => ({
   getReminders: getRemindersMock,
   setReminders: setRemindersMock,
   // Faithful, not a stub: the read has to happen inside the write, so a mock taking the caller's
@@ -16,6 +16,8 @@ vi.mock('@cuewise/storage', () => ({
   }),
   // Runs at module load now, sync or no sync — must resolve, background.ts chains off it.
   ensureSettingsMigrated: vi.fn(() => Promise.resolve()),
+  // The fire path checks the Notifications switch before it notifies.
+  getSettings: vi.fn(async () => (await import('@cuewise/shared')).DEFAULT_SETTINGS),
 }));
 
 type AlarmListener = (alarm: { name: string }) => void;
@@ -265,6 +267,24 @@ describe('background: reminder alarm guards', () => {
     await vi.waitFor(() => expect(chromeMock.notifications.create).toHaveBeenCalled());
     await flushAsync();
 
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+});
+
+// The Settings test notification carries a reminder id nothing is stored under.
+describe('background: the test notification', () => {
+  it.each([
+    ['Done', 0],
+    ['Snooze', 1],
+  ])('clears it on %s without writing or arming', async (_label, buttonIndex) => {
+    getRemindersMock.mockResolvedValue([]);
+
+    fireButton('reminder-test', buttonIndex);
+
+    await vi.waitFor(() => {
+      expect(chromeMock.notifications.clear).toHaveBeenCalledWith('reminder-test');
+    });
+    expect(setRemindersMock).not.toHaveBeenCalled();
     expect(chromeMock.alarms.create).not.toHaveBeenCalled();
   });
 });

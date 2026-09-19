@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebNotifier } from './web-notifier';
 
@@ -11,6 +12,7 @@ function stubNotification(permission: NotificationPermission) {
 describe('WebNotifier', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('delivers via the web Notification API when permission is granted', async () => {
@@ -21,12 +23,19 @@ describe('WebNotifier', () => {
     expect(notification).toHaveBeenCalledWith('Pomodoro Timer', { body: 'Done!' });
   });
 
-  it('does nothing when permission is not granted', async () => {
+  // Error, not warn: 'error' is the shipped log level, so anything quieter is never seen.
+  it('delivers nothing when permission is not granted, and says so', async () => {
     const notification = stubNotification('denied');
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await new WebNotifier().notify({ id: 'x', title: 'T', body: 'B' });
 
     expect(notification).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Web notification not delivered: permission not granted',
+      undefined,
+      { id: 'x' }
+    );
   });
 
   it('exposes no-op interaction subscriptions', () => {
@@ -34,5 +43,21 @@ describe('WebNotifier', () => {
 
     expect(() => notifier.onClick(() => {})()).not.toThrow();
     expect(() => notifier.onAction(() => {})()).not.toThrow();
+  });
+
+  it.each([
+    ['granted', 'granted'],
+    ['denied', 'denied'],
+    ['default', 'unknown'],
+  ] as const)('maps the web permission %s to %s', async (web, expected) => {
+    stubNotification(web);
+
+    expect(await new WebNotifier().permission()).toBe(expected);
+  });
+
+  it('reports unknown where there is no Notification API', async () => {
+    vi.stubGlobal('Notification', undefined);
+
+    expect(await new WebNotifier().permission()).toBe('unknown');
   });
 });

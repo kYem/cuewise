@@ -19,6 +19,7 @@ const fakeScheduler: Scheduler = {
 const fakeNotifier: Notifier = {
   notify: async () => {},
   clear: async () => {},
+  permission: async () => 'unknown',
 };
 const fakeStorage: KeyValueStore = {
   supportsSync: false,
