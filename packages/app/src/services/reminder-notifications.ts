@@ -15,6 +15,43 @@ import {
   reminderIdFromAlarm,
 } from '@cuewise/shared';
 import { getReminders, updateReminders } from '@cuewise/storage';
+import { activitySubject, recordReminderActivity } from './reminder-activity';
+
+/**
+ * Arm every reminder that should have a wake but whose alarm id is not in `armed`. Runs
+ * wherever a host has just lost its wakes: the extension service worker on install, update
+ * and browser start (chrome.alarms are cleared on update), the macOS app on every launch
+ * (Rust timers are in-memory). An overdue one arms at its past due date and fires at once —
+ * delivered late rather than never.
+ */
+export async function armMissingReminderAlarms(armed: ReadonlySet<string>): Promise<void> {
+  const reminders = await getReminders();
+  let pending = 0;
+  let rearmed = 0;
+  for (const reminder of reminders) {
+    if (reminder.completed || reminder.paused) {
+      continue;
+    }
+    if (!reminder.recurring && reminder.notified) {
+      continue;
+    }
+    pending += 1;
+    const alarmId = reminderAlarmId(reminder.id);
+    if (armed.has(alarmId)) {
+      continue;
+    }
+    try {
+      await getScheduler().scheduleAt(alarmId, new Date(reminder.dueDate));
+      rearmed += 1;
+    } catch (error) {
+      logger.error(`Failed to re-arm reminder ${reminder.id}`, error);
+    }
+  }
+  await recordReminderActivity({
+    event: 'reconciled',
+    detail: `re-armed ${rearmed} of ${pending} pending`,
+  });
+}
 
 /**
  * Deliver a reminder's notification when its scheduled wake fires. Looks the
@@ -34,15 +71,26 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
 
     if (!reminder) {
       logger.warn(`Reminder ${reminderId} not found`);
+      await recordReminderActivity({ event: 'skipped', reminderId, detail: 'not found' });
       return;
     }
 
     if (reminder.completed) {
+      await recordReminderActivity({
+        event: 'skipped',
+        ...activitySubject(reminder),
+        detail: 'completed',
+      });
       return;
     }
 
     // Paused recurring reminders must neither notify nor re-arm.
     if (reminder.recurring && reminder.paused) {
+      await recordReminderActivity({
+        event: 'skipped',
+        ...activitySubject(reminder),
+        detail: 'paused',
+      });
       return;
     }
 
@@ -56,7 +104,7 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
 
     // One locked section reading fresh, not the list from before the notify: that round trip is
     // long enough for a pull to land, and every decision below has to be made against what it left.
-    let nextDueDate: Date | null = null;
+    let nextDueDate = null as Date | null;
     const { result } = await updateReminders((current) =>
       current.map((r) => {
         if (r.id !== reminderId) {
@@ -75,12 +123,22 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     // never sees it. Arming the next occurrence off an unpersisted advance would double-fire it.
     if (result?.success === false) {
       logger.error('Could not persist the fired reminder', result.error);
+      await recordReminderActivity({
+        event: 'fired',
+        ...activitySubject(reminder),
+        detail: 'not persisted',
+      });
       return;
     }
 
     if (nextDueDate !== null) {
       await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);
     }
+    await recordReminderActivity({
+      event: 'fired',
+      ...activitySubject(reminder),
+      ...(nextDueDate !== null ? { detail: `next ${nextDueDate.toISOString()}` } : {}),
+    });
   } catch (error) {
     logger.error('Error handling reminder fire', error);
   }

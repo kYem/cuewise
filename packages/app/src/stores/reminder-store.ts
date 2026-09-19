@@ -22,6 +22,8 @@ import {
   withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
+import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
+import { armMissingReminderAlarms } from '../services/reminder-notifications';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
@@ -55,6 +57,7 @@ interface ReminderStore {
 async function clearReminderAlarm(reminderId: string): Promise<void> {
   try {
     await getScheduler().cancel(reminderAlarmId(reminderId));
+    await recordReminderActivity({ event: 'cancelled', reminderId });
   } catch (error) {
     logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
   }
@@ -63,6 +66,11 @@ async function clearReminderAlarm(reminderId: string): Promise<void> {
 async function armReminderAlarm(reminderId: string, whenMs: number): Promise<void> {
   try {
     await getScheduler().scheduleAt(reminderAlarmId(reminderId), new Date(whenMs));
+    await recordReminderActivity({
+      event: 'armed',
+      reminderId,
+      detail: `due ${new Date(whenMs).toISOString()}`,
+    });
   } catch (error) {
     logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
     useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");
@@ -183,7 +191,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         });
 
       // Re-runs against a fresh read inside the lock, so a pull landing during the read survives.
-      if (reminders.some(isOverdueRecurring)) {
+      const overdueIds = new Set(reminders.filter(isOverdueRecurring).map((r) => r.id));
+      if (overdueIds.size > 0) {
         const { result, reminders: advancedReminders } = await updateReminders(advance);
         if (result?.success === false) {
           logger.error('Failed to persist auto-advanced reminders on init', result.error);
@@ -192,6 +201,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
           // Reschedule alarms for advanced reminders
           for (const reminder of reminders) {
+            if (overdueIds.has(reminder.id)) {
+              await recordReminderActivity({
+                event: 'advanced',
+                ...activitySubject(reminder),
+                detail: `to ${reminder.dueDate}`,
+              });
+            }
             if (reminder.recurring && !reminder.paused) {
               await clearReminderAlarm(reminder.id);
               await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
@@ -202,19 +218,11 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, reminders, { isLoading: false });
 
-      // Rust-backed schedulers lose their armed wakes on restart, unlike chrome.alarms, so re-arm
-      // from storage. Overdue one-offs fire on arm; skip delivered ones so they don't re-notify.
+      // Rust-backed schedulers lose their armed wakes on restart, so re-arm from storage; the
+      // extension's service worker does this for itself, so its page must not.
       const scheduler = getScheduler();
       if (scheduler.deliversInBackground && !scheduler.persistsAcrossRestarts) {
-        for (const reminder of reminders) {
-          if (reminder.completed || reminder.paused) {
-            continue;
-          }
-          if (!reminder.recurring && reminder.notified) {
-            continue;
-          }
-          await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
-        }
+        await armMissingReminderAlarms(new Set());
       }
     } catch (error) {
       logger.error('Error initializing reminder store', error);
@@ -626,6 +634,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
+        await recordReminderActivity({ event: 'toasted', ...activitySubject(r) });
         // No background worker to raise the OS notification, so deliver it here via the port.
         // Where a resident host owns delivery, it notifies instead.
         if (!getScheduler().deliversInBackground) {

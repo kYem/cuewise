@@ -6,7 +6,9 @@ import { logger, type SchedulerHost } from '@cuewise/shared';
  */
 export class ChromeScheduler implements SchedulerHost {
   readonly deliversInBackground = true;
-  // chrome.alarms persist across browser/service-worker restarts, so no re-arm needed.
+  // True only because the service worker itself re-arms from storage on install, update and
+  // browser start (background.ts) — Chrome clears alarms on every update. The page must not
+  // also re-arm: it cannot see what is armed, so it would re-create an alarm mid-fire.
   readonly persistsAcrossRestarts = true;
 
   async scheduleAt(id: string, when: Date): Promise<void> {

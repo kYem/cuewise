@@ -8,8 +8,15 @@ import {
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { recordReminderActivity } from '../services/reminder-activity';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useReminderStore } from './reminder-store';
+
+vi.mock('../services/reminder-activity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../services/reminder-activity')>()),
+  recordReminderActivity: vi.fn(() => Promise.resolve()),
+}));
+const recordActivity = vi.mocked(recordReminderActivity);
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -1009,5 +1016,80 @@ describe('writers read storage, not their own snapshot', () => {
 
     const written = setRemindersMock.mock.calls[0][0] as Reminder[];
     expect(written[0].text).toBe('Stretch legs');
+  });
+});
+
+describe('reminder activity log', () => {
+  it('records the wake when a reminder is added', async () => {
+    const due = new Date(Date.now() + 60 * 60_000);
+
+    await useReminderStore.getState().addReminder('Stretch', due);
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'armed',
+      reminderId: expect.any(String),
+      detail: `due ${due.toISOString()}`,
+    });
+  });
+
+  it('records the cancelled wake when a reminder is deleted', async () => {
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'gone' })] });
+
+    await useReminderStore.getState().deleteReminder('gone');
+
+    expect(recordActivity).toHaveBeenCalledWith({ event: 'cancelled', reminderId: 'gone' });
+  });
+
+  it('records each reminder the page announced as a toast', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      text: 'Stand up',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    useReminderStore.setState({ reminders: [due] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'toasted',
+      reminderId: 'due-1',
+      text: 'Stand up',
+    });
+  });
+
+  // The one silent path: an occurrence that was never delivered is skipped here without a trace.
+  it('records an overdue recurring reminder the load advanced past', async () => {
+    const overdue = recurringReminderFactory.build({
+      id: 'overdue',
+      text: 'Water',
+      dueDate: new Date(Date.now() - 60 * 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    getRemindersMock.mockResolvedValue([overdue]);
+
+    await useReminderStore.getState().initialize();
+
+    const written = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'advanced',
+      reminderId: 'overdue',
+      text: 'Water',
+      detail: `to ${written[0].dueDate}`,
+    });
+  });
+
+  it('records the startup reconcile where the host has to re-arm from storage', async () => {
+    configurePlatform({
+      scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: false },
+    });
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1' })]);
+
+    await useReminderStore.getState().initialize();
+
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-r1', expect.any(Date));
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'reconciled',
+      detail: 're-armed 1 of 1 pending',
+    });
   });
 });

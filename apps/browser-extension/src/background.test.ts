@@ -1,9 +1,14 @@
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
+const { getRemindersMock, setRemindersMock, recordActivityMock } = vi.hoisted(() => ({
   getRemindersMock: vi.fn(),
   setRemindersMock: vi.fn(),
+  recordActivityMock: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('@cuewise/app/reminder-activity', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cuewise/app/reminder-activity')>()),
+  recordReminderActivity: recordActivityMock,
 }));
 vi.mock('@cuewise/storage', () => ({
   getReminders: getRemindersMock,
@@ -29,6 +34,7 @@ const chromeMock = {
   alarms: {
     create: vi.fn(() => Promise.resolve()),
     clear: vi.fn(() => Promise.resolve(true)),
+    getAll: vi.fn(() => Promise.resolve([] as { name: string }[])),
     onAlarm: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   notifications: {
@@ -47,12 +53,16 @@ const chromeMock = {
     getURL: (path: string) => path,
     getManifest: vi.fn().mockReturnValue({ version: '9.9.9' }),
     setUninstallURL: vi.fn().mockResolvedValue(undefined),
+    onInstalled: { addListener: vi.fn(), removeListener: vi.fn() },
+    onStartup: { addListener: vi.fn(), removeListener: vi.fn() },
   },
 };
 
 let fireAlarm: AlarmListener;
 let fireButton: ButtonListener;
 let fireClick: ClickListener;
+let fireInstalled: () => void;
+let fireStartup: () => void;
 let uninstallUrl: string | undefined;
 
 beforeAll(async () => {
@@ -70,6 +80,8 @@ beforeAll(async () => {
   fireButton = chromeMock.notifications.onButtonClicked.addListener.mock
     .calls[0][0] as ButtonListener;
   fireClick = chromeMock.notifications.onClicked.addListener.mock.calls[0][0] as ClickListener;
+  fireInstalled = chromeMock.runtime.onInstalled.addListener.mock.calls[0][0] as () => void;
+  fireStartup = chromeMock.runtime.onStartup.addListener.mock.calls[0][0] as () => void;
   // 30s (vs the 10s default): the dynamic import above cold-transpiles the whole sync-engine
   // graph. Don't "restore the default" — that was tried on vite 8/rolldown (#241) and main's
   // full-verify run still timed out at 10062ms. Rolldown cut the transpile a lot (this file runs
@@ -110,6 +122,46 @@ describe('background: mapToUi', () => {
   });
 });
 
+// chrome.alarms are cleared whenever the extension updates, so every stored reminder's wake has
+// to be checked again when the worker comes up — otherwise a release silently kills them all.
+describe('background: reminder alarms re-armed on start', () => {
+  it('arms a stored reminder whose alarm is missing after an install or update', async () => {
+    const pending = reminderFactory.build({ id: 'r1' });
+    getRemindersMock.mockResolvedValue([pending]);
+    chromeMock.alarms.getAll.mockResolvedValue([]);
+
+    fireInstalled();
+
+    await vi.waitFor(() => {
+      expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-r1', {
+        when: new Date(pending.dueDate).getTime(),
+      });
+    });
+  });
+
+  it('arms a stored reminder whose alarm is missing after a browser start', async () => {
+    const pending = reminderFactory.build({ id: 'r2' });
+    getRemindersMock.mockResolvedValue([pending]);
+    chromeMock.alarms.getAll.mockResolvedValue([]);
+
+    fireStartup();
+
+    await vi.waitFor(() => {
+      expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-r2', expect.any(Object));
+    });
+  });
+
+  it('leaves an alarm Chrome kept untouched, so it cannot fire twice', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r3' })]);
+    chromeMock.alarms.getAll.mockResolvedValue([{ name: 'reminder-r3' }]);
+
+    fireStartup();
+
+    await flushAsync();
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('background: reminder alarm fires', () => {
   it('notifies with Done/Snooze buttons and re-arms a recurring reminder', async () => {
     const reminder = recurringReminderFactory.build({
@@ -137,7 +189,7 @@ describe('background: reminder alarm fires', () => {
 
 describe('background: notification action buttons', () => {
   it('completes the reminder on the Done button (index 0)', async () => {
-    const reminder = reminderFactory.build({ id: 'r2', completed: false });
+    const reminder = reminderFactory.build({ id: 'r2', text: 'Stretch', completed: false });
     getRemindersMock.mockResolvedValue([reminder]);
 
     fireButton('reminder-r2', 0);
@@ -146,6 +198,11 @@ describe('background: notification action buttons', () => {
       const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
       const updated = saved.find((r) => r.id === 'r2');
       expect(updated?.completed).toBe(true);
+    });
+    expect(recordActivityMock).toHaveBeenCalledWith({
+      event: 'done',
+      reminderId: 'r2',
+      text: 'Stretch',
     });
   });
 
@@ -218,6 +275,12 @@ describe('background: notification action buttons', () => {
     });
     await vi.waitFor(() => {
       expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-r3', expect.any(Object));
+    });
+    expect(recordActivityMock).toHaveBeenCalledWith({
+      event: 'snoozed',
+      reminderId: 'r3',
+      text: reminder.text,
+      detail: expect.stringMatching(/^until \d{4}-/),
     });
   });
 });

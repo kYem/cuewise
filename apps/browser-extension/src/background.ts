@@ -4,7 +4,8 @@
  */
 
 import type { SyncUiStatus } from '@cuewise/app';
-import { handleReminderFire } from '@cuewise/app/reminder-notifications';
+import { activitySubject, recordReminderActivity } from '@cuewise/app/reminder-activity';
+import { armMissingReminderAlarms, handleReminderFire } from '@cuewise/app/reminder-notifications';
 import {
   getStorage,
   logger,
@@ -26,6 +27,20 @@ const { scheduler, notifier } = configureChromePlatform();
 // The lookup + deliver + recurring re-arm logic is shared with the macOS app, so both
 // platforms behave identically.
 scheduler.onFire(handleReminderFire);
+
+// chrome.alarms are cleared on every extension update and not guaranteed across a browser
+// restart, so re-check the stored reminders' wakes at the two moments Chrome drops them.
+// Only the missing ones: re-creating an alarm Chrome kept would fire it a second time.
+async function reconcileReminderAlarms(): Promise<void> {
+  try {
+    const armed = new Set((await chrome.alarms.getAll()).map((alarm) => alarm.name));
+    await armMissingReminderAlarms(armed);
+  } catch (error) {
+    logger.error('Could not reconcile reminder alarms on start', error);
+  }
+}
+chrome.runtime.onInstalled.addListener(reconcileReminderAlarms);
+chrome.runtime.onStartup.addListener(reconcileReminderAlarms);
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
 // extension version rides the URL — no user data.
@@ -194,6 +209,8 @@ notifier.onAction(async (notificationId, buttonIndex) => {
       // silently failed to persist would otherwise leave no trace at all.
       if (result?.success === false) {
         logger.error('Could not persist the completed reminder', result.error);
+      } else if (reminder) {
+        await recordReminderActivity({ event: 'done', ...activitySubject(reminder) });
       }
     } else if (action.type === 'snooze') {
       const { result } = await updateReminders((current) =>
@@ -209,6 +226,13 @@ notifier.onAction(async (notificationId, buttonIndex) => {
         logger.error('Could not persist the snoozed reminder', result.error);
       } else {
         await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+        if (reminder) {
+          await recordReminderActivity({
+            event: 'snoozed',
+            ...activitySubject(reminder),
+            detail: `until ${action.dueDate}`,
+          });
+        }
       }
     }
 
