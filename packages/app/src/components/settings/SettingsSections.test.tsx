@@ -186,7 +186,7 @@ describe('settings sections', () => {
       'notification',
       'test notification',
       'send test',
-    ])('renders the test row, and only it, for a "%s" search', (query) => {
+    ])('renders the test row for a "%s" search', (query) => {
       expect(sectionsMatching(query)).toContain('goals');
       renderSection('goals', query);
 

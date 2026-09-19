@@ -1,10 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type BrowserContext, chromium, type Worker } from '@playwright/test';
+import { type BrowserContext, chromium, type Page, type Worker } from '@playwright/test';
 
-// Playwright loads unpacked extensions only in Chromium, and only headed: MV3 service workers
-// never register under `--headless=new` here (confirmed: 15s timeout waiting for the event).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const EXTENSION_ROOT = path.resolve(__dirname, '..');
 export const EXTENSION_DIST = path.join(EXTENSION_ROOT, 'dist');
@@ -25,7 +23,10 @@ export interface ExtensionSession {
   extensionId: string;
 }
 
-/** An empty `profileDir` is a fresh temp profile; reuse one to stage a restart or an update. */
+/**
+ * An empty `profileDir` is a fresh temp profile; reuse one to stage a restart or an update. Headed,
+ * as MV3 service workers never register under `--headless=new` here (15s timeout, confirmed).
+ */
 export async function launchExtension(
   options: { extensionDir?: string; profileDir?: string } = {}
 ): Promise<ExtensionSession> {
@@ -39,4 +40,12 @@ export async function launchExtension(
     worker = await context.waitForEvent('serviceworker');
   }
   return { context, worker, extensionId: new URL(worker.url()).host };
+}
+
+/** The new-tab page, past the welcome dialog a fresh profile shows once. */
+export async function openNewTab(session: ExtensionSession): Promise<Page> {
+  const page = session.context.pages()[0] ?? (await session.context.newPage());
+  await page.goto(`chrome-extension://${session.extensionId}/index.html`);
+  await page.getByRole('button', { name: 'Skip', exact: true }).click();
+  return page;
 }

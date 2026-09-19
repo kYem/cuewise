@@ -10,6 +10,7 @@ import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { reminderNotification } from '../services/reminder-notifications';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useReminderStore } from './reminder-store';
 
@@ -382,9 +383,9 @@ describe('fireDueReminders', () => {
     expect(logged).toHaveBeenCalledWith('Fired due reminders', { count: 1 });
   });
 
-  // Without a background host the page raises the OS notification itself — same switch applies.
   describe('raising the OS notification from the page', () => {
     const notifier = fakeNotifier();
+    const DUE_TEXT = 'Stand up';
 
     beforeEach(() => {
       configurePlatform({ scheduler: fakeScheduler, notifier });
@@ -392,6 +393,7 @@ describe('fireDueReminders', () => {
         reminders: [
           reminderFactory.build({
             id: 'due-1',
+            text: DUE_TEXT,
             dueDate: new Date(Date.now() - 60_000).toISOString(),
             notified: false,
           }),
@@ -403,7 +405,7 @@ describe('fireDueReminders', () => {
       await useReminderStore.getState().fireDueReminders();
 
       expect(notifier.notify).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'reminder-due-1' })
+        reminderNotification('reminder-due-1', DUE_TEXT)
       );
     });
 

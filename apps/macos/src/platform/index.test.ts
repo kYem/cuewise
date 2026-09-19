@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const isPermissionGrantedMock = vi.fn<() => Promise<boolean>>();
@@ -29,7 +30,6 @@ describe('TauriNotifier.permission', () => {
     expect(await new TauriNotifier().permission()).toBe('granted');
   });
 
-  // The plugin cannot separate denied from unasked, so it must not claim either.
   it('reports unknown, never denied, when the plugin has no permission', async () => {
     isPermissionGrantedMock.mockResolvedValue(false);
 
@@ -63,6 +63,30 @@ function stubNotification(permission: 'granted' | 'denied' | 'default'): void {
   (mock as unknown as { permission: string }).permission = permission;
   vi.stubGlobal('Notification', mock);
 }
+
+describe('WebNotifier.notify', () => {
+  it('delivers through the web API when permission is granted', async () => {
+    stubNotification('granted');
+
+    await new WebNotifier().notify({ id: 'reminder-1', title: 'T', body: 'B' });
+
+    expect(vi.mocked(Notification)).toHaveBeenCalledWith('T', { body: 'B', tag: 'reminder-1' });
+  });
+
+  it('delivers nothing when permission is not granted, and says so', async () => {
+    stubNotification('default');
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await new WebNotifier().notify({ id: 'reminder-1', title: 'T', body: 'B' });
+
+    expect(vi.mocked(Notification)).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Web notification not delivered: permission not granted',
+      undefined,
+      { id: 'reminder-1' }
+    );
+  });
+});
 
 describe('WebNotifier.permission', () => {
   it.each([

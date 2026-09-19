@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import shared from '@cuewise/shared';
 import { expect, test } from '@playwright/test';
 import { startSite } from '../../website/e2e/static-server';
-import { buildExtension, launchExtension } from './extension-harness';
+import { buildExtension, launchExtension, openNewTab } from './extension-harness';
 
 const { DEFAULT_YOUTUBE_PLAYLISTS } = shared;
 
@@ -62,10 +62,9 @@ async function setPlayerFrameAncestors(frameAncestors: string): Promise<void> {
 test('allowlisted extension id: the player iframe loads', async () => {
   await setPlayerFrameAncestors(`chrome-extension://${extensionId}`);
 
-  const { context } = await launchExtension();
-  const page = context.pages()[0] ?? (await context.newPage());
-  await page.goto(`chrome-extension://${extensionId}/index.html`);
-  await page.getByRole('button', { name: 'Skip', exact: true }).click();
+  const session = await launchExtension();
+  const { context } = session;
+  const page = await openNewTab(session);
   await page.goto(`chrome-extension://${extensionId}/index.html#pomodoro`);
   await page.getByRole('button', { name: 'Open sounds panel' }).click();
   await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();
@@ -87,10 +86,9 @@ test('allowlisted extension id: the player iframe loads', async () => {
 test('a NOT-allowlisted extension id: the player iframe is blocked', async () => {
   await setPlayerFrameAncestors("'none'");
 
-  const { context } = await launchExtension();
-  const page = context.pages()[0] ?? (await context.newPage());
-  await page.goto(`chrome-extension://${extensionId}/index.html`);
-  await page.getByRole('button', { name: 'Skip', exact: true }).click();
+  const session = await launchExtension();
+  const { context } = session;
+  const page = await openNewTab(session);
   await page.goto(`chrome-extension://${extensionId}/index.html#pomodoro`);
   await page.getByRole('button', { name: 'Open sounds panel' }).click();
   await page.getByRole('button', { name: DEFAULT_YOUTUBE_PLAYLISTS[0].name }).click();

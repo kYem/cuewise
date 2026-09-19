@@ -5,7 +5,7 @@ const { getRemindersMock, setRemindersMock } = vi.hoisted(() => ({
   getRemindersMock: vi.fn(),
   setRemindersMock: vi.fn(),
 }));
-vi.mock('@cuewise/storage', () => ({
+vi.mock('@cuewise/storage', async () => ({
   getReminders: getRemindersMock,
   setReminders: setRemindersMock,
   // Faithful, not a stub: the read has to happen inside the write, so a mock taking the caller's
@@ -17,7 +17,7 @@ vi.mock('@cuewise/storage', () => ({
   // Runs at module load now, sync or no sync — must resolve, background.ts chains off it.
   ensureSettingsMigrated: vi.fn(() => Promise.resolve()),
   // The fire path checks the Notifications switch before it notifies.
-  getSettings: vi.fn(() => Promise.resolve({ enableNotifications: true })),
+  getSettings: vi.fn(async () => (await import('@cuewise/shared')).DEFAULT_SETTINGS),
 }));
 
 type AlarmListener = (alarm: { name: string }) => void;
@@ -271,8 +271,7 @@ describe('background: reminder alarm guards', () => {
   });
 });
 
-// The Settings test notification carries a reminder id nothing is stored under; its Done and
-// Snooze must close it and touch nothing.
+// The Settings test notification carries a reminder id nothing is stored under.
 describe('background: the test notification', () => {
   it.each([
     ['Done', 0],

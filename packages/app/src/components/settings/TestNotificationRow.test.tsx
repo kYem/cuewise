@@ -44,7 +44,7 @@ describe('TestNotificationRow', () => {
     expect(await screen.findByText(/^Sent\./)).toBeInTheDocument();
   });
 
-  // A host that cannot tell (Tauri before the first grant) must still get to prompt via notify.
+  // 'unknown' is not a refusal: whether notify can still prompt is the adapter's call.
   it('sends when the permission is unknown', async () => {
     notifier.permission.mockResolvedValue('unknown');
     renderRow();
@@ -77,6 +77,27 @@ describe('TestNotificationRow', () => {
       'Failed to send the test notification',
       expect.any(Error)
     );
+  });
+
+  // On Tauri, notify awaits a native prompt; a second click meanwhile would prompt twice.
+  it('disables the button while a send is in flight', async () => {
+    notifier.notify.mockReturnValueOnce(new Promise(() => {}));
+    renderRow();
+
+    await clickSend();
+
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  });
+
+  it('forgets the last outcome when the switch is turned off', async () => {
+    const { rerender } = renderRow();
+    await clickSend();
+    await screen.findByText(/^Sent\./);
+
+    rerender(<TestNotificationRow enabled={false} filter="" />);
+    rerender(<TestNotificationRow enabled={true} filter="" />);
+
+    expect(screen.queryByText(/^Sent\./)).not.toBeInTheDocument();
   });
 
   it('hides itself, hint included, when the search filter does not match', () => {

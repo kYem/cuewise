@@ -1,7 +1,7 @@
 import { getNotifier, logger } from '@cuewise/shared';
 import { BellRing } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   REMINDER_TEST_NOTIFICATION_ID,
   reminderNotification,
@@ -33,6 +33,13 @@ interface TestNotificationRowProps {
 
 export const TestNotificationRow: React.FC<TestNotificationRowProps> = ({ enabled, filter }) => {
   const [outcome, setOutcome] = useState<Outcome>('idle');
+
+  // Switching off ends the story a "Sent." note was telling; switching back on must not resume it.
+  useEffect(() => {
+    if (!enabled) {
+      setOutcome('idle');
+    }
+  }, [enabled]);
 
   if (!settingsMatch(filter, LABEL, HELP, KEYWORDS)) {
     return null;

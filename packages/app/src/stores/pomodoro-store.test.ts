@@ -267,7 +267,6 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
       );
     });
 
-    // Auto-start fails closed; the notification fails open — an unreadable switch is on.
     it('still notifies that the session ended', async () => {
       setupWorkSession();
       await usePomodoroStore.getState().completeSession();

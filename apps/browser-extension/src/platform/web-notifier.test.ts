@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebNotifier } from './web-notifier';
 
@@ -21,12 +22,20 @@ describe('WebNotifier', () => {
     expect(notification).toHaveBeenCalledWith('Pomodoro Timer', { body: 'Done!' });
   });
 
-  it('does nothing when permission is not granted', async () => {
+  // At error level: the shipped log level is 'error', and a silent non-delivery is what this
+  // adapter used to do.
+  it('delivers nothing when permission is not granted, and says so', async () => {
     const notification = stubNotification('denied');
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await new WebNotifier().notify({ id: 'x', title: 'T', body: 'B' });
 
     expect(notification).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Web notification not delivered: permission not granted',
+      undefined,
+      { id: 'x' }
+    );
   });
 
   it('exposes no-op interaction subscriptions', () => {
