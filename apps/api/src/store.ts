@@ -26,10 +26,32 @@ export interface Session {
   tokenHash: SessionTokenHash;
 }
 
-export interface AuthCodePayload {
+export interface SignInCodePayload {
   provider: 'apple' | 'google';
   providerSub: string;
   email?: string;
+}
+
+/**
+ * A third-party grant parked between the provider's redirect and the app claiming it. The
+ * callback runs in a browser with no session, so it cannot know whose account this is; the
+ * device that fires the deep link redeems the code with its own session, which is what binds
+ * the grant to whoever actually authorised — not to whoever minted the link.
+ */
+export interface ProviderCodePayload {
+  provider: 'notion';
+  grant: SealedGrant;
+}
+
+export type AuthCodePayload = SignInCodePayload | ProviderCodePayload;
+
+/** Access and refresh tokens as stored: AES-GCM under PROVIDER_TOKEN_KEY. */
+export interface SealedGrant {
+  ciphertext: string;
+  iv: string;
+  refreshCiphertext: string | null;
+  refreshIv: string | null;
+  workspace: string | null;
 }
 
 // Device-to-device pairing (ENG-50): a short-lived relay row so a new device can join an
@@ -59,6 +81,12 @@ export class StorageQuotaExceededError extends Error {
     super(message);
     this.name = 'StorageQuotaExceededError';
   }
+}
+
+// dataSourceId is the table queried — Notion's schema lives on the data source, not the database.
+export interface ProviderConnection extends SealedGrant {
+  provider: string;
+  dataSourceId: string | null;
 }
 
 export interface SyncStore {
@@ -100,6 +128,23 @@ export interface SyncStore {
   // Create-only: inserts iff no (userId, kind) row exists yet. Returns false (no-op) when one
   // already does — the caller maps that to a 409, closing the "two devices both generate a key" race.
   putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean>;
+  // The only credential the server decrypts itself: a provider token is useless to us wrapped
+  // in a client-only key. One row per (user, provider), and no whole-row writer: every write
+  // below touches only its own columns, so a renewal and a selection in flight together cannot
+  // clobber each other.
+  getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
+  deleteProviderConnection(userId: string, provider: string): Promise<void>;
+  // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
+  // read-then-write window can revert a selection that lands in between.
+  putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
+  // `null` refresh means "keep the stored one" — a renewal that does not rotate the refresh
+  // token must not erase it. Both answer false when no row exists.
+  updateProviderTokens(
+    userId: string,
+    provider: string,
+    tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
+  ): Promise<boolean>;
+  setProviderDataSource(userId: string, provider: string, dataSourceId: string): Promise<boolean>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
   bumpRateWindow(

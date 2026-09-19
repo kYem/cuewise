@@ -4,6 +4,8 @@ import {
   base64UrlDecodeString,
   base64UrlEncodeString,
   bearerToken,
+  decryptSecret,
+  encryptSecret,
   sha256Base64Url,
   signState,
   verifyState,
@@ -166,5 +168,49 @@ describe('signState / verifyState', () => {
     await verifyState(stateB, cacheKey);
 
     expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('encryptSecret / decryptSecret', () => {
+  // 43 base64url chars decode to exactly 32 bytes; all-'A' keeps these deterministic.
+  const KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const OTHER_KEY = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+
+  it('round-trips a token', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    await expect(decryptSecret(ciphertext, iv, KEY)).resolves.toBe('secret-abc');
+  });
+
+  it('keeps the plaintext out of its own output', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    expect(ciphertext).not.toContain('secret-abc');
+    expect(iv).not.toContain('secret-abc');
+  });
+
+  it('uses a fresh iv per call, so equal plaintexts encrypt differently', async () => {
+    const first = await encryptSecret('same', KEY);
+    const second = await encryptSecret('same', KEY);
+    expect(first.iv).not.toBe(second.iv);
+    expect(first.ciphertext).not.toBe(second.ciphertext);
+  });
+
+  it('rejects a wrong key rather than returning garbage', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    await expect(decryptSecret(ciphertext, iv, OTHER_KEY)).rejects.toThrow();
+  });
+
+  it('rejects a tampered ciphertext', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    const flipped = `${ciphertext.startsWith('A') ? 'B' : 'A'}${ciphertext.slice(1)}`;
+    await expect(decryptSecret(flipped, iv, KEY)).rejects.toThrow();
+  });
+
+  it('round-trips a token carrying non-ascii', async () => {
+    const { ciphertext, iv } = await encryptSecret('naïve—token', KEY);
+    await expect(decryptSecret(ciphertext, iv, KEY)).resolves.toBe('naïve—token');
+  });
+
+  it('refuses a key that does not decode to 32 bytes', async () => {
+    await expect(encryptSecret('x', 'c2hvcnQ')).rejects.toThrow(/32 bytes/);
   });
 });

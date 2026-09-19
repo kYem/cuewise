@@ -23,7 +23,9 @@ import {
   PAIRING_TTL_MS,
   type PairingForRequester,
   type PendingPairing,
+  type ProviderConnection,
   type PushRecord,
+  type SealedGrant,
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
@@ -406,6 +408,7 @@ export class D1SyncStore implements SyncStore {
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM pairings WHERE user_id = ?').bind(userId),
+      this.db.prepare('DELETE FROM provider_tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
   }
@@ -471,6 +474,112 @@ export class D1SyncStore implements SyncStore {
       .bind(userId, kind, envelope, this.now())
       .run();
     return (result.meta.changes ?? 0) > 0;
+  }
+
+  async getProviderConnection(
+    userId: string,
+    provider: string
+  ): Promise<ProviderConnection | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id
+           FROM provider_tokens WHERE user_id = ? AND provider = ?`
+      )
+      .bind(userId, provider)
+      .first<{
+        provider: string;
+        ciphertext: string;
+        iv: string;
+        refresh_ciphertext: string | null;
+        refresh_iv: string | null;
+        workspace: string | null;
+        data_source_id: string | null;
+      }>();
+    if (row === null) {
+      return null;
+    }
+    return {
+      provider: row.provider,
+      ciphertext: row.ciphertext,
+      iv: row.iv,
+      refreshCiphertext: row.refresh_ciphertext,
+      refreshIv: row.refresh_iv,
+      workspace: row.workspace,
+      dataSourceId: row.data_source_id,
+    };
+  }
+
+  async updateProviderTokens(
+    userId: string,
+    provider: string,
+    tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
+  ): Promise<boolean> {
+    // COALESCE keeps the stored refresh pair when the renewal carried none.
+    const res = await this.db
+      .prepare(
+        `UPDATE provider_tokens
+            SET ciphertext = ?, iv = ?,
+                refresh_ciphertext = COALESCE(?, refresh_ciphertext),
+                refresh_iv = COALESCE(?, refresh_iv)
+          WHERE user_id = ? AND provider = ?`
+      )
+      .bind(
+        tokens.ciphertext,
+        tokens.iv,
+        tokens.refreshCiphertext,
+        tokens.refreshIv,
+        userId,
+        provider
+      )
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async setProviderDataSource(
+    userId: string,
+    provider: string,
+    dataSourceId: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .prepare('UPDATE provider_tokens SET data_source_id = ? WHERE user_id = ? AND provider = ?')
+      .bind(dataSourceId, userId, provider)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO provider_tokens
+           (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
+            workspace, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+         ON CONFLICT (user_id, provider) DO UPDATE SET
+           ciphertext = excluded.ciphertext,
+           iv = excluded.iv,
+           refresh_ciphertext = excluded.refresh_ciphertext,
+           refresh_iv = excluded.refresh_iv,
+           workspace = excluded.workspace,
+           data_source_id = provider_tokens.data_source_id`
+      )
+      .bind(
+        userId,
+        provider,
+        grant.ciphertext,
+        grant.iv,
+        grant.refreshCiphertext,
+        grant.refreshIv,
+        grant.workspace,
+        this.now()
+      )
+      .run();
+  }
+
+  async deleteProviderConnection(userId: string, provider: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ?')
+      .bind(userId, provider)
+      .run();
   }
 
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
