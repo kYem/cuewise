@@ -1,4 +1,9 @@
-import { logger, type NotifierHost, type NotifyOptions } from '@cuewise/shared';
+import {
+  logger,
+  type NotificationPermission,
+  type NotifierHost,
+  type NotifyOptions,
+} from '@cuewise/shared';
 
 const ICON_PATH = 'icons/icon-128.png';
 
@@ -23,6 +28,10 @@ export class ChromeNotifier implements NotifierHost {
 
   async clear(id: string): Promise<void> {
     await chrome.notifications.clear(id);
+  }
+
+  async permission(): Promise<NotificationPermission> {
+    return chrome.notifications.getPermissionLevel();
   }
 
   onClick(handler: (id: string) => void | Promise<void>): () => void {

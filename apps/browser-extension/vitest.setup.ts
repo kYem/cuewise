@@ -39,7 +39,7 @@ beforeEach(() => {
       scheduleAt: async () => {},
       cancel: async () => {},
     },
-    notifier: { notify: async () => {}, clear: async () => {} },
+    notifier: { notify: async () => {}, clear: async () => {}, permission: async () => 'unknown' },
   });
 });
 

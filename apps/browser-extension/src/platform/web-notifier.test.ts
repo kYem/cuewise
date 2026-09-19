@@ -35,4 +35,15 @@ describe('WebNotifier', () => {
     expect(() => notifier.onClick(() => {})()).not.toThrow();
     expect(() => notifier.onAction(() => {})()).not.toThrow();
   });
+
+  it('maps the web permission, with an unasked user reported as unknown', async () => {
+    stubNotification('denied');
+    expect(await new WebNotifier().permission()).toBe('denied');
+
+    stubNotification('default');
+    expect(await new WebNotifier().permission()).toBe('unknown');
+
+    vi.stubGlobal('Notification', undefined);
+    expect(await new WebNotifier().permission()).toBe('unknown');
+  });
 });

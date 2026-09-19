@@ -10,11 +10,40 @@ import {
   getNotifier,
   getScheduler,
   logger,
+  type NotifyOptions,
   nextReminderDueDate,
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
-import { getReminders, updateReminders } from '@cuewise/storage';
+import { getReminders, readSettings, updateReminders } from '@cuewise/storage';
+
+// A reminder-prefixed id that matches no stored reminder: the host's click and button handlers
+// then resolve it to dismiss-and-clear, so Done / Snooze on the test simply close it.
+export const REMINDER_TEST_NOTIFICATION_ID = reminderAlarmId('test');
+
+/** The one shape every reminder notification takes, so a test notification is a real preview. */
+export function reminderNotification(id: string, body: string): NotifyOptions {
+  return {
+    id,
+    title: '🔔 Reminder',
+    body,
+    actions: ['Done', 'Snooze 5 min'],
+    requireInteraction: true,
+  };
+}
+
+/**
+ * The Settings → Notifications switch, read from storage because the service worker has no
+ * settings store. A failed read is not a "no": the default is on, and a storage hiccup must
+ * not silence reminders.
+ */
+export async function notificationsEnabled(): Promise<boolean> {
+  const read = await readSettings();
+  if (!read.ok) {
+    return true;
+  }
+  return read.settings.enableNotifications;
+}
 
 /**
  * Deliver a reminder's notification when its scheduled wake fires. Looks the
@@ -46,13 +75,9 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       return;
     }
 
-    await getNotifier().notify({
-      id: reminderAlarmId(reminderId),
-      title: '🔔 Reminder',
-      body: reminder.text,
-      actions: ['Done', 'Snooze 5 min'],
-      requireInteraction: true,
-    });
+    if (await notificationsEnabled()) {
+      await getNotifier().notify(reminderNotification(reminderAlarmId(reminderId), reminder.text));
+    }
 
     // One locked section reading fresh, not the list from before the notify: that round trip is
     // long enough for a pull to land, and every decision below has to be made against what it left.

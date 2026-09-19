@@ -7,6 +7,7 @@ type ButtonListener = (id: string, buttonIndex: number) => void;
 const notifications = {
   create: vi.fn((_id: string, _options: unknown) => Promise.resolve('id')),
   clear: vi.fn((_id: string) => Promise.resolve(true)),
+  getPermissionLevel: vi.fn(() => Promise.resolve('granted' as 'granted' | 'denied')),
   onClicked: { addListener: vi.fn(), removeListener: vi.fn() },
   onButtonClicked: { addListener: vi.fn(), removeListener: vi.fn() },
 };
@@ -81,5 +82,12 @@ describe('ChromeNotifier', () => {
     listener('reminder-9', 1);
 
     expect(handler).toHaveBeenCalledWith('reminder-9', 1);
+  });
+
+  it("reports Chrome's permission level", async () => {
+    notifications.getPermissionLevel.mockResolvedValueOnce('denied');
+
+    expect(await new ChromeNotifier().permission()).toBe('denied');
+    expect(await new ChromeNotifier().permission()).toBe('granted');
   });
 });

@@ -1,4 +1,4 @@
-import type { NotifierHost, NotifyOptions } from '@cuewise/shared';
+import type { NotificationPermission, NotifierHost, NotifyOptions } from '@cuewise/shared';
 
 /**
  * Notifier for contexts without chrome.notifications (dev/web): delivers via the
@@ -13,6 +13,13 @@ export class WebNotifier implements NotifierHost {
   }
 
   async clear(_id: string): Promise<void> {}
+
+  async permission(): Promise<NotificationPermission> {
+    if (typeof Notification === 'undefined' || Notification.permission === 'default') {
+      return 'unknown';
+    }
+    return Notification.permission;
+  }
 
   onClick(_handler: (id: string) => void | Promise<void>): () => void {
     return () => {};

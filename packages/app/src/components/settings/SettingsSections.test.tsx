@@ -145,6 +145,10 @@ describe('settings sections', () => {
       expect(sectionsMatching(query)).toContain('focus');
     });
 
+    it.each(['test notification', 'send test'])('surfaces Goals & alerts for "%s"', (query) => {
+      expect(sectionsMatching(query)).toContain('goals');
+    });
+
     // A section matches on `terms`, then each row re-filters on its own label/help/keywords
     // (SettingControls.tsx). A term no row carries opens the section onto an empty panel.
     // Words already in the section's label are excluded: those surface it via label matching
@@ -170,6 +174,22 @@ describe('settings sections', () => {
         });
 
       expect(orphans).toEqual([]);
+    });
+  });
+
+  describe('Goals & alerts', () => {
+    it('offers a test notification right under the Notifications switch, gated by it', () => {
+      renderSection('goals', '', { enableNotifications: false });
+
+      expect(screen.getByText('Test notification')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Send test' })).toBeDisabled();
+    });
+
+    it('surfaces the test row for a "notification" search', () => {
+      renderSection('goals', 'notification');
+
+      expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
+      expect(screen.queryByText('Reminders layout')).not.toBeInTheDocument();
     });
   });
 

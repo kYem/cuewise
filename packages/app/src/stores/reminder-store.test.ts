@@ -1,5 +1,6 @@
 import {
   configurePlatform,
+  DEFAULT_SETTINGS,
   logger,
   type Reminder,
   resetPlatform,
@@ -15,6 +16,7 @@ import { useReminderStore } from './reminder-store';
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
+  readSettings: vi.fn(),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -40,6 +42,7 @@ vi.mock('./toast-store', () => ({
 
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
+const readSettingsMock = vi.mocked(storage.readSettings);
 
 // The Scheduler is injected; assert against it instead of poking chrome.alarms.
 const fakeScheduler = {
@@ -68,6 +71,7 @@ beforeEach(() => {
   // seed with setState or an earlier action and still exercise the read-inside-the-write.
   getRemindersMock.mockImplementation(async () => useReminderStore.getState().reminders);
   setRemindersMock.mockResolvedValue({ success: true });
+  readSettingsMock.mockResolvedValue({ ok: true, settings: DEFAULT_SETTINGS });
   configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({
     reminders: [],
@@ -375,6 +379,35 @@ describe('fireDueReminders', () => {
     await useReminderStore.getState().fireDueReminders();
 
     expect(logged).toHaveBeenCalledWith('Fired due reminders', { count: 1 });
+  });
+
+  // Without a background host the page raises the OS notification itself — same switch applies.
+  it('raises the OS notification itself only when notifications are on', async () => {
+    const notify = vi.fn(() => Promise.resolve());
+    configurePlatform({
+      scheduler: fakeScheduler,
+      notifier: { notify, clear: async () => {}, permission: async () => 'granted' },
+    });
+    const due = () =>
+      reminderFactory.build({
+        id: 'due-1',
+        dueDate: new Date(Date.now() - 60_000).toISOString(),
+        notified: false,
+      });
+
+    readSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: { ...DEFAULT_SETTINGS, enableNotifications: false },
+    });
+    useReminderStore.setState({ reminders: [due()] });
+    await useReminderStore.getState().fireDueReminders();
+    expect(notify).not.toHaveBeenCalled();
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+
+    readSettingsMock.mockResolvedValue({ ok: true, settings: DEFAULT_SETTINGS });
+    useReminderStore.setState({ reminders: [due()] });
+    await useReminderStore.getState().fireDueReminders();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ id: 'reminder-due-1' }));
   });
 });
 

@@ -57,6 +57,7 @@ vi.mock('./celebration-store', () => ({
 const fakeNotifier = {
   notify: vi.fn(() => Promise.resolve()),
   clear: vi.fn(() => Promise.resolve()),
+  permission: vi.fn(() => Promise.resolve('unknown' as const)),
 };
 
 // completeSession awaits readSettings() before it writes, so a fire-and-forget tick has not
@@ -166,6 +167,18 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
       expect(storage.setPomodoroSessions).toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
+    });
+
+    it('does not notify when notifications are switched off in settings', async () => {
+      vi.mocked(storage.readSettings).mockResolvedValue(
+        settingsRead({ ...defaultSettings, enableNotifications: false })
+      );
+      setupWorkSession();
+
+      await usePomodoroStore.getState().completeSession();
+
+      expect(fakeNotifier.notify).not.toHaveBeenCalled();
+      expect(storage.setPomodoroSessions).toHaveBeenCalled();
     });
   });
 

@@ -1,4 +1,10 @@
-import { logger, type Notifier, type NotifyOptions, type SchedulerHost } from '@cuewise/shared';
+import {
+  logger,
+  type NotificationPermission,
+  type Notifier,
+  type NotifyOptions,
+  type SchedulerHost,
+} from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -30,6 +36,13 @@ export class WebNotifier implements Notifier {
   async clear(_id: string): Promise<void> {
     // Web notifications auto-dismiss; nothing to clear.
   }
+
+  async permission(): Promise<NotificationPermission> {
+    if (typeof Notification === 'undefined' || Notification.permission === 'default') {
+      return 'unknown';
+    }
+    return Notification.permission;
+  }
 }
 
 /**
@@ -51,6 +64,11 @@ export class TauriNotifier implements Notifier {
 
   async clear(_id: string): Promise<void> {
     // The plugin exposes no programmatic clear for delivered notifications.
+  }
+
+  // The plugin only answers granted-or-not; not-yet-granted still prompts on the next notify.
+  async permission(): Promise<NotificationPermission> {
+    return (await isPermissionGranted()) ? 'granted' : 'unknown';
   }
 }
 

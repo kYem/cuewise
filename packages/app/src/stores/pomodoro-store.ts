@@ -429,6 +429,8 @@ export const usePomodoroStore = create<PomodoroStore>()(
         // Only the persistence is guarded: the transitions, the celebration and the sounds below
         // must not be reported as "failed to save", nor pause a break that already started.
         let autoStartBreaks: boolean;
+        // An unreadable switch defaults to on: a storage hiccup must not silence the session end.
+        let notificationsOn = true;
         let saved: boolean;
         try {
           // Defaults to on, so a value it cannot read must leave the user to press start rather
@@ -436,6 +438,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           const read = await readSettings();
           if (read.ok) {
             autoStartBreaks = read.settings.pomodoroAutoStartBreaks;
+            notificationsOn = read.settings.enableNotifications;
           } else {
             logger.error('Could not read pomodoroAutoStartBreaks; leaving the next block stopped');
             autoStartBreaks = false;
@@ -568,14 +571,16 @@ export const usePomodoroStore = create<PomodoroStore>()(
           }
           // Fire-and-forget: a notification failure — async rejection OR a
           // synchronous getNotifier() throw — must not fail the already-saved session.
-          try {
-            getNotifier()
-              .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
-              .catch((error) => {
-                logger.error('Failed to show pomodoro completion notification', error);
-              });
-          } catch (error) {
-            logger.error('Failed to show pomodoro completion notification', error);
+          if (notificationsOn) {
+            try {
+              getNotifier()
+                .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })
+                .catch((error) => {
+                  logger.error('Failed to show pomodoro completion notification', error);
+                });
+            } catch (error) {
+              logger.error('Failed to show pomodoro completion notification', error);
+            }
           }
         } catch (error) {
           logger.error('Error finishing a completed pomodoro session', error);
