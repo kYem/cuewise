@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asSchemas, checkboxSchema } from './__fixtures__/notion.fixtures';
+import { asSchemas, checkboxSchema, noTodoStatusSchema } from './__fixtures__/notion.fixtures';
 import {
   type CompletionProperty,
   completionWrite,
@@ -120,17 +120,7 @@ describe('findCompletionProperty', () => {
   });
 
   it('reports an empty To-do list rather than inventing one', () => {
-    const noTodo = asSchemas({
-      Status: {
-        type: 'status',
-        status: {
-          options: [{ id: 'o3', name: 'Shipped' }],
-          groups: [{ id: 'g3', name: 'Complete', option_ids: ['o3'] }],
-        },
-      },
-    });
-
-    expect(findCompletionProperty(noTodo)).toMatchObject({ todoOptionIds: [] });
+    expect(findCompletionProperty(noTodoStatusSchema)).toMatchObject({ todoOptionIds: [] });
   });
 
   it('ignores a checkbox under any other name', () => {
@@ -166,18 +156,8 @@ describe('completionWrite', () => {
   });
 
   it('yields null for un-completing a table with no To-do group, rather than a cleared status', () => {
-    const noTodo = asSchemas({
-      Status: {
-        type: 'status',
-        status: {
-          options: [{ id: 'o3', name: 'Shipped' }],
-          groups: [{ id: 'g3', name: 'Complete', option_ids: ['o3'] }],
-        },
-      },
-    });
-
-    expect(completionWrite(statusProperty(noTodo), false)).toBeNull();
-    expect(completionWrite(statusProperty(noTodo), true)).toEqual({
+    expect(completionWrite(statusProperty(noTodoStatusSchema), false)).toBeNull();
+    expect(completionWrite(statusProperty(noTodoStatusSchema), true)).toEqual({
       kind: 'status',
       name: 'Status',
       optionId: 'o3',

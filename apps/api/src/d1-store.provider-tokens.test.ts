@@ -4,6 +4,8 @@ import { clockedStore, newUser } from './__fixtures__/api-test-helpers.fixtures'
 import { D1SyncStore } from './d1-store';
 import type { ProviderConnection, SealedGrant } from './store';
 
+const REFRESH_PAIR = { refreshCiphertext: 'r-ct', refreshIv: 'r-iv' };
+
 function grant(overrides: Partial<SealedGrant> = {}): SealedGrant {
   return {
     ciphertext: 'ct',
@@ -33,14 +35,10 @@ describe('provider connections', () => {
   });
 
   it('putProviderGrant creates a connection with no table chosen', async () => {
-    await store.putProviderGrant(
-      userId,
-      'notion',
-      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
-    );
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+      connection(REFRESH_PAIR)
     );
   });
 
@@ -99,11 +97,7 @@ describe('provider connections', () => {
   });
 
   it('updateProviderTokens replaces the access pair and keeps a refresh pair the renewal omitted', async () => {
-    await store.putProviderGrant(
-      userId,
-      'notion',
-      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
-    );
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
     await store.setProviderDataSource(userId, 'notion', 'ds1');
 
     await store.updateProviderTokens(userId, 'notion', {
@@ -114,22 +108,12 @@ describe('provider connections', () => {
     });
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({
-        ciphertext: 'ct-2',
-        iv: 'iv-2',
-        refreshCiphertext: 'r-ct',
-        refreshIv: 'r-iv',
-        dataSourceId: 'ds1',
-      })
+      connection({ ...REFRESH_PAIR, ciphertext: 'ct-2', iv: 'iv-2', dataSourceId: 'ds1' })
     );
   });
 
   it('updateProviderTokens rotates the refresh pair when the renewal carried one', async () => {
-    await store.putProviderGrant(
-      userId,
-      'notion',
-      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
-    );
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
     await store.updateProviderTokens(userId, 'notion', {
       ciphertext: 'ct-2',
@@ -145,16 +129,12 @@ describe('provider connections', () => {
   });
 
   it('setProviderDataSource touches only the selection, never the tokens', async () => {
-    await store.putProviderGrant(
-      userId,
-      'notion',
-      grant({ refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
-    );
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
     await store.setProviderDataSource(userId, 'notion', 'ds9');
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ dataSourceId: 'ds9', refreshCiphertext: 'r-ct', refreshIv: 'r-iv' })
+      connection({ ...REFRESH_PAIR, dataSourceId: 'ds9' })
     );
   });
 

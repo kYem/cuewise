@@ -1,11 +1,13 @@
 import type { Env } from './env';
 import {
+  asRecord,
   type CompletionProperty,
   type CompletionWrite,
   isRowDone,
   type NotionPage,
   type PropertySchemas,
   type PropertyValues,
+  plainText,
   rowTitle,
 } from './notion-schema';
 
@@ -85,44 +87,13 @@ export interface NotionClient {
 
 type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC_BASE_URL'>;
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-/**
- * A searched data source names itself in a rich-text `title` array, not a plain string.
- * Verified against the live API (2026-09-11): results carry `object: 'data_source'`, a string
- * `id`, and `title[].plain_text`.
- */
-function dataSourceTitle(item: Record<string, unknown>): string {
-  if (!Array.isArray(item.title)) {
-    return typeof item.id === 'string' ? item.id : '';
-  }
-  const text = item.title
-    .map((piece) => {
-      const part = asRecord(piece);
-      if (part === null || typeof part.plain_text !== 'string') {
-        return '';
-      }
-      return part.plain_text;
-    })
-    .join('');
-  if (text === '') {
-    return typeof item.id === 'string' ? item.id : '';
-  }
-  return text;
-}
-
 /**
  * Classifies a failure by shape, never by content: no message here may carry the code, the
  * access token or the client secret, since these reach the logger.
  */
 function classify(status: number, body: unknown): Error {
-  const record = asRecord(body);
-  const raw = record === null ? '' : (record.error ?? record.code);
+  const record = asRecord(body) ?? {};
+  const raw = record.error ?? record.code;
   const code = typeof raw === 'string' ? raw : '';
   if (code === 'invalid_client' || code === 'unauthorized_client') {
     return new NotionConfigError(`notion rejected our client (${status}, ${code || 'no code'})`);
@@ -184,17 +155,17 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
   }
 
   function toGrant(body: unknown): NotionGrant {
-    const record = asRecord(body);
-    const accessToken = record === null ? null : record.access_token;
+    const record = asRecord(body) ?? {};
+    const accessToken = record.access_token;
     if (typeof accessToken !== 'string' || accessToken === '') {
       throw new NotionUnavailableError('notion returned no access token');
     }
-    const rawRefresh = record === null ? null : record.refresh_token;
+    const refreshToken = record.refresh_token;
+    const workspace = record.workspace_name;
     return {
       accessToken,
-      refreshToken: typeof rawRefresh === 'string' && rawRefresh !== '' ? rawRefresh : null,
-      workspace:
-        record !== null && typeof record.workspace_name === 'string' ? record.workspace_name : null,
+      refreshToken: typeof refreshToken === 'string' && refreshToken !== '' ? refreshToken : null,
+      workspace: typeof workspace === 'string' ? workspace : null,
     };
   }
 
@@ -248,11 +219,12 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         }
         throw error;
       }
-      const record = asRecord(body);
-      const results = record === null ? null : record.results;
+      const results = asRecord(body)?.results;
       if (!Array.isArray(results)) {
         throw new NotionUnavailableError('notion search answered without a results array');
       }
+      // Verified against the live API (2026-09-11): results carry a string `id`, a rich-text
+      // `title[].plain_text`, and `in_trash`.
       return results.flatMap((entry) => {
         const item = asRecord(entry);
         if (item === null || typeof item.id !== 'string') {
@@ -263,7 +235,8 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         if (item.in_trash === true) {
           return [];
         }
-        return [{ id: item.id, name: dataSourceTitle(item) }];
+        const title = plainText(item.title);
+        return [{ id: item.id, name: title === '' ? item.id : title }];
       });
     },
 
@@ -272,8 +245,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         `/data_sources/${encodeURIComponent(dataSourceId)}`,
         `Bearer ${accessToken}`
       );
-      const record = asRecord(body);
-      const properties = record === null ? null : asRecord(record.properties);
+      const properties = asRecord(asRecord(body)?.properties);
       if (properties === null) {
         throw new NotionUnavailableError('notion data source carried no readable schema');
       }
@@ -295,8 +267,8 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
             ...(cursor === null ? {} : { start_cursor: cursor }),
           }),
         });
-        const record = asRecord(body);
-        const results = record === null ? null : record.results;
+        const record = asRecord(body) ?? {};
+        const results = record.results;
         if (!Array.isArray(results)) {
           throw new NotionUnavailableError('notion query answered without a results array');
         }
@@ -313,8 +285,8 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
             done: isRowDone(notionPage, property),
           });
         }
-        const hasMore = record !== null && record.has_more === true;
-        const next = record === null ? null : record.next_cursor;
+        const hasMore = record.has_more === true;
+        const next = record.next_cursor;
         if (!hasMore || typeof next !== 'string') {
           // has_more with no cursor cannot be followed, but must not read as a complete list.
           return { items, truncated: hasMore };

@@ -34,11 +34,27 @@ export interface NotionPage {
   properties: PropertyValues;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
+export function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+/** Joins a Notion rich-text array; anything that is not one reads as empty. */
+export function plainText(pieces: unknown): string {
+  if (!Array.isArray(pieces)) {
+    return '';
+  }
+  return pieces
+    .map((piece) => {
+      const part = asRecord(piece);
+      if (part === null || typeof part.plain_text !== 'string') {
+        return '';
+      }
+      return part.plain_text;
+    })
+    .join('');
 }
 
 function groupOptionIds(groups: unknown, groupName: string): string[] {
@@ -132,15 +148,7 @@ export function rowTitle(page: NotionPage): string {
     if (property === null || property.type !== 'title' || !Array.isArray(property.title)) {
       continue;
     }
-    return property.title
-      .map((piece) => {
-        const part = asRecord(piece);
-        if (part === null || typeof part.plain_text !== 'string') {
-          return '';
-        }
-        return part.plain_text;
-      })
-      .join('');
+    return plainText(property.title);
   }
   return '';
 }

@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  asSchemas,
   connectedNotionUser,
+  noTodoStatusSchema,
   notionEnv,
   signedInWithoutNotion,
   statusSchema,
+  storedNotionTokens,
   stubNotionClient,
   TEST_ACCESS_TOKEN,
   TEST_DATA_SOURCE_ID,
@@ -13,8 +14,9 @@ import {
   TEST_REFRESH_TOKEN,
   TEST_REFRESHED_TOKEN,
   TEST_ROTATED_REFRESH_TOKEN,
+  titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
-import { decryptSecret, encryptSecret } from '../crypto-utils';
+import { encryptSecret } from '../crypto-utils';
 import { createApp } from '../index';
 import { NotionAuthError, NotionResourceError, NotionUnavailableError } from '../notion-client';
 
@@ -24,6 +26,10 @@ function app(client = stubNotionClient()) {
 
 const ITEMS = '/v1/integrations/notion/items';
 const PAGE = `/v1/integrations/notion/items/${TEST_PAGE_ID}`;
+
+function getItems(headers: Record<string, string>, client?: ReturnType<typeof stubNotionClient>) {
+  return app(client).request(ITEMS, { headers }, notionEnv());
+}
 
 function patchDone(
   headers: Record<string, string>,
@@ -60,7 +66,7 @@ describe('GET /v1/integrations/notion/items', () => {
   it('404s when the account has no grant', async () => {
     const { headers } = await signedInWithoutNotion();
 
-    const res = await app().request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers);
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(404);
@@ -70,7 +76,7 @@ describe('GET /v1/integrations/notion/items', () => {
   it('409s when connected but no table has been picked, so the client shows the picker', async () => {
     const { headers } = await connectedNotionUser({ dataSourceId: null });
 
-    const res = await app().request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers);
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(409);
@@ -84,7 +90,7 @@ describe('GET /v1/integrations/notion/items', () => {
     }));
     const { headers } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
 
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({
@@ -98,7 +104,7 @@ describe('GET /v1/integrations/notion/items', () => {
     const queryRows = vi.fn(async () => ({ items: [], truncated: false }));
     const { headers } = await connectedNotionUser();
 
-    await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    await getItems(headers, stubNotionClient({ queryRows }));
 
     expect(queryRows).toHaveBeenCalledWith(
       TEST_ACCESS_TOKEN,
@@ -113,7 +119,7 @@ describe('GET /v1/integrations/notion/items', () => {
     });
     const { headers, store, userId } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(401);
@@ -127,7 +133,7 @@ describe('GET /v1/integrations/notion/items', () => {
     });
     const { headers, store, userId } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(404);
@@ -169,7 +175,7 @@ describe('GET /v1/integrations/notion/items', () => {
       throw new NotionAuthError('revoked');
     });
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(404);
@@ -177,14 +183,10 @@ describe('GET /v1/integrations/notion/items', () => {
   });
 
   it('prompts to re-validate when the completion property has gone', async () => {
-    const getPropertySchemas = vi.fn(async () => asSchemas({ Name: { type: 'title', title: [] } }));
+    const getPropertySchemas = vi.fn(async () => titleOnlySchema);
     const { headers } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ getPropertySchemas })).request(
-      ITEMS,
-      { headers },
-      notionEnv()
-    );
+    const res = await getItems(headers, stubNotionClient({ getPropertySchemas }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(422);
@@ -197,7 +199,7 @@ describe('token renewal', () => {
     const { queryRows, tokens } = expiringQuery();
     const { headers } = await connectedNotionUser({ withRefreshToken: true });
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
 
     expect(res.status).toBe(200);
     expect(tokens).toEqual([TEST_ACCESS_TOKEN, TEST_REFRESHED_TOKEN]);
@@ -207,18 +209,12 @@ describe('token renewal', () => {
     const { queryRows } = expiringQuery();
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    await getItems(headers, stubNotionClient({ queryRows }));
 
-    const stored = await store.getProviderConnection(userId, 'notion');
-    if (stored === null || stored.refreshCiphertext === null || stored.refreshIv === null) {
-      throw new Error('expected the renewed grant to be stored with its refresh token');
-    }
-    await expect(decryptSecret(stored.ciphertext, stored.iv, TEST_PROVIDER_KEY)).resolves.toBe(
-      TEST_REFRESHED_TOKEN
-    );
-    await expect(
-      decryptSecret(stored.refreshCiphertext, stored.refreshIv, TEST_PROVIDER_KEY)
-    ).resolves.toBe(TEST_ROTATED_REFRESH_TOKEN);
+    await expect(storedNotionTokens(store, userId)).resolves.toEqual({
+      accessToken: TEST_REFRESHED_TOKEN,
+      refreshToken: TEST_ROTATED_REFRESH_TOKEN,
+    });
   });
 
   it('keeps the stored refresh token when the renewal did not rotate it', async () => {
@@ -230,26 +226,18 @@ describe('token renewal', () => {
     }));
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    await app(stubNotionClient({ queryRows, refreshGrant })).request(
-      ITEMS,
-      { headers },
-      notionEnv()
-    );
+    await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
-    const stored = await store.getProviderConnection(userId, 'notion');
-    if (stored === null || stored.refreshCiphertext === null || stored.refreshIv === null) {
-      throw new Error('the refresh token must survive a renewal that omitted one');
-    }
-    await expect(
-      decryptSecret(stored.refreshCiphertext, stored.refreshIv, TEST_PROVIDER_KEY)
-    ).resolves.toBe(TEST_REFRESH_TOKEN);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      refreshToken: TEST_REFRESH_TOKEN,
+    });
   });
 
   it('keeps the workspace name, which a refresh response never carries', async () => {
     const { queryRows } = expiringQuery();
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    await getItems(headers, stubNotionClient({ queryRows }));
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       workspace: 'Acme',
@@ -265,11 +253,7 @@ describe('token renewal', () => {
     });
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    const res = await app(stubNotionClient({ queryRows, refreshGrant })).request(
-      ITEMS,
-      { headers },
-      notionEnv()
-    );
+    const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
     expect(res.status).toBe(503);
     expect(refreshGrant).not.toHaveBeenCalled();
@@ -285,11 +269,7 @@ describe('token renewal', () => {
     });
     const { headers } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ queryRows, refreshGrant })).request(
-      ITEMS,
-      { headers },
-      notionEnv()
-    );
+    const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
     expect(res.status).toBe(401);
     expect(refreshGrant).not.toHaveBeenCalled();
@@ -304,11 +284,7 @@ describe('token renewal', () => {
     });
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    const res = await app(stubNotionClient({ queryRows, refreshGrant })).request(
-      ITEMS,
-      { headers },
-      notionEnv()
-    );
+    const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
     expect(res.status).toBe(401);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
@@ -320,7 +296,7 @@ describe('token renewal', () => {
     });
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(401);
@@ -337,11 +313,7 @@ describe('token renewal', () => {
       throw new NotionAuthError('expired');
     });
 
-    const res = await app(stubNotionClient({ queryRows, revokeToken })).request(
-      ITEMS,
-      { headers },
-      notionEnv()
-    );
+    const res = await getItems(headers, stubNotionClient({ queryRows, revokeToken }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(404);
@@ -363,16 +335,12 @@ describe('token renewal', () => {
       throw new NotionAuthError('expired');
     });
 
-    const res = await app(stubNotionClient({ queryRows })).request(ITEMS, { headers }, notionEnv());
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
 
     expect(res.status).toBe(503);
-    const stored = await store.getProviderConnection(userId, 'notion');
-    if (stored === null) {
-      throw new Error("the winner's renewed grant must survive the loser's auth fault");
-    }
-    await expect(decryptSecret(stored.ciphertext, stored.iv, TEST_PROVIDER_KEY)).resolves.toBe(
-      TEST_REFRESHED_TOKEN
-    );
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: TEST_REFRESHED_TOKEN,
+    });
   });
 });
 
@@ -429,16 +397,7 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
 
   it('names the missing To-do group when un-completing, rather than calling the table unusable', async () => {
     const setCompletion = vi.fn(async () => undefined);
-    const noTodo = asSchemas({
-      Status: {
-        type: 'status',
-        status: {
-          options: [{ id: 'o3', name: 'Shipped' }],
-          groups: [{ id: 'g3', name: 'Complete', option_ids: ['o3'] }],
-        },
-      },
-    });
-    const getPropertySchemas = vi.fn(async () => noTodo);
+    const getPropertySchemas = vi.fn(async () => noTodoStatusSchema);
     const { headers } = await connectedNotionUser();
 
     const res = await patchDone(
@@ -514,7 +473,7 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
 
   it('refuses to write when the completion property has gone', async () => {
     const setCompletion = vi.fn(async () => undefined);
-    const getPropertySchemas = vi.fn(async () => asSchemas({ Name: { type: 'title', title: [] } }));
+    const getPropertySchemas = vi.fn(async () => titleOnlySchema);
     const { headers } = await connectedNotionUser();
 
     const res = await patchDone(

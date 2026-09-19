@@ -45,6 +45,8 @@ const NOTION_ID_RE =
 /** Sanitized vocabulary for the deep link; nothing attacker-shaped rides back to the app. */
 type ConnectOutcome = 'access_denied' | 'connect_failed' | 'server_error';
 
+type SealedSecret = Pick<SealedGrant, 'ciphertext' | 'iv'>;
+
 function returnWithCode(returnUri: string, code: string): Response {
   const target = new URL(returnUri);
   target.searchParams.set('code', code);
@@ -59,6 +61,11 @@ function returnWithError(returnUri: string, outcome: ConnectOutcome): Response {
 
 function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown';
+}
+
+/** For decrypt failures: the class is diagnostic enough, and a crypto message is not ours to log. */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'unknown';
 }
 
 /** Fails closed: a key that cannot open a grant answers 500, and never touches a stored one. */
@@ -99,7 +106,7 @@ async function revokeUpstream(
 /** `revokeUpstream` for a stored grant; one that no longer decrypts is logged and left. */
 async function revokeSealed(
   client: NotionClient,
-  sealed: Pick<SealedGrant, 'ciphertext' | 'iv'>,
+  sealed: SealedSecret,
   key: string,
   userId: string
 ): Promise<void> {
@@ -109,7 +116,7 @@ async function revokeSealed(
   } catch (error) {
     logger.warn('Could not decrypt a Notion grant to revoke it upstream', {
       userId,
-      reason: error instanceof Error ? error.name : 'unknown',
+      reason: errorName(error),
     });
     return;
   }
@@ -178,7 +185,7 @@ async function openGrant(
   } catch (error) {
     logger.error('Stored Notion grant does not decrypt under the current key', {
       userId,
-      reason: error instanceof Error ? error.name : 'unknown',
+      reason: errorName(error),
     });
     return problem('provider_reauth_required');
   }
@@ -239,7 +246,7 @@ interface RenewedGrant {
 /** Trades the stored refresh token for a new grant and persists it — tokens only, never the row. */
 async function renewGrant(
   open: OpenGrant,
-  refresh: { ciphertext: string; iv: string }
+  refresh: SealedSecret
 ): Promise<RenewedGrant | Response> {
   let grant: NotionGrant;
   let sealed: SealedGrant;
@@ -262,7 +269,7 @@ async function renewGrant(
   return { accessToken: grant.accessToken, ciphertext: sealed.ciphertext };
 }
 
-function refreshPair(connection: ProviderConnection): { ciphertext: string; iv: string } | null {
+function refreshPair(connection: ProviderConnection): SealedSecret | null {
   if (connection.refreshCiphertext === null || connection.refreshIv === null) {
     return null;
   }

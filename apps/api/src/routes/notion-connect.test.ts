@@ -1,22 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
 import {
-  asSchemas,
   connectedNotionUser,
   FailingWriteStore,
   notionEnv,
   signedInWithoutNotion,
   statusSchema,
+  storedNotionTokens,
   stubNotionClient,
   TEST_ACCESS_TOKEN,
   TEST_CODE_VERIFIER,
   TEST_DATA_SOURCE_ID,
-  TEST_PROVIDER_KEY,
   TEST_REFRESH_TOKEN,
   TEST_REFRESHED_TOKEN,
+  TEST_STATE_SIGNING_KEY,
   testCodeChallenge,
+  titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
-import { base64UrlDecodeString, decryptSecret, signState } from '../crypto-utils';
+import { base64UrlDecodeString, signState } from '../crypto-utils';
 import { createApp } from '../index';
 import { NotionAuthError, NotionConfigError } from '../notion-client';
 
@@ -27,18 +28,27 @@ function app(client = stubNotionClient()) {
 async function signedState(returnUri = 'cuewise://auth') {
   return signState(
     { returnUri, codeChallenge: await testCodeChallenge(), nonce: 'n-1' },
-    notionEnv().STATE_SIGNING_KEY as unknown as string
+    TEST_STATE_SIGNING_KEY
   );
+}
+
+async function startUrl(overrides: Record<string, string> = {}): Promise<string> {
+  const query = new URLSearchParams({
+    return_uri: 'cuewise://auth',
+    code_challenge: await testCodeChallenge(),
+    ...overrides,
+  });
+  return `/v1/integrations/notion/start?${query}`;
+}
+
+function callbackUrl(state: string, query: Record<string, string> = { code: 'c' }): string {
+  return `/v1/integrations/notion/callback?${new URLSearchParams({ ...query, state })}`;
 }
 
 /** Runs the callback and pulls the one-time code off the interstitial's deep link. */
 async function parkedCode(client = stubNotionClient(), returnUri?: string): Promise<string> {
   const state = await signedState(returnUri);
-  const res = await app(client).request(
-    `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
-    {},
-    notionEnv()
-  );
+  const res = await app(client).request(callbackUrl(state), {}, notionEnv());
   const html = await res.text();
   const match = html.match(/location\.replace\((".*?")\);/);
   if (match === null) {
@@ -70,7 +80,7 @@ describe('GET /v1/integrations/notion/start', () => {
     const { headers } = await signedInWithoutNotion();
 
     const res = await app().request(
-      `/v1/integrations/notion/start?return_uri=https://evil.test&code_challenge=${await testCodeChallenge()}`,
+      await startUrl({ return_uri: 'https://evil.test' }),
       { headers },
       notionEnv()
     );
@@ -82,7 +92,7 @@ describe('GET /v1/integrations/notion/start', () => {
     const { headers } = await signedInWithoutNotion();
 
     const res = await app().request(
-      '/v1/integrations/notion/start?return_uri=cuewise://auth&code_challenge=short',
+      await startUrl({ code_challenge: 'short' }),
       { headers },
       notionEnv()
     );
@@ -93,11 +103,7 @@ describe('GET /v1/integrations/notion/start', () => {
   it('answers the authorize url as json, with a state that names no account', async () => {
     const { headers, userId } = await signedInWithoutNotion();
 
-    const res = await app().request(
-      `/v1/integrations/notion/start?return_uri=cuewise://auth&code_challenge=${await testCodeChallenge()}`,
-      { headers },
-      notionEnv()
-    );
+    const res = await app().request(await startUrl(), { headers }, notionEnv());
     const body = (await res.json()) as { authorizeUrl: string };
 
     expect(res.status).toBe(200);
@@ -123,7 +129,7 @@ describe('GET /v1/integrations/notion/start', () => {
     const { headers } = await signedInWithoutNotion();
 
     const res = await app().request(
-      `/v1/integrations/notion/start?return_uri=cuewise://auth&code_challenge=${await testCodeChallenge()}`,
+      await startUrl(),
       { headers },
       notionEnv({ NOTION_CLIENT_ID: '' })
     );
@@ -135,7 +141,7 @@ describe('GET /v1/integrations/notion/start', () => {
     const { headers } = await signedInWithoutNotion();
 
     const res = await app().request(
-      `/v1/integrations/notion/start?return_uri=cuewise://auth&code_challenge=${await testCodeChallenge()}`,
+      await startUrl(),
       { headers },
       notionEnv({ PROVIDER_TOKEN_KEY: 'short' })
     );
@@ -153,7 +159,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     }));
 
     const res = await app(stubNotionClient({ exchangeCode })).request(
-      '/v1/integrations/notion/callback?code=c&state=forged',
+      callbackUrl('forged'),
       {},
       notionEnv()
     );
@@ -172,7 +178,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const state = await signedState('cuewise://auth');
 
     const res = await app().request(
-      `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
+      callbackUrl(state),
       {},
       notionEnv({ ALLOWED_RETURN_URIS: 'cuewise://other' })
     );
@@ -192,11 +198,7 @@ describe('GET /v1/integrations/notion/callback', () => {
   it('returns through the deep link with no-store, since the page carries the code', async () => {
     const state = await signedState();
 
-    const res = await app().request(
-      `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
-      {},
-      notionEnv()
-    );
+    const res = await app().request(callbackUrl(state), {}, notionEnv());
 
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(await res.text()).toContain('code=');
@@ -205,11 +207,7 @@ describe('GET /v1/integrations/notion/callback', () => {
   it('relays a redirect with neither code nor error as ours', async () => {
     const state = await signedState();
 
-    const res = await app().request(
-      `/v1/integrations/notion/callback?state=${encodeURIComponent(state)}`,
-      {},
-      notionEnv()
-    );
+    const res = await app().request(callbackUrl(state, {}), {}, notionEnv());
 
     expect(await res.text()).toContain('error=server_error');
   });
@@ -221,11 +219,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const res = await createApp({
       notionClientFactory: () => stubNotionClient({ revokeToken }),
       storeFactory: () => new FailingWriteStore('mintAuthCode'),
-    }).request(
-      `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
-      {},
-      notionEnv()
-    );
+    }).request(callbackUrl(state), {}, notionEnv());
 
     expect(await res.text()).toContain('error=connect_failed');
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
@@ -235,11 +229,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const errorSpy = spyOnLoggerError();
     const state = await signedState();
 
-    await app().request(
-      `/v1/integrations/notion/callback?error=${encodeURIComponent('<script>x</script>')}&state=${encodeURIComponent(state)}`,
-      {},
-      notionEnv()
-    );
+    await app().request(callbackUrl(state, { error: '<script>x</script>' }), {}, notionEnv());
 
     expect(errorSpy).toHaveBeenCalledWith('Notion authorize step failed', {
       error: 'unrecognised',
@@ -250,7 +240,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const state = await signedState();
 
     const res = await app().request(
-      `/v1/integrations/notion/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+      callbackUrl(state, { error: 'access_denied' }),
       {},
       notionEnv()
     );
@@ -262,7 +252,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const state = await signedState();
 
     const res = await app().request(
-      `/v1/integrations/notion/callback?error=invalid_request&state=${encodeURIComponent(state)}`,
+      callbackUrl(state, { error: 'invalid_request' }),
       {},
       notionEnv()
     );
@@ -277,7 +267,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const state = await signedState();
 
     const res = await app(stubNotionClient({ exchangeCode })).request(
-      `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
+      callbackUrl(state),
       {},
       notionEnv()
     );
@@ -293,7 +283,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     const state = await signedState();
 
     const res = await app(stubNotionClient({ exchangeCode })).request(
-      `/v1/integrations/notion/callback?code=c&state=${encodeURIComponent(state)}`,
+      callbackUrl(state),
       {},
       notionEnv()
     );
@@ -393,16 +383,11 @@ describe('POST /v1/integrations/notion/claim', () => {
     await claim(code, headers);
 
     const stored = await store.getProviderConnection(userId, 'notion');
-    if (stored === null || stored.refreshCiphertext === null || stored.refreshIv === null) {
-      throw new Error('expected a stored grant with a refresh token');
-    }
-    expect(stored.ciphertext).not.toContain(TEST_ACCESS_TOKEN);
-    await expect(decryptSecret(stored.ciphertext, stored.iv, TEST_PROVIDER_KEY)).resolves.toBe(
-      TEST_ACCESS_TOKEN
-    );
-    await expect(
-      decryptSecret(stored.refreshCiphertext, stored.refreshIv, TEST_PROVIDER_KEY)
-    ).resolves.toBe(TEST_REFRESH_TOKEN);
+    expect(stored?.ciphertext).not.toContain(TEST_ACCESS_TOKEN);
+    await expect(storedNotionTokens(store, userId)).resolves.toEqual({
+      accessToken: TEST_ACCESS_TOKEN,
+      refreshToken: TEST_REFRESH_TOKEN,
+    });
   });
 
   it('stores a grant that came without a refresh token, leaving both refresh columns null', async () => {
@@ -597,7 +582,7 @@ describe('PUT /v1/integrations/notion/selection', () => {
   });
 
   it('refuses a table with no usable completion property, naming the requirement', async () => {
-    const getPropertySchemas = vi.fn(async () => asSchemas({ Name: { type: 'title', title: [] } }));
+    const getPropertySchemas = vi.fn(async () => titleOnlySchema);
     const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
 
     const res = await select(
@@ -654,14 +639,12 @@ describe('PUT /v1/integrations/notion/selection', () => {
     );
 
     expect(res.status).toBe(200);
-    const stored = await store.getProviderConnection(userId, 'notion');
-    if (stored === null) {
-      throw new Error('expected the grant to survive');
-    }
-    await expect(decryptSecret(stored.ciphertext, stored.iv, TEST_PROVIDER_KEY)).resolves.toBe(
-      TEST_REFRESHED_TOKEN
-    );
-    expect(stored.dataSourceId).toBe(TEST_DATA_SOURCE_ID);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: TEST_REFRESHED_TOKEN,
+    });
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceId: TEST_DATA_SOURCE_ID,
+    });
   });
 
   it('answers not_connected, not success, when the grant vanished mid-request', async () => {
@@ -682,6 +665,17 @@ describe('PUT /v1/integrations/notion/selection', () => {
 });
 
 describe('DELETE /v1/integrations/notion', () => {
+  function disconnect(
+    headers: Record<string, string>,
+    client?: ReturnType<typeof stubNotionClient>
+  ) {
+    return app(client).request(
+      '/v1/integrations/notion',
+      { method: 'DELETE', headers },
+      notionEnv()
+    );
+  }
+
   it('401s without a session', async () => {
     const res = await app().request('/v1/integrations/notion', { method: 'DELETE' }, notionEnv());
 
@@ -691,11 +685,7 @@ describe('DELETE /v1/integrations/notion', () => {
   it('404s when nothing is connected', async () => {
     const { headers } = await signedInWithoutNotion();
 
-    const res = await app().request(
-      '/v1/integrations/notion',
-      { method: 'DELETE', headers },
-      notionEnv()
-    );
+    const res = await disconnect(headers);
 
     expect(res.status).toBe(404);
   });
@@ -704,11 +694,7 @@ describe('DELETE /v1/integrations/notion', () => {
     const revokeToken = vi.fn(async () => undefined);
     const { headers, store, userId } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ revokeToken })).request(
-      '/v1/integrations/notion',
-      { method: 'DELETE', headers },
-      notionEnv()
-    );
+    const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
@@ -721,11 +707,7 @@ describe('DELETE /v1/integrations/notion', () => {
     });
     const { headers, store, userId } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ revokeToken })).request(
-      '/v1/integrations/notion',
-      { method: 'DELETE', headers },
-      notionEnv()
-    );
+    const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
@@ -751,11 +733,7 @@ describe('DELETE /v1/integrations/notion', () => {
     });
     const { headers, store, userId } = await connectedNotionUser();
 
-    const res = await app(stubNotionClient({ revokeToken })).request(
-      '/v1/integrations/notion',
-      { method: 'DELETE', headers },
-      notionEnv()
-    );
+    const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
     expect(errorSpy).toHaveBeenCalled();

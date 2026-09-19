@@ -1,14 +1,15 @@
 import { env } from 'cloudflare:test';
 import { vi } from 'vitest';
-import { encryptSecret, sha256Base64Url } from '../crypto-utils';
+import { decryptSecret, encryptSecret, sha256Base64Url } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import type { NotionClient } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
-import type { AuthCodePayload, SealedGrant } from '../store';
+import type { AuthCodePayload, SealedGrant, SyncStore } from '../store';
 import { signedInToken } from './api-test-helpers.fixtures';
 
 /** 43 base64url chars decode to the 32 bytes AES-GCM needs. */
 export const TEST_PROVIDER_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+export const TEST_STATE_SIGNING_KEY = 'notion-signing-key-for-tests';
 export const TEST_ACCESS_TOKEN = 'notion-access-token';
 export const TEST_REFRESH_TOKEN = 'notion-refresh-token';
 export const TEST_REFRESHED_TOKEN = 'notion-access-token-v2';
@@ -42,13 +43,27 @@ export function asSchemas(value: Record<string, unknown>): PropertySchemas {
   return value as PropertySchemas;
 }
 
-export function notionEnv(overrides: Record<string, string> = {}) {
+/** No completion property at all: what a table looks like after the user removed it. */
+export const titleOnlySchema = asSchemas({ Name: { type: 'title', title: [] } });
+
+/** A status property with a Complete group but no To-do group, so "not done" has nowhere to go. */
+export const noTodoStatusSchema = asSchemas({
+  Status: {
+    type: 'status',
+    status: {
+      options: [{ id: 'o3', name: 'Shipped' }],
+      groups: [{ id: 'g3', name: 'Complete', option_ids: ['o3'] }],
+    },
+  },
+});
+
+export function notionEnv(overrides: Record<string, string> = {}): typeof env {
   return {
     ...env,
     PROVIDER_TOKEN_KEY: TEST_PROVIDER_KEY,
     NOTION_CLIENT_ID: 'cid',
     NOTION_CLIENT_SECRET: 'csecret',
-    STATE_SIGNING_KEY: 'notion-signing-key-for-tests',
+    STATE_SIGNING_KEY: TEST_STATE_SIGNING_KEY,
     PUBLIC_BASE_URL: 'https://api.example.test',
     ALLOWED_RETURN_URIS: 'cuewise://auth',
     ...overrides,
@@ -129,6 +144,32 @@ export async function connectedNotionUser(
     await user.store.setProviderDataSource(user.userId, 'notion', dataSourceId);
   }
   return user;
+}
+
+export interface StoredNotionTokens {
+  accessToken: string;
+  refreshToken: string | null;
+}
+
+/** The stored grant, decrypted under the test key; throws when the account holds none. */
+export async function storedNotionTokens(
+  store: SyncStore,
+  userId: string
+): Promise<StoredNotionTokens> {
+  const stored = await store.getProviderConnection(userId, 'notion');
+  if (stored === null) {
+    throw new Error('expected a stored Notion grant');
+  }
+  const accessToken = await decryptSecret(stored.ciphertext, stored.iv, TEST_PROVIDER_KEY);
+  if (stored.refreshCiphertext === null || stored.refreshIv === null) {
+    return { accessToken, refreshToken: null };
+  }
+  const refreshToken = await decryptSecret(
+    stored.refreshCiphertext,
+    stored.refreshIv,
+    TEST_PROVIDER_KEY
+  );
+  return { accessToken, refreshToken };
 }
 
 type FailingWrite = 'mintAuthCode' | 'putProviderGrant';
