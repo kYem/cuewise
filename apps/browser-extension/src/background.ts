@@ -26,9 +26,8 @@ import { QUARANTINE_KEY, STATUS_KEY } from './sync/sync-storage-keys';
 
 const { scheduler, notifier } = configureChromePlatform();
 
-// The lookup + deliver + recurring re-arm logic is shared with the macOS app, so both
-// platforms behave identically. Chrome drops a one-shot alarm before dispatching it, so a fire
-// in flight is absent from chrome.alarms.getAll(); the reconcile below must see it as armed.
+// Chrome drops a one-shot alarm before dispatching it, so a fire in flight is absent from
+// chrome.alarms.getAll(); the reconcile below must see it as armed.
 const firing = new Set<string>();
 scheduler.onFire(async (id) => {
   firing.add(id);

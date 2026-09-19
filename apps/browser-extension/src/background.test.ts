@@ -207,11 +207,15 @@ describe('background: reminder alarms re-armed on start', () => {
   // Chrome drops a one-shot alarm before dispatching it, so getAll() no longer lists a fire in
   // flight; a startup reconcile that re-armed it would deliver the reminder twice.
   it('does not re-arm a reminder whose fire is still in flight', async () => {
-    const overdue = reminderFactory.build({
+    const firing = reminderFactory.build({
       id: 'r5',
       dueDate: new Date(Date.now() - 60_000).toISOString(),
     });
-    getRemindersMock.mockResolvedValue([overdue]);
+    const alsoOverdue = reminderFactory.build({
+      id: 'r6',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    getRemindersMock.mockResolvedValue([firing, alsoOverdue]);
     chromeMock.alarms.getAll.mockResolvedValue([]);
     let finishNotify = (): void => {};
     chromeMock.notifications.create.mockReturnValueOnce(
@@ -226,13 +230,14 @@ describe('background: reminder alarms re-armed on start', () => {
     await vi.waitFor(() => {
       expect(recordActivityMock).toHaveBeenCalledWith({
         event: 'reconciled',
-        detail: 're-armed 0 of 1 pending',
+        detail: 're-armed 1 of 2 pending',
       });
     });
     finishNotify();
 
     await vi.waitFor(() => expect(setRemindersMock).toHaveBeenCalled());
-    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+    expect(chromeMock.alarms.create).toHaveBeenCalledTimes(1);
+    expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-r6', expect.any(Object));
   });
 });
 

@@ -56,7 +56,7 @@ const fakeScheduler = {
   cancel: vi.fn(() => Promise.resolve()),
 };
 
-/** A resident host that delivers in the background; `persists` is what its wakes survive. */
+/** A resident host that delivers in the background; `persists`: its wakes survive a restart. */
 function useHostScheduler(persists: boolean): void {
   configurePlatform({
     scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: persists },
@@ -587,11 +587,6 @@ describe('alarm scheduling failures', () => {
     expect(useReminderStore.getState().reminders).toHaveLength(0);
     expect(toastError).not.toHaveBeenCalled();
     expect(toastWarning).not.toHaveBeenCalled();
-    expect(recordActivity).toHaveBeenCalledWith({
-      event: 'failed',
-      reminderId: 'clear-fail',
-      detail: 'cancel: alarm gone',
-    });
   });
 });
 
@@ -1099,6 +1094,19 @@ describe('reminder activity log', () => {
     expect(recordActivity).toHaveBeenCalledWith({
       event: 'reconciled',
       detail: 're-armed 1 of 1 pending',
+    });
+  });
+
+  it('records a failed cancel as failed', async () => {
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'clear-fail' })] });
+    fakeScheduler.cancel.mockRejectedValueOnce(new Error('alarm gone'));
+
+    await useReminderStore.getState().deleteReminder('clear-fail');
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'failed',
+      reminderId: 'clear-fail',
+      detail: 'cancel: alarm gone',
     });
   });
 
