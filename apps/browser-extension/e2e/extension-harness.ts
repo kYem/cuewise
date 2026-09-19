@@ -25,7 +25,7 @@ export interface ExtensionSession {
 
 /**
  * An empty `profileDir` is a fresh temp profile. Headed, as MV3 service workers never register
- * under `--headless=new` here (15s timeout, confirmed).
+ * under `--headless=new` here.
  */
 export async function launchExtension(
   options: { extensionDir?: string; profileDir?: string } = {}

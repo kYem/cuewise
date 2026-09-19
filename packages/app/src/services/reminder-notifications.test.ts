@@ -190,8 +190,7 @@ describe('handleReminderFire', () => {
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r6', expect.any(Date));
   });
 
-  // Consumed silently: the occurrence is spent, so it will not fire again when the switch returns.
-  it('marks a one-off notified without delivering it when notifications are switched off', async () => {
+  it('spends a one-off, rather than deferring it, when notifications are switched off', async () => {
     getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
     getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8' })]);
 

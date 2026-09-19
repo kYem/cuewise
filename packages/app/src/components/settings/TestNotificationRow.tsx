@@ -16,7 +16,7 @@ const TEST_BODY = 'This is a test reminder. If you can see it, reminders will re
 
 type Result = 'sent' | 'blocked' | 'failed';
 
-// The extension cannot see an OS-level mute of the browser itself, so "sent" still hedges.
+// No host can see an OS-level mute of the browser or app itself, so "sent" still hedges.
 const RESULT_NOTES: Record<Result, string> = {
   sent: "Sent. Nothing appeared? Check your system's notification settings — the browser or app itself may be muted.",
   blocked: 'Notifications are blocked for Cuewise — allow them in your browser or system settings.',
@@ -34,7 +34,7 @@ interface TestNotificationRowProps {
 export const TestNotificationRow: React.FC<TestNotificationRowProps> = ({ enabled, filter }) => {
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
-  // Switching off ends the attempt: a result that lands afterwards must not surface on switch-on.
+  // Switching off orphans an in-flight send: its result must not surface on switch-on.
   const attempt = useRef(0);
 
   useEffect(() => {
