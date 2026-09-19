@@ -23,7 +23,7 @@ import {
 /** Web Notification API notifier — works inside the Tauri WKWebView. */
 export class WebNotifier implements Notifier {
   async notify(opts: NotifyOptions): Promise<void> {
-    // Delivers only when already granted: WebKit rejects a permission request outside a user gesture.
+    // Only when already granted: WebKit rejects a permission request outside a user gesture.
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
       logger.error('Web notification not delivered: permission not granted', undefined, {
         id: opts.id,

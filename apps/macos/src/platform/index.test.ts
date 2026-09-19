@@ -21,6 +21,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('TauriNotifier.permission', () => {
@@ -38,6 +39,15 @@ describe('TauriNotifier.permission', () => {
 });
 
 describe('TauriNotifier.notify', () => {
+  it('sends without asking when permission is already granted', async () => {
+    isPermissionGrantedMock.mockResolvedValue(true);
+
+    await new TauriNotifier().notify({ id: 'reminder-1', title: 'T', body: 'B' });
+
+    expect(requestPermissionMock).not.toHaveBeenCalled();
+    expect(sendNotificationMock).toHaveBeenCalledWith({ title: 'T', body: 'B' });
+  });
+
   it('asks for permission once when it is missing, then sends', async () => {
     isPermissionGrantedMock.mockResolvedValue(false);
     requestPermissionMock.mockResolvedValue('granted');

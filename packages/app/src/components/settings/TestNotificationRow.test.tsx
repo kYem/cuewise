@@ -1,6 +1,6 @@
 import { configurePlatform, logger } from '@cuewise/shared';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestNotificationRow } from './TestNotificationRow';
@@ -87,6 +87,37 @@ describe('TestNotificationRow', () => {
     await clickSend();
 
     expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  });
+
+  it('stays in flight across a switch toggle', async () => {
+    notifier.notify.mockReturnValueOnce(new Promise(() => {}));
+    const { rerender } = renderRow();
+    await clickSend();
+
+    rerender(<TestNotificationRow enabled={false} filter="" />);
+    rerender(<TestNotificationRow enabled={true} filter="" />);
+
+    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
+  });
+
+  it('drops the result of a send that finished while the switch was off', async () => {
+    let finish = (): void => {};
+    notifier.notify.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      })
+    );
+    const { rerender } = renderRow();
+    await clickSend();
+
+    rerender(<TestNotificationRow enabled={false} filter="" />);
+    await act(async () => {
+      finish();
+    });
+    rerender(<TestNotificationRow enabled={true} filter="" />);
+
+    expect(screen.queryByText(/^Sent\./)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
   });
 
   it('forgets the last outcome when the switch is turned off', async () => {

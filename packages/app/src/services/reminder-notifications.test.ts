@@ -188,7 +188,17 @@ describe('handleReminderFire', () => {
 
     expect(notify).not.toHaveBeenCalled();
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r6', expect.any(Date));
-    expect(setRemindersMock.mock.calls[0][0][0].notified).toBe(false);
+  });
+
+  // Consumed silently: the occurrence is spent, so it will not fire again when the switch returns.
+  it('marks a one-off notified without delivering it when notifications are switched off', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8' })]);
+
+    await handleReminderFire('reminder-r8');
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(setRemindersMock.mock.calls[0][0][0].notified).toBe(true);
   });
 
   // A storage hiccup must not silence reminders: the default is on, so unknown means on.

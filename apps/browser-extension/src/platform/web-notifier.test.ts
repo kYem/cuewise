@@ -12,6 +12,7 @@ function stubNotification(permission: NotificationPermission) {
 describe('WebNotifier', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('delivers via the web Notification API when permission is granted', async () => {
@@ -22,8 +23,7 @@ describe('WebNotifier', () => {
     expect(notification).toHaveBeenCalledWith('Pomodoro Timer', { body: 'Done!' });
   });
 
-  // At error level: the shipped log level is 'error', and a silent non-delivery is what this
-  // adapter used to do.
+  // Error, not warn: 'error' is the shipped log level, so anything quieter is never seen.
   it('delivers nothing when permission is not granted, and says so', async () => {
     const notification = stubNotification('denied');
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});

@@ -24,8 +24,8 @@ export interface ExtensionSession {
 }
 
 /**
- * An empty `profileDir` is a fresh temp profile; reuse one to stage a restart or an update. Headed,
- * as MV3 service workers never register under `--headless=new` here (15s timeout, confirmed).
+ * An empty `profileDir` is a fresh temp profile. Headed, as MV3 service workers never register
+ * under `--headless=new` here (15s timeout, confirmed).
  */
 export async function launchExtension(
   options: { extensionDir?: string; profileDir?: string } = {}

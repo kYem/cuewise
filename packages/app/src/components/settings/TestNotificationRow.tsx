@@ -1,7 +1,7 @@
 import { getNotifier, logger } from '@cuewise/shared';
 import { BellRing } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   REMINDER_TEST_NOTIFICATION_ID,
   reminderNotification,
@@ -14,10 +14,10 @@ const HELP = 'Send one now to check it reaches you';
 const KEYWORDS = 'test notification send test preview check reminder alert';
 const TEST_BODY = 'This is a test reminder. If you can see it, reminders will reach you.';
 
-type Outcome = 'idle' | 'sending' | 'sent' | 'blocked' | 'failed';
+type Result = 'sent' | 'blocked' | 'failed';
 
 // The extension cannot see an OS-level mute of the browser itself, so "sent" still hedges.
-const OUTCOME_NOTES: Partial<Record<Outcome, string>> = {
+const RESULT_NOTES: Record<Result, string> = {
   sent: "Sent. Nothing appeared? Check your system's notification settings — the browser or app itself may be muted.",
   blocked: 'Notifications are blocked for Cuewise — allow them in your browser or system settings.',
   failed:
@@ -32,12 +32,15 @@ interface TestNotificationRowProps {
 }
 
 export const TestNotificationRow: React.FC<TestNotificationRowProps> = ({ enabled, filter }) => {
-  const [outcome, setOutcome] = useState<Outcome>('idle');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+  // Switching off ends the attempt: a result that lands afterwards must not surface on switch-on.
+  const attempt = useRef(0);
 
-  // Switching off ends the story a "Sent." note was telling; switching back on must not resume it.
   useEffect(() => {
     if (!enabled) {
-      setOutcome('idle');
+      attempt.current += 1;
+      setResult(null);
     }
   }, [enabled]);
 
@@ -46,22 +49,34 @@ export const TestNotificationRow: React.FC<TestNotificationRowProps> = ({ enable
   }
 
   const send = async () => {
-    setOutcome('sending');
+    const mine = attempt.current;
+    const settle = (next: Result) => {
+      if (mine === attempt.current) {
+        setResult(next);
+      }
+    };
+    setSending(true);
+    setResult(null);
     try {
       const notifier = getNotifier();
       if ((await notifier.permission()) === 'denied') {
-        setOutcome('blocked');
+        settle('blocked');
         return;
       }
       await notifier.notify(reminderNotification(REMINDER_TEST_NOTIFICATION_ID, TEST_BODY));
-      setOutcome('sent');
+      settle('sent');
     } catch (error) {
       logger.error('Failed to send the test notification', error);
-      setOutcome('failed');
+      settle('failed');
+    } finally {
+      setSending(false);
     }
   };
 
-  const note = enabled ? OUTCOME_NOTES[outcome] : SWITCH_OFF_NOTE;
+  let note: string | null = SWITCH_OFF_NOTE;
+  if (enabled) {
+    note = result === null ? null : RESULT_NOTES[result];
+  }
 
   return (
     <>
@@ -69,11 +84,11 @@ export const TestNotificationRow: React.FC<TestNotificationRowProps> = ({ enable
         <button
           type="button"
           onClick={send}
-          disabled={!enabled || outcome === 'sending'}
+          disabled={!enabled || sending}
           className="flex flex-none items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50"
         >
           <BellRing className="h-3.5 w-3.5" />
-          {outcome === 'sending' ? 'Sending…' : 'Send test'}
+          {sending ? 'Sending…' : 'Send test'}
         </button>
       </SettingRow>
       {note && <p className="-mt-1 mb-2 max-w-[420px] text-xs text-tertiary">{note}</p>}
