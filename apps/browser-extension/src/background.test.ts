@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -122,8 +123,6 @@ describe('background: mapToUi', () => {
   });
 });
 
-// chrome.alarms are cleared whenever the extension updates, so every stored reminder's wake has
-// to be checked again when the worker comes up — otherwise a release silently kills them all.
 describe('background: reminder alarms re-armed on start', () => {
   it('arms a stored reminder whose alarm is missing after an install or update', async () => {
     const pending = reminderFactory.build({ id: 'r1' });
@@ -157,7 +156,50 @@ describe('background: reminder alarms re-armed on start', () => {
 
     fireStartup();
 
+    // The reconcile's own record proves it ran to completion and classified r3 as armed.
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'reconciled',
+        detail: 're-armed 0 of 1 pending',
+      });
+    });
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  // An update applied at launch fires both events.
+  it('runs one reconcile when install and startup fire together', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r4' })]);
+    chromeMock.alarms.getAll.mockResolvedValue([]);
+
+    fireInstalled();
+    fireStartup();
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith(
+        expect.objectContaining({ event: 'reconciled' })
+      );
+    });
     await flushAsync();
+    expect(chromeMock.alarms.getAll).toHaveBeenCalledTimes(1);
+    expect(chromeMock.alarms.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a trace when the reconcile itself fails', async () => {
+    chromeMock.alarms.getAll.mockRejectedValueOnce(new Error('alarms unavailable'));
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    fireStartup();
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'reconciled',
+        detail: 'failed: alarms unavailable',
+      });
+    });
+    expect(errorLog).toHaveBeenCalledWith(
+      'Could not reconcile reminder alarms on start',
+      expect.any(Error)
+    );
     expect(chromeMock.alarms.create).not.toHaveBeenCalled();
   });
 });
@@ -222,6 +264,32 @@ describe('background: notification action buttons', () => {
 
     await vi.waitFor(() => expect(setRemindersMock).toHaveBeenCalled());
     expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'r6',
+        text: reminder.text,
+        detail: 'snooze: not persisted',
+      });
+    });
+  });
+
+  it('records a snooze wake that could not be armed', async () => {
+    const reminder = reminderFactory.build({ id: 'r7', text: 'Stretch' });
+    getRemindersMock.mockResolvedValue([reminder]);
+    chromeMock.alarms.create.mockRejectedValueOnce(new Error('alarm limit'));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    fireButton('reminder-r7', 1);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'r7',
+        text: 'Stretch',
+        detail: 'button 1: alarm limit',
+      });
+    });
   });
 
   // The lookup read and the locked read are separate; a pull can land between them.

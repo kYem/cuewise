@@ -392,7 +392,7 @@ export const COLLECTION_LOCKS = [
   'quotes',
   'collections',
   'reminders',
-  'reminderActivity',
+  'reminderActivity', // device-local, never synced — locked for the two realms, not the pull
 ] as const;
 
 export type CollectionLock = (typeof COLLECTION_LOCKS)[number];

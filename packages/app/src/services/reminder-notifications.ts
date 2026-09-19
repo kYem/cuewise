@@ -1,33 +1,39 @@
 /**
- * Shared reminder fire→deliver logic. Runs wherever a resident host fires a
- * scheduled wake — the extension's service worker and the macOS Rust scheduler —
- * so both platforms deliver reminders identically. Kept free of React/UI imports
- * so it can be pulled into the service-worker bundle via the `@cuewise/app/
- * reminder-notifications` subpath without dragging in the app.
+ * Shared reminder fire→deliver logic for every resident host — the extension's service worker
+ * and the macOS Rust scheduler — plus the wake reconcile, which the macOS page runs on launch.
+ * Kept free of React/UI imports so the service-worker bundle can pull it in via the
+ * `@cuewise/app/reminder-notifications` subpath without dragging in the app.
  */
 
 import {
+  describeThrown,
   getNotifier,
   getScheduler,
   logger,
   nextReminderDueDate,
+  type Reminder,
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
 import { getReminders, updateReminders } from '@cuewise/storage';
 import { activitySubject, recordReminderActivity } from './reminder-activity';
 
+export interface ReminderAlarmReconcile {
+  pending: number;
+  rearmed: number;
+  /** Reminder ids whose wake could not be scheduled. */
+  failed: string[];
+}
+
 /**
- * Arm every reminder that should have a wake but whose alarm id is not in `armed`. Runs
- * wherever a host has just lost its wakes: the extension service worker on install, update
- * and browser start (chrome.alarms are cleared on update), the macOS app on every launch
- * (Rust timers are in-memory). An overdue one arms at its past due date and fires at once —
- * delivered late rather than never.
+ * Fills the wakes a host lost (chrome.alarms on update, Rust timers on launch). An overdue one
+ * arms at its past due date and fires on the next tick — delivered late rather than never.
  */
-export async function armMissingReminderAlarms(armed: ReadonlySet<string>): Promise<void> {
-  const reminders = await getReminders();
-  let pending = 0;
-  let rearmed = 0;
+export async function armMissingReminderAlarms(
+  reminders: Reminder[],
+  armedAlarmIds: ReadonlySet<string>
+): Promise<ReminderAlarmReconcile> {
+  const tally: ReminderAlarmReconcile = { pending: 0, rearmed: 0, failed: [] };
   for (const reminder of reminders) {
     if (reminder.completed || reminder.paused) {
       continue;
@@ -35,22 +41,25 @@ export async function armMissingReminderAlarms(armed: ReadonlySet<string>): Prom
     if (!reminder.recurring && reminder.notified) {
       continue;
     }
-    pending += 1;
+    tally.pending += 1;
     const alarmId = reminderAlarmId(reminder.id);
-    if (armed.has(alarmId)) {
+    if (armedAlarmIds.has(alarmId)) {
       continue;
     }
     try {
       await getScheduler().scheduleAt(alarmId, new Date(reminder.dueDate));
-      rearmed += 1;
+      tally.rearmed += 1;
     } catch (error) {
       logger.error(`Failed to re-arm reminder ${reminder.id}`, error);
+      tally.failed.push(reminder.id);
     }
   }
+  const failed = tally.failed.length > 0 ? `, failed: ${tally.failed.join(' ')}` : '';
   await recordReminderActivity({
     event: 'reconciled',
-    detail: `re-armed ${rearmed} of ${pending} pending`,
+    detail: `re-armed ${tally.rearmed} of ${tally.pending} pending${failed}`,
   });
+  return tally;
 }
 
 /**
@@ -65,9 +74,12 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     return;
   }
 
+  // Named so the failure entry says which step broke: the one thing a missed fire needs recorded.
+  let step = 'lookup';
+  let reminder: Reminder | undefined;
   try {
     const reminders = await getReminders();
-    const reminder = reminders.find((r) => r.id === reminderId);
+    reminder = reminders.find((r) => r.id === reminderId);
 
     if (!reminder) {
       logger.warn(`Reminder ${reminderId} not found`);
@@ -94,6 +106,7 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       return;
     }
 
+    step = 'notify';
     await getNotifier().notify({
       id: reminderAlarmId(reminderId),
       title: '🔔 Reminder',
@@ -104,6 +117,7 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
 
     // One locked section reading fresh, not the list from before the notify: that round trip is
     // long enough for a pull to land, and every decision below has to be made against what it left.
+    step = 'persist';
     let nextDueDate = null as Date | null;
     const { result } = await updateReminders((current) =>
       current.map((r) => {
@@ -132,6 +146,7 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     }
 
     if (nextDueDate !== null) {
+      step = 're-arm';
       await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);
     }
     await recordReminderActivity({
@@ -141,5 +156,10 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     });
   } catch (error) {
     logger.error('Error handling reminder fire', error);
+    await recordReminderActivity({
+      event: 'failed',
+      ...(reminder ? activitySubject(reminder) : { reminderId }),
+      detail: `${step}: ${describeThrown(error)}`,
+    });
   }
 }

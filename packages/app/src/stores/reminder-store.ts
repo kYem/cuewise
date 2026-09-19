@@ -1,4 +1,5 @@
 import {
+  describeThrown,
   generateId,
   getNotifier,
   getScheduler,
@@ -60,6 +61,11 @@ async function clearReminderAlarm(reminderId: string): Promise<void> {
     await recordReminderActivity({ event: 'cancelled', reminderId });
   } catch (error) {
     logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
+    await recordReminderActivity({
+      event: 'failed',
+      reminderId,
+      detail: `cancel: ${describeThrown(error)}`,
+    });
   }
 }
 
@@ -74,6 +80,11 @@ async function armReminderAlarm(reminderId: string, whenMs: number): Promise<voi
   } catch (error) {
     logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
     useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");
+    await recordReminderActivity({
+      event: 'failed',
+      reminderId,
+      detail: `arm: ${describeThrown(error)}`,
+    });
   }
 }
 
@@ -199,30 +210,32 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         } else {
           reminders = advancedReminders;
 
-          // Reschedule alarms for advanced reminders
+          // Only the advanced ones move their wake; touching the rest could re-create one mid-fire.
           for (const reminder of reminders) {
-            if (overdueIds.has(reminder.id)) {
-              await recordReminderActivity({
-                event: 'advanced',
-                ...activitySubject(reminder),
-                detail: `to ${reminder.dueDate}`,
-              });
+            if (!overdueIds.has(reminder.id) || reminder.paused) {
+              continue;
             }
-            if (reminder.recurring && !reminder.paused) {
-              await clearReminderAlarm(reminder.id);
-              await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
-            }
+            await recordReminderActivity({
+              event: 'advanced',
+              ...activitySubject(reminder),
+              detail: `to ${reminder.dueDate}`,
+            });
+            await clearReminderAlarm(reminder.id);
+            await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
           }
         }
       }
 
       commitReminders(set, reminders, { isLoading: false });
 
-      // Rust-backed schedulers lose their armed wakes on restart, so re-arm from storage; the
-      // extension's service worker does this for itself, so its page must not.
+      // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the
+      // extension's service worker reconciles its own, so its page does not.
       const scheduler = getScheduler();
       if (scheduler.deliversInBackground && !scheduler.persistsAcrossRestarts) {
-        await armMissingReminderAlarms(new Set());
+        const reconcile = await armMissingReminderAlarms(reminders, new Set());
+        if (reconcile.failed.length > 0) {
+          useToastStore.getState().warning("Some reminders couldn't be re-armed after launch.");
+        }
       }
     } catch (error) {
       logger.error('Error initializing reminder store', error);

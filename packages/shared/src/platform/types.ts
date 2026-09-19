@@ -19,10 +19,8 @@ export interface Scheduler {
    */
   readonly deliversInBackground: boolean;
   /**
-   * Whether the page can trust armed wakes to still exist after a restart. False when the
-   * page is the only thing that can re-arm them (in-memory native timers); true when the
-   * resident host reconciles them itself (the extension service worker — chrome.alarms are
-   * cleared on every extension update, so "persists" is a promise the host keeps, not Chrome).
+   * Whether armed wakes outlive a restart without the page re-arming them — the platform keeps
+   * them, or the resident host reconciles them itself. False: the page re-arms from storage.
    */
   readonly persistsAcrossRestarts: boolean;
   scheduleAt(id: string, when: Date): Promise<void>;

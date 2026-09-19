@@ -136,6 +136,9 @@ describe('handleReminderFire', () => {
       'Could not persist the fired reminder',
       expect.anything()
     );
+    expect(recordActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'fired', reminderId: 'r5', detail: 'not persisted' })
+    );
   });
 
   it('does not notify a completed reminder', async () => {
@@ -208,24 +211,69 @@ describe('handleReminderFire', () => {
     });
   });
 
-  it('records why a fire was skipped', async () => {
-    getRemindersMock.mockResolvedValue([
-      recurringReminderFactory.build({ id: 'paused', text: 'Walk', paused: true }),
-    ]);
+  it.each([
+    ['paused', recurringReminderFactory.build({ id: 'skip', text: 'Walk', paused: true })],
+    ['completed', reminderFactory.build({ id: 'skip', text: 'Walk', completed: true })],
+  ])('records a %s reminder as skipped', async (reason, reminder) => {
+    getRemindersMock.mockResolvedValue([reminder]);
 
-    await handleReminderFire('reminder-paused');
+    await handleReminderFire('reminder-skip');
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'skipped',
+      reminderId: 'skip',
+      text: 'Walk',
+      detail: reason,
+    });
+  });
+
+  it('records a missing reminder as skipped', async () => {
+    getRemindersMock.mockResolvedValue([]);
+
     await handleReminderFire('reminder-missing');
 
     expect(recordActivity).toHaveBeenCalledWith({
       event: 'skipped',
-      reminderId: 'paused',
-      text: 'Walk',
-      detail: 'paused',
-    });
-    expect(recordActivity).toHaveBeenCalledWith({
-      event: 'skipped',
       reminderId: 'missing',
       detail: 'not found',
+    });
+  });
+
+  // The trace exists for exactly this: a fire that broke must say where, since the alarm is spent.
+  it('records a notification that could not be shown as a failed fire', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r9', text: 'Stretch' })]);
+    notify.mockRejectedValueOnce(new Error('images.download failed'));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await handleReminderFire('reminder-r9');
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'failed',
+      reminderId: 'r9',
+      text: 'Stretch',
+      detail: 'notify: images.download failed',
+    });
+  });
+
+  it('records a next occurrence that could not be armed as a failed fire', async () => {
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({
+        id: 'r10',
+        text: 'Water',
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      }),
+    ]);
+    scheduleAt.mockRejectedValueOnce(new Error('alarm limit'));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await handleReminderFire('reminder-r10');
+
+    expect(notify).toHaveBeenCalled();
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'failed',
+      reminderId: 'r10',
+      text: 'Water',
+      detail: 're-arm: alarm limit',
     });
   });
 });
@@ -235,91 +283,75 @@ describe('armMissingReminderAlarms', () => {
 
   it('arms a pending one-off at its due date', async () => {
     const pending = reminderFactory.build({ id: 'r1' });
-    getRemindersMock.mockResolvedValue([pending]);
 
-    await armMissingReminderAlarms(nothingArmed);
+    await armMissingReminderAlarms([pending], nothingArmed);
 
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r1', new Date(pending.dueDate));
   });
 
   it('arms an active recurring reminder', async () => {
-    getRemindersMock.mockResolvedValue([recurringReminderFactory.build({ id: 'r2' })]);
-
-    await armMissingReminderAlarms(nothingArmed);
+    await armMissingReminderAlarms([recurringReminderFactory.build({ id: 'r2' })], nothingArmed);
 
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r2', expect.any(Date));
   });
 
-  // A wake lost while the reminder was due arms in the past and fires at once: late, not never.
   it('arms an overdue undelivered one-off at its past due date', async () => {
     const overdue = reminderFactory.build({
       id: 'r3',
       dueDate: new Date(Date.now() - 60_000).toISOString(),
     });
-    getRemindersMock.mockResolvedValue([overdue]);
 
-    await armMissingReminderAlarms(nothingArmed);
+    await armMissingReminderAlarms([overdue], nothingArmed);
 
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r3', new Date(overdue.dueDate));
   });
 
   it('leaves an already-armed reminder alone', async () => {
-    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r4' })]);
-
-    await armMissingReminderAlarms(new Set(['reminder-r4']));
+    await armMissingReminderAlarms([reminderFactory.build({ id: 'r4' })], new Set(['reminder-r4']));
 
     expect(scheduleAt).not.toHaveBeenCalled();
   });
 
-  it('does not arm a completed reminder', async () => {
-    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r5', completed: true })]);
-
-    await armMissingReminderAlarms(nothingArmed);
-
-    expect(scheduleAt).not.toHaveBeenCalled();
-  });
-
-  it('does not arm a paused recurring reminder', async () => {
-    getRemindersMock.mockResolvedValue([
-      recurringReminderFactory.build({ id: 'r6', paused: true }),
-    ]);
-
-    await armMissingReminderAlarms(nothingArmed);
+  it.each([
+    ['completed', reminderFactory.build({ id: 'r5', completed: true })],
+    ['paused recurring', recurringReminderFactory.build({ id: 'r6', paused: true })],
+    ['already delivered one-off', reminderFactory.build({ id: 'r7', notified: true })],
+  ])('does not arm a %s reminder', async (_label, reminder) => {
+    const tally = await armMissingReminderAlarms([reminder], nothingArmed);
 
     expect(scheduleAt).not.toHaveBeenCalled();
+    expect(tally.pending).toBe(0);
   });
 
-  it('does not arm a one-off that was already delivered', async () => {
-    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r7', notified: true })]);
-
-    await armMissingReminderAlarms(nothingArmed);
-
-    expect(scheduleAt).not.toHaveBeenCalled();
-  });
-
-  it('arms the rest when one wake fails to schedule', async () => {
-    getRemindersMock.mockResolvedValue([
-      reminderFactory.build({ id: 'r8' }),
-      reminderFactory.build({ id: 'r9' }),
-    ]);
+  it('arms the rest when one wake fails to schedule, and names the failure', async () => {
     scheduleAt.mockRejectedValueOnce(new Error('alarm limit'));
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await armMissingReminderAlarms(nothingArmed);
+    const tally = await armMissingReminderAlarms(
+      [reminderFactory.build({ id: 'r8' }), reminderFactory.build({ id: 'r9' })],
+      nothingArmed
+    );
 
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r9', expect.any(Date));
     expect(errorLog).toHaveBeenCalledWith('Failed to re-arm reminder r8', expect.any(Error));
+    expect(tally).toEqual({ pending: 2, rearmed: 1, failed: ['r8'] });
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'reconciled',
+      detail: 're-armed 1 of 2 pending, failed: r8',
+    });
   });
 
   it('records one reconciled entry with what it re-armed', async () => {
-    getRemindersMock.mockResolvedValue([
-      reminderFactory.build({ id: 'r10' }),
-      reminderFactory.build({ id: 'r11' }),
-      reminderFactory.build({ id: 'r12', completed: true }),
-    ]);
+    const tally = await armMissingReminderAlarms(
+      [
+        reminderFactory.build({ id: 'r10' }),
+        reminderFactory.build({ id: 'r11' }),
+        reminderFactory.build({ id: 'r12', completed: true }),
+      ],
+      new Set(['reminder-r11'])
+    );
 
-    await armMissingReminderAlarms(new Set(['reminder-r11']));
-
+    expect(tally).toEqual({ pending: 2, rearmed: 1, failed: [] });
     expect(recordActivity).toHaveBeenCalledTimes(1);
     expect(recordActivity).toHaveBeenCalledWith({
       event: 'reconciled',

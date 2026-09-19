@@ -1057,7 +1057,6 @@ describe('reminder activity log', () => {
     });
   });
 
-  // The one silent path: an occurrence that was never delivered is skipped here without a trace.
   it('records an overdue recurring reminder the load advanced past', async () => {
     const overdue = recurringReminderFactory.build({
       id: 'overdue',
@@ -1091,5 +1090,77 @@ describe('reminder activity log', () => {
       event: 'reconciled',
       detail: 're-armed 1 of 1 pending',
     });
+  });
+
+  it('records a failed arm as failed, never as armed', async () => {
+    fakeScheduler.scheduleAt.mockRejectedValueOnce(new Error('MAX_SUSTAINED_ALARMS'));
+
+    await useReminderStore.getState().addReminder('Stretch', new Date(Date.now() + 60_000));
+
+    expect(recordActivity).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'armed' }));
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'failed',
+      reminderId: expect.any(String),
+      detail: 'arm: MAX_SUSTAINED_ALARMS',
+    });
+  });
+});
+
+describe('re-arming on load', () => {
+  const overdue = () =>
+    recurringReminderFactory.build({
+      id: 'overdue',
+      dueDate: new Date(Date.now() - 60 * 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+  const upcoming = () =>
+    recurringReminderFactory.build({
+      id: 'upcoming',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      recurring: { frequency: 'daily' },
+    });
+
+  // Re-creating a wake the host still holds could fire it twice; only a moved wake needs it.
+  it('moves the wake of an advanced reminder and leaves the other recurring ones alone', async () => {
+    getRemindersMock.mockResolvedValue([overdue(), upcoming()]);
+
+    await useReminderStore.getState().initialize();
+
+    expect(fakeScheduler.cancel).toHaveBeenCalledWith('reminder-overdue');
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-overdue', expect.any(Date));
+    expect(fakeScheduler.cancel).not.toHaveBeenCalledWith('reminder-upcoming');
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalledWith(
+      'reminder-upcoming',
+      expect.any(Date)
+    );
+  });
+
+  // The extension's own worker reconciles; the page cannot see what is armed, so it must not.
+  it('does not reconcile where the host keeps its own wakes', async () => {
+    configurePlatform({
+      scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: true },
+    });
+    getRemindersMock.mockResolvedValue([upcoming()]);
+
+    await useReminderStore.getState().initialize();
+
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+    expect(recordActivity).not.toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'reconciled' })
+    );
+  });
+
+  it('warns when a wake could not be re-armed at launch', async () => {
+    configurePlatform({
+      scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: false },
+    });
+    getRemindersMock.mockResolvedValue([upcoming()]);
+    fakeScheduler.scheduleAt.mockRejectedValueOnce(new Error('timer refused'));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await useReminderStore.getState().initialize();
+
+    expect(toastWarning).toHaveBeenCalledWith("Some reminders couldn't be re-armed after launch.");
+    expect(toastError).not.toHaveBeenCalled();
   });
 });

@@ -7,8 +7,10 @@ import type { SyncUiStatus } from '@cuewise/app';
 import { activitySubject, recordReminderActivity } from '@cuewise/app/reminder-activity';
 import { armMissingReminderAlarms, handleReminderFire } from '@cuewise/app/reminder-notifications';
 import {
+  describeThrown,
   getStorage,
   logger,
+  type Reminder,
   reminderAlarmId,
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
@@ -28,19 +30,32 @@ const { scheduler, notifier } = configureChromePlatform();
 // platforms behave identically.
 scheduler.onFire(handleReminderFire);
 
-// chrome.alarms are cleared on every extension update and not guaranteed across a browser
-// restart, so re-check the stored reminders' wakes at the two moments Chrome drops them.
-// Only the missing ones: re-creating an alarm Chrome kept would fire it a second time.
+// Chrome clears alarms on every extension update and does not guarantee them across a browser
+// restart; fill in only the missing ones, so a wake whose fire is already in flight is left alone.
 async function reconcileReminderAlarms(): Promise<void> {
   try {
     const armed = new Set((await chrome.alarms.getAll()).map((alarm) => alarm.name));
-    await armMissingReminderAlarms(armed);
+    await armMissingReminderAlarms(await getReminders(), armed);
   } catch (error) {
     logger.error('Could not reconcile reminder alarms on start', error);
+    await recordReminderActivity({
+      event: 'reconciled',
+      detail: `failed: ${describeThrown(error)}`,
+    });
   }
 }
-chrome.runtime.onInstalled.addListener(reconcileReminderAlarms);
-chrome.runtime.onStartup.addListener(reconcileReminderAlarms);
+// An update applied at launch fires both events; two reconciles would each re-arm the same wake.
+let reconciling: Promise<void> | null = null;
+function reconcileOnce(): Promise<void> {
+  if (reconciling === null) {
+    reconciling = reconcileReminderAlarms().finally(() => {
+      reconciling = null;
+    });
+  }
+  return reconciling;
+}
+chrome.runtime.onInstalled.addListener(reconcileOnce);
+chrome.runtime.onStartup.addListener(reconcileOnce);
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
 // extension version rides the URL — no user data.
@@ -192,13 +207,14 @@ notifier.onClick(async (notificationId) => {
 
 // Notification action buttons (Done / Snooze 5 min).
 notifier.onAction(async (notificationId, buttonIndex) => {
+  const reminderId = reminderIdFromAlarm(notificationId);
+  if (reminderId === null) {
+    return;
+  }
+  let reminder: Reminder | undefined;
   try {
-    const reminderId = reminderIdFromAlarm(notificationId);
-    if (reminderId === null) {
-      return;
-    }
     const reminders = await getReminders();
-    const reminder = reminders.find((r) => r.id === reminderId);
+    reminder = reminders.find((r) => r.id === reminderId);
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
     if (action.type === 'complete') {
@@ -209,6 +225,11 @@ notifier.onAction(async (notificationId, buttonIndex) => {
       // silently failed to persist would otherwise leave no trace at all.
       if (result?.success === false) {
         logger.error('Could not persist the completed reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'done: not persisted',
+        });
       } else if (reminder) {
         await recordReminderActivity({ event: 'done', ...activitySubject(reminder) });
       }
@@ -224,6 +245,11 @@ notifier.onAction(async (notificationId, buttonIndex) => {
       // against its still-overdue stored copy, which notifies all over again.
       if (result?.success === false) {
         logger.error('Could not persist the snoozed reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'snooze: not persisted',
+        });
       } else {
         await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
         if (reminder) {
@@ -239,5 +265,14 @@ notifier.onAction(async (notificationId, buttonIndex) => {
     await notifier.clear(notificationId);
   } catch (error) {
     logger.error('Error handling reminder notification button click', error);
+    await recordReminderActivity({
+      event: 'failed',
+      ...subjectOf(reminder, reminderId),
+      detail: `button ${buttonIndex}: ${describeThrown(error)}`,
+    });
   }
 });
+
+function subjectOf(reminder: Reminder | undefined, reminderId: string) {
+  return reminder ? activitySubject(reminder) : { reminderId };
+}

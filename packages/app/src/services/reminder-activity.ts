@@ -1,9 +1,5 @@
-/**
- * A short, device-local trace of what the reminder pipeline did — armed, fired, snoozed,
- * skipped — so a missed fire can be diagnosed after the fact. The logger cannot do this: it
- * writes to the console, and the service worker's console dies with the idle worker.
- * Free of React/UI imports so the service-worker bundle can pull it in.
- */
+// Device-local trace of the reminder pipeline so a missed fire can be diagnosed after the fact.
+// The logger cannot: it is console-only, and the worker's console dies with the idle worker.
 
 import { getStorage, logger, type Reminder } from '@cuewise/shared';
 import { withCollectionLock } from '@cuewise/storage';
@@ -21,7 +17,8 @@ export type ReminderActivityEvent =
   | 'done'
   | 'snoozed'
   | 'reconciled'
-  | 'advanced';
+  | 'advanced'
+  | 'failed';
 
 export interface ReminderActivityEntry {
   at: string;
@@ -34,7 +31,7 @@ export interface ReminderActivityEntry {
 
 export type ReminderActivity = Omit<ReminderActivityEntry, 'at' | 'realm'>;
 
-export function activitySubject(reminder: Reminder): Pick<ReminderActivity, 'reminderId' | 'text'> {
+export function activitySubject(reminder: Reminder): { reminderId: string; text: string } {
   return { reminderId: reminder.id, text: reminder.text.slice(0, TEXT_LIMIT) };
 }
 
@@ -52,8 +49,18 @@ export async function recordReminderActivity(activity: ReminderActivity): Promis
   try {
     await withCollectionLock('reminderActivity', async () => {
       const store = getStorage();
-      const current =
-        (await store.get<ReminderActivityEntry[]>(REMINDER_ACTIVITY_KEY, 'local')) ?? [];
+      // A failed read must not become a one-entry log: skip the write and keep what is there.
+      // A stored value that is unreadable or not a list is garbage worth replacing.
+      const stored = await store.getMany([REMINDER_ACTIVITY_KEY], 'local');
+      if (stored === null) {
+        logger.error('Could not read the reminder activity log; entry dropped', undefined, {
+          entry,
+        });
+        return;
+      }
+      const slot = stored[REMINDER_ACTIVITY_KEY];
+      const current: ReminderActivityEntry[] =
+        slot?.readable && Array.isArray(slot.value) ? slot.value : [];
       const next = [...current, entry].slice(-REMINDER_ACTIVITY_LIMIT);
       const result = await store.set(REMINDER_ACTIVITY_KEY, next, 'local');
       if (!result.success) {
@@ -61,6 +68,6 @@ export async function recordReminderActivity(activity: ReminderActivity): Promis
       }
     });
   } catch (error) {
-    logger.warn('Could not record reminder activity', { error });
+    logger.error('Could not record reminder activity', error, { entry });
   }
 }
