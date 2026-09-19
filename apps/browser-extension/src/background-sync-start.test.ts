@@ -37,6 +37,8 @@ const chromeMock = {
     getManifest: vi.fn().mockReturnValue({ version: '9.9.9' }),
     setUninstallURL: vi.fn().mockResolvedValue(undefined),
     onMessage: { addListener: vi.fn() },
+    onInstalled: { addListener: vi.fn() },
+    onStartup: { addListener: vi.fn() },
   },
 };
 
