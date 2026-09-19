@@ -27,20 +27,30 @@ import { QUARANTINE_KEY, STATUS_KEY } from './sync/sync-storage-keys';
 const { scheduler, notifier } = configureChromePlatform();
 
 // The lookup + deliver + recurring re-arm logic is shared with the macOS app, so both
-// platforms behave identically.
-scheduler.onFire(handleReminderFire);
+// platforms behave identically. Chrome drops a one-shot alarm before dispatching it, so a fire
+// in flight is absent from chrome.alarms.getAll(); the reconcile below must see it as armed.
+const firing = new Set<string>();
+scheduler.onFire(async (id) => {
+  firing.add(id);
+  try {
+    await handleReminderFire(id);
+  } finally {
+    firing.delete(id);
+  }
+});
 
 // Chrome clears alarms on every extension update and does not guarantee them across a browser
-// restart; fill in only the missing ones, so a wake whose fire is already in flight is left alone.
+// restart. Only the missing ones: re-creating a listed wake that fires meanwhile fires it twice.
 async function reconcileReminderAlarms(): Promise<void> {
   try {
-    const armed = new Set((await chrome.alarms.getAll()).map((alarm) => alarm.name));
+    const alarms = await chrome.alarms.getAll();
+    const armed = new Set([...alarms.map((alarm) => alarm.name), ...firing]);
     await armMissingReminderAlarms(await getReminders(), armed);
   } catch (error) {
     logger.error('Could not reconcile reminder alarms on start', error);
     await recordReminderActivity({
-      event: 'reconciled',
-      detail: `failed: ${describeThrown(error)}`,
+      event: 'failed',
+      detail: `reconcile: ${describeThrown(error)}`,
     });
   }
 }

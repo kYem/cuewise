@@ -1,8 +1,6 @@
 /**
- * Shared reminder fire→deliver logic for every resident host — the extension's service worker
- * and the macOS Rust scheduler — plus the wake reconcile, which the macOS page runs on launch.
- * Kept free of React/UI imports so the service-worker bundle can pull it in via the
- * `@cuewise/app/reminder-notifications` subpath without dragging in the app.
+ * Fire→deliver logic and the start-up wake reconcile, shared by every resident host (extension
+ * worker, macOS). No React/UI imports: the worker bundle pulls this subpath in on its own.
  */
 
 import {
@@ -138,9 +136,9 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     if (result?.success === false) {
       logger.error('Could not persist the fired reminder', result.error);
       await recordReminderActivity({
-        event: 'fired',
+        event: 'failed',
         ...activitySubject(reminder),
-        detail: 'not persisted',
+        detail: 'persist: not persisted',
       });
       return;
     }

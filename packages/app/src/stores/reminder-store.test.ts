@@ -56,6 +56,13 @@ const fakeScheduler = {
   cancel: vi.fn(() => Promise.resolve()),
 };
 
+/** A resident host that delivers in the background; `persists` is what its wakes survive. */
+function useHostScheduler(persists: boolean): void {
+  configurePlatform({
+    scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: persists },
+  });
+}
+
 /**
  * Seeds the store and storage with deliberately different lists — a pull that landed after the
  * store last read. Every writer must persist against `stored`, not the state it can see.
@@ -580,6 +587,11 @@ describe('alarm scheduling failures', () => {
     expect(useReminderStore.getState().reminders).toHaveLength(0);
     expect(toastError).not.toHaveBeenCalled();
     expect(toastWarning).not.toHaveBeenCalled();
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'failed',
+      reminderId: 'clear-fail',
+      detail: 'cancel: alarm gone',
+    });
   });
 });
 
@@ -1078,9 +1090,7 @@ describe('reminder activity log', () => {
   });
 
   it('records the startup reconcile where the host has to re-arm from storage', async () => {
-    configurePlatform({
-      scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: false },
-    });
+    useHostScheduler(false);
     getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1' })]);
 
     await useReminderStore.getState().initialize();
@@ -1120,7 +1130,7 @@ describe('re-arming on load', () => {
       recurring: { frequency: 'daily' },
     });
 
-  // Re-creating a wake the host still holds could fire it twice; only a moved wake needs it.
+  // Re-creating a wake that has just fired re-fires it; only a moved wake needs re-arming.
   it('moves the wake of an advanced reminder and leaves the other recurring ones alone', async () => {
     getRemindersMock.mockResolvedValue([overdue(), upcoming()]);
 
@@ -1135,11 +1145,38 @@ describe('re-arming on load', () => {
     );
   });
 
-  // The extension's own worker reconciles; the page cannot see what is armed, so it must not.
-  it('does not reconcile where the host keeps its own wakes', async () => {
-    configurePlatform({
-      scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: true },
+  // Which reminders moved is decided inside the lock: a pull may have advanced one meanwhile.
+  it('does not log or re-arm a reminder the locked read shows already advanced', async () => {
+    const stale = overdue();
+    const alreadyAdvanced = { ...stale, dueDate: new Date(Date.now() + 30 * 60_000).toISOString() };
+    getRemindersMock.mockResolvedValueOnce([stale]).mockResolvedValue([alreadyAdvanced]);
+
+    await useReminderStore.getState().initialize();
+
+    expect(recordActivity).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'advanced' }));
+    expect(fakeScheduler.cancel).not.toHaveBeenCalled();
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  it('records an advance that did not persist', async () => {
+    getRemindersMock.mockResolvedValue([overdue()]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
     });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await useReminderStore.getState().initialize();
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'failed',
+      detail: 'advance: not persisted',
+    });
+    expect(fakeScheduler.scheduleAt).not.toHaveBeenCalled();
+  });
+
+  it('does not reconcile where the host keeps its own wakes', async () => {
+    useHostScheduler(true);
     getRemindersMock.mockResolvedValue([upcoming()]);
 
     await useReminderStore.getState().initialize();
@@ -1151,9 +1188,7 @@ describe('re-arming on load', () => {
   });
 
   it('warns when a wake could not be re-armed at launch', async () => {
-    configurePlatform({
-      scheduler: { ...fakeScheduler, deliversInBackground: true, persistsAcrossRestarts: false },
-    });
+    useHostScheduler(false);
     getRemindersMock.mockResolvedValue([upcoming()]);
     fakeScheduler.scheduleAt.mockRejectedValueOnce(new Error('timer refused'));
     vi.spyOn(logger, 'error').mockImplementation(() => {});

@@ -137,7 +137,11 @@ describe('handleReminderFire', () => {
       expect.anything()
     );
     expect(recordActivity).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'fired', reminderId: 'r5', detail: 'not persisted' })
+      expect.objectContaining({
+        event: 'failed',
+        reminderId: 'r5',
+        detail: 'persist: not persisted',
+      })
     );
   });
 
@@ -239,41 +243,44 @@ describe('handleReminderFire', () => {
     });
   });
 
-  // The trace exists for exactly this: a fire that broke must say where, since the alarm is spent.
-  it('records a notification that could not be shown as a failed fire', async () => {
-    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r9', text: 'Stretch' })]);
-    notify.mockRejectedValueOnce(new Error('images.download failed'));
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
-
-    await handleReminderFire('reminder-r9');
-
-    expect(recordActivity).toHaveBeenCalledWith({
-      event: 'failed',
-      reminderId: 'r9',
-      text: 'Stretch',
-      detail: 'notify: images.download failed',
-    });
-  });
-
-  it('records a next occurrence that could not be armed as a failed fire', async () => {
-    getRemindersMock.mockResolvedValue([
+  describe('a fire that breaks records the step that failed', () => {
+    const recurring = () =>
       recurringReminderFactory.build({
-        id: 'r10',
+        id: 'r9',
         text: 'Water',
         recurring: { frequency: 'interval', intervalMinutes: 30 },
-      }),
-    ]);
-    scheduleAt.mockRejectedValueOnce(new Error('alarm limit'));
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
+      });
 
-    await handleReminderFire('reminder-r10');
+    it('lookup: with only the id, since the reminder was never read', async () => {
+      getRemindersMock.mockRejectedValueOnce(new Error('storage gone'));
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    expect(notify).toHaveBeenCalled();
-    expect(recordActivity).toHaveBeenCalledWith({
-      event: 'failed',
-      reminderId: 'r10',
-      text: 'Water',
-      detail: 're-arm: alarm limit',
+      await handleReminderFire('reminder-r9');
+
+      expect(recordActivity).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'r9',
+        detail: 'lookup: storage gone',
+      });
+    });
+
+    it.each([
+      ['notify', () => notify.mockRejectedValueOnce(new Error('step broke'))],
+      ['persist', () => setRemindersMock.mockRejectedValueOnce(new Error('step broke'))],
+      ['re-arm', () => scheduleAt.mockRejectedValueOnce(new Error('step broke'))],
+    ])('%s', async (step, breakStep) => {
+      getRemindersMock.mockResolvedValue([recurring()]);
+      breakStep();
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      await handleReminderFire('reminder-r9');
+
+      expect(recordActivity).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'r9',
+        text: 'Water',
+        detail: `${step}: step broke`,
+      });
     });
   });
 });
@@ -338,6 +345,29 @@ describe('armMissingReminderAlarms', () => {
     expect(recordActivity).toHaveBeenCalledWith({
       event: 'reconciled',
       detail: 're-armed 1 of 2 pending, failed: r8',
+    });
+  });
+
+  it('keeps going and names every failure when several wakes fail', async () => {
+    scheduleAt
+      .mockRejectedValueOnce(new Error('alarm limit'))
+      .mockRejectedValueOnce(new Error('alarm limit'))
+      .mockRejectedValueOnce(new Error('alarm limit'));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const tally = await armMissingReminderAlarms(
+      [
+        reminderFactory.build({ id: 'r8' }),
+        reminderFactory.build({ id: 'r9' }),
+        reminderFactory.build({ id: 'r10' }),
+      ],
+      nothingArmed
+    );
+
+    expect(tally.failed).toEqual(['r8', 'r9', 'r10']);
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'reconciled',
+      detail: 're-armed 0 of 3 pending, failed: r8 r9 r10',
     });
   });
 

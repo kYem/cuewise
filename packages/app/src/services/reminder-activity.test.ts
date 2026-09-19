@@ -1,4 +1,4 @@
-import { configurePlatform, logger } from '@cuewise/shared';
+import { configurePlatform, getStorage, type KeyValueStore, logger } from '@cuewise/shared';
 import { ChromeKeyValueStore } from '@cuewise/storage';
 import { reminderFactory } from '@cuewise/test-utils/factories';
 import { installLockManagerMock } from '@cuewise/test-utils/mocks';
@@ -89,13 +89,19 @@ describe('recordReminderActivity', () => {
 // read-modify-write drops entries.
 describe('recordReminderActivity under the collection lock', () => {
   let restore: () => void;
+  let previousStorage: KeyValueStore;
 
   beforeEach(() => {
     restore = installLockManagerMock();
+    previousStorage = getStorage();
     configurePlatform({ storage: new ChromeKeyValueStore() });
   });
 
-  afterEach(() => restore());
+  // The locking store binds navigator.locks at call time; left registered, it breaks later tests.
+  afterEach(() => {
+    restore();
+    configurePlatform({ storage: previousStorage });
+  });
 
   it('keeps every concurrent entry, in order', async () => {
     await Promise.all([

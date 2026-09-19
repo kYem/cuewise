@@ -185,11 +185,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         !reminder.paused &&
         !reminder.completed &&
         new Date(reminder.dueDate) < now;
+      // Filled inside the lock: the pre-lock snapshot cannot say what a pull changed meanwhile.
+      const advancedIds = new Set<string>();
       const advance = (list: Reminder[]): Reminder[] =>
         list.map((reminder) => {
           if (!isOverdueRecurring(reminder)) {
             return reminder;
           }
+          advancedIds.add(reminder.id);
           const nextDueDate = nextReminderDueDate(reminder, now);
           const advanced: Reminder = {
             ...reminder,
@@ -201,18 +204,17 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           return advanced;
         });
 
-      // Re-runs against a fresh read inside the lock, so a pull landing during the read survives.
-      const overdueIds = new Set(reminders.filter(isOverdueRecurring).map((r) => r.id));
-      if (overdueIds.size > 0) {
+      if (reminders.some(isOverdueRecurring)) {
         const { result, reminders: advancedReminders } = await updateReminders(advance);
         if (result?.success === false) {
           logger.error('Failed to persist auto-advanced reminders on init', result.error);
+          await recordReminderActivity({ event: 'failed', detail: 'advance: not persisted' });
         } else {
           reminders = advancedReminders;
 
           // Only the advanced ones move their wake; touching the rest could re-create one mid-fire.
           for (const reminder of reminders) {
-            if (!overdueIds.has(reminder.id) || reminder.paused) {
+            if (!advancedIds.has(reminder.id)) {
               continue;
             }
             await recordReminderActivity({

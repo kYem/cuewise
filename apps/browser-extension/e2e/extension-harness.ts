@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const EXTENSION_ROOT = path.resolve(__dirname, '..');
 export const EXTENSION_DIST = path.join(EXTENSION_ROOT, 'dist');
 
-/** Builds into dist. `env` reaches the vite build, e.g. VITE_PLAYER_ORIGIN. */
+/** `env` reaches the vite build, e.g. VITE_PLAYER_ORIGIN. */
 export function buildExtension(env: NodeJS.ProcessEnv = {}): void {
   execFileSync('pnpm', ['--filter', '@cuewise/browser-extension', 'build'], {
     cwd: EXTENSION_ROOT,

@@ -95,6 +95,7 @@ afterAll(() => {
 });
 
 beforeEach(async () => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   // The shared vitest setup resets global.chrome each test — re-assert our mock.
   global.chrome = chromeMock as unknown as typeof chrome;
@@ -192,14 +193,45 @@ describe('background: reminder alarms re-armed on start', () => {
 
     await vi.waitFor(() => {
       expect(recordActivityMock).toHaveBeenCalledWith({
-        event: 'reconciled',
-        detail: 'failed: alarms unavailable',
+        event: 'failed',
+        detail: 'reconcile: alarms unavailable',
       });
     });
     expect(errorLog).toHaveBeenCalledWith(
       'Could not reconcile reminder alarms on start',
       expect.any(Error)
     );
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  // Chrome drops a one-shot alarm before dispatching it, so getAll() no longer lists a fire in
+  // flight; a startup reconcile that re-armed it would deliver the reminder twice.
+  it('does not re-arm a reminder whose fire is still in flight', async () => {
+    const overdue = reminderFactory.build({
+      id: 'r5',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+    });
+    getRemindersMock.mockResolvedValue([overdue]);
+    chromeMock.alarms.getAll.mockResolvedValue([]);
+    let finishNotify = (): void => {};
+    chromeMock.notifications.create.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        finishNotify = () => resolve('id');
+      })
+    );
+
+    fireAlarm({ name: 'reminder-r5' });
+    await vi.waitFor(() => expect(chromeMock.notifications.create).toHaveBeenCalled());
+    fireStartup();
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'reconciled',
+        detail: 're-armed 0 of 1 pending',
+      });
+    });
+    finishNotify();
+
+    await vi.waitFor(() => expect(setRemindersMock).toHaveBeenCalled());
     expect(chromeMock.alarms.create).not.toHaveBeenCalled();
   });
 });
@@ -262,14 +294,48 @@ describe('background: notification action buttons', () => {
 
     fireButton('reminder-r6', 1);
 
-    await vi.waitFor(() => expect(setRemindersMock).toHaveBeenCalled());
-    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
     await vi.waitFor(() => {
       expect(recordActivityMock).toHaveBeenCalledWith({
         event: 'failed',
         reminderId: 'r6',
         text: reminder.text,
         detail: 'snooze: not persisted',
+      });
+    });
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  it('records a Done that did not persist', async () => {
+    const reminder = reminderFactory.build({ id: 'r6', text: 'Stretch' });
+    getRemindersMock.mockResolvedValue([reminder]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    fireButton('reminder-r6', 0);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'r6',
+        text: 'Stretch',
+        detail: 'done: not persisted',
+      });
+    });
+  });
+
+  it('records a button whose lookup failed, with only the id', async () => {
+    getRemindersMock.mockRejectedValueOnce(new Error('storage gone'));
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    fireButton('reminder-r8', 0);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'r8',
+        detail: 'button 0: storage gone',
       });
     });
   });
