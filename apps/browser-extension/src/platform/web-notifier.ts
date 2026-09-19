@@ -1,4 +1,9 @@
-import type { NotificationPermission, NotifierHost, NotifyOptions } from '@cuewise/shared';
+import {
+  logger,
+  type NotifierHost,
+  type NotifierPermission,
+  type NotifyOptions,
+} from '@cuewise/shared';
 
 /**
  * Notifier for contexts without chrome.notifications (dev/web): delivers via the
@@ -7,14 +12,16 @@ import type { NotificationPermission, NotifierHost, NotifyOptions } from '@cuewi
  */
 export class WebNotifier implements NotifierHost {
   async notify(opts: NotifyOptions): Promise<void> {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification(opts.title, { body: opts.body });
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      logger.warn('Web notification not delivered: permission not granted', { id: opts.id });
+      return;
     }
+    new Notification(opts.title, { body: opts.body });
   }
 
   async clear(_id: string): Promise<void> {}
 
-  async permission(): Promise<NotificationPermission> {
+  async permission(): Promise<NotifierPermission> {
     if (typeof Notification === 'undefined' || Notification.permission === 'default') {
       return 'unknown';
     }

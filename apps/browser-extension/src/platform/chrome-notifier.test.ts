@@ -84,10 +84,9 @@ describe('ChromeNotifier', () => {
     expect(handler).toHaveBeenCalledWith('reminder-9', 1);
   });
 
-  it("reports Chrome's permission level", async () => {
-    notifications.getPermissionLevel.mockResolvedValueOnce('denied');
+  it.each(['granted', 'denied'] as const)("reports Chrome's %s permission level", async (level) => {
+    notifications.getPermissionLevel.mockResolvedValueOnce(level);
 
-    expect(await new ChromeNotifier().permission()).toBe('denied');
-    expect(await new ChromeNotifier().permission()).toBe('granted');
+    expect(await new ChromeNotifier().permission()).toBe(level);
   });
 });

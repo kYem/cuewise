@@ -36,14 +36,19 @@ describe('WebNotifier', () => {
     expect(() => notifier.onAction(() => {})()).not.toThrow();
   });
 
-  it('maps the web permission, with an unasked user reported as unknown', async () => {
-    stubNotification('denied');
-    expect(await new WebNotifier().permission()).toBe('denied');
+  it.each([
+    ['granted', 'granted'],
+    ['denied', 'denied'],
+    ['default', 'unknown'],
+  ] as const)('maps the web permission %s to %s', async (web, expected) => {
+    stubNotification(web);
 
-    stubNotification('default');
-    expect(await new WebNotifier().permission()).toBe('unknown');
+    expect(await new WebNotifier().permission()).toBe(expected);
+  });
 
+  it('reports unknown where there is no Notification API', async () => {
     vi.stubGlobal('Notification', undefined);
+
     expect(await new WebNotifier().permission()).toBe('unknown');
   });
 });

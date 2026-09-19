@@ -15,10 +15,10 @@ import {
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
-import { getReminders, readSettings, updateReminders } from '@cuewise/storage';
+import { getReminders, getSettings, updateReminders } from '@cuewise/storage';
 
-// A reminder-prefixed id that matches no stored reminder: the host's click and button handlers
-// then resolve it to dismiss-and-clear, so Done / Snooze on the test simply close it.
+// A reminder-prefixed id with no stored reminder: the extension's button handler resolves it to
+// dismiss, so Done / Snooze just close the test; a click opens Cuewise like any reminder.
 export const REMINDER_TEST_NOTIFICATION_ID = reminderAlarmId('test');
 
 /** The one shape every reminder notification takes, so a test notification is a real preview. */
@@ -33,16 +33,16 @@ export function reminderNotification(id: string, body: string): NotifyOptions {
 }
 
 /**
- * The Settings → Notifications switch, read from storage because the service worker has no
- * settings store. A failed read is not a "no": the default is on, and a storage hiccup must
- * not silence reminders.
+ * Read from storage, not the settings store: the service worker has none. getSettings defaults
+ * field-wise, so an unreadable switch is on and a readable "off" is honoured; a rejection is on too.
  */
 export async function notificationsEnabled(): Promise<boolean> {
-  const read = await readSettings();
-  if (!read.ok) {
+  try {
+    return (await getSettings()).enableNotifications;
+  } catch (error) {
+    logger.error('Could not read the Notifications switch; notifying anyway', error);
     return true;
   }
-  return read.settings.enableNotifications;
 }
 
 /**

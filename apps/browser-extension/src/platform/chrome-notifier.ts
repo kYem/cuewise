@@ -1,7 +1,7 @@
 import {
   logger,
-  type NotificationPermission,
   type NotifierHost,
+  type NotifierPermission,
   type NotifyOptions,
 } from '@cuewise/shared';
 
@@ -30,7 +30,7 @@ export class ChromeNotifier implements NotifierHost {
     await chrome.notifications.clear(id);
   }
 
-  async permission(): Promise<NotificationPermission> {
+  async permission(): Promise<NotifierPermission> {
     return chrome.notifications.getPermissionLevel();
   }
 

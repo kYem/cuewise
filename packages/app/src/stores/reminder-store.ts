@@ -625,12 +625,16 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // reminder that fired but never reached the user would otherwise leave no trace.
       logger.error('Fired due reminders', { count: dueNow.length });
 
-      // No background worker to raise the OS notification, so deliver it here via the port.
-      // Where a resident host owns delivery, it notifies instead.
-      const raiseHere = !getScheduler().deliversInBackground && (await notificationsEnabled());
+      // Toasts first: `notified` is already persisted, so nothing fallible may sit between that
+      // write and the one delivery a page without a background host is guaranteed to make.
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
-        if (raiseHere) {
+      }
+
+      // No background worker to raise the OS notification, so deliver it here via the port.
+      // Where a resident host owns delivery, it notifies instead.
+      if (!getScheduler().deliversInBackground && (await notificationsEnabled())) {
+        for (const r of dueNow) {
           getNotifier()
             .notify(reminderNotification(reminderAlarmId(r.id), r.text))
             .catch((error) => logger.error('Failed to deliver reminder notification', error));

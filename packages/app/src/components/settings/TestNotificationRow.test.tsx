@@ -1,20 +1,24 @@
-import { configurePlatform, logger, type NotificationPermission } from '@cuewise/shared';
+import { configurePlatform, logger } from '@cuewise/shared';
+import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestNotificationRow } from './TestNotificationRow';
 
-const notify = vi.fn(() => Promise.resolve());
-const permission = vi.fn<() => Promise<NotificationPermission>>(() => Promise.resolve('granted'));
+const notifier = fakeNotifier();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  permission.mockResolvedValue('granted');
-  configurePlatform({ notifier: { notify, clear: async () => {}, permission } });
+  notifier.permission.mockResolvedValue('granted');
+  configurePlatform({ notifier });
 });
 
 function renderRow(enabled = true, filter = '') {
   return render(<TestNotificationRow enabled={enabled} filter={filter} />);
+}
+
+async function clickSend(): Promise<void> {
+  await userEvent.click(screen.getByRole('button', { name: 'Send test' }));
 }
 
 describe('TestNotificationRow', () => {
@@ -28,9 +32,9 @@ describe('TestNotificationRow', () => {
   it('sends a notification shaped exactly like a reminder', async () => {
     renderRow();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Send test' }));
+    await clickSend();
 
-    expect(notify).toHaveBeenCalledWith({
+    expect(notifier.notify).toHaveBeenCalledWith({
       id: 'reminder-test',
       title: '🔔 Reminder',
       body: expect.stringContaining('test'),
@@ -40,22 +44,33 @@ describe('TestNotificationRow', () => {
     expect(await screen.findByText(/^Sent\./)).toBeInTheDocument();
   });
 
-  it('does not send when notifications are blocked, and says where to fix it', async () => {
-    permission.mockResolvedValue('denied');
+  // A host that cannot tell (Tauri before the first grant) must still get to prompt via notify.
+  it('sends when the permission is unknown', async () => {
+    notifier.permission.mockResolvedValue('unknown');
     renderRow();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Send test' }));
+    await clickSend();
 
-    expect(notify).not.toHaveBeenCalled();
+    expect(notifier.notify).toHaveBeenCalled();
+    expect(await screen.findByText(/^Sent\./)).toBeInTheDocument();
+  });
+
+  it('does not send when notifications are blocked, and says where to fix it', async () => {
+    notifier.permission.mockResolvedValue('denied');
+    renderRow();
+
+    await clickSend();
+
+    expect(notifier.notify).not.toHaveBeenCalled();
     expect(await screen.findByText(/blocked for Cuewise/)).toBeInTheDocument();
   });
 
   it('reports a failed send instead of throwing', async () => {
-    notify.mockRejectedValueOnce(new Error('no notifications API'));
+    notifier.notify.mockRejectedValueOnce(new Error('no notifications API'));
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
     renderRow();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Send test' }));
+    await clickSend();
 
     expect(await screen.findByText(/Couldn't send/)).toBeInTheDocument();
     expect(errorLog).toHaveBeenCalledWith(

@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url';
 // Default-import + destructure: Playwright's loader compiles the workspace
 // package to CJS, so named ESM imports from it fail at runtime.
 import shared from '@cuewise/shared';
-import { type BrowserContext, chromium, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { startSite } from '../../website/e2e/static-server';
+import { buildExtension, launchExtension } from './extension-harness';
 
 const { DEFAULT_YOUTUBE_PLAYLISTS } = shared;
 
@@ -20,9 +21,7 @@ const { DEFAULT_YOUTUBE_PLAYLISTS } = shared;
 // player-frame-ancestors.spec.ts from fea79a9, whose static-server plumbing —
 // startSite, now parameterized by frame-ancestors — this spec reuses).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EXTENSION_ROOT = path.resolve(__dirname, '..');
 const WEBSITE_ROOT = path.resolve(__dirname, '../../website');
-const EXTENSION_DIST = path.join(EXTENSION_ROOT, 'dist');
 const WEBSITE_DIST = path.join(WEBSITE_ROOT, 'dist');
 const PLAYER_PORT = 8791;
 const PLAYER_ORIGIN = `http://localhost:${PLAYER_PORT}`;
@@ -31,29 +30,6 @@ const PLAYER_URL_PATTERN = new RegExp(`localhost:${PLAYER_PORT}/player`);
 let extensionId: string;
 let playerServer: Server;
 
-// Chrome derives an unpacked extension's id deterministically from its dist
-// path (confirmed: stable across repeated launches below), so a throwaway
-// launch+close here to learn the id, then a fresh context per test, keeps each
-// test's Chrome profile (and any persisted sounds-panel state) independent.
-async function launchExtensionContext(): Promise<BrowserContext> {
-  // MV3 service workers don't register under Chromium's headless mode in this
-  // environment (confirmed: 15s timeout waiting for the `serviceworker` event
-  // with `--headless=new`; headed registers immediately) — headed is required
-  // for loading extensions here, matching Playwright's documented recipe.
-  return chromium.launchPersistentContext('', {
-    headless: false,
-    args: [`--disable-extensions-except=${EXTENSION_DIST}`, `--load-extension=${EXTENSION_DIST}`],
-  });
-}
-
-async function discoverExtensionId(context: BrowserContext): Promise<string> {
-  let [worker] = context.serviceWorkers();
-  if (!worker) {
-    worker = await context.waitForEvent('serviceworker');
-  }
-  return new URL(worker.url()).host;
-}
-
 test.beforeAll(async () => {
   execFileSync('pnpm', ['--filter', '@cuewise/website', 'build'], {
     cwd: WEBSITE_ROOT,
@@ -61,18 +37,16 @@ test.beforeAll(async () => {
   });
   // VITE_PLAYER_ORIGIN (ENG-48 override) points the real extension code at our
   // local player instead of https://cuewise.app — see youtube-player.ts.
-  execFileSync('pnpm', ['--filter', '@cuewise/browser-extension', 'build'], {
-    cwd: EXTENSION_ROOT,
-    stdio: 'inherit',
-    env: { ...process.env, VITE_PLAYER_ORIGIN: PLAYER_ORIGIN },
-  });
+  buildExtension({ VITE_PLAYER_ORIGIN: PLAYER_ORIGIN });
 
   // Nothing has tried to load the player yet — the allowlist content doesn't matter.
   playerServer = await startSite(WEBSITE_DIST, PLAYER_PORT, "'none'");
 
-  const probe = await launchExtensionContext();
-  extensionId = await discoverExtensionId(probe);
-  await probe.close();
+  // A throwaway launch learns the id once; each test then gets a fresh profile, so persisted
+  // sounds-panel state cannot leak between them.
+  const probe = await launchExtension();
+  extensionId = probe.extensionId;
+  await probe.context.close();
 });
 
 test.afterAll(async () => {
@@ -88,7 +62,7 @@ async function setPlayerFrameAncestors(frameAncestors: string): Promise<void> {
 test('allowlisted extension id: the player iframe loads', async () => {
   await setPlayerFrameAncestors(`chrome-extension://${extensionId}`);
 
-  const context = await launchExtensionContext();
+  const { context } = await launchExtension();
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto(`chrome-extension://${extensionId}/index.html`);
   await page.getByRole('button', { name: 'Skip', exact: true }).click();
@@ -113,7 +87,7 @@ test('allowlisted extension id: the player iframe loads', async () => {
 test('a NOT-allowlisted extension id: the player iframe is blocked', async () => {
   await setPlayerFrameAncestors("'none'");
 
-  const context = await launchExtensionContext();
+  const { context } = await launchExtension();
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto(`chrome-extension://${extensionId}/index.html`);
   await page.getByRole('button', { name: 'Skip', exact: true }).click();

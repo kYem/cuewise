@@ -48,14 +48,17 @@ export interface NotifyOptions {
   requireInteraction?: boolean;
 }
 
-/** `unknown`: the host cannot tell, or has not asked yet — a notify may still prompt. */
-export type NotificationPermission = 'granted' | 'denied' | 'unknown';
+/**
+ * Not `NotificationPermission`: lib.dom owns that name with a different member set. `unknown` is
+ * "the host cannot tell, or has not asked"; whether a notify then prompts is up to the adapter.
+ */
+export type NotifierPermission = 'granted' | 'denied' | 'unknown';
 
 /** Command surface: deliver/clear an OS notification, keyed by id. */
 export interface Notifier {
   notify(opts: NotifyOptions): Promise<void>;
   clear(id: string): Promise<void>;
-  permission(): Promise<NotificationPermission>;
+  permission(): Promise<NotifierPermission>;
 }
 
 /** A resident context that also routes notification clicks/actions back to handlers. */

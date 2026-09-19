@@ -1,7 +1,7 @@
 import {
   logger,
-  type NotificationPermission,
   type Notifier,
+  type NotifierPermission,
   type NotifyOptions,
   type SchedulerHost,
 } from '@cuewise/shared';
@@ -28,6 +28,7 @@ export class WebNotifier implements Notifier {
     // settings action — and real OS notifications move to the Tauri notification
     // plugin later. Until then this placeholder no-ops rather than nag.
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      logger.warn('Web notification not delivered: permission not granted', { id: opts.id });
       return;
     }
     new Notification(opts.title, { body: opts.body, tag: opts.id });
@@ -37,7 +38,7 @@ export class WebNotifier implements Notifier {
     // Web notifications auto-dismiss; nothing to clear.
   }
 
-  async permission(): Promise<NotificationPermission> {
+  async permission(): Promise<NotifierPermission> {
     if (typeof Notification === 'undefined' || Notification.permission === 'default') {
       return 'unknown';
     }
@@ -66,8 +67,9 @@ export class TauriNotifier implements Notifier {
     // The plugin exposes no programmatic clear for delivered notifications.
   }
 
-  // The plugin only answers granted-or-not; not-yet-granted still prompts on the next notify.
-  async permission(): Promise<NotificationPermission> {
+  // Never 'denied': the desktop plugin hard-codes granted, so an OS-level denial is invisible
+  // here, and a false could as well mean unasked.
+  async permission(): Promise<NotifierPermission> {
     return (await isPermissionGranted()) ? 'granted' : 'unknown';
   }
 }

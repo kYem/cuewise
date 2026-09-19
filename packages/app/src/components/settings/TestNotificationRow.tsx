@@ -11,7 +11,7 @@ import { settingsMatch } from './settings-match';
 
 const LABEL = 'Test notification';
 const HELP = 'Send one now to check it reaches you';
-const KEYWORDS = 'test notification preview check reminder alert';
+const KEYWORDS = 'test notification send test preview check reminder alert';
 const TEST_BODY = 'This is a test reminder. If you can see it, reminders will reach you.';
 
 type Outcome = 'idle' | 'sending' | 'sent' | 'blocked' | 'failed';
@@ -20,7 +20,8 @@ type Outcome = 'idle' | 'sending' | 'sent' | 'blocked' | 'failed';
 const OUTCOME_NOTES: Partial<Record<Outcome, string>> = {
   sent: "Sent. Nothing appeared? Check your system's notification settings — the browser or app itself may be muted.",
   blocked: 'Notifications are blocked for Cuewise — allow them in your browser or system settings.',
-  failed: "Couldn't send the notification. Check your browser's notification settings.",
+  failed:
+    "Couldn't send the notification. Reload this page and try again; if it keeps failing, check that notifications are allowed for Cuewise.",
 };
 const SWITCH_OFF_NOTE = 'Turn Notifications on first.';
 

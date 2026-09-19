@@ -1,13 +1,14 @@
 import { configurePlatform, DEFAULT_SETTINGS, logger, type Reminder } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
+import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleReminderFire } from './reminder-notifications';
 
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
-  readSettings: vi.fn(),
+  getSettings: vi.fn(),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -18,23 +19,20 @@ vi.mock('@cuewise/storage', () => ({
 
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
-const readSettingsMock = vi.mocked(storage.readSettings);
-
-function settingsWithNotifications(enableNotifications: boolean): storage.SettingsRead {
-  return { ok: true, settings: { ...DEFAULT_SETTINGS, enableNotifications } };
-}
+const getSettingsMock = vi.mocked(storage.getSettings);
 
 // Spy notifier/scheduler injected via the platform ports — assert against these
 // instead of any concrete adapter.
-const notify = vi.fn(() => Promise.resolve());
+const notifier = fakeNotifier();
+const notify = notifier.notify;
 const scheduleAt = vi.fn(() => Promise.resolve());
 
 beforeEach(() => {
   vi.clearAllMocks();
   setRemindersMock.mockResolvedValue({ success: true });
-  readSettingsMock.mockResolvedValue(settingsWithNotifications(true));
+  getSettingsMock.mockResolvedValue(DEFAULT_SETTINGS);
   configurePlatform({
-    notifier: { notify, clear: async () => {}, permission: async () => 'unknown' },
+    notifier,
     scheduler: {
       deliversInBackground: true,
       persistsAcrossRestarts: false,
@@ -177,9 +175,8 @@ describe('handleReminderFire', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  // The switch silences the OS notification only; the occurrence still happened.
   it('skips the notification but still advances when notifications are switched off', async () => {
-    readSettingsMock.mockResolvedValue(settingsWithNotifications(false));
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
     getRemindersMock.mockResolvedValue([
       recurringReminderFactory.build({
         id: 'r6',
@@ -195,12 +192,17 @@ describe('handleReminderFire', () => {
   });
 
   // A storage hiccup must not silence reminders: the default is on, so unknown means on.
-  it('notifies when the settings cannot be read', async () => {
-    readSettingsMock.mockResolvedValue({ ok: false, unreadable: ['enableNotifications'] });
+  it('notifies, and says so, when the settings read rejects', async () => {
+    getSettingsMock.mockRejectedValue(new Error('storage unavailable'));
     getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r7' })]);
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await handleReminderFire('reminder-r7');
 
     expect(notify).toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Could not read the Notifications switch; notifying anyway',
+      expect.any(Error)
+    );
   });
 });
