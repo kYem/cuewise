@@ -462,9 +462,10 @@ describe('GoalsList - Unfinished group', () => {
 
     render(<GoalsList />);
 
-    expect(screen.getByRole('button', { name: 'Today thing' })).toBeInTheDocument();
-    expect(screen.getByText('Unfinished (1)')).toBeInTheDocument();
+    const todayRow = screen.getByRole('button', { name: 'Today thing' });
+    const header = screen.getByText('Unfinished (1)');
     expect(screen.getByText(stale.text)).toBeInTheDocument();
+    expect(todayRow.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 
   it('lists the most recent day first and moves all in that order', async () => {
@@ -632,6 +633,19 @@ describe('GoalsList - Unfinished group across midnight', () => {
     rerender(<GoalsList />);
 
     expect(screen.getByText('Unfinished (1)')).toBeInTheDocument();
+  });
+
+  it('updates the empty-state hint after the day changes without a goals write', () => {
+    const task = goalFactory.build({ date: getTodayDateString(), completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+    const { rerender } = render(<GoalsList />);
+
+    vi.setSystemTime(new Date(2026, 8, 21, 12, 0, 0));
+    store.todayTasks = [];
+    rerender(<GoalsList />);
+
+    expect(screen.getByText('Unfinished tasks are below')).toBeInTheDocument();
   });
 });
 

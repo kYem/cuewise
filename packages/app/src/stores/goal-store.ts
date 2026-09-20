@@ -371,8 +371,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const wanted = new Set(goalIds);
       const movedIds: string[] = [];
 
-      // Re-decided on the fresh read: the caller's list can be stale (a second click, or a task
-      // completed elsewhere), and re-dating a done task would push an un-completion to sync.
+      // Caller ids can be stale (second click, finished elsewhere); the fresh read decides what moves.
       const updatedGoals = await persistGoals((goals) =>
         goals.map((goal) => {
           if (!wanted.has(goal.id) || !isTask(goal) || goal.completed || goal.date >= today) {
@@ -385,7 +384,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
       if (movedIds.length === 0) {
-        useToastStore.getState().info('Those tasks were already moved or removed');
+        useToastStore.getState().info('Nothing left to move — already done, moved or removed');
         return true;
       }
       notifyMutatedBulk('goals', movedIds);

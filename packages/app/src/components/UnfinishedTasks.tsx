@@ -9,7 +9,7 @@ import { AnimatedCheckbox } from './AnimatedCheckbox';
 // Past this many rows the group opens collapsed to its count line.
 const COLLAPSE_THRESHOLD = 5;
 
-// Not memoised on goals: "previous days" moves at midnight while the goals array reference does not.
+// Not memoised on goals: "previous days" shifts at midnight without a new goals reference.
 function useUnfinishedTasks(): { unfinished: Goal[]; moveAllToToday: () => Promise<boolean> } {
   const { goals, moveTasksToToday } = useGoalStore();
   const unfinished = getRecentIncompleteTasks(goals).sort((a, b) => b.date.localeCompare(a.date));

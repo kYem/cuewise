@@ -372,7 +372,9 @@ describe('Goal Store', () => {
       await useGoalStore.getState().moveTasksToToday(['gone']);
 
       expect(toastSuccess).not.toHaveBeenCalled();
-      expect(toastInfo).toHaveBeenCalledWith('Those tasks were already moved or removed');
+      expect(toastInfo).toHaveBeenCalledWith(
+        'Nothing left to move — already done, moved or removed'
+      );
     });
   });
 
@@ -1078,20 +1080,22 @@ describe('sync sink wiring', () => {
   });
 
   it('does not notify markMutatedBulk when the pull deleted every task first', async () => {
-    useGoalStore.setState({ goals: [], todayTasks: [] });
+    const mine = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
 
-    await useGoalStore.getState().moveTasksToToday(['gone']);
+    await useGoalStore.getState().moveTasksToToday([mine.id]);
 
     expect(markMutatedBulk).not.toHaveBeenCalled();
   });
 
-  // A completion pulled from another device must not be pushed back as an un-completion.
   it('does not announce a listed task the pull completed before the write', async () => {
     const stale = goalFactory.build({ date: '2025-01-01', completed: false });
-    const doneElsewhere = completedGoalFactory.build({ date: '2025-01-01' });
-    useGoalStore.setState({ goals: [stale, doneElsewhere], todayTasks: [] });
+    const other = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [stale, other], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([stale, { ...other, completed: true }]);
 
-    await useGoalStore.getState().moveTasksToToday([stale.id, doneElsewhere.id]);
+    await useGoalStore.getState().moveTasksToToday([stale.id, other.id]);
 
     expect(markMutatedBulk).toHaveBeenCalledWith('goals', [stale.id]);
   });
@@ -1718,6 +1722,18 @@ describe('writers read storage, not their own snapshot', () => {
 
     const [written] = vi.mocked(storage.setGoals).mock.calls[0];
     expect(written.map((goal) => goal.id)).toEqual([seeded.id, pulled.id, expect.any(String)]);
+  });
+
+  it('moveTasksToToday leaves a task the pull finished mid-click where it was', async () => {
+    const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+    const other = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [stale, other], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([stale, { ...other, completed: true }]);
+
+    await useGoalStore.getState().moveTasksToToday([stale.id, other.id]);
+
+    const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+    expect(written.find((goal) => goal.id === other.id)).toEqual({ ...other, completed: true });
   });
 
   it('rollDueTasks keeps a goal that only storage knows about', async () => {
