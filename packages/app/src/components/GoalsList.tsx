@@ -526,7 +526,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </div>
       )}
 
-      {/* Unfinished from previous days — on by default, opt-out from the ⚙ menu */}
       {settings.showIncompleteGoals && <UnfinishedTasks />}
 
       {/* Upcoming — revealed from the ⚙ menu (both list views) */}

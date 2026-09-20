@@ -1,13 +1,14 @@
-import { getTodayDateString } from '@cuewise/shared';
-import { goalFactory } from '@cuewise/test-utils/factories';
+import { getYesterdayDateString } from '@cuewise/shared';
+import { completedGoalFactory } from '@cuewise/test-utils/factories';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type CompletionFilter, useGoalStore } from '../stores/goal-store';
+import { useGoalStore } from '../stores/goal-store';
 import {
   buildUnfinishedTasks,
   createGoalStoreMock,
-  createMockGoalStore,
+  createGoalsPageStore,
+  type MockGoalsPageStore,
 } from './__fixtures__/goals-list.fixtures';
 import { GoalsPage } from './GoalsPage';
 
@@ -19,14 +20,7 @@ vi.mock('./AllGoalsList', () => ({ AllGoalsList: () => <div data-testid="all-goa
 vi.mock('./UpcomingTasks', () => ({ UpcomingTasks: () => null }));
 vi.mock('./goals', () => ({ GoalsSection: () => null }));
 
-function mockPageStore(goals: ReturnType<typeof goalFactory.build>[], filter: CompletionFilter) {
-  const store = {
-    ...createMockGoalStore({ goals }),
-    initialize: vi.fn(),
-    addTask: vi.fn(async () => true),
-    completionFilter: filter,
-    setCompletionFilter: vi.fn(),
-  };
+function mountStore(store: MockGoalsPageStore): MockGoalsPageStore {
   vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
   return store;
 }
@@ -37,7 +31,7 @@ describe('GoalsPage - Unfinished callout', () => {
   });
 
   it('counts unfinished tasks from previous days above the list', () => {
-    mockPageStore(buildUnfinishedTasks(2), 'all');
+    mountStore(createGoalsPageStore(buildUnfinishedTasks(2)));
 
     render(<GoalsPage />);
 
@@ -47,7 +41,7 @@ describe('GoalsPage - Unfinished callout', () => {
   it('moves them all to today from the callout', async () => {
     const user = userEvent.setup();
     const unfinished = buildUnfinishedTasks(2);
-    const store = mockPageStore(unfinished, 'all');
+    const store = mountStore(createGoalsPageStore(unfinished));
 
     render(<GoalsPage />);
     await user.click(screen.getByRole('button', { name: 'Move all to today' }));
@@ -56,7 +50,9 @@ describe('GoalsPage - Unfinished callout', () => {
   });
 
   it('is absent when every past task is done', () => {
-    mockPageStore([goalFactory.build({ date: getTodayDateString(), completed: false })], 'all');
+    mountStore(
+      createGoalsPageStore([completedGoalFactory.build({ date: getYesterdayDateString() })])
+    );
 
     render(<GoalsPage />);
 
@@ -64,7 +60,7 @@ describe('GoalsPage - Unfinished callout', () => {
   });
 
   it('is absent under the completed filter', () => {
-    mockPageStore(buildUnfinishedTasks(2), 'completed');
+    mountStore(createGoalsPageStore(buildUnfinishedTasks(2), 'completed'));
 
     render(<GoalsPage />);
 

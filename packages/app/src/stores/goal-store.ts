@@ -382,9 +382,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      if (movedIds.length > 0) {
-        notifyMutatedBulk('goals', movedIds);
-      }
+      notifyMutatedBulk('goals', movedIds);
 
       const noun = movedIds.length === 1 ? 'task' : 'tasks';
       useToastStore.getState().success(`Moved ${movedIds.length} ${noun} to today`);

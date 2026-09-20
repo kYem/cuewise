@@ -518,8 +518,8 @@ export function getUpcomingTasks(goals: Goal[], daysAhead = 14): (Goal & { dueDa
 }
 
 /**
- * Get incomplete goals from the recent past (excluding today) — the carry-over
- * backlog surfaced in the goals widget. Uses local-time date strings throughout.
+ * Get incomplete goals from the recent past — the carry-over backlog surfaced in the goals
+ * widget. Strictly before today: a task transferred to tomorrow is a deferral, not a leftover.
  * @param goals - Array of all goals
  * @param daysBack - How many days back to include (default: 14)
  */
@@ -527,7 +527,7 @@ export function getRecentIncompleteTasks(goals: Goal[], daysBack = 14): Goal[] {
   const today = getTodayDateString();
   const cutoff = format(new Date(Date.now() - daysBack * DAY_IN_MS), 'yyyy-MM-dd');
 
-  return goals.filter((g) => isTask(g) && !g.completed && g.date !== today && g.date >= cutoff);
+  return goals.filter((g) => isTask(g) && !g.completed && g.date < today && g.date >= cutoff);
 }
 
 /** rolledIds: the tasks whose date moved — never empty; always a subset of goals. */

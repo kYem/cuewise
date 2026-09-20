@@ -2,6 +2,7 @@ import { type Goal, getYesterdayDateString } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
+import type { CompletionFilter } from '../../stores/goal-store';
 
 // Re-exported so existing GoalsList test imports keep resolving from this file.
 export { createSettingsStoreMock };
@@ -77,4 +78,25 @@ export function buildUnfinishedTasks(count: number): Goal[] {
 /** A goal store holding only `unfinished` (nothing for today), so the group renders alone. */
 export function createUnfinishedOnlyStore(unfinished: Goal[]): MockGoalStore {
   return createMockGoalStore({ todayTasks: [], goals: unfinished });
+}
+
+export type MockGoalsPageStore = MockGoalStore & {
+  initialize: Mock;
+  addTask: Mock;
+  completionFilter: CompletionFilter;
+  setCompletionFilter: Mock;
+};
+
+/** The store slice GoalsPage itself reads, on top of what its task list needs. */
+export function createGoalsPageStore(
+  goals: Goal[],
+  completionFilter: CompletionFilter = 'all'
+): MockGoalsPageStore {
+  return {
+    ...createMockGoalStore({ goals }),
+    initialize: vi.fn(),
+    addTask: vi.fn(async () => true),
+    completionFilter,
+    setCompletionFilter: vi.fn(),
+  };
 }
