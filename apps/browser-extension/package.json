@@ -41,7 +41,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "catalog:",
     "@cuewise/test-utils": "workspace:*",
-    "@playwright/test": "^1",
+    "@playwright/test": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
