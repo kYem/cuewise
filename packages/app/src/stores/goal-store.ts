@@ -371,17 +371,23 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const wanted = new Set(goalIds);
       const movedIds: string[] = [];
 
+      // Re-decided on the fresh read: the caller's list can be stale (a second click, or a task
+      // completed elsewhere), and re-dating a done task would push an un-completion to sync.
       const updatedGoals = await persistGoals((goals) =>
         goals.map((goal) => {
-          if (!wanted.has(goal.id)) {
+          if (!wanted.has(goal.id) || !isTask(goal) || goal.completed || goal.date >= today) {
             return goal;
           }
           movedIds.push(goal.id);
-          return { ...goal, date: today, completed: false };
+          return { ...goal, date: today };
         })
       );
 
       set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      if (movedIds.length === 0) {
+        useToastStore.getState().info('Those tasks were already moved or removed');
+        return true;
+      }
       notifyMutatedBulk('goals', movedIds);
 
       const noun = movedIds.length === 1 ? 'task' : 'tasks';

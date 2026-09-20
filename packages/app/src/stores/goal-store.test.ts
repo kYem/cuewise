@@ -48,12 +48,14 @@ const autoRollNeverStored: Settings = { ...DEFAULT_SETTINGS, ...autoRollAbsentFr
 const toastError = vi.fn();
 const toastWarning = vi.fn();
 const toastSuccess = vi.fn();
+const toastInfo = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
       error: toastError,
       warning: toastWarning,
       success: toastSuccess,
+      info: toastInfo,
     }),
   },
 }));
@@ -339,6 +341,38 @@ describe('Goal Store', () => {
       await useGoalStore.getState().moveTasksToToday([stale.id]);
 
       expect(toastSuccess).toHaveBeenCalledWith('Moved 1 task to today');
+    });
+
+    it('leaves a listed task alone when the fresh read shows it already done', async () => {
+      const done = completedGoalFactory.build({ date: '2025-01-01' });
+      const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: [done, stale], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday([done.id, stale.id]);
+
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written.find((task) => task.id === done.id)).toEqual(done);
+      expect(toastSuccess).toHaveBeenCalledWith('Moved 1 task to today');
+    });
+
+    it('leaves a listed task alone when the fresh read shows it already on today', async () => {
+      const alreadyToday = goalFactory.build({ date: today, completed: false, sortOrder: 3 });
+      useGoalStore.setState({ goals: [alreadyToday], todayTasks: [alreadyToday] });
+
+      await useGoalStore.getState().moveTasksToToday([alreadyToday.id]);
+
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written).toEqual([alreadyToday]);
+      expect(toastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('tells the user when nothing was left to move instead of claiming success', async () => {
+      useGoalStore.setState({ goals: [], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(['gone']);
+
+      expect(toastSuccess).not.toHaveBeenCalled();
+      expect(toastInfo).toHaveBeenCalledWith('Those tasks were already moved or removed');
     });
   });
 
@@ -1049,6 +1083,17 @@ describe('sync sink wiring', () => {
     await useGoalStore.getState().moveTasksToToday(['gone']);
 
     expect(markMutatedBulk).not.toHaveBeenCalled();
+  });
+
+  // A completion pulled from another device must not be pushed back as an un-completion.
+  it('does not announce a listed task the pull completed before the write', async () => {
+    const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+    const doneElsewhere = completedGoalFactory.build({ date: '2025-01-01' });
+    useGoalStore.setState({ goals: [stale, doneElsewhere], todayTasks: [] });
+
+    await useGoalStore.getState().moveTasksToToday([stale.id, doneElsewhere.id]);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('goals', [stale.id]);
   });
 
   it('notifies markMutated with the new task id after addTask persists', async () => {

@@ -518,8 +518,8 @@ export function getUpcomingTasks(goals: Goal[], daysAhead = 14): (Goal & { dueDa
 }
 
 /**
- * Get incomplete goals from the recent past — the carry-over backlog surfaced in the goals
- * widget. Strictly before today: a task transferred to tomorrow is a deferral, not a leftover.
+ * Incomplete tasks from the recent past — the carry-over backlog. Strictly before today: a task
+ * transferred to tomorrow is a deferral, not a leftover.
  * @param goals - Array of all goals
  * @param daysBack - How many days back to include (default: 14)
  */

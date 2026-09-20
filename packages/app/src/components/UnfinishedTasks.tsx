@@ -2,20 +2,17 @@ import { type Goal, getRecentIncompleteTasks, getRelativeDateLabel } from '@cuew
 import { cn } from '@cuewise/ui';
 import { ChevronDown, ChevronUp, ExternalLink, History, MoveRight, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useGoalStore } from '../stores/goal-store';
 import { AnimatedCheckbox } from './AnimatedCheckbox';
 
 // Past this many rows the group opens collapsed to its count line.
 const COLLAPSE_THRESHOLD = 5;
 
-/** Incomplete tasks from previous days (getRecentIncompleteTasks), newest first. */
+// Not memoised on goals: "previous days" moves at midnight while the goals array reference does not.
 function useUnfinishedTasks(): { unfinished: Goal[]; moveAllToToday: () => Promise<boolean> } {
   const { goals, moveTasksToToday } = useGoalStore();
-  const unfinished = useMemo(
-    () => getRecentIncompleteTasks(goals).sort((a, b) => b.date.localeCompare(a.date)),
-    [goals]
-  );
+  const unfinished = getRecentIncompleteTasks(goals).sort((a, b) => b.date.localeCompare(a.date));
   const moveAllToToday = () => moveTasksToToday(unfinished.map((task) => task.id));
   return { unfinished, moveAllToToday };
 }
@@ -69,10 +66,7 @@ export const UnfinishedBanner: React.FC<{ className?: string }> = ({ className }
   );
 };
 
-/**
- * The home widget's Unfinished group: collapsible rows with per-row move / complete / delete
- * and a one-click move-all.
- */
+/** The home widget's Unfinished group; UnfinishedBanner is the goals-page counterpart. */
 export const UnfinishedTasks: React.FC = () => {
   const { toggleTask, moveTaskToToday, deleteTask } = useGoalStore();
   const { unfinished, moveAllToToday } = useUnfinishedTasks();

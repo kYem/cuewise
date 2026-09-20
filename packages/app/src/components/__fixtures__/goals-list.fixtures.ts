@@ -75,9 +75,14 @@ export function buildUnfinishedTasks(count: number): Goal[] {
   return goalFactory.buildList(count, { date: getYesterdayDateString(), completed: false });
 }
 
-/** A goal store holding only `unfinished` (nothing for today), so the group renders alone. */
-export function createUnfinishedOnlyStore(unfinished: Goal[]): MockGoalStore {
-  return createMockGoalStore({ todayTasks: [], goals: unfinished });
+/** One incomplete task per date, in the order given. */
+export function buildUnfinishedTasksOn(dates: string[]): Goal[] {
+  return dates.map((date) => goalFactory.build({ date, completed: false }));
+}
+
+/** A goal store with nothing scheduled for today, so only the sections below the list render. */
+export function createNoTodayTasksStore(goals: Goal[]): MockGoalStore {
+  return createMockGoalStore({ todayTasks: [], goals });
 }
 
 export type MockGoalsPageStore = MockGoalStore & {
@@ -87,7 +92,7 @@ export type MockGoalsPageStore = MockGoalStore & {
   setCompletionFilter: Mock;
 };
 
-/** The store slice GoalsPage itself reads, on top of what its task list needs. */
+/** GoalsPage's own reads on top of the GoalsList mock, which already covers UnfinishedBanner. */
 export function createGoalsPageStore(
   goals: Goal[],
   completionFilter: CompletionFilter = 'all'

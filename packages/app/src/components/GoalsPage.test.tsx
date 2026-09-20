@@ -14,7 +14,7 @@ import { GoalsPage } from './GoalsPage';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
 
-// The page under test is the Tasks tab chrome; its children each have their own tests.
+// Children are stubbed; this suite only exercises the Unfinished callout.
 vi.mock('./PageHeader', () => ({ PageHeader: () => <div data-testid="page-header" /> }));
 vi.mock('./AllGoalsList', () => ({ AllGoalsList: () => <div data-testid="all-goals-list" /> }));
 vi.mock('./UpcomingTasks', () => ({ UpcomingTasks: () => null }));
@@ -57,6 +57,14 @@ describe('GoalsPage - Unfinished callout', () => {
     render(<GoalsPage />);
 
     expect(screen.queryByRole('button', { name: 'Move all to today' })).not.toBeInTheDocument();
+  });
+
+  it('stays under the incomplete filter', () => {
+    mountStore(createGoalsPageStore(buildUnfinishedTasks(2), 'incomplete'));
+
+    render(<GoalsPage />);
+
+    expect(screen.getByRole('button', { name: 'Move all to today' })).toBeInTheDocument();
   });
 
   it('is absent under the completed filter', () => {
