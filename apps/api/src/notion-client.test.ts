@@ -110,6 +110,18 @@ describe('exchangeCode', () => {
     });
   });
 
+  it('refuses a 200 whose access token is the empty string', async () => {
+    const notion = client(() => Response.json({ access_token: '' }));
+
+    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionUnavailableError);
+  });
+
+  it('treats an empty-string refresh token as none', async () => {
+    const notion = client(() => Response.json({ access_token: 'tok', refresh_token: '' }));
+
+    await expect(notion.exchangeCode('c')).resolves.toMatchObject({ refreshToken: null });
+  });
+
   it('treats an explicitly null refresh token as none', async () => {
     const notion = client(() => Response.json({ access_token: 'tok', refresh_token: null }));
 
@@ -161,6 +173,27 @@ describe('failure classification', () => {
     await expect(notion.getPropertySchemas('tok', 'ds1')).rejects.toBeInstanceOf(
       NotionResourceError
     );
+  });
+
+  it('treats any other 4xx as our request being wrong, not as an outage to retry', async () => {
+    const notion = client(() => Response.json({ code: 'invalid_request_url' }, { status: 400 }));
+
+    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
+  });
+
+  it('keeps validation_error retryable, since a renamed property causes it mid-write', async () => {
+    const notion = client(() => Response.json({ code: 'validation_error' }, { status: 400 }));
+
+    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionUnavailableError);
+  });
+
+  it('logs only an enum-shaped error code, never whatever the body carried', async () => {
+    const notion = client(() => Response.json({ code: 'tok <secret>' }, { status: 400 }));
+
+    const error = await notion.exchangeCode('c').catch((thrown: unknown) => thrown);
+
+    expect(String(error)).toContain('no code');
+    expect(String(error)).not.toContain('secret');
   });
 
   it('maps rate limiting to retryable', async () => {
@@ -252,6 +285,12 @@ describe('searchDataSources', () => {
     );
 
     await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'Live' }]);
+  });
+
+  it('falls back to the id when a result carries no title at all', async () => {
+    const notion = client(() => Response.json({ results: [{ id: 'ds1' }] }));
+
+    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'ds1' }]);
   });
 
   it('falls back to the id for an untitled table', async () => {

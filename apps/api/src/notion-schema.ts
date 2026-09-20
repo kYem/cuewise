@@ -11,10 +11,10 @@ export type CompletionProperty =
   | {
       kind: 'status';
       name: string;
-      // Non-empty by construction; [0] is what a write uses.
-      completeOptionIds: string[];
+      // [0] is what a write uses.
+      completeOptionIds: readonly [string, ...string[]];
       // Empty when the schema has no To-do group, which makes un-completing impossible to express.
-      todoOptionIds: string[];
+      todoOptionIds: readonly string[];
     }
   | { kind: 'checkbox'; name: string };
 
@@ -91,14 +91,14 @@ export function findCompletionProperty(properties: PropertySchemas): CompletionP
     if (status === null) {
       continue;
     }
-    const completeOptionIds = groupOptionIds(status.groups, COMPLETE_GROUP);
-    if (completeOptionIds.length === 0) {
+    const [first, ...rest] = groupOptionIds(status.groups, COMPLETE_GROUP);
+    if (first === undefined) {
       continue;
     }
     return {
       kind: 'status',
       name,
-      completeOptionIds,
+      completeOptionIds: [first, ...rest],
       todoOptionIds: groupOptionIds(status.groups, TODO_GROUP),
     };
   }
@@ -119,7 +119,10 @@ export function completionWrite(
   if (property.kind === 'checkbox') {
     return { kind: 'checkbox', name: property.name, checkbox: done };
   }
-  const optionId = done ? property.completeOptionIds[0] : property.todoOptionIds[0];
+  if (done) {
+    return { kind: 'status', name: property.name, optionId: property.completeOptionIds[0] };
+  }
+  const optionId = property.todoOptionIds.at(0);
   if (optionId === undefined) {
     return null;
   }

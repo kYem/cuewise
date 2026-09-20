@@ -4,7 +4,7 @@ import { decryptSecret, encryptSecret, sha256Base64Url } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import type { NotionClient } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
-import type { AuthCodePayload, SealedGrant, SyncStore } from '../store';
+import type { AuthCodePayload, SealedGrant, SealedTokens, SyncStore } from '../store';
 import { signedInToken } from './api-test-helpers.fixtures';
 
 /** 43 base64url chars decode to the 32 bytes AES-GCM needs. */
@@ -74,10 +74,7 @@ export async function testCodeChallenge(): Promise<string> {
   return sha256Base64Url(TEST_CODE_VERIFIER);
 }
 
-/**
- * Every method stubbed so a test overrides only the call it is about. The refresh stub answers
- * `workspace: null`, as the real API does.
- */
+/** Every method stubbed so a test overrides only the call it is about. */
 export function stubNotionClient(overrides: Partial<NotionClient> = {}): NotionClient {
   return {
     exchangeCode: vi.fn(async () => ({
@@ -172,7 +169,7 @@ export async function storedNotionTokens(
   return { accessToken, refreshToken };
 }
 
-type FailingWrite = 'mintAuthCode' | 'putProviderGrant';
+type FailingWrite = 'mintAuthCode' | 'putProviderGrant' | 'updateProviderTokens';
 
 /** A real store whose one named write throws, so a route's cleanup path runs against real rows. */
 export class FailingWriteStore extends D1SyncStore {
@@ -199,5 +196,16 @@ export class FailingWriteStore extends D1SyncStore {
       throw new Error('D1 write failed');
     }
     return super.putProviderGrant(userId, provider, grant);
+  }
+
+  override async updateProviderTokens(
+    userId: string,
+    provider: string,
+    tokens: SealedTokens
+  ): Promise<boolean> {
+    if (this.failing === 'updateProviderTokens') {
+      throw new Error('D1 write failed');
+    }
+    return super.updateProviderTokens(userId, provider, tokens);
   }
 }

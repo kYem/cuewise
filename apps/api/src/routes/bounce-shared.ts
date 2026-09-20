@@ -11,10 +11,6 @@ export const CODE_VERIFIER_RE = new RegExp(
   `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
 );
 
-// An RFC 6749 error code is enum-shaped. Anything else came from the network and never reaches
-// a log line.
-export const OAUTH_ERROR_CODE_RE = /^[a-z_]{1,64}$/;
-
 /** Picks the most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides pass/fail. */
 export function codeVerifierIssue(value: unknown): ValidationIssue {
   const pointer = '/codeVerifier';

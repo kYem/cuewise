@@ -26,6 +26,7 @@ import {
   type ProviderConnection,
   type PushRecord,
   type SealedGrant,
+  type SealedTokens,
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
@@ -512,7 +513,7 @@ export class D1SyncStore implements SyncStore {
   async updateProviderTokens(
     userId: string,
     provider: string,
-    tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
+    tokens: SealedTokens
   ): Promise<boolean> {
     // COALESCE keeps the stored refresh pair when the renewal carried none.
     const res = await this.db

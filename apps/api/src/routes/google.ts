@@ -3,13 +3,13 @@ import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { randomToken, signState, verifyState } from '../crypto-utils';
 import type { Env } from '../env';
+import { ERROR_CODE_RE } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problem-details';
 import { verifyOrProblem } from '../verifiers';
 import {
   CODE_CHALLENGE_RE,
   isAllowedReturnUri,
-  OAUTH_ERROR_CODE_RE,
   requireStateSigningKey,
   respondWithDeepLink,
   toBounceState,
@@ -47,7 +47,7 @@ const CONFIG_FAULT_ERRORS = new Set([
 async function readOAuthErrorCode(res: Response): Promise<string | null> {
   try {
     const body = (await res.json()) as { error?: unknown };
-    if (typeof body.error === 'string' && OAUTH_ERROR_CODE_RE.test(body.error)) {
+    if (typeof body.error === 'string' && ERROR_CODE_RE.test(body.error)) {
       return body.error;
     }
     return null;

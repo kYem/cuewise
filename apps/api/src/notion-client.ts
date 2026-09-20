@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { ERROR_CODE_RE } from './http';
 import {
   asRecord,
   type CompletionProperty,
@@ -25,11 +26,11 @@ export const MAX_QUERY_PAGES = 5;
 export class NotionAuthError extends Error {
   override readonly name = 'NotionAuthError';
 }
-/** Our client id or secret is wrong. Loud: no action by the user can fix it. */
+/** Our client id, secret or request shape is wrong. Loud: no action by the user can fix it. */
 export class NotionConfigError extends Error {
   override readonly name = 'NotionConfigError';
 }
-/** Notion is down, rate-limiting, or unreadable. Retryable, and not a fault of ours. */
+/** Notion is down, rate-limiting, unreadable, or mid-edit. Retryable, and not a fault of ours. */
 export class NotionUnavailableError extends Error {
   override readonly name = 'NotionUnavailableError';
 }
@@ -46,8 +47,8 @@ export interface NotionItem {
 
 export interface NotionRows {
   items: NotionItem[];
-  // True when the page bound stopped the read, so the client can say "and more" rather than
-  // presenting a partial list as the whole table.
+  // True when the read stopped before the table ended — the page bound, or a has_more Notion
+  // gave no cursor for — so the client can say "and more" rather than present a partial list.
   truncated: boolean;
 }
 
@@ -94,19 +95,25 @@ type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC
 function classify(status: number, body: unknown): Error {
   const record = asRecord(body) ?? {};
   const raw = record.error ?? record.code;
-  const code = typeof raw === 'string' ? raw : '';
+  const code = typeof raw === 'string' && ERROR_CODE_RE.test(raw) ? raw : 'no code';
   if (code === 'invalid_client' || code === 'unauthorized_client') {
-    return new NotionConfigError(`notion rejected our client (${status}, ${code || 'no code'})`);
+    return new NotionConfigError(`notion rejected our client (${status}, ${code})`);
   }
   if (status === 401 || code === 'invalid_grant' || code === 'unauthorized') {
-    return new NotionAuthError(`notion grant is unusable (${status}, ${code || 'no code'})`);
+    return new NotionAuthError(`notion grant is unusable (${status}, ${code})`);
   }
   // 403 restricted_resource is the user un-sharing; 404 object_not_found is a deleted table.
   // Neither is ours to fix and neither clears on retry.
   if (status === 403 || status === 404) {
-    return new NotionResourceError(`notion resource unreachable (${status}, ${code || 'no code'})`);
+    return new NotionResourceError(`notion resource unreachable (${status}, ${code})`);
   }
-  return new NotionUnavailableError(`notion answered ${status} (${code || 'no code'})`);
+  // validation_error is the one 4xx a user can cause — a property renamed between the schema
+  // read and the write — and the next read prompts for it. Any other 4xx is a request only we
+  // could have malformed (redirect_uri, Notion-Version, body), which no retry will fix.
+  if (status >= 400 && status < 500 && status !== 429 && code !== 'validation_error') {
+    return new NotionConfigError(`notion rejected our request (${status}, ${code})`);
+  }
+  return new NotionUnavailableError(`notion answered ${status} (${code})`);
 }
 
 export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fetch): NotionClient {
@@ -212,7 +219,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
           }),
         });
       } catch (error) {
-        // Search names no resource the user could un-share, so a 403 here is our integration's
+        // Search names no resource the user could un-share, so a 403/404 here is our integration's
         // capabilities in the developer portal — sending the user back to the picker cannot fix it.
         if (error instanceof NotionResourceError) {
           throw new NotionConfigError(`notion search is forbidden (${error.message})`);

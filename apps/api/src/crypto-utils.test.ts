@@ -6,6 +6,7 @@ import {
   bearerToken,
   decryptSecret,
   encryptSecret,
+  isSecretKey,
   sha256Base64Url,
   signState,
   verifyState,
@@ -212,5 +213,15 @@ describe('encryptSecret / decryptSecret', () => {
 
   it('refuses a key that does not decode to 32 bytes', async () => {
     await expect(encryptSecret('x', 'c2hvcnQ')).rejects.toThrow(/32 bytes/);
+  });
+});
+
+describe('isSecretKey', () => {
+  it('accepts exactly 32 bytes of base64url and nothing else', () => {
+    expect(isSecretKey('A'.repeat(43))).toBe(true);
+    expect(isSecretKey('A'.repeat(42))).toBe(false);
+    expect(isSecretKey('A'.repeat(44))).toBe(false);
+    expect(isSecretKey('')).toBe(false);
+    expect(isSecretKey('not base64url!')).toBe(false);
   });
 });

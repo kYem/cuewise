@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
+import { spyOnLoggerError, spyOnLoggerWarn } from '../__fixtures__/logger.fixtures';
 import {
   connectedNotionUser,
   FailingWriteStore,
@@ -13,13 +13,14 @@ import {
   TEST_DATA_SOURCE_ID,
   TEST_REFRESH_TOKEN,
   TEST_REFRESHED_TOKEN,
+  TEST_ROTATED_REFRESH_TOKEN,
   TEST_STATE_SIGNING_KEY,
   testCodeChallenge,
   titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
 import { base64UrlDecodeString, signState } from '../crypto-utils';
 import { createApp } from '../index';
-import { NotionAuthError, NotionConfigError } from '../notion-client';
+import { NotionAuthError, NotionConfigError, NotionUnavailableError } from '../notion-client';
 
 function app(client = stubNotionClient()) {
   return createApp({ notionClientFactory: () => client });
@@ -204,12 +205,32 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(await res.text()).toContain('code=');
   });
 
-  it('relays a redirect with neither code nor error as ours', async () => {
+  it('relays a redirect with neither code nor error as ours, and logs it', async () => {
+    const warnSpy = spyOnLoggerWarn();
     const state = await signedState();
 
     const res = await app().request(callbackUrl(state, {}), {}, notionEnv());
 
     expect(await res.text()).toContain('error=server_error');
+    expect(warnSpy).toHaveBeenCalledWith('Notion callback carried neither a code nor an error');
+  });
+
+  it('answers server_error without exchanging the code when the token key is malformed', async () => {
+    const exchangeCode = vi.fn(async () => ({
+      accessToken: TEST_ACCESS_TOKEN,
+      refreshToken: null,
+      workspace: 'Acme',
+    }));
+    const state = await signedState();
+
+    const res = await app(stubNotionClient({ exchangeCode })).request(
+      callbackUrl(state),
+      {},
+      notionEnv({ PROVIDER_TOKEN_KEY: 'short' })
+    );
+
+    expect(await res.text()).toContain('error=server_error');
+    expect(exchangeCode).not.toHaveBeenCalled();
   });
 
   it('revokes the exchanged grant when it cannot be parked, so no live token is orphaned', async () => {
@@ -248,7 +269,8 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(await res.text()).toContain('error=access_denied');
   });
 
-  it('relays any other authorize error as ours, not as a cancel', async () => {
+  it('relays any other authorize error as ours, not as a cancel, and logs the code', async () => {
+    const errorSpy = spyOnLoggerError();
     const state = await signedState();
 
     const res = await app().request(
@@ -258,9 +280,13 @@ describe('GET /v1/integrations/notion/callback', () => {
     );
 
     expect(await res.text()).toContain('error=server_error');
+    expect(errorSpy).toHaveBeenCalledWith('Notion authorize step failed', {
+      error: 'invalid_request',
+    });
   });
 
   it('relays a failed exchange to the app instead of stranding its pending flow', async () => {
+    const errorSpy = spyOnLoggerError();
     const exchangeCode = vi.fn(async () => {
       throw new NotionAuthError('bad code');
     });
@@ -274,6 +300,8 @@ describe('GET /v1/integrations/notion/callback', () => {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('error=connect_failed');
+    // A code Notion would not exchange is not our fault; only our own misconfiguration is loud.
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('distinguishes our own misconfiguration from a bad code', async () => {
@@ -639,8 +667,9 @@ describe('PUT /v1/integrations/notion/selection', () => {
     );
 
     expect(res.status).toBe(200);
-    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+    await expect(storedNotionTokens(store, userId)).resolves.toEqual({
       accessToken: TEST_REFRESHED_TOKEN,
+      refreshToken: TEST_ROTATED_REFRESH_TOKEN,
     });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       dataSourceId: TEST_DATA_SOURCE_ID,
@@ -702,14 +731,31 @@ describe('DELETE /v1/integrations/notion', () => {
   });
 
   it('still disconnects when revocation fails, so notion being down cannot trap the user', async () => {
+    const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => {
-      throw new Error('notion unreachable');
+      throw new NotionUnavailableError('notion unreachable');
     });
     const { headers, store, userId } = await connectedNotionUser();
 
     const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
+    // An outage is theirs, not ours: warn, never error.
+    expect(errorSpy).not.toHaveBeenCalled();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('logs at error when revocation throws something that is not a notion fault', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => {
+      throw new TypeError('btoa: invalid character');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await disconnect(headers, stubNotionClient({ revokeToken }));
+
+    expect(res.status).toBe(204);
+    expect(errorSpy).toHaveBeenCalled();
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -723,6 +769,23 @@ describe('DELETE /v1/integrations/notion', () => {
     );
 
     expect(res.status).toBe(204);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('still disconnects on a malformed key, and says loudly why revocation was skipped', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await app(stubNotionClient({ revokeToken })).request(
+      '/v1/integrations/notion',
+      { method: 'DELETE', headers },
+      notionEnv({ PROVIDER_TOKEN_KEY: 'short' })
+    );
+
+    expect(res.status).toBe(204);
+    expect(revokeToken).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 

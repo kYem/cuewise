@@ -11,7 +11,7 @@ import {
   verifyState,
 } from '../crypto-utils';
 import type { Env } from '../env';
-import { parseJsonBody } from '../http';
+import { ERROR_CODE_RE, parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import {
   NotionAuthError,
@@ -29,7 +29,6 @@ import {
   CODE_VERIFIER_RE,
   codeVerifierIssue,
   isAllowedReturnUri,
-  OAUTH_ERROR_CODE_RE,
   requireStateSigningKey,
   respondWithDeepLink,
   toBounceState,
@@ -63,12 +62,14 @@ function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : 'unknown';
 }
 
-/** For decrypt failures: the class is diagnostic enough, and a crypto message is not ours to log. */
+// `name`, not `message`, for decrypt failures: WebCrypto's message is runtime-authored and not
+// guaranteed secret-free, and the class already says which step failed.
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown';
 }
 
-/** Fails closed: a key that cannot open a grant answers 500, and never touches a stored one. */
+// Shape only: a well-formed wrong key still passes and fails at decrypt. Callers answer 500
+// rather than read a grant with a key that cannot have sealed it.
 function requireProviderTokenKey(env: Env): string | null {
   if (!isSecretKey(env.PROVIDER_TOKEN_KEY)) {
     logger.error('PROVIDER_TOKEN_KEY is missing or does not decode to 32 bytes');
@@ -94,22 +95,30 @@ async function revokeUpstream(
   try {
     await client.revokeToken(accessToken);
   } catch (error) {
-    if (error instanceof NotionConfigError) {
-      // Our secret is wrong, so revocation fails for every user — systemic, must be loud.
-      logger.error('Notion revocation is failing on our client configuration', error);
+    if (
+      error instanceof NotionAuthError ||
+      error instanceof NotionUnavailableError ||
+      error instanceof NotionResourceError
+    ) {
+      logger.warn('Could not revoke a Notion grant upstream', { userId, reason: reasonOf(error) });
       return;
     }
-    logger.warn('Could not revoke a Notion grant upstream', { userId, reason: reasonOf(error) });
+    // Our secret, or our bug: fails for every user, so it must be loud.
+    logger.error('Notion revocation failed on our side', error, { userId });
   }
 }
 
-/** `revokeUpstream` for a stored grant; one that no longer decrypts is logged and left. */
+/** `revokeUpstream` for a stored grant; one that cannot be opened is logged and skipped. */
 async function revokeSealed(
   client: NotionClient,
   sealed: SealedSecret,
-  key: string,
+  env: Env,
   userId: string
 ): Promise<void> {
+  const key = requireProviderTokenKey(env);
+  if (key === null) {
+    return;
+  }
   let accessToken: string;
   try {
     accessToken = await decryptSecret(sealed.ciphertext, sealed.iv, key);
@@ -134,7 +143,7 @@ export async function revokeNotionGrant(
   if (existing === null) {
     return;
   }
-  await revokeSealed(client, existing, env.PROVIDER_TOKEN_KEY, userId);
+  await revokeSealed(client, existing, env, userId);
 }
 
 async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> {
@@ -149,7 +158,6 @@ async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> 
   };
 }
 
-/** Everything a request needs to act on the caller's grant. */
 interface OpenGrant {
   readonly store: SyncStore;
   readonly client: NotionClient;
@@ -159,12 +167,8 @@ interface OpenGrant {
   readonly accessToken: string;
 }
 
-/**
- * Loads and decrypts the caller's grant, or answers why it cannot: no grant (404), a malformed
- * key (500), or a grant sealed under a different key (401). Nothing is deleted here: a rotated
- * or mis-deployed key makes every grant unreadable at once, and putting it back must find them
- * all still there. A reconnect replaces the row anyway.
- */
+// Nothing is deleted on a decrypt failure: a rotated or mis-deployed key makes every grant
+// unreadable at once, and putting it back must find them all. A reconnect replaces the row anyway.
 async function openGrant(
   store: SyncStore,
   client: NotionClient,
@@ -239,47 +243,73 @@ async function providerProblem(
 }
 
 interface RenewedGrant {
-  accessToken: string;
-  ciphertext: string;
+  readonly accessToken: string;
+  readonly ciphertext: string;
 }
 
+// Named by role so the access pair (bare `ciphertext`/`iv`) cannot be handed in as the refresh one.
+type RefreshPair = { refreshCiphertext: string; refreshIv: string };
+
 /** Trades the stored refresh token for a new grant and persists it — tokens only, never the row. */
-async function renewGrant(
-  open: OpenGrant,
-  refresh: SealedSecret
-): Promise<RenewedGrant | Response> {
+async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<RenewedGrant | Response> {
+  const { userId, client, store } = open;
+  let refreshToken: string;
+  try {
+    refreshToken = await decryptSecret(refresh.refreshCiphertext, refresh.refreshIv, open.key);
+  } catch (error) {
+    // The access token opened under this key moments ago, so the row is inconsistent and will stay
+    // so: only a reconnect fixes it, and 500s would never prompt one.
+    logger.error('Stored Notion refresh token does not decrypt under the current key', {
+      userId,
+      reason: errorName(error),
+    });
+    return problem('provider_reauth_required');
+  }
   let grant: NotionGrant;
   let sealed: SealedGrant;
   try {
-    const refreshToken = await decryptSecret(refresh.ciphertext, refresh.iv, open.key);
-    grant = await open.client.refreshGrant(refreshToken);
+    grant = await client.refreshGrant(refreshToken);
     sealed = await sealGrant(grant, open.key);
   } catch (error) {
     // Named separately from the primary call's fault: an operator must be able to see that
     // renewal is what keeps failing.
-    logger.warn('Notion grant renewal failed', { userId: open.userId, reason: reasonOf(error) });
+    logger.warn('Notion grant renewal failed', { userId, reason: reasonOf(error) });
     return providerProblem(error, open, open.connection.ciphertext);
   }
-  const stored = await open.store.updateProviderTokens(open.userId, PROVIDER, sealed);
+  // Tokens only: `workspace` is dropped on purpose, since a refresh response never carries one.
+  const { ciphertext, iv, refreshCiphertext, refreshIv } = sealed;
+  let stored: boolean;
+  try {
+    stored = await store.updateProviderTokens(userId, PROVIDER, {
+      ciphertext,
+      iv,
+      refreshCiphertext,
+      refreshIv,
+    });
+  } catch (error) {
+    // The token just minted would otherwise stay live at Notion with nobody holding it.
+    await revokeUpstream(client, grant.accessToken, userId);
+    throw error;
+  }
   if (!stored) {
-    // Disconnected mid-request. The token just minted is held by nobody; do not leave it live.
-    await revokeUpstream(open.client, grant.accessToken, open.userId);
+    // Disconnected mid-request. Same orphan, different cause.
+    await revokeUpstream(client, grant.accessToken, userId);
     return problem('provider_not_connected');
   }
-  return { accessToken: grant.accessToken, ciphertext: sealed.ciphertext };
+  return { accessToken: grant.accessToken, ciphertext };
 }
 
-function refreshPair(connection: ProviderConnection): SealedSecret | null {
+function refreshPair(connection: ProviderConnection): RefreshPair | null {
   if (connection.refreshCiphertext === null || connection.refreshIv === null) {
     return null;
   }
-  return { ciphertext: connection.refreshCiphertext, iv: connection.refreshIv };
+  return { refreshCiphertext: connection.refreshCiphertext, refreshIv: connection.refreshIv };
 }
 
 /**
  * Runs one Notion call, renewing the grant once on an auth fault when a refresh token is held
- * (Notion documents no expires_in, so a 401 is the only signal a grant expired). Every failure
- * is answered here, so a route sees either its value or a finished Response.
+ * (Notion documents no expires_in, so a 401 is the only signal a grant expired). Every provider
+ * failure is answered here; anything else propagates to onError as a 500.
  */
 async function withFreshToken<T>(
   open: OpenGrant,
@@ -396,13 +426,17 @@ export function registerNotionRoutes(
         logger.warn('Notion authorize step unavailable', { error: denied });
       } else {
         logger.error('Notion authorize step failed', {
-          error: OAUTH_ERROR_CODE_RE.test(denied) ? denied : 'unrecognised',
+          error: ERROR_CODE_RE.test(denied) ? denied : 'unrecognised',
         });
       }
       return returnWithError(state.returnUri, 'server_error');
     }
     const code = c.req.query('code') ?? '';
-    if (code === '' || !credentialsConfigured(c.env)) {
+    if (code === '') {
+      logger.warn('Notion callback carried neither a code nor an error');
+      return returnWithError(state.returnUri, 'server_error');
+    }
+    if (!credentialsConfigured(c.env)) {
       return returnWithError(state.returnUri, 'server_error');
     }
     let grant: NotionGrant | null = null;
@@ -476,7 +510,7 @@ export function registerNotionRoutes(
       // The code is already burned, so this grant can never be claimed again. Revoke it rather
       // than leave a live token nobody holds, and say so — a retry will only see invalid_token.
       logger.error('Notion grant lost after its claim code was consumed', error, { userId });
-      await revokeSealed(client(c.env), grant, c.env.PROVIDER_TOKEN_KEY, userId);
+      await revokeSealed(client(c.env), grant, c.env, userId);
       return problem('internal', { detail: 'The connection was not saved; please connect again.' });
     }
     return c.json({ workspace: grant.workspace });
@@ -627,7 +661,7 @@ export function registerNotionRoutes(
     if (existing === null) {
       return problem('provider_not_connected');
     }
-    await revokeSealed(client(c.env), existing, c.env.PROVIDER_TOKEN_KEY, userId);
+    await revokeSealed(client(c.env), existing, c.env, userId);
     await store.deleteProviderConnection(userId, PROVIDER);
     return c.body(null, 204);
   });

@@ -54,6 +54,12 @@ export interface SealedGrant {
   workspace: string | null;
 }
 
+/** What a renewal may write: the tokens, never the workspace or the chosen table. */
+export type SealedTokens = Pick<
+  SealedGrant,
+  'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'
+>;
+
 // Device-to-device pairing (ENG-50): a short-lived relay row so a new device can join an
 // account by approving from one already signed in, without typing a code by hand.
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
@@ -129,9 +135,8 @@ export interface SyncStore {
   // already does — the caller maps that to a 409, closing the "two devices both generate a key" race.
   putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean>;
   // The only credential the server decrypts itself: a provider token is useless to us wrapped
-  // in a client-only key. One row per (user, provider), and no whole-row writer: every write
-  // below touches only its own columns, so a renewal and a selection in flight together cannot
-  // clobber each other.
+  // in a client-only key. No whole-row writer: the token writers never touch `data_source_id`
+  // and the picker touches nothing else, so a renewal and a selection cannot clobber each other.
   getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
   deleteProviderConnection(userId: string, provider: string): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
@@ -139,11 +144,7 @@ export interface SyncStore {
   putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
   // `null` refresh means "keep the stored one" — a renewal that does not rotate the refresh
   // token must not erase it. Both answer false when no row exists.
-  updateProviderTokens(
-    userId: string,
-    provider: string,
-    tokens: Pick<SealedGrant, 'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'>
-  ): Promise<boolean>;
+  updateProviderTokens(userId: string, provider: string, tokens: SealedTokens): Promise<boolean>;
   setProviderDataSource(userId: string, provider: string, dataSourceId: string): Promise<boolean>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
