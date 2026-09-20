@@ -73,6 +73,12 @@ describe('Due Date Utilities', () => {
       expect(getRecentIncompleteTasks(goals)).toEqual([]);
     });
 
+    it('excludes tasks scheduled for a future day', () => {
+      const goals = [createTestTask({ id: '1', date: getNextDayDateString() })];
+
+      expect(getRecentIncompleteTasks(goals)).toEqual([]);
+    });
+
     it('excludes tasks older than the day window', () => {
       const recent = createTestTask({ id: 'recent', date: daysAgo(10) });
       const old = createTestTask({ id: 'old', date: daysAgo(20) });

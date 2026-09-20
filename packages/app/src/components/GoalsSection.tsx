@@ -52,7 +52,7 @@ function getSubtitle(totalCount: number, incompleteCount: number): string {
   return `${incompleteCount} to go — keep your momentum`;
 }
 
-// Reveal toggle in the ⚙ menu (e.g. Show incomplete / Upcoming): icon + label +
+// Reveal toggle in the ⚙ menu (e.g. Show unfinished / Upcoming): icon + label +
 // count badge, highlighted while active.
 function MenuToggleItem({
   icon: Icon,
@@ -109,7 +109,7 @@ export const GoalsSection: React.FC = () => {
   const totalCount = todayTasks.length;
   const incompleteCount = totalCount - completedCount;
 
-  // Counts for the menu's "Show incomplete" (recent backlog) and "Upcoming" entries
+  // Counts for the menu's "Show unfinished" and "Upcoming" entries
   const recentIncompleteCount = getRecentIncompleteTasks(goals).length;
   const upcomingCount = getUpcomingTasks(goals).filter((t) => !t.completed).length;
   const focusedGoalId = settings.focusedGoalId;
@@ -337,7 +337,7 @@ export const GoalsSection: React.FC = () => {
             {recentIncompleteCount > 0 && (
               <MenuToggleItem
                 icon={History}
-                label="Show incomplete"
+                label="Show unfinished"
                 count={recentIncompleteCount}
                 active={settings.showIncompleteGoals}
                 onToggle={handleToggleShowIncomplete}

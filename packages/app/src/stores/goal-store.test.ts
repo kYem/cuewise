@@ -48,12 +48,14 @@ const autoRollNeverStored: Settings = { ...DEFAULT_SETTINGS, ...autoRollAbsentFr
 const toastError = vi.fn();
 const toastWarning = vi.fn();
 const toastSuccess = vi.fn();
+const toastInfo = vi.fn();
 vi.mock('./toast-store', () => ({
   useToastStore: {
     getState: () => ({
       error: toastError,
       warning: toastWarning,
       success: toastSuccess,
+      info: toastInfo,
     }),
   },
 }));
@@ -285,6 +287,94 @@ describe('Goal Store', () => {
       const state = useGoalStore.getState();
       expect(state.todayTasks).toHaveLength(1);
       expect(state.todayTasks[0].id).toBe(pastGoal.id);
+    });
+  });
+
+  describe('moveTasksToToday', () => {
+    const today = getTodayDateString();
+
+    it('re-dates every listed task to today in a single write', async () => {
+      const stale = goalFactory.buildList(2, { date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: stale, todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(stale.map((task) => task.id));
+
+      expect(storage.setGoals).toHaveBeenCalledOnce();
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written.map((task) => task.date)).toEqual([today, today]);
+    });
+
+    it('leaves tasks outside the list untouched', async () => {
+      const moved = goalFactory.build({ date: '2025-01-01', completed: false });
+      const kept = goalFactory.build({ date: '2025-01-02', completed: false });
+      useGoalStore.setState({ goals: [moved, kept], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday([moved.id]);
+
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written.find((task) => task.id === kept.id)?.date).toBe('2025-01-02');
+    });
+
+    it('shows the moved tasks in todayTasks', async () => {
+      const stale = goalFactory.buildList(2, { date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: stale, todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(stale.map((task) => task.id));
+
+      const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
+      expect(shown).toEqual(stale.map((task) => task.id));
+    });
+
+    it('toasts the number of tasks moved', async () => {
+      const stale = goalFactory.buildList(3, { date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: stale, todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(stale.map((task) => task.id));
+
+      expect(toastSuccess).toHaveBeenCalledWith('Moved 3 tasks to today');
+    });
+
+    it('uses the singular when one task moves', async () => {
+      const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: [stale], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday([stale.id]);
+
+      expect(toastSuccess).toHaveBeenCalledWith('Moved 1 task to today');
+    });
+
+    it('leaves a listed task alone when the fresh read shows it already done', async () => {
+      const done = completedGoalFactory.build({ date: '2025-01-01' });
+      const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: [done, stale], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday([done.id, stale.id]);
+
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written.find((task) => task.id === done.id)).toEqual(done);
+      expect(toastSuccess).toHaveBeenCalledWith('Moved 1 task to today');
+    });
+
+    it('leaves a listed task alone when the fresh read shows it already on today', async () => {
+      const alreadyToday = goalFactory.build({ date: today, completed: false, sortOrder: 3 });
+      useGoalStore.setState({ goals: [alreadyToday], todayTasks: [alreadyToday] });
+
+      await useGoalStore.getState().moveTasksToToday([alreadyToday.id]);
+
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written).toEqual([alreadyToday]);
+      expect(toastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('tells the user when nothing was left to move instead of claiming success', async () => {
+      useGoalStore.setState({ goals: [], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(['gone']);
+
+      expect(toastSuccess).not.toHaveBeenCalled();
+      expect(toastInfo).toHaveBeenCalledWith(
+        'Nothing left to move — already done, moved or removed'
+      );
     });
   });
 
@@ -980,6 +1070,36 @@ describe('sync sink wiring', () => {
     expect(markMutatedBulk).toHaveBeenCalledWith('goals', [overdue.id]);
   });
 
+  it('notifies markMutatedBulk with only the ids the write actually held', async () => {
+    const mine = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+
+    await useGoalStore.getState().moveTasksToToday([mine.id, 'gone']);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('goals', [mine.id]);
+  });
+
+  it('does not notify markMutatedBulk when the pull deleted every task first', async () => {
+    const mine = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([]);
+
+    await useGoalStore.getState().moveTasksToToday([mine.id]);
+
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+  });
+
+  it('does not announce a listed task the pull completed before the write', async () => {
+    const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+    const other = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [stale, other], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([stale, { ...other, completed: true }]);
+
+    await useGoalStore.getState().moveTasksToToday([stale.id, other.id]);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('goals', [stale.id]);
+  });
+
   it('notifies markMutated with the new task id after addTask persists', async () => {
     useGoalStore.setState({ goals: [] });
 
@@ -1439,6 +1559,17 @@ describe('resolved write failures are honored across writers', () => {
       },
     },
     {
+      name: 'moveTasksToToday',
+      prepare: () => {
+        const task = goalFactory.build({ date: '2025-01-01' });
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().moveTasksToToday([task.id]),
+          verify: () => expect(store().goals[0]).toMatchObject({ date: '2025-01-01' }),
+        };
+      },
+    },
+    {
       name: 'duplicateTask',
       prepare: () => {
         const task = goalFactory.build();
@@ -1591,6 +1722,18 @@ describe('writers read storage, not their own snapshot', () => {
 
     const [written] = vi.mocked(storage.setGoals).mock.calls[0];
     expect(written.map((goal) => goal.id)).toEqual([seeded.id, pulled.id, expect.any(String)]);
+  });
+
+  it('moveTasksToToday leaves a task the pull finished mid-click where it was', async () => {
+    const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+    const other = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [stale, other], todayTasks: [] });
+    vi.mocked(storage.getGoals).mockResolvedValue([stale, { ...other, completed: true }]);
+
+    await useGoalStore.getState().moveTasksToToday([stale.id, other.id]);
+
+    const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+    expect(written.find((goal) => goal.id === other.id)).toEqual({ ...other, completed: true });
   });
 
   it('rollDueTasks keeps a goal that only storage knows about', async () => {
