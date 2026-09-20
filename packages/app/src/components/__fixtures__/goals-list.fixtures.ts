@@ -1,5 +1,6 @@
-import type { Goal } from '@cuewise/shared';
+import { type Goal, getYesterdayDateString } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
+import { goalFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
 
 // Re-exported so existing GoalsList test imports keep resolving from this file.
@@ -20,6 +21,7 @@ export interface MockGoalStore {
   deleteTask: Mock;
   transferTaskToNextDay: Mock;
   moveTaskToToday: Mock;
+  moveTasksToToday: Mock;
   getActiveGoals: Mock;
   getGoalProgress: Mock;
   linkTaskToGoal: Mock;
@@ -43,6 +45,7 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
     deleteTask: vi.fn(async () => true),
     transferTaskToNextDay: vi.fn(async () => true),
     moveTaskToToday: vi.fn(async () => true),
+    moveTasksToToday: vi.fn(async () => true),
     getActiveGoals: vi.fn(() => []),
     getGoalProgress: vi.fn(() => null),
     linkTaskToGoal: vi.fn(async () => true),
@@ -64,4 +67,14 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
  */
 export function createGoalStoreMock(store: MockGoalStore) {
   return createSelectorMock(store);
+}
+
+/** Incomplete tasks dated yesterday — what the Unfinished group surfaces. */
+export function buildUnfinishedTasks(count: number): Goal[] {
+  return goalFactory.buildList(count, { date: getYesterdayDateString(), completed: false });
+}
+
+/** A goal store holding only `unfinished` (nothing for today), so the group renders alone. */
+export function createUnfinishedOnlyStore(unfinished: Goal[]): MockGoalStore {
+  return createMockGoalStore({ todayTasks: [], goals: unfinished });
 }

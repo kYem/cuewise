@@ -2,7 +2,6 @@ import {
   type Goal,
   type GoalViewMode,
   getDueDateLabel,
-  getRecentIncompleteTasks,
   getSubtaskProgress,
   getTodayDateString,
   isObjective,
@@ -29,15 +28,13 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  ExternalLink,
   Flag,
-  MoveRight,
   Plus,
   Trash2,
   X,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import emptyTasksAnimation from '../assets/lottie/empty/tasks.json';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
@@ -49,6 +46,7 @@ import { EmptyState } from './EmptyState';
 import { GoalInput } from './GoalInput';
 import { GoalLinkPopover } from './goals/GoalLinkPopover';
 import { getFilteredReorder, SortableTaskItem } from './SortableTaskItem';
+import { UnfinishedTasks } from './UnfinishedTasks';
 import { UpcomingTasks } from './UpcomingTasks';
 
 interface GoalsListProps {
@@ -99,7 +97,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     updateTask,
     deleteTask,
     transferTaskToNextDay,
-    moveTaskToToday,
     isLoading,
     getActiveGoals,
     linkTaskToGoal,
@@ -175,8 +172,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     }
   }, [addingSubtaskId]);
 
-  const recentIncompleteGoals = useMemo(() => getRecentIncompleteTasks(goals), [goals]);
-
   const hasOtherGoals = goals.length > todayTasks.length;
 
   if (isLoading) {
@@ -200,7 +195,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
             animationData={emptyTasksAnimation}
             title="No tasks for today"
             description={
-              hasOtherGoals ? 'View incomplete tasks below' : 'Add your first task to get started!'
+              hasOtherGoals ? 'Unfinished tasks are below' : 'Add your first task to get started!'
             }
           />
         </div>
@@ -531,51 +526,8 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </div>
       )}
 
-      {/* Recent incomplete backlog — revealed from the ⚙ menu (Show incomplete) */}
-      {settings.showIncompleteGoals && recentIncompleteGoals.length > 0 && (
-        <div className="pt-2.5 border-t border-border space-y-1.5">
-          <div className="px-0.5 text-xs font-medium text-tertiary">From the last 2 weeks</div>
-          {recentIncompleteGoals.map((goal) => (
-            <div
-              key={goal.id}
-              className="group flex items-center gap-2.5 px-3 py-2 rounded-xl border border-border bg-surface-variant/30 hover:border-primary-300 transition-all"
-            >
-              <button
-                type="button"
-                onClick={async () => {
-                  await toggleTask(goal.id);
-                }}
-                className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-full"
-                aria-label="Mark as complete"
-              >
-                <AnimatedCheckbox checked={goal.completed} size="md" />
-              </button>
-              <div className="flex-1 min-w-0">
-                <span className="block truncate text-sm text-primary">{goal.text}</span>
-                <span className="text-xs text-tertiary">{goal.date}</span>
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  await moveTaskToToday(goal.id);
-                }}
-                className="flex-shrink-0 p-1 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100"
-                aria-label="Move to today"
-                title="Move to today"
-              >
-                <MoveRight className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-          <a
-            href="#goals"
-            className="flex items-center justify-center gap-1.5 py-1 text-xs text-secondary hover:text-primary-600 transition-colors"
-          >
-            <span>View all goals</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      )}
+      {/* Unfinished from previous days — on by default, opt-out from the ⚙ menu */}
+      {settings.showIncompleteGoals && <UnfinishedTasks />}
 
       {/* Upcoming — revealed from the ⚙ menu (both list views) */}
       {settings.showUpcomingGoals && <UpcomingTasks showTrigger={false} />}

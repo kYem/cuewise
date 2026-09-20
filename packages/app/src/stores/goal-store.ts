@@ -53,6 +53,7 @@ interface GoalStore {
   clearCompleted: () => Promise<boolean>;
   transferTaskToNextDay: (goalId: string) => Promise<boolean>;
   moveTaskToToday: (goalId: string) => Promise<boolean>;
+  moveTasksToToday: (goalIds: string[]) => Promise<boolean>;
   rollDueTasks: () => Promise<boolean>;
   handleDayRollover: () => Promise<void>;
   setCompletionFilter: (filter: CompletionFilter) => void;
@@ -358,6 +359,39 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     } catch (error) {
       logger.error('Error moving goal to today', error);
       const errorMessage = 'Failed to move goal. Please try again.';
+      set({ error: errorMessage });
+      useToastStore.getState().error(errorMessage);
+      return false;
+    }
+  },
+
+  moveTasksToToday: async (goalIds: string[]) => {
+    try {
+      const today = getTodayDateString();
+      const wanted = new Set(goalIds);
+      const movedIds: string[] = [];
+
+      const updatedGoals = await persistGoals((goals) =>
+        goals.map((goal) => {
+          if (!wanted.has(goal.id)) {
+            return goal;
+          }
+          movedIds.push(goal.id);
+          return { ...goal, date: today, completed: false };
+        })
+      );
+
+      set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
+      if (movedIds.length > 0) {
+        notifyMutatedBulk('goals', movedIds);
+      }
+
+      const noun = movedIds.length === 1 ? 'task' : 'tasks';
+      useToastStore.getState().success(`Moved ${movedIds.length} ${noun} to today`);
+      return true;
+    } catch (error) {
+      logger.error('Error moving tasks to today', error);
+      const errorMessage = 'Failed to move tasks. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;

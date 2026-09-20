@@ -7,6 +7,7 @@ import { type CompletionFilter, useGoalStore } from '../stores/goal-store';
 import { AllGoalsList } from './AllGoalsList';
 import { GoalsSection } from './goals';
 import { PageHeader } from './PageHeader';
+import { UnfinishedBanner } from './UnfinishedTasks';
 import { UpcomingTasks } from './UpcomingTasks';
 
 type ViewTab = 'tasks' | 'goals';
@@ -223,6 +224,8 @@ export const GoalsPage: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {completionFilter !== 'completed' && <UnfinishedBanner className="mb-4" />}
 
             {/* Goals List */}
             <div className="bg-surface rounded-xl border-2 border-border p-6">

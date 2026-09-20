@@ -463,7 +463,7 @@ export interface Settings {
   newTabCalendarPosition: NewTabCalendarPosition; // Calendar order vs goals when shown (default 'below')
   focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
   showCompletedGoals: boolean; // Show completed tasks in Today's Focus list (default true)
-  showIncompleteGoals: boolean; // Reveal the recent-incomplete backlog in the widget (default false)
+  showIncompleteGoals: boolean; // Show unfinished tasks from previous days in the widget (default true)
   showUpcomingGoals: boolean; // Reveal the upcoming (due-soon) section in the widget (default false)
   // Quote Display
   quoteDisplayMode: QuoteDisplayMode; // How quotes are displayed on home page (default 'bottom')

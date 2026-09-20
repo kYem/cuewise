@@ -10,9 +10,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import {
+  buildUnfinishedTasks,
   createGoalStoreMock,
   createMockGoalStore,
   createSettingsStoreMock,
+  createUnfinishedOnlyStore,
   type MockGoalStore,
 } from './__fixtures__/goals-list.fixtures';
 import { GoalsList } from './GoalsList';
@@ -349,6 +351,152 @@ describe('GoalsList - Upcoming section', () => {
     render(<GoalsList />);
 
     expect(screen.queryByText('Ship release')).not.toBeInTheDocument();
+  });
+});
+
+describe('GoalsList - Unfinished group', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
+  });
+
+  it('shows unfinished tasks from previous days by default', () => {
+    const [stale] = buildUnfinishedTasks(1);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore([stale]))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.getByText('Unfinished (1)')).toBeInTheDocument();
+    expect(screen.getByText(stale.text)).toBeInTheDocument();
+  });
+
+  it('hides the group when showIncompleteGoals is turned off', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showIncompleteGoals: false })
+    );
+    const [stale] = buildUnfinishedTasks(1);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore([stale]))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.queryByText('Unfinished (1)')).not.toBeInTheDocument();
+    expect(screen.queryByText(stale.text)).not.toBeInTheDocument();
+  });
+
+  it('labels each row with its relative date', () => {
+    const [stale] = buildUnfinishedTasks(1);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore([stale]))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.getByText('Yesterday')).toBeInTheDocument();
+  });
+
+  it('moves every unfinished task to today with one click', async () => {
+    const user = userEvent.setup();
+    const unfinished = buildUnfinishedTasks(3);
+    const store = createUnfinishedOnlyStore(unfinished);
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Move all to today' }));
+
+    expect(store.moveTasksToToday).toHaveBeenCalledWith(unfinished.map((task) => task.id));
+  });
+
+  it('moves a single row to today', async () => {
+    const user = userEvent.setup();
+    const [stale] = buildUnfinishedTasks(1);
+    const store = createUnfinishedOnlyStore([stale]);
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: `Move "${stale.text}" to today` }));
+
+    expect(store.moveTaskToToday).toHaveBeenCalledWith(stale.id);
+  });
+
+  it('deletes a single row', async () => {
+    const user = userEvent.setup();
+    const [stale] = buildUnfinishedTasks(1);
+    const store = createUnfinishedOnlyStore([stale]);
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: `Delete "${stale.text}"` }));
+
+    expect(store.deleteTask).toHaveBeenCalledWith(stale.id);
+  });
+
+  it('completes a single row', async () => {
+    const user = userEvent.setup();
+    const [stale] = buildUnfinishedTasks(1);
+    const store = createUnfinishedOnlyStore([stale]);
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: `Mark "${stale.text}" complete` }));
+
+    expect(store.toggleTask).toHaveBeenCalledWith(stale.id);
+  });
+
+  it('starts collapsed to the count when more than five are unfinished', () => {
+    const unfinished = buildUnfinishedTasks(6);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore(unfinished))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.getByRole('button', { name: 'Unfinished (6)' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    expect(screen.queryByText(unfinished[0].text)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move all to today' })).toBeInTheDocument();
+  });
+
+  it('expands a collapsed group when its header is clicked', async () => {
+    const user = userEvent.setup();
+    const unfinished = buildUnfinishedTasks(6);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore(unfinished))
+    );
+
+    render(<GoalsList />);
+    await user.click(screen.getByRole('button', { name: 'Unfinished (6)' }));
+
+    expect(screen.getByText(unfinished[0].text)).toBeInTheDocument();
+  });
+
+  it('starts expanded when five or fewer are unfinished', () => {
+    const unfinished = buildUnfinishedTasks(5);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore(unfinished))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.getByRole('button', { name: 'Unfinished (5)' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+  });
+
+  it('points the empty state at the unfinished group', () => {
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore(buildUnfinishedTasks(1)))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.getByText('Unfinished tasks are below')).toBeInTheDocument();
   });
 });
 

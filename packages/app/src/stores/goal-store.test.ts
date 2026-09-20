@@ -288,6 +288,60 @@ describe('Goal Store', () => {
     });
   });
 
+  describe('moveTasksToToday', () => {
+    const today = getTodayDateString();
+
+    it('re-dates every listed task to today in a single write', async () => {
+      const stale = goalFactory.buildList(2, { date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: stale, todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(stale.map((task) => task.id));
+
+      expect(storage.setGoals).toHaveBeenCalledOnce();
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written.map((task) => task.date)).toEqual([today, today]);
+    });
+
+    it('leaves tasks outside the list untouched', async () => {
+      const moved = goalFactory.build({ date: '2025-01-01', completed: false });
+      const kept = goalFactory.build({ date: '2025-01-02', completed: false });
+      useGoalStore.setState({ goals: [moved, kept], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday([moved.id]);
+
+      const [written] = vi.mocked(storage.setGoals).mock.calls[0];
+      expect(written.find((task) => task.id === kept.id)?.date).toBe('2025-01-02');
+    });
+
+    it('shows the moved tasks in todayTasks', async () => {
+      const stale = goalFactory.buildList(2, { date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: stale, todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(stale.map((task) => task.id));
+
+      const shown = useGoalStore.getState().todayTasks.map((task) => task.id);
+      expect(shown).toEqual(stale.map((task) => task.id));
+    });
+
+    it('toasts the number of tasks moved', async () => {
+      const stale = goalFactory.buildList(3, { date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: stale, todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday(stale.map((task) => task.id));
+
+      expect(toastSuccess).toHaveBeenCalledWith('Moved 3 tasks to today');
+    });
+
+    it('uses the singular when one task moves', async () => {
+      const stale = goalFactory.build({ date: '2025-01-01', completed: false });
+      useGoalStore.setState({ goals: [stale], todayTasks: [] });
+
+      await useGoalStore.getState().moveTasksToToday([stale.id]);
+
+      expect(toastSuccess).toHaveBeenCalledWith('Moved 1 task to today');
+    });
+  });
+
   describe('transferGoalToNextDay', () => {
     it('should transfer goal to tomorrow', async () => {
       const today = getTodayDateString();
@@ -980,6 +1034,23 @@ describe('sync sink wiring', () => {
     expect(markMutatedBulk).toHaveBeenCalledWith('goals', [overdue.id]);
   });
 
+  it('notifies markMutatedBulk with only the ids the write actually held', async () => {
+    const mine = goalFactory.build({ date: '2025-01-01', completed: false });
+    useGoalStore.setState({ goals: [mine], todayTasks: [] });
+
+    await useGoalStore.getState().moveTasksToToday([mine.id, 'gone']);
+
+    expect(markMutatedBulk).toHaveBeenCalledWith('goals', [mine.id]);
+  });
+
+  it('does not notify markMutatedBulk when the pull deleted every task first', async () => {
+    useGoalStore.setState({ goals: [], todayTasks: [] });
+
+    await useGoalStore.getState().moveTasksToToday(['gone']);
+
+    expect(markMutatedBulk).not.toHaveBeenCalled();
+  });
+
   it('notifies markMutated with the new task id after addTask persists', async () => {
     useGoalStore.setState({ goals: [] });
 
@@ -1434,6 +1505,17 @@ describe('resolved write failures are honored across writers', () => {
         useGoalStore.setState({ goals: [task] });
         return {
           act: () => store().moveTaskToToday(task.id),
+          verify: () => expect(store().goals[0]).toMatchObject({ date: '2025-01-01' }),
+        };
+      },
+    },
+    {
+      name: 'moveTasksToToday',
+      prepare: () => {
+        const task = goalFactory.build({ date: '2025-01-01' });
+        useGoalStore.setState({ goals: [task] });
+        return {
+          act: () => store().moveTasksToToday([task.id]),
           verify: () => expect(store().goals[0]).toMatchObject({ date: '2025-01-01' }),
         };
       },
