@@ -34,7 +34,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@playwright/test": "^1",
+    "@playwright/test": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@tauri-apps/cli": "^2",
     "@types/chrome": "catalog:",
