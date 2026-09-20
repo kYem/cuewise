@@ -371,7 +371,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const wanted = new Set(goalIds);
       const movedIds: string[] = [];
 
-      // Caller ids can be stale (second click, finished elsewhere); the fresh read decides what moves.
+      // Ids may be stale (second click, finished elsewhere); the fresh read decides what moves.
       const updatedGoals = await persistGoals((goals) =>
         goals.map((goal) => {
           if (!wanted.has(goal.id) || !isTask(goal) || goal.completed || goal.date >= today) {

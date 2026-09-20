@@ -80,7 +80,7 @@ export function buildUnfinishedTasksOn(dates: string[]): Goal[] {
   return dates.map((date) => goalFactory.build({ date, completed: false }));
 }
 
-/** Nothing scheduled for today, so the Unfinished group renders under the empty state. */
+/** Nothing for today, so the empty state renders with any Unfinished group beneath it. */
 export function createNoTodayTasksStore(goals: Goal[]): MockGoalStore {
   return createMockGoalStore({ todayTasks: [], goals });
 }
