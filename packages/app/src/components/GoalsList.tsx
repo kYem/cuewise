@@ -528,7 +528,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
         </div>
       )}
 
-      {settings.showIncompleteGoals && <UnfinishedTasks />}
+      {settings.showIncompleteGoals && <UnfinishedTasks compact={viewMode === 'compact'} />}
 
       {/* Upcoming — revealed from the ⚙ menu (both list views) */}
       {settings.showUpcomingGoals && <UpcomingTasks showTrigger={false} />}

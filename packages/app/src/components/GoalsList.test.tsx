@@ -529,6 +529,35 @@ describe('GoalsList - Unfinished group', () => {
     expect(screen.queryByRole('link', { name: /View all goals/ })).not.toBeInTheDocument();
   });
 
+  it('uses borderless rows in compact view, keeping every row action', () => {
+    const [stale] = buildUnfinishedTasks(1);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createNoTodayTasksStore([stale]))
+    );
+
+    render(<GoalsList viewMode="compact" />);
+
+    const row = screen.getByRole('button', { name: `Mark "${stale.text}" complete` }).parentElement;
+    expect(row).not.toHaveClass('border');
+    expect(screen.getByText('Yesterday')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: `Move "${stale.text}" to today` })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Delete "${stale.text}"` })).toBeInTheDocument();
+  });
+
+  it('uses bordered card rows in full view', () => {
+    const [stale] = buildUnfinishedTasks(1);
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createNoTodayTasksStore([stale]))
+    );
+
+    render(<GoalsList />);
+
+    const row = screen.getByRole('button', { name: `Mark "${stale.text}" complete` }).parentElement;
+    expect(row).toHaveClass('border');
+  });
+
   it('starts collapsed to the count when more than five are unfinished', () => {
     const unfinished = buildUnfinishedTasks(6);
     vi.mocked(useGoalStore).mockImplementation(

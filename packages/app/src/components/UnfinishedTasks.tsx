@@ -66,9 +66,62 @@ export const UnfinishedBanner: React.FC<{ className?: string }> = ({ className }
   );
 };
 
-/** The home widget's Unfinished group; UnfinishedBanner is the goals-page counterpart. */
-export const UnfinishedTasks: React.FC = () => {
+// Compact matches CompactGoalRow: borderless, one line, the date as a muted suffix.
+const ROW_CLASS = {
+  full: 'group flex items-center gap-2.5 px-3 py-2 rounded-xl border border-border bg-surface-variant/30 hover:border-primary-300 transition-all',
+  compact:
+    'group flex items-center gap-2.5 px-2 py-1.5 rounded-lg bg-surface-variant/30 hover:bg-surface-variant/50 transition-colors',
+};
+
+function UnfinishedRow({ task, compact }: { task: Goal; compact: boolean }): React.ReactElement {
   const { toggleTask, moveTaskToToday, deleteTask } = useGoalStore();
+  const dateLabel = getRelativeDateLabel(task.date);
+
+  return (
+    <div className={compact ? ROW_CLASS.compact : ROW_CLASS.full}>
+      <button
+        type="button"
+        onClick={() => toggleTask(task.id)}
+        className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-full"
+        aria-label={`Mark "${task.text}" complete`}
+      >
+        <AnimatedCheckbox checked={task.completed} size="md" />
+      </button>
+      {compact ? (
+        <>
+          <span className="min-w-0 flex-1 truncate text-sm text-primary">{task.text}</span>
+          <span className="flex-shrink-0 text-[10px] text-tertiary">{dateLabel}</span>
+        </>
+      ) : (
+        <div className="flex-1 min-w-0">
+          <span className="block truncate text-sm text-primary">{task.text}</span>
+          <span className="text-xs text-tertiary">{dateLabel}</span>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => moveTaskToToday(task.id)}
+        className="flex-shrink-0 p-1 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+        aria-label={`Move "${task.text}" to today`}
+        title="Move to today"
+      >
+        <MoveRight className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => deleteTask(task.id)}
+        className="flex-shrink-0 p-1 text-secondary hover:text-red-500 rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+        aria-label={`Delete "${task.text}"`}
+        title="Delete"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+/** The home widget's Unfinished group; UnfinishedBanner is the goals-page counterpart. */
+export const UnfinishedTasks: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const { unfinished, moveAllToToday } = useUnfinishedTasks();
   // null = never toggled, so the row count decides until the user picks.
   const [expandedByUser, setExpandedByUser] = useState<boolean | null>(null);
@@ -103,41 +156,7 @@ export const UnfinishedTasks: React.FC = () => {
       {expanded && (
         <>
           {unfinished.map((task) => (
-            <div
-              key={task.id}
-              className="group flex items-center gap-2.5 px-3 py-2 rounded-xl border border-border bg-surface-variant/30 hover:border-primary-300 transition-all"
-            >
-              <button
-                type="button"
-                onClick={() => toggleTask(task.id)}
-                className="flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-full"
-                aria-label={`Mark "${task.text}" complete`}
-              >
-                <AnimatedCheckbox checked={task.completed} size="md" />
-              </button>
-              <div className="flex-1 min-w-0">
-                <span className="block truncate text-sm text-primary">{task.text}</span>
-                <span className="text-xs text-tertiary">{getRelativeDateLabel(task.date)}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => moveTaskToToday(task.id)}
-                className="flex-shrink-0 p-1 text-secondary hover:text-primary-600 hover:bg-primary-50 rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                aria-label={`Move "${task.text}" to today`}
-                title="Move to today"
-              >
-                <MoveRight className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteTask(task.id)}
-                className="flex-shrink-0 p-1 text-secondary hover:text-red-500 rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                aria-label={`Delete "${task.text}"`}
-                title="Delete"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+            <UnfinishedRow key={task.id} task={task} compact={compact} />
           ))}
           <a
             href="#goals"
