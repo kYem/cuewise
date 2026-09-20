@@ -1,5 +1,6 @@
 import {
   configurePlatform,
+  DEFAULT_SETTINGS,
   logger,
   type Reminder,
   resetPlatform,
@@ -7,8 +8,10 @@ import {
 } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
+import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordReminderActivity } from '../services/reminder-activity';
+import { reminderNotification } from '../services/reminder-notifications';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useReminderStore } from './reminder-store';
 
@@ -22,6 +25,7 @@ const recordActivity = vi.mocked(recordReminderActivity);
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
+  getSettings: vi.fn(),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -47,6 +51,7 @@ vi.mock('./toast-store', () => ({
 
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
+const getSettingsMock = vi.mocked(storage.getSettings);
 
 // The Scheduler is injected; assert against it instead of poking chrome.alarms.
 const fakeScheduler = {
@@ -82,6 +87,7 @@ beforeEach(() => {
   // seed with setState or an earlier action and still exercise the read-inside-the-write.
   getRemindersMock.mockImplementation(async () => useReminderStore.getState().reminders);
   setRemindersMock.mockResolvedValue({ success: true });
+  getSettingsMock.mockResolvedValue(DEFAULT_SETTINGS);
   configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({
     reminders: [],
@@ -389,6 +395,51 @@ describe('fireDueReminders', () => {
     await useReminderStore.getState().fireDueReminders();
 
     expect(logged).toHaveBeenCalledWith('Fired due reminders', { count: 1 });
+  });
+
+  describe('raising the OS notification from the page', () => {
+    const notifier = fakeNotifier();
+    const DUE_TEXT = 'Stand up';
+
+    beforeEach(() => {
+      configurePlatform({ scheduler: fakeScheduler, notifier });
+      useReminderStore.setState({
+        reminders: [
+          reminderFactory.build({
+            id: 'due-1',
+            text: DUE_TEXT,
+            dueDate: new Date(Date.now() - 60_000).toISOString(),
+            notified: false,
+          }),
+        ],
+      });
+    });
+
+    it('notifies when the switch is on', async () => {
+      await useReminderStore.getState().fireDueReminders();
+
+      expect(notifier.notify).toHaveBeenCalledWith(
+        reminderNotification('reminder-due-1', DUE_TEXT)
+      );
+    });
+
+    it('still toasts, but does not notify, when the switch is off', async () => {
+      getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+
+      await useReminderStore.getState().fireDueReminders();
+
+      expect(notifier.notify).not.toHaveBeenCalled();
+      expect(toastWarning).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves delivery to a background host', async () => {
+      configurePlatform({ scheduler: { ...fakeScheduler, deliversInBackground: true }, notifier });
+
+      await useReminderStore.getState().fireDueReminders();
+
+      expect(notifier.notify).not.toHaveBeenCalled();
+      expect(getSettingsMock).not.toHaveBeenCalled();
+    });
   });
 });
 

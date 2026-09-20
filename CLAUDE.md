@@ -40,7 +40,7 @@ apps/
 // Host variants so a command-only context can't accidentally subscribe.
 interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<void>; }
 interface SchedulerHost extends Scheduler { onFire(handler): () => void; }
-interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; }
+interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; permission(): Promise<NotifierPermission>; }
 interface NotifierHost extends Notifier { onClick(handler): () => void; onAction(handler): () => void; }
 interface KeyValueStore { get(key, area); set(key, value, area); remove(key, area); getUsage(area); }
 

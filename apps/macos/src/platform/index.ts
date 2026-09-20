@@ -1,4 +1,10 @@
-import { logger, type Notifier, type NotifyOptions, type SchedulerHost } from '@cuewise/shared';
+import {
+  logger,
+  type Notifier,
+  type NotifierPermission,
+  type NotifyOptions,
+  type SchedulerHost,
+} from '@cuewise/shared';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -17,11 +23,11 @@ import {
 /** Web Notification API notifier — works inside the Tauri WKWebView. */
 export class WebNotifier implements Notifier {
   async notify(opts: NotifyOptions): Promise<void> {
-    // Only deliver when permission is already granted. Requesting it must come
-    // from a user gesture (WebKit errors otherwise), so that belongs in a
-    // settings action — and real OS notifications move to the Tauri notification
-    // plugin later. Until then this placeholder no-ops rather than nag.
+    // Only when already granted: WebKit rejects a permission request outside a user gesture.
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      logger.error('Web notification not delivered: permission not granted', undefined, {
+        id: opts.id,
+      });
       return;
     }
     new Notification(opts.title, { body: opts.body, tag: opts.id });
@@ -29,6 +35,13 @@ export class WebNotifier implements Notifier {
 
   async clear(_id: string): Promise<void> {
     // Web notifications auto-dismiss; nothing to clear.
+  }
+
+  async permission(): Promise<NotifierPermission> {
+    if (typeof Notification === 'undefined' || Notification.permission === 'default') {
+      return 'unknown';
+    }
+    return Notification.permission;
   }
 }
 
@@ -51,6 +64,12 @@ export class TauriNotifier implements Notifier {
 
   async clear(_id: string): Promise<void> {
     // The plugin exposes no programmatic clear for delivered notifications.
+  }
+
+  // Never 'denied': the desktop plugin hard-codes granted, so an OS-level denial is invisible
+  // here, and a false could as well mean unasked.
+  async permission(): Promise<NotifierPermission> {
+    return (await isPermissionGranted()) ? 'granted' : 'unknown';
   }
 }
 

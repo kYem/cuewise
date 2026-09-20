@@ -2,6 +2,7 @@ import { configurePlatform, type Settings } from '@cuewise/shared';
 import type { SettingsRead } from '@cuewise/storage';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
+import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as sounds from '../utils/sounds';
 import { usePomodoroStore } from './pomodoro-store';
@@ -54,10 +55,7 @@ vi.mock('./celebration-store', () => ({
 }));
 
 // The Notifier is injected; assert against it instead of the global Notification.
-const fakeNotifier = {
-  notify: vi.fn(() => Promise.resolve()),
-  clear: vi.fn(() => Promise.resolve()),
-};
+const notifier = fakeNotifier();
 
 // completeSession awaits readSettings() before it writes, so a fire-and-forget tick has not
 // reached the write when the caller's next statement runs.
@@ -141,7 +139,7 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
 
-    configurePlatform({ notifier: fakeNotifier });
+    configurePlatform({ notifier });
   });
 
   describe('completeSession notification', () => {
@@ -150,7 +148,7 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
       await usePomodoroStore.getState().completeSession();
 
-      expect(fakeNotifier.notify).toHaveBeenCalledWith(
+      expect(notifier.notify).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Pomodoro Timer',
           body: expect.stringContaining('complete'),
@@ -159,13 +157,26 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
     });
 
     it('still saves the session when the notification fails', async () => {
-      fakeNotifier.notify.mockRejectedValueOnce(new Error('notify failed'));
+      notifier.notify.mockRejectedValueOnce(new Error('notify failed'));
       setupWorkSession();
 
       await expect(usePomodoroStore.getState().completeSession()).resolves.toBeUndefined();
 
       expect(storage.setPomodoroSessions).toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
+    });
+
+    it('does not notify when notifications are switched off in settings', async () => {
+      vi.mocked(storage.getSettings).mockResolvedValue({
+        ...defaultSettings,
+        enableNotifications: false,
+      });
+      setupWorkSession();
+
+      await usePomodoroStore.getState().completeSession();
+
+      expect(notifier.notify).not.toHaveBeenCalled();
+      expect(storage.setPomodoroSessions).toHaveBeenCalled();
     });
   });
 
@@ -254,6 +265,13 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
       expect(storeLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('pomodoroAutoStartBreaks')
       );
+    });
+
+    it('still notifies that the session ended', async () => {
+      setupWorkSession();
+      await usePomodoroStore.getState().completeSession();
+
+      expect(notifier.notify).toHaveBeenCalled();
     });
   });
 
@@ -473,7 +491,7 @@ describe('Pomodoro Store - tick wall-clock reconciliation (#159)', () => {
     vi.mocked(storage.setPomodoroSessions).mockResolvedValue({ success: true });
     vi.mocked(storage.getSettings).mockResolvedValue(defaultSettings);
     vi.mocked(storage.readSettings).mockResolvedValue(settingsRead(defaultSettings));
-    configurePlatform({ notifier: fakeNotifier });
+    configurePlatform({ notifier });
   });
 
   it('decrements by one second on a normal ~1s tick', () => {

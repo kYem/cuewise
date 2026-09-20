@@ -8,12 +8,13 @@ import {
   getNotifier,
   getScheduler,
   logger,
+  type NotifyOptions,
   nextReminderDueDate,
   type Reminder,
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
-import { getReminders, updateReminders } from '@cuewise/storage';
+import { getReminders, getSettings, updateReminders } from '@cuewise/storage';
 import { activitySubject, recordReminderActivity } from './reminder-activity';
 
 export interface ReminderAlarmReconcile {
@@ -58,6 +59,34 @@ export async function armMissingReminderAlarms(
     detail: `re-armed ${tally.rearmed} of ${tally.pending} pending${failed}`,
   });
   return tally;
+}
+
+// A reminder-prefixed id with no stored reminder: the extension's button handler resolves it to
+// dismiss, so Done / Snooze just close the test; a click opens Cuewise like any reminder.
+export const REMINDER_TEST_NOTIFICATION_ID = reminderAlarmId('test');
+
+/** The one shape every reminder notification takes, so a test notification is a real preview. */
+export function reminderNotification(id: string, body: string): NotifyOptions {
+  return {
+    id,
+    title: '🔔 Reminder',
+    body,
+    actions: ['Done', 'Snooze 5 min'],
+    requireInteraction: true,
+  };
+}
+
+/**
+ * Read from storage, not the settings store: the service worker has none. getSettings defaults
+ * field-wise, so an unreadable switch is on and a readable "off" is honoured; a rejection is on too.
+ */
+export async function notificationsEnabled(): Promise<boolean> {
+  try {
+    return (await getSettings()).enableNotifications;
+  } catch (error) {
+    logger.error('Could not read the Notifications switch; notifying anyway', error);
+    return true;
+  }
 }
 
 /**
@@ -105,13 +134,10 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
     }
 
     step = 'notify';
-    await getNotifier().notify({
-      id: reminderAlarmId(reminderId),
-      title: '🔔 Reminder',
-      body: reminder.text,
-      actions: ['Done', 'Snooze 5 min'],
-      requireInteraction: true,
-    });
+    const delivered = await notificationsEnabled();
+    if (delivered) {
+      await getNotifier().notify(reminderNotification(reminderAlarmId(reminderId), reminder.text));
+    }
 
     // One locked section reading fresh, not the list from before the notify: that round trip is
     // long enough for a pull to land, and every decision below has to be made against what it left.
@@ -147,10 +173,14 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       step = 're-arm';
       await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);
     }
+    const details = [
+      ...(delivered ? [] : ['notifications off']),
+      ...(nextDueDate !== null ? [`next ${nextDueDate.toISOString()}`] : []),
+    ];
     await recordReminderActivity({
       event: 'fired',
       ...activitySubject(reminder),
-      ...(nextDueDate !== null ? { detail: `next ${nextDueDate.toISOString()}` } : {}),
+      ...(details.length > 0 ? { detail: details.join(', ') } : {}),
     });
   } catch (error) {
     logger.error('Error handling reminder fire', error);
