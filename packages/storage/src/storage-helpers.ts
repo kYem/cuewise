@@ -387,7 +387,13 @@ export async function setGoals(goals: Goal[]): Promise<StorageResult> {
  * Every writer of one whole-array collection, page or service worker, names its lock from here —
  * a rename is then a type error rather than two literals silently drifting apart.
  */
-export const COLLECTION_LOCKS = ['goals', 'quotes', 'collections', 'reminders'] as const;
+export const COLLECTION_LOCKS = [
+  'goals',
+  'quotes',
+  'collections',
+  'reminders',
+  'reminderActivity', // device-local, never synced — locked for the two realms, not the pull
+] as const;
 
 export type CollectionLock = (typeof COLLECTION_LOCKS)[number];
 

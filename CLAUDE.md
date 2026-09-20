@@ -502,6 +502,11 @@ pnpm --filter @cuewise/browser-extension dev
 
 **Note**: Dev server uses Vite HMR. For production testing, load `apps/browser-extension/dist` as unpacked extension in Chrome.
 
+**Real-extension e2e** (`apps/browser-extension/e2e/`): Playwright drives the built extension's service
+worker in headed Chromium. `pnpm --filter @cuewise/browser-extension e2e e2e/reminder-lifecycle.spec.ts`
+runs one reminder through add → fire → snooze → update → done and prints the `reminderActivity` trace
+(also in `chrome.storage.local`, last 20 events, on any install).
+
 ## Package Naming Convention
 
 - **Apps**: `@cuewise/browser-extension`, `@cuewise/api`, `@cuewise/web`, `@cuewise/mobile`
