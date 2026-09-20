@@ -173,6 +173,28 @@ describe('settings sections', () => {
     });
   });
 
+  describe('Goals & alerts', () => {
+    it('offers a test notification, gated by the Notifications switch', () => {
+      renderSection('goals', '', { enableNotifications: false });
+
+      expect(screen.getByText('Test notification')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Send test' })).toBeDisabled();
+    });
+
+    // Every phrase that opens the section must also match the row, or the panel opens empty.
+    it.each([
+      'notification',
+      'test notification',
+      'send test',
+    ])('renders the test row for a "%s" search', (query) => {
+      expect(sectionsMatching(query)).toContain('goals');
+      renderSection('goals', query);
+
+      expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
+      expect(screen.queryByText('Reminders layout')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Home', () => {
     it('renders every catalogued widget row with its help text', () => {
       renderSection('home');

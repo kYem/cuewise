@@ -24,7 +24,11 @@ import {
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
-import { armMissingReminderAlarms } from '../services/reminder-notifications';
+import {
+  armMissingReminderAlarms,
+  notificationsEnabled,
+  reminderNotification,
+} from '../services/reminder-notifications';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
@@ -647,20 +651,19 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // reminder that fired but never reached the user would otherwise leave no trace.
       logger.error('Fired due reminders', { count: dueNow.length });
 
+      // Toasts first: `notified` is already persisted, so nothing fallible may sit between that
+      // write and the one delivery a page without a background host is guaranteed to make.
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
         await recordReminderActivity({ event: 'toasted', ...activitySubject(r) });
-        // No background worker to raise the OS notification, so deliver it here via the port.
-        // Where a resident host owns delivery, it notifies instead.
-        if (!getScheduler().deliversInBackground) {
+      }
+
+      // No background worker to raise the OS notification, so deliver it here via the port.
+      // Where a resident host owns delivery, it notifies instead.
+      if (!getScheduler().deliversInBackground && (await notificationsEnabled())) {
+        for (const r of dueNow) {
           getNotifier()
-            .notify({
-              id: reminderAlarmId(r.id),
-              title: '🔔 Reminder',
-              body: r.text,
-              actions: ['Done', 'Snooze 5 min'],
-              requireInteraction: true,
-            })
+            .notify(reminderNotification(reminderAlarmId(r.id), r.text))
             .catch((error) => logger.error('Failed to deliver reminder notification', error));
         }
       }

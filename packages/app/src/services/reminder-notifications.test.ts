@@ -1,6 +1,7 @@
-import { configurePlatform, logger, type Reminder } from '@cuewise/shared';
+import { configurePlatform, DEFAULT_SETTINGS, logger, type Reminder } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
+import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordReminderActivity } from './reminder-activity';
 import { armMissingReminderAlarms, handleReminderFire } from './reminder-notifications';
@@ -14,6 +15,7 @@ const recordActivity = vi.mocked(recordReminderActivity);
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
+  getSettings: vi.fn(),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -24,17 +26,20 @@ vi.mock('@cuewise/storage', () => ({
 
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
+const getSettingsMock = vi.mocked(storage.getSettings);
 
 // Spy notifier/scheduler injected via the platform ports — assert against these
 // instead of any concrete adapter.
-const notify = vi.fn(() => Promise.resolve());
+const notifier = fakeNotifier();
+const notify = notifier.notify;
 const scheduleAt = vi.fn(() => Promise.resolve());
 
 beforeEach(() => {
   vi.clearAllMocks();
   setRemindersMock.mockResolvedValue({ success: true });
+  getSettingsMock.mockResolvedValue(DEFAULT_SETTINGS);
   configurePlatform({
-    notifier: { notify, clear: async () => {} },
+    notifier,
     scheduler: {
       deliversInBackground: true,
       persistsAcrossRestarts: false,
@@ -182,6 +187,80 @@ describe('handleReminderFire', () => {
 
     expect(getRemindersMock).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('skips the notification but still advances when notifications are switched off', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({
+        id: 'r6',
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      }),
+    ]);
+
+    await handleReminderFire('reminder-r6');
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(scheduleAt).toHaveBeenCalledWith('reminder-r6', expect.any(Date));
+  });
+
+  it('spends a one-off, rather than deferring it, when notifications are switched off', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8' })]);
+
+    await handleReminderFire('reminder-r8');
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(setRemindersMock.mock.calls[0][0][0].notified).toBe(true);
+  });
+
+  it('records a withheld one-off as fired with the switch named', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8', text: 'Stretch' })]);
+
+    await handleReminderFire('reminder-r8');
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'fired',
+      reminderId: 'r8',
+      text: 'Stretch',
+      detail: 'notifications off',
+    });
+  });
+
+  it('records a withheld recurring fire together with its next occurrence', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({
+        id: 'r2',
+        text: 'Water',
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      }),
+    ]);
+
+    await handleReminderFire('reminder-r2');
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'fired',
+      reminderId: 'r2',
+      text: 'Water',
+      detail: expect.stringMatching(/^notifications off, next \d{4}-/),
+    });
+  });
+
+  // A storage hiccup must not silence reminders: the default is on, so unknown means on.
+  it('notifies, and says so, when the settings read rejects', async () => {
+    getSettingsMock.mockRejectedValue(new Error('storage unavailable'));
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r7' })]);
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await handleReminderFire('reminder-r7');
+
+    expect(notify).toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Could not read the Notifications switch; notifying anyway',
+      expect.any(Error)
+    );
   });
 
   it('records a fired one-off in the activity log', async () => {
