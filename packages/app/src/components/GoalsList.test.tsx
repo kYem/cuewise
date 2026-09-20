@@ -498,6 +498,30 @@ describe('GoalsList - Unfinished group', () => {
 
     expect(screen.getByText('Unfinished tasks are below')).toBeInTheDocument();
   });
+
+  it('does not promise an unfinished group when the only other task is tomorrow', () => {
+    const deferred = goalFactory.build({ date: getNextDayDateString(), completed: false });
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore([deferred]))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.queryByText('Unfinished tasks are below')).not.toBeInTheDocument();
+  });
+
+  it('does not promise an unfinished group when showIncompleteGoals is off', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showIncompleteGoals: false })
+    );
+    vi.mocked(useGoalStore).mockImplementation(
+      createGoalStoreMock(createUnfinishedOnlyStore(buildUnfinishedTasks(1)))
+    );
+
+    render(<GoalsList />);
+
+    expect(screen.queryByText('Unfinished tasks are below')).not.toBeInTheDocument();
+  });
 });
 
 describe('GoalsList - Show completed filter', () => {

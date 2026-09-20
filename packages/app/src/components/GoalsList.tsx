@@ -2,6 +2,7 @@ import {
   type Goal,
   type GoalViewMode,
   getDueDateLabel,
+  getRecentIncompleteTasks,
   getSubtaskProgress,
   getTodayDateString,
   isObjective,
@@ -172,7 +173,8 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     }
   }, [addingSubtaskId]);
 
-  const hasOtherGoals = goals.length > todayTasks.length;
+  const showsUnfinished =
+    settings.showIncompleteGoals && getRecentIncompleteTasks(goals).length > 0;
 
   if (isLoading) {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
@@ -195,7 +197,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
             animationData={emptyTasksAnimation}
             title="No tasks for today"
             description={
-              hasOtherGoals ? 'Unfinished tasks are below' : 'Add your first task to get started!'
+              showsUnfinished ? 'Unfinished tasks are below' : 'Add your first task to get started!'
             }
           />
         </div>
