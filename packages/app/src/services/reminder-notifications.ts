@@ -90,9 +90,9 @@ export async function notificationsEnabled(): Promise<boolean> {
 }
 
 /**
- * Deliver a reminder's notification when its scheduled wake fires. Looks the
- * reminder up by the alarm id, notifies (with Done/Snooze actions), marks it
- * notified, and re-arms the next occurrence for recurring reminders. A no-op for
+ * Deliver a reminder's notification when its scheduled wake fires. Looks the reminder up by the
+ * alarm id, notifies (with Done/Snooze actions) unless the Notifications switch is off, and in
+ * either case marks it notified and re-arms the next occurrence of a recurring one. A no-op for
  * non-reminder alarm ids, or reminders that are gone / completed / paused.
  */
 export async function handleReminderFire(alarmId: string): Promise<void> {

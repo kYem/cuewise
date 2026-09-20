@@ -440,6 +440,33 @@ describe('fireDueReminders', () => {
       expect(notifier.notify).not.toHaveBeenCalled();
       expect(getSettingsMock).not.toHaveBeenCalled();
     });
+
+    // `notified` is persisted before the toasts, so every due reminder must reach the user even
+    // when the notifier is unusable — the toast is the delivery nothing fallible may precede.
+    it('toasts every due reminder before anything that can fail', async () => {
+      resetPlatform();
+      configurePlatform({ scheduler: fakeScheduler });
+      useReminderStore.setState({
+        reminders: [
+          reminderFactory.build({
+            id: 'due-1',
+            dueDate: new Date(Date.now() - 60_000).toISOString(),
+            notified: false,
+          }),
+          reminderFactory.build({
+            id: 'due-2',
+            dueDate: new Date(Date.now() - 30_000).toISOString(),
+            notified: false,
+          }),
+        ],
+      });
+      const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      await useReminderStore.getState().fireDueReminders();
+
+      expect(toastWarning).toHaveBeenCalledTimes(2);
+      expect(errorLog).toHaveBeenCalledWith('Error firing due reminders', expect.anything());
+    });
   });
 });
 

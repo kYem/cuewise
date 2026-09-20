@@ -567,9 +567,9 @@ export const usePomodoroStore = create<PomodoroStore>()(
           } else {
             message = 'Break complete! Ready to focus?';
           }
-          // Fire-and-forget: a notification failure — async rejection OR a
-          // synchronous getNotifier() throw — must not fail the already-saved session.
           if (await notificationsEnabled()) {
+            // Fire-and-forget: a notification failure — async rejection OR a
+            // synchronous getNotifier() throw — must not fail the already-saved session.
             try {
               getNotifier()
                 .notify({ id: 'pomodoro-complete', title: 'Pomodoro Timer', body: message })

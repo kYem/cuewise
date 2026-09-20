@@ -57,9 +57,13 @@ export class TauriNotifier implements Notifier {
     if (!granted) {
       granted = (await requestPermission()) === 'granted';
     }
-    if (granted) {
-      sendNotification({ title: opts.title, body: opts.body });
+    if (!granted) {
+      logger.error('Native notification not delivered: permission refused', undefined, {
+        id: opts.id,
+      });
+      return;
     }
+    sendNotification({ title: opts.title, body: opts.body });
   }
 
   async clear(_id: string): Promise<void> {

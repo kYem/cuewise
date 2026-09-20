@@ -58,13 +58,19 @@ describe('TauriNotifier.notify', () => {
     expect(sendNotificationMock).toHaveBeenCalledWith({ title: 'T', body: 'B' });
   });
 
-  it('sends nothing when permission is refused', async () => {
+  it('sends nothing when permission is refused, and says so', async () => {
     isPermissionGrantedMock.mockResolvedValue(false);
     requestPermissionMock.mockResolvedValue('denied');
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     await new TauriNotifier().notify({ id: 'reminder-1', title: 'T', body: 'B' });
 
     expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledWith(
+      'Native notification not delivered: permission refused',
+      undefined,
+      { id: 'reminder-1' }
+    );
   });
 });
 

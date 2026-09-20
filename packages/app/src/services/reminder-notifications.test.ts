@@ -206,17 +206,45 @@ describe('handleReminderFire', () => {
 
   it('spends a one-off, rather than deferring it, when notifications are switched off', async () => {
     getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
-    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8', text: 'Stretch' })]);
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8' })]);
 
     await handleReminderFire('reminder-r8');
 
     expect(notify).not.toHaveBeenCalled();
     expect(setRemindersMock.mock.calls[0][0][0].notified).toBe(true);
+  });
+
+  it('records a withheld one-off as fired with the switch named', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r8', text: 'Stretch' })]);
+
+    await handleReminderFire('reminder-r8');
+
     expect(recordActivity).toHaveBeenCalledWith({
       event: 'fired',
       reminderId: 'r8',
       text: 'Stretch',
       detail: 'notifications off',
+    });
+  });
+
+  it('records a withheld recurring fire together with its next occurrence', async () => {
+    getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({
+        id: 'r2',
+        text: 'Water',
+        recurring: { frequency: 'interval', intervalMinutes: 30 },
+      }),
+    ]);
+
+    await handleReminderFire('reminder-r2');
+
+    expect(recordActivity).toHaveBeenCalledWith({
+      event: 'fired',
+      reminderId: 'r2',
+      text: 'Water',
+      detail: expect.stringMatching(/^notifications off, next \d{4}-/),
     });
   });
 

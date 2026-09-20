@@ -11,7 +11,7 @@ vi.mock('@cuewise/app/reminder-activity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cuewise/app/reminder-activity')>()),
   recordReminderActivity: recordActivityMock,
 }));
-vi.mock('@cuewise/storage', async () => ({
+vi.mock('@cuewise/storage', () => ({
   getReminders: getRemindersMock,
   setReminders: setRemindersMock,
   // Faithful, not a stub: the read has to happen inside the write, so a mock taking the caller's
