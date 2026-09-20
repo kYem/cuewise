@@ -135,8 +135,7 @@ export interface SyncStore {
   // already does — the caller maps that to a 409, closing the "two devices both generate a key" race.
   putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean>;
   // The only credential the server decrypts itself: a provider token is useless to us wrapped
-  // in a client-only key. No whole-row writer: the token writers never touch `data_source_id`
-  // and the picker touches nothing else, so a renewal and a selection cannot clobber each other.
+  // in a client-only key. No whole-row writer, so a renewal and a selection cannot clobber each other.
   getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
   deleteProviderConnection(userId: string, provider: string): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no

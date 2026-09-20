@@ -5,6 +5,7 @@ import {
   FailingWriteStore,
   noTodoStatusSchema,
   notionEnv,
+  sealRefreshUnderForeignKey,
   signedInWithoutNotion,
   statusSchema,
   storedNotionTokens,
@@ -248,7 +249,7 @@ describe('token renewal', () => {
     });
   });
 
-  it('keeps the workspace name, which a refresh response never carries', async () => {
+  it('keeps the workspace name across a renewal', async () => {
     const { queryRows } = expiringQuery();
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
@@ -305,6 +306,20 @@ describe('token renewal', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
+  it('hands notion the stored refresh token, not the access token it just rejected', async () => {
+    const { queryRows } = expiringQuery();
+    const refreshGrant = vi.fn(async () => ({
+      accessToken: TEST_REFRESHED_TOKEN,
+      refreshToken: TEST_ROTATED_REFRESH_TOKEN,
+      workspace: null,
+    }));
+    const { headers } = await connectedNotionUser({ withRefreshToken: true });
+
+    await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
+
+    expect(refreshGrant).toHaveBeenCalledWith(TEST_REFRESH_TOKEN);
+  });
+
   it('asks to reconnect when the refresh token no longer decrypts, keeping the row', async () => {
     const errorSpy = spyOnLoggerError();
     const refreshGrant = vi.fn(async () => {
@@ -314,31 +329,27 @@ describe('token renewal', () => {
       throw new NotionAuthError('expired');
     });
     const { headers, store, userId } = await connectedNotionUser();
-    // The access pair decrypts; the refresh pair was sealed under some other key.
-    const foreign = await encryptSecret(TEST_REFRESH_TOKEN, 'B'.repeat(43));
-    const current = await storedNotionTokens(store, userId);
-    const access = await encryptSecret(current.accessToken, TEST_PROVIDER_KEY);
-    await store.updateProviderTokens(userId, 'notion', {
-      ciphertext: access.ciphertext,
-      iv: access.iv,
-      refreshCiphertext: foreign.ciphertext,
-      refreshIv: foreign.iv,
-    });
+    await sealRefreshUnderForeignKey(store, userId);
 
     const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(401);
     expect(body.code).toBe('provider_reauth_required');
+    expect(queryRows).toHaveBeenCalled();
     expect(refreshGrant).not.toHaveBeenCalled();
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Stored Notion refresh token does not decrypt under the current key',
+      { userId, reason: 'OperationError' }
+    );
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
-  it('revokes the renewed token when storing it fails, so nothing live is orphaned', async () => {
+  it('revokes the renewed token when storing it fails, and says so before the 500', async () => {
+    const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => undefined);
     const { queryRows } = expiringQuery();
-    const { headers } = await connectedNotionUser({ withRefreshToken: true });
+    const { headers, userId } = await connectedNotionUser({ withRefreshToken: true });
 
     const res = await createApp({
       notionClientFactory: () => stubNotionClient({ queryRows, revokeToken }),
@@ -347,6 +358,11 @@ describe('token renewal', () => {
 
     expect(res.status).toBe(500);
     expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Notion renewal could not be stored; revoked the new token',
+      expect.any(Error),
+      { userId }
+    );
   });
 
   it('drops the grant when the renewal itself is rejected', async () => {

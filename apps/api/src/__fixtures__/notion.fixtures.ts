@@ -143,6 +143,19 @@ export async function connectedNotionUser(
   return user;
 }
 
+/** Reseals only the refresh pair under a different key, so the access token opens and the refresh one cannot. */
+export async function sealRefreshUnderForeignKey(store: SyncStore, userId: string): Promise<void> {
+  const current = await storedNotionTokens(store, userId);
+  const access = await encryptSecret(current.accessToken, TEST_PROVIDER_KEY);
+  const foreign = await encryptSecret(TEST_REFRESH_TOKEN, 'B'.repeat(43));
+  await store.updateProviderTokens(userId, 'notion', {
+    ciphertext: access.ciphertext,
+    iv: access.iv,
+    refreshCiphertext: foreign.ciphertext,
+    refreshIv: foreign.iv,
+  });
+}
+
 export interface StoredNotionTokens {
   accessToken: string;
   refreshToken: string | null;

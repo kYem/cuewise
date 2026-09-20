@@ -68,8 +68,8 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown';
 }
 
-// Shape only: a well-formed wrong key still passes and fails at decrypt. Callers answer 500
-// rather than read a grant with a key that cannot have sealed it.
+// Shape only: a well-formed wrong key still passes and fails at decrypt. Checked up front so a
+// truncated secret reads as our fault, never as a revoked grant.
 function requireProviderTokenKey(env: Env): string | null {
   if (!isSecretKey(env.PROVIDER_TOKEN_KEY)) {
     logger.error('PROVIDER_TOKEN_KEY is missing or does not decode to 32 bytes');
@@ -103,7 +103,7 @@ async function revokeUpstream(
       logger.warn('Could not revoke a Notion grant upstream', { userId, reason: reasonOf(error) });
       return;
     }
-    // Our secret, or our bug: fails for every user, so it must be loud.
+    // Our config, or our bug: fails for every user, so it must be loud.
     logger.error('Notion revocation failed on our side', error, { userId });
   }
 }
@@ -115,8 +115,12 @@ async function revokeSealed(
   env: Env,
   userId: string
 ): Promise<void> {
-  const key = requireProviderTokenKey(env);
-  if (key === null) {
+  const key = env.PROVIDER_TOKEN_KEY;
+  if (!isSecretKey(key)) {
+    // Notion tokens never expire on their own, so this one stays live until someone notices.
+    logger.error('PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation', {
+      userId,
+    });
     return;
   }
   let accessToken: string;
@@ -235,8 +239,8 @@ async function providerProblem(
     return problem('upstream_unavailable', { detail: error.message });
   }
   if (error instanceof NotionConfigError) {
-    // Our credentials, not the user's grant — nothing they can do, so it must be loud.
-    logger.error('Notion rejected our client configuration', error);
+    // Our credentials or our request, not the user's grant — nothing they can do, so it must be loud.
+    logger.error('Notion rejected our client or request', error);
     return problem('internal');
   }
   throw error;
@@ -248,7 +252,10 @@ interface RenewedGrant {
 }
 
 // Named by role so the access pair (bare `ciphertext`/`iv`) cannot be handed in as the refresh one.
-type RefreshPair = { refreshCiphertext: string; refreshIv: string };
+interface RefreshPair {
+  readonly refreshCiphertext: string;
+  readonly refreshIv: string;
+}
 
 /** Trades the stored refresh token for a new grant and persists it — tokens only, never the row. */
 async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<RenewedGrant | Response> {
@@ -265,18 +272,21 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
     });
     return problem('provider_reauth_required');
   }
-  let grant: NotionGrant;
+  let grant: NotionGrant | null = null;
   let sealed: SealedGrant;
   try {
     grant = await client.refreshGrant(refreshToken);
     sealed = await sealGrant(grant, open.key);
   } catch (error) {
+    if (grant !== null) {
+      // Minted but never stored: nobody holds this token, so do not leave it live.
+      await revokeUpstream(client, grant.accessToken, userId);
+    }
     // Named separately from the primary call's fault: an operator must be able to see that
     // renewal is what keeps failing.
     logger.warn('Notion grant renewal failed', { userId, reason: reasonOf(error) });
     return providerProblem(error, open, open.connection.ciphertext);
   }
-  // Tokens only: `workspace` is dropped on purpose, since a refresh response never carries one.
   const { ciphertext, iv, refreshCiphertext, refreshIv } = sealed;
   let stored: boolean;
   try {
@@ -287,8 +297,8 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
       refreshIv,
     });
   } catch (error) {
-    // The token just minted would otherwise stay live at Notion with nobody holding it.
     await revokeUpstream(client, grant.accessToken, userId);
+    logger.error('Notion renewal could not be stored; revoked the new token', error, { userId });
     throw error;
   }
   if (!stored) {
@@ -453,7 +463,7 @@ export function registerNotionRoutes(
         await revokeUpstream(client(c.env), grant.accessToken, null);
       }
       if (error instanceof NotionConfigError) {
-        logger.error('Notion rejected our client configuration', error);
+        logger.error('Notion rejected our client or request', error);
         return returnWithError(state.returnUri, 'server_error');
       }
       if (error instanceof NotionAuthError || error instanceof NotionUnavailableError) {

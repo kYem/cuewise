@@ -30,7 +30,7 @@ export class NotionAuthError extends Error {
 export class NotionConfigError extends Error {
   override readonly name = 'NotionConfigError';
 }
-/** Notion is down, rate-limiting, unreadable, or mid-edit. Retryable, and not a fault of ours. */
+/** Notion is down, rate-limiting, unreadable, or the row changed under a write. Retryable, not ours. */
 export class NotionUnavailableError extends Error {
   override readonly name = 'NotionUnavailableError';
 }
@@ -95,7 +95,8 @@ type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC
 function classify(status: number, body: unknown): Error {
   const record = asRecord(body) ?? {};
   const raw = record.error ?? record.code;
-  const code = typeof raw === 'string' && ERROR_CODE_RE.test(raw) ? raw : 'no code';
+  const code =
+    typeof raw === 'string' ? (ERROR_CODE_RE.test(raw) ? raw : 'unrecognised') : 'no code';
   if (code === 'invalid_client' || code === 'unauthorized_client') {
     return new NotionConfigError(`notion rejected our client (${status}, ${code})`);
   }
@@ -107,10 +108,15 @@ function classify(status: number, body: unknown): Error {
   if (status === 403 || status === 404) {
     return new NotionResourceError(`notion resource unreachable (${status}, ${code})`);
   }
-  // validation_error is the one 4xx a user can cause — a property renamed between the schema
-  // read and the write — and the next read prompts for it. Any other 4xx is a request only we
-  // could have malformed (redirect_uri, Notion-Version, body), which no retry will fix.
-  if (status >= 400 && status < 500 && status !== 429 && code !== 'validation_error') {
+  // validation_error (schema drift under a write) and a 409 collision are Notion's retryable 4xx;
+  // any other is a request only we could have malformed (Notion-Version, invalid_json).
+  if (
+    status >= 400 &&
+    status < 500 &&
+    status !== 429 &&
+    status !== 409 &&
+    code !== 'validation_error'
+  ) {
     return new NotionConfigError(`notion rejected our request (${status}, ${code})`);
   }
   return new NotionUnavailableError(`notion answered ${status} (${code})`);
@@ -219,8 +225,8 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
           }),
         });
       } catch (error) {
-        // Search names no resource the user could un-share, so a 403/404 here is our integration's
-        // capabilities in the developer portal — sending the user back to the picker cannot fix it.
+        // Search names no resource the user could un-share: a 403 here is our integration's
+        // capabilities (a 404 would be our URL), and the picker cannot fix either.
         if (error instanceof NotionResourceError) {
           throw new NotionConfigError(`notion search is forbidden (${error.message})`);
         }
@@ -295,7 +301,6 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         const hasMore = record.has_more === true;
         const next = record.next_cursor;
         if (!hasMore || typeof next !== 'string') {
-          // has_more with no cursor cannot be followed, but must not read as a complete list.
           return { items, truncated: hasMore };
         }
         cursor = next;

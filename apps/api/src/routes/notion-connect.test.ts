@@ -20,7 +20,12 @@ import {
 } from '../__fixtures__/notion.fixtures';
 import { base64UrlDecodeString, signState } from '../crypto-utils';
 import { createApp } from '../index';
-import { NotionAuthError, NotionConfigError, NotionUnavailableError } from '../notion-client';
+import {
+  NotionAuthError,
+  NotionConfigError,
+  NotionResourceError,
+  NotionUnavailableError,
+} from '../notion-client';
 
 function app(client = stubNotionClient()) {
   return createApp({ notionClientFactory: () => client });
@@ -285,7 +290,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     });
   });
 
-  it('relays a failed exchange to the app instead of stranding its pending flow', async () => {
+  it('relays a failed exchange to the app as theirs, not ours — no error log', async () => {
     const errorSpy = spyOnLoggerError();
     const exchangeCode = vi.fn(async () => {
       throw new NotionAuthError('bad code');
@@ -300,7 +305,6 @@ describe('GET /v1/integrations/notion/callback', () => {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('error=connect_failed');
-    // A code Notion would not exchange is not our fault; only our own misconfiguration is loud.
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
@@ -730,8 +734,9 @@ describe('DELETE /v1/integrations/notion', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('still disconnects when revocation fails, so notion being down cannot trap the user', async () => {
+  it('still disconnects on an outage, warning rather than erroring — theirs, not ours', async () => {
     const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
     const revokeToken = vi.fn(async () => {
       throw new NotionUnavailableError('notion unreachable');
     });
@@ -740,22 +745,56 @@ describe('DELETE /v1/integrations/notion', () => {
     const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
-    // An outage is theirs, not ours: warn, never error.
     expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('Could not revoke a Notion grant upstream', {
+      userId,
+      reason: 'notion unreachable',
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('logs at error when revocation throws something that is not a notion fault', async () => {
+  it('warns, not errors, when notion already considers the grant dead', async () => {
     const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => {
-      throw new TypeError('btoa: invalid character');
+      throw new NotionAuthError('invalid_token');
     });
     const { headers, store, userId } = await connectedNotionUser();
 
     const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('warns, not errors, when notion answers the revoke with a 403 or 404', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => {
+      throw new NotionResourceError('restricted_resource');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await disconnect(headers, stubNotionClient({ revokeToken }));
+
+    expect(res.status).toBe(204);
+    expect(errorSpy).not.toHaveBeenCalled();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('logs at error, with the error and the user, when revocation throws something that is not a notion fault', async () => {
+    const errorSpy = spyOnLoggerError();
+    const thrown = new TypeError('btoa: invalid character');
+    const revokeToken = vi.fn(async () => {
+      throw thrown;
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await disconnect(headers, stubNotionClient({ revokeToken }));
+
+    expect(res.status).toBe(204);
+    expect(errorSpy).toHaveBeenCalledWith('Notion revocation failed on our side', thrown, {
+      userId,
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -774,6 +813,7 @@ describe('DELETE /v1/integrations/notion', () => {
 
   it('still disconnects on a malformed key, and says loudly why revocation was skipped', async () => {
     const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
     const revokeToken = vi.fn(async () => undefined);
     const { headers, store, userId } = await connectedNotionUser();
 
@@ -785,21 +825,28 @@ describe('DELETE /v1/integrations/notion', () => {
 
     expect(res.status).toBe(204);
     expect(revokeToken).not.toHaveBeenCalled();
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation',
+      { userId }
+    );
+    expect(warnSpy).not.toHaveBeenCalled();
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
   it('logs at error when revocation fails on our own configuration, since every user is affected', async () => {
     const errorSpy = spyOnLoggerError();
+    const thrown = new NotionConfigError('invalid_client');
     const revokeToken = vi.fn(async () => {
-      throw new NotionConfigError('invalid_client');
+      throw thrown;
     });
     const { headers, store, userId } = await connectedNotionUser();
 
     const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith('Notion revocation failed on our side', thrown, {
+      userId,
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 });
@@ -822,7 +869,7 @@ describe('DELETE /v1/account', () => {
 
   it('still deletes the account when revocation fails', async () => {
     const revokeToken = vi.fn(async () => {
-      throw new Error('notion unreachable');
+      throw new NotionUnavailableError('notion unreachable');
     });
     const { headers, store, userId } = await connectedNotionUser();
 

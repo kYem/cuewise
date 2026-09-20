@@ -181,6 +181,22 @@ describe('failure classification', () => {
     await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
   });
 
+  it('keeps a 409 collision retryable, since a concurrent edit to the page causes it', async () => {
+    const notion = client(() => Response.json({ code: 'conflict_error' }, { status: 409 }));
+
+    await expect(
+      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
+    ).rejects.toBeInstanceOf(NotionUnavailableError);
+  });
+
+  it('treats a 401 with no readable code as the grant being unusable, not our config', async () => {
+    const notion = client(() => new Response('', { status: 401 }));
+
+    await expect(notion.queryRows('tok', 'ds1', checkboxProperty)).rejects.toBeInstanceOf(
+      NotionAuthError
+    );
+  });
+
   it('keeps validation_error retryable, since a renamed property causes it mid-write', async () => {
     const notion = client(() => Response.json({ code: 'validation_error' }, { status: 400 }));
 
@@ -192,7 +208,7 @@ describe('failure classification', () => {
 
     const error = await notion.exchangeCode('c').catch((thrown: unknown) => thrown);
 
-    expect(String(error)).toContain('no code');
+    expect(String(error)).toContain('unrecognised');
     expect(String(error)).not.toContain('secret');
   });
 
