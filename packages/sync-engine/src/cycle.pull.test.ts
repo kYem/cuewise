@@ -13,11 +13,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableAfterFirstWrite, requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
+import { sealServerRecord } from './__fixtures__/records';
 import { defaultBindings } from './collections';
 import { type CycleDeps, PULL_PAGE, pullOnce } from './cycle';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
-import { toPushRecord } from './record-map';
 import { LwwHlcStrategy, type RecordBody } from './strategy';
 
 const KEY_ID = 'dk-1';
@@ -25,18 +25,6 @@ const OLDER_HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'de
 const NEWER_HLC = hlcEncode({ physical: 1_700_000_001_000, counter: 1, node: 'device-a' });
 /** Wall clock for a local edit that must outrank anything the pull is carrying. */
 const AHEAD_OF_PULL_MS = 1_800_000_000_000;
-
-/** Seals a body with the shared dk/keyId and stamps it with a seq, as the server would. */
-async function sealRecord(
-  dk: ReturnType<typeof generateDataKey>,
-  collection: string,
-  entityId: string,
-  body: RecordBody,
-  seq: number
-): Promise<SyncRecord> {
-  const pushRecord = await toPushRecord(dk, KEY_ID, collection, entityId, body);
-  return { ...pushRecord, seq };
-}
 
 /** Runs `landing` inside the pull's round trip — after it loaded the ledger, before it saves. */
 function duringPull(transport: FakeTransport, landing: () => Promise<void>): void {
@@ -93,7 +81,14 @@ describe('pullOnce', () => {
     await setGoals([local]);
     await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
     const incomingGoal = goalFactory.build({ id: 'g1', text: 'incoming' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: incomingGoal, hlc: NEWER_HLC },
+      1
+    );
     transport.pullRecords = [rec];
 
     await pullOnce(makeDeps());
@@ -112,7 +107,14 @@ describe('pullOnce', () => {
     await setGoals([local]);
     await seedLocalHlc(metaStore, 'goals', 'g1', NEWER_HLC);
     const staleGoal = goalFactory.build({ id: 'g1', text: 'stale' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: staleGoal, hlc: OLDER_HLC }, 1);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: staleGoal, hlc: OLDER_HLC },
+      1
+    );
     transport.pullRecords = [rec];
     const bindings = defaultBindings();
     const writeOneSpy = vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne');
@@ -133,7 +135,14 @@ describe('pullOnce', () => {
     const local = goalFactory.build({ id: 'g1', text: 'mine' });
     await setGoals([local]);
     await seedLocalHlc(metaStore, 'goals', 'g1', NEWER_HLC);
-    const echo = await sealRecord(dk, 'goals', 'g1', { entity: local, hlc: NEWER_HLC }, 3);
+    const echo = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: local, hlc: NEWER_HLC },
+      3
+    );
     transport.pullRecords = [echo];
 
     await pullOnce(makeDeps());
@@ -151,8 +160,9 @@ describe('pullOnce', () => {
     await setGoals([local]);
     await seedLocalHlc(metaStore, 'goals', 'g1', localHlc);
     transport.pullRecords = [
-      await sealRecord(
+      await sealServerRecord(
         dk,
+        KEY_ID,
         'goals',
         'g1',
         { entity: { ...local, text: 'theirs' }, hlc: incomingHlc },
@@ -172,7 +182,7 @@ describe('pullOnce', () => {
     await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
     const incoming = goalFactory.build({ id: 'g1', text: 'incoming' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 7),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 7),
     ];
     const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
     duringPull(transport, () => tracker.markMutated('goals', 'g1'));
@@ -191,7 +201,7 @@ describe('pullOnce', () => {
     });
     const goal = goalFactory.build({ id: 'g1' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 2),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 2),
     ];
 
     await pullOnce(makeDeps());
@@ -201,7 +211,14 @@ describe('pullOnce', () => {
 
   it('records the seq of a quarantined record too', async () => {
     const goal = goalFactory.build({ id: 'g1' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 4);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: goal, hlc: NEWER_HLC },
+      4
+    );
     transport.pullRecords = [{ ...rec, ciphertext: 'garbage' }];
 
     await pullOnce(makeDeps());
@@ -211,7 +228,14 @@ describe('pullOnce', () => {
 
   it('quarantines a poison record, skips the write, fires onQuarantine once, and still advances the cursor', async () => {
     const goal = goalFactory.build({ id: 'g1' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: goal, hlc: NEWER_HLC },
+      1
+    );
     const poisoned: SyncRecord = { ...rec, ciphertext: 'garbage' };
     transport.pullRecords = [poisoned];
     const onQuarantine = vi.fn();
@@ -254,7 +278,14 @@ describe('pullOnce', () => {
   it('stops before advancing the cursor when a write fails, so the record retries next cycle', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const goal = goalFactory.build({ id: 'g1' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: goal, hlc: NEWER_HLC },
+      1
+    );
     transport.pullRecords = [rec];
     const bindings = defaultBindings();
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
@@ -292,7 +323,7 @@ describe('pullOnce', () => {
     });
     const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 5),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 5),
     ];
     const bindings = defaultBindings();
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
@@ -315,8 +346,8 @@ describe('pullOnce', () => {
     await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
     await seedLocalHlc(metaStore, 'goals', 'g1', between);
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: OLDER_HLC }, 1),
-      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 5),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: OLDER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 5),
     ];
     const bindings = defaultBindings();
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
@@ -336,10 +367,18 @@ describe('pullOnce', () => {
   it('keeps the progress made earlier in the page when a later record stalls the pull', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const goal = goalFactory.build({ id: 'g1' });
-    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
-    const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
-    const wedging = await sealRecord(
+    const sealed = await sealServerRecord(
       dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: goal, hlc: NEWER_HLC },
+      1
+    );
+    const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
+    const wedging = await sealServerRecord(
+      dk,
+      KEY_ID,
       'goals',
       'g2',
       { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
@@ -373,7 +412,7 @@ describe('pullOnce', () => {
   it('stops without advancing the cursor when the local collection cannot be read', async () => {
     const goal = goalFactory.build({ id: 'g1' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
     ];
     kv.failGetManyForKey = 'goals';
 
@@ -389,7 +428,7 @@ describe('pullOnce', () => {
     const records: SyncRecord[] = [];
     for (let seq = 1; seq <= PULL_PAGE; seq++) {
       const body: RecordBody = { entity: null, hlc: NEWER_HLC };
-      records.push(await sealRecord(dk, 'unsynced-collection', `e${seq}`, body, seq));
+      records.push(await sealServerRecord(dk, KEY_ID, 'unsynced-collection', `e${seq}`, body, seq));
     }
     transport.pullRecords = records;
 
@@ -453,7 +492,14 @@ describe('pullOnce', () => {
     const local = goalFactory.build({ id: 'g1', text: 'legacy-local' });
     await setGoals([local]);
     const incomingGoal = goalFactory.build({ id: 'g1', text: 'incoming' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: incomingGoal, hlc: NEWER_HLC }, 1);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: incomingGoal, hlc: NEWER_HLC },
+      1
+    );
     transport.pullRecords = [rec];
 
     await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
@@ -467,15 +513,17 @@ describe('pullOnce', () => {
   it('does not move the cursor backward when a later record in the page carries a lower seq', async () => {
     const firstGoal = goalFactory.build({ id: 'g1' });
     const secondGoal = goalFactory.build({ id: 'g2' });
-    const higherSeqRec = await sealRecord(
+    const higherSeqRec = await sealServerRecord(
       dk,
+      KEY_ID,
       'goals',
       'g1',
       { entity: firstGoal, hlc: NEWER_HLC },
       5
     );
-    const lowerSeqRec = await sealRecord(
+    const lowerSeqRec = await sealServerRecord(
       dk,
+      KEY_ID,
       'goals',
       'g2',
       { entity: secondGoal, hlc: NEWER_HLC },
@@ -505,8 +553,8 @@ describe('pullOnce', () => {
     const first = goalFactory.build({ id: 'g1', text: 'first' });
     const second = goalFactory.build({ id: 'g2', text: 'second' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: first, hlc: NEWER_HLC }, 1),
-      await sealRecord(dk, 'goals', 'g2', { entity: second, hlc: NEWER_HLC }, 2),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: first, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g2', { entity: second, hlc: NEWER_HLC }, 2),
     ];
     const bindings = defaultBindings();
     const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
@@ -531,7 +579,7 @@ describe('pullOnce', () => {
     // guard on the save keeps an advanced cursor from outliving the account that earned it.
     const goal = goalFactory.build({ id: 'g1' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
     ];
     const bindings = defaultBindings();
     const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
@@ -547,20 +595,29 @@ describe('pullOnce', () => {
   it('counts only the records it actually wrote when reporting what a cancelled pull left', async () => {
     // The count is the sole trace of what a disconnect left behind, so a quarantined record —
     // which writes nothing — must not inflate it.
-    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1);
+    const sealed = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: null, hlc: NEWER_HLC },
+      1
+    );
     const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
     // A record the strategy resolves to local writes nothing either, so it must not count.
     await setGoals([goalFactory.build({ id: 'g3', text: 'local' })]);
     await seedLocalHlc(metaStore, 'goals', 'g3', NEWER_HLC);
-    const lost = await sealRecord(
+    const lost = await sealServerRecord(
       dk,
+      KEY_ID,
       'goals',
       'g3',
       { entity: goalFactory.build({ id: 'g3', text: 'stale' }), hlc: OLDER_HLC },
       2
     );
-    const good = await sealRecord(
+    const good = await sealServerRecord(
       dk,
+      KEY_ID,
       'goals',
       'g2',
       { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
@@ -582,15 +639,17 @@ describe('pullOnce', () => {
   it('persists nothing when a write fails at the moment the account is removed', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     transport.pullRecords = [
-      await sealRecord(
+      await sealServerRecord(
         dk,
+        KEY_ID,
         'goals',
         'g1',
         { entity: goalFactory.build({ id: 'g1' }), hlc: NEWER_HLC },
         1
       ),
-      await sealRecord(
+      await sealServerRecord(
         dk,
+        KEY_ID,
         'goals',
         'g2',
         { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
@@ -638,7 +697,14 @@ describe('pullOnce', () => {
 
   it('recovers a quarantined key once a later pull decrypts it cleanly, removing it from quarantine', async () => {
     const goal = goalFactory.build({ id: 'g1' });
-    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1);
+    const sealed = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: goal, hlc: NEWER_HLC },
+      1
+    );
     const poisoned: SyncRecord = { ...sealed, ciphertext: 'garbage' };
     transport.pullRecords = [poisoned];
 
@@ -648,8 +714,9 @@ describe('pullOnce', () => {
     expect(afterQuarantine.quarantine).toEqual(['goals/g1']);
 
     const recoveredGoal = goalFactory.build({ id: 'g1', text: 'recovered' });
-    const recoveredRec = await sealRecord(
+    const recoveredRec = await sealServerRecord(
       dk,
+      KEY_ID,
       'goals',
       'g1',
       { entity: recoveredGoal, hlc: NEWER_HLC },
@@ -668,7 +735,7 @@ describe('pullOnce', () => {
   it('keeps an edit marked dirty while the pull was in flight', async () => {
     const incoming = goalFactory.build({ id: 'g1', text: 'incoming' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 1),
     ];
     const tracker = new MutationTracker(metaStore, () => 1000);
     duringPull(transport, () => tracker.markMutated('goals', 'g2'));
@@ -686,8 +753,9 @@ describe('pullOnce', () => {
     await setGoals([goalFactory.build({ id: 'g1', text: 'local' })]);
     await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
     transport.pullRecords = [
-      await sealRecord(
+      await sealServerRecord(
         dk,
+        KEY_ID,
         'goals',
         'g1',
         { entity: goalFactory.build({ id: 'g1', text: 'incoming' }), hlc: NEWER_HLC },
@@ -709,8 +777,9 @@ describe('pullOnce', () => {
     meta.tombstones = ['goals/g1'];
     await metaStore.save(meta);
     transport.pullRecords = [
-      await sealRecord(
+      await sealServerRecord(
         dk,
+        KEY_ID,
         'goals',
         'g1',
         { entity: goalFactory.build({ id: 'g1' }), hlc: NEWER_HLC },
@@ -732,7 +801,7 @@ describe('pullOnce', () => {
     meta.tombstones = ['goals/g1'];
     await metaStore.save(meta);
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1),
     ];
 
     await pullOnce(makeDeps());
@@ -741,7 +810,14 @@ describe('pullOnce', () => {
   });
 
   it('keeps a key another cycle quarantined while this pull was in flight', async () => {
-    const sealed = await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1);
+    const sealed = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: null, hlc: NEWER_HLC },
+      1
+    );
     transport.pullRecords = [{ ...sealed, ciphertext: 'garbage' }];
     duringPull(transport, () =>
       metaStore.update((meta) => {
@@ -759,7 +835,7 @@ describe('pullOnce', () => {
   it('leaves the cursor where a concurrent writer moved it rather than rewinding it', async () => {
     const goal = goalFactory.build({ id: 'g1' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
     ];
     duringPull(transport, () =>
       metaStore.update((meta) => {
@@ -775,8 +851,9 @@ describe('pullOnce', () => {
   it('never lowers the device clock a concurrent writer advanced past the pull’s own', async () => {
     const ahead = hlcEncode({ physical: 2_000_000_000_000, counter: 0, node: 'device-b' });
     transport.pullRecords = [
-      await sealRecord(
+      await sealServerRecord(
         dk,
+        KEY_ID,
         'goals',
         'g1',
         { entity: goalFactory.build({ id: 'g1' }), hlc: NEWER_HLC },
@@ -798,7 +875,7 @@ describe('pullOnce', () => {
     await setGoals([goalFactory.build({ id: 'g1' })]);
     await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 1),
     ];
 
     await pullOnce(makeDeps());
@@ -814,7 +891,7 @@ describe('pullOnce', () => {
     await metaStore.save(meta);
     const revived = goalFactory.build({ id: 'g1', text: 'revived' });
     transport.pullRecords = [
-      await sealRecord(dk, 'goals', 'g1', { entity: revived, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: revived, hlc: NEWER_HLC }, 1),
     ];
 
     await pullOnce(makeDeps());
@@ -828,7 +905,14 @@ describe('pullOnce', () => {
   it('summarises what it applied, with the cursor it moved and no entity ids', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
     const incoming = goalFactory.build({ id: 'g1', text: 'incoming' });
-    const rec = await sealRecord(dk, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 1);
+    const rec = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: incoming, hlc: NEWER_HLC },
+      1
+    );
     transport.pullRecords = [rec];
 
     await pullOnce(makeDeps());

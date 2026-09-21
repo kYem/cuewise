@@ -697,8 +697,8 @@ export interface PushRecord {
   clientUpdatedAt: number;
   deleted: boolean;
   /**
-   * The server seq this device last saw for the entity; omitted when unknown, which makes the push
-   * unconditional.
+   * The server seq this device last saw for the entity, or 0 when it never saw one (matches no
+   * row). Omitted only by clients that predate compare-and-set, whose pushes are unconditional.
    */
   baseSeq?: number;
 }

@@ -10,7 +10,7 @@ export function requireBinding(bindings: CollectionBinding[], name: string): Col
   return binding;
 }
 
-/** A disable landing mid-apply: the flag flips once one record has been written through `binding`. */
+/** A disable landing mid-apply: the flag flips once one record has been written via `binding`. */
 export function disableAfterFirstWrite(binding: CollectionBinding): { isCancelled: () => boolean } {
   const write = binding.writeOne.bind(binding);
   let disabled = false;

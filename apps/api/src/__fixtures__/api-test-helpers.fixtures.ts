@@ -33,6 +33,44 @@ export function record(overrides: Partial<PushRecord> = {}): PushRecord {
   };
 }
 
+interface D1Hooks {
+  /** Rewrites what `batch` answers, to script a driver fault. */
+  batch?: (results: D1Result[]) => D1Result[];
+  /** Sees every statement's bound values; the local emulator enforces no cap, so tests must. */
+  onBind?: (values: unknown[]) => void;
+}
+
+function boundMethods<T extends object>(target: T, overrides: Partial<T>): T {
+  return new Proxy(target, {
+    get(t, prop, receiver) {
+      if (prop in overrides) {
+        return Reflect.get(overrides, prop, receiver);
+      }
+      const value = Reflect.get(t, prop, receiver);
+      return typeof value === 'function' ? value.bind(t) : value;
+    },
+  });
+}
+
+/** The test D1 binding with `batch` results and statement binds observable. */
+export function observedDb(hooks: D1Hooks): D1Database {
+  return boundMethods(env.DB, {
+    prepare: (query: string) => {
+      const stmt = env.DB.prepare(query);
+      return boundMethods(stmt, {
+        bind: (...values: unknown[]) => {
+          hooks.onBind?.(values);
+          return stmt.bind(...values);
+        },
+      });
+    },
+    batch: async <T = unknown>(stmts: D1PreparedStatement[]) => {
+      const results = await env.DB.batch<T>(stmts);
+      return hooks.batch === undefined ? results : (hooks.batch(results) as D1Result<T>[]);
+    },
+  });
+}
+
 /** A D1SyncStore whose clock is driven by `tick` instead of wall time, for TTL/window tests. */
 export function clockedStore(now: number): { store: D1SyncStore; tick: (ms: number) => void } {
   let current = now;

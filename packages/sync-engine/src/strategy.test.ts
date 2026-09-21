@@ -29,6 +29,6 @@ describe('LwwHlcStrategy', () => {
   it('equal physical and counter resolves by node tiebreak deterministically', () => {
     const local = { entity: {}, hlc: hlcEncode({ physical: 1000, counter: 0, node: 'z' }) };
     const incoming = { entity: {}, hlc: hlcEncode({ physical: 1000, counter: 0, node: 'a' }) };
-    expect(s.resolve(local, incoming)).toEqual({ winner: 'local', reason: 'newer' }); // 'a' < 'z'
+    expect(s.resolve(local, incoming)).toEqual({ winner: 'local', reason: 'newer' });
   });
 });

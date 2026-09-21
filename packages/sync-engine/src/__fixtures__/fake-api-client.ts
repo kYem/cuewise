@@ -79,7 +79,7 @@ export class FakeSyncServer {
         (r) => r.collection === rec.collection && r.entityId === rec.entityId
       );
       const current = idx === -1 ? undefined : this.records[idx];
-      // Like the real store: every row reserves a seq, used or not.
+      // Like the real store: every pushed record reserves a seq, used or not.
       this.nextSeq += 1;
       if (rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq) {
         response.conflicts.push(current);

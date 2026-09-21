@@ -19,6 +19,7 @@ import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -33,7 +34,6 @@ import {
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
-import { toPushRecord } from './record-map';
 
 interface Device {
   kv: FakeKvStore;
@@ -168,26 +168,18 @@ async function replayFromScratch(device: Pick<Device, 'kv'>): Promise<void> {
   await setGoals([]);
 }
 
-/**
- * Lands a newer version of an entity on the server from "another device", sealed under the key
- * this device enrolled with; answers the seq it took.
- */
-async function seedServerVersion(
+/** Lands a version of an entity from "another device" that outranks anything this device stamps. */
+function seedServerVersion(
   device: Device,
   server: FakeSyncServer,
   collection: string,
   entityId: string,
   entity: unknown
-): Promise<number | undefined> {
-  const stored = await loadPersistedDataKey(device.kv);
-  if (stored === null) {
-    throw new Error('expected a persisted data key');
-  }
-  const newer = await toPushRecord(stored.dk, stored.keyId, collection, entityId, {
+): Promise<number> {
+  return pushWithoutBase(device.kv, server, collection, entityId, {
     entity,
     hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
   });
-  return server.pushChanges([newer]).applied[0]?.seq;
 }
 
 /** A disable landing mid-pull: it fires once, while the first pulled goal is being written. */
@@ -2138,7 +2130,7 @@ describe('SyncEngine.disableSync', () => {
 });
 
 describe('SyncEngine ledger seqs on a re-enable', () => {
-  it('forgets per-entity seqs with the cursor, so the first push is unconditional', async () => {
+  it('forgets per-entity seqs with the cursor, so no push carries a base from the last account', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);

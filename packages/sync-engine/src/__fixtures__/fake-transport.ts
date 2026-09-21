@@ -40,7 +40,7 @@ export class FakeTransport implements SyncTransport {
     for (const rec of records) {
       const key = `${rec.collection}/${rec.entityId}`;
       const current = this.serverRecords.get(key);
-      // Like the real store: every row reserves a seq, used or not.
+      // Like the real store: every pushed record reserves a seq, used or not.
       this.cursor += 1;
       const stale =
         rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq;

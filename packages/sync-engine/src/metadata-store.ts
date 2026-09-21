@@ -10,7 +10,7 @@ export interface SyncMeta {
   cursor: number; // last pulled seq
   dirty: Record<string, string[]>; // collection -> entityIds pending push
   hlcs: Record<string, string>; // "collection/entityId" -> hlcEncode
-  seqs: Record<string, number>; // "collection/entityId" -> last server seq applied or outranked
+  seqs: Record<string, number>; // "collection/entityId" -> highest server seq seen, less failed writes
   tombstones: string[]; // "collection/entityId" that are deleted
   quarantine: string[]; // "collection/entityId" that failed decrypt
 }
@@ -53,15 +53,31 @@ function isStoredSyncMeta(value: unknown): value is StoredSyncMeta {
   );
 }
 
-// An absent map means "no seq known", which is exactly what an unconditional first push needs.
-function withSeqs(meta: StoredSyncMeta): SyncMeta {
-  if (typeof meta.seqs === 'object' && meta.seqs !== null) {
-    return { ...meta, seqs: meta.seqs as Record<string, number> };
-  }
-  return { ...meta, seqs: {} };
+/** What the server assigns rows and what it accepts as a base; anything else refuses a whole push. */
+export function isServerSeq(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
-/** The engine's bookkeeping: dirty set, per-entity hlcs and seqs, cursor, tombstones, quarantine. */
+// An absent map or entry means "no seq known", so the entity pushes as a row the server has not got.
+function withSeqs(meta: StoredSyncMeta): SyncMeta {
+  const seqs: Record<string, number> = {};
+  if (typeof meta.seqs === 'object' && meta.seqs !== null) {
+    let dropped = 0;
+    for (const [key, value] of Object.entries(meta.seqs)) {
+      if (isServerSeq(value)) {
+        seqs[key] = value;
+      } else {
+        dropped += 1;
+      }
+    }
+    if (dropped > 0) {
+      logger.warn(`Dropped ${dropped} stored sync seq(s) that were not seqs`);
+    }
+  }
+  return { ...meta, seqs };
+}
+
+/** The engine's bookkeeping: dirty set, per-entity hlcs/seqs, cursor, tombstones, quarantine. */
 export class SyncMetadataStore {
   // Tail of the serialised update queue; see `update`.
   private chain: Promise<void> = Promise.resolve();

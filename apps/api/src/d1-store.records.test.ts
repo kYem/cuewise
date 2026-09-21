@@ -1,6 +1,11 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { clockedStore, newUser, record } from './__fixtures__/api-test-helpers.fixtures';
+import {
+  clockedStore,
+  newUser,
+  observedDb,
+  record,
+} from './__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from './d1-store';
 import { StorageQuotaExceededError } from './store';
 
@@ -304,6 +309,31 @@ describe('D1SyncStore records', () => {
     expect(result.conflicts).toEqual([]);
   });
 
+  it('reads baseSeq 0 as "no row yet": inserts where none exists and refuses where one does', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-zero');
+
+    const first = await store.applyChanges(userId, [
+      record({ entityId: 'a', ciphertext: 'v1', baseSeq: 0 }),
+    ]);
+    const second = await store.applyChanges(userId, [
+      record({ entityId: 'a', ciphertext: 'v2', baseSeq: 0 }),
+    ]);
+
+    expect(first.applied).toEqual([{ collection: 'quotes', entityId: 'a', seq: 1 }]);
+    expect(second.applied).toEqual([]);
+    expect(second.conflicts[0]).toMatchObject({ entityId: 'a', seq: 1, ciphertext: 'v1' });
+  });
+
+  it('throws rather than reading result sets positionally when D1 answers one short', async () => {
+    const userId = await newUser(new D1SyncStore(env.DB), 'u-short-batch');
+    const store = new D1SyncStore(observedDb({ batch: (results) => results.slice(0, -1) }));
+
+    await expect(store.applyChanges(userId, [record({ entityId: 'a' })])).rejects.toThrow(
+      'expected 3 result sets, got 2'
+    );
+  });
+
   it('conflicts against a live tombstone, handing the tombstone back as current', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u-cas-tombstone');
@@ -315,9 +345,11 @@ describe('D1SyncStore records', () => {
     expect(result.conflicts[0]).toMatchObject({ seq: 2, deleted: true });
   });
 
-  it('hands back every refused row of a full batch, across the conflict-lookup chunks', async () => {
-    // The local D1 emulator does not enforce the bind cap, so this proves the reassembly, not it.
-    const store = new D1SyncStore(env.DB);
+  it('hands back every refused row of a full batch, never binding more than D1 allows per statement', async () => {
+    const bindCounts: number[] = [];
+    const store = new D1SyncStore(
+      observedDb({ onBind: (values) => bindCounts.push(values.length) })
+    );
     const userId = await newUser(store, 'u-cas-chunks');
     const ids = Array.from({ length: 100 }, (_, i) => `e${i}`);
     await store.applyChanges(
@@ -341,6 +373,7 @@ describe('D1SyncStore records', () => {
     const bumpedSeqs = new Map(bumped.applied.map((a) => [a.entityId, a.seq]));
     expect(result.conflicts.every((c) => c.seq === bumpedSeqs.get(c.entityId))).toBe(true);
     expect(result.conflicts.every((c) => c.ciphertext === 'v2')).toBe(true);
+    expect(Math.max(...bindCounts)).toBeLessThanOrEqual(100);
   });
 
   it('applies the fresh rows of a mixed batch, leaves seq gaps for the refused ones, and pages across them', async () => {

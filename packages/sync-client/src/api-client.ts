@@ -81,13 +81,15 @@ export class ApiClient {
       { auth: true }
     );
     const body = await this.parseSuccessBody<Partial<PushResponse> & { cursor: number }>(res);
-    if (body.applied !== undefined && body.conflicts !== undefined) {
+    if (Array.isArray(body.applied) && Array.isArray(body.conflicts)) {
       return { cursor: body.cursor, applied: body.applied, conflicts: body.conflicts };
     }
     // Half a reply is neither shape; a pre-compare-and-set server answers a bare cursor, meaning
     // everything landed with no seqs to report.
     if (body.applied !== undefined || body.conflicts !== undefined) {
-      throw new ApiError('invalid_response', res.status);
+      throw new ApiError('invalid_response', res.status, {
+        detail: 'push reply did not carry both applied and conflicts arrays',
+      });
     }
     if (!this.warnedLegacyPush) {
       this.warnedLegacyPush = true;

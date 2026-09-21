@@ -12,7 +12,7 @@ import {
 } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import { type CollectionBinding, DEVICE_LOCAL_SETTINGS_KEYS } from './collections';
-import { type SyncMeta, SyncMetadataStore } from './metadata-store';
+import { isServerSeq, type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { fromSyncRecord, toPushRecord } from './record-map';
 import type { ConflictStrategy, RecordBody } from './strategy';
 
@@ -42,7 +42,8 @@ export interface CycleDeps {
  * The working ledger of one pull, or of one batch's conflict settling. `meta` is the snapshot it
  * resolves against and mutates as records apply; `applied` and `quarantined` name the keys it
  * decided something about, and it may claim each only while the stored ledger has not moved that
- * key on past it meanwhile. `dirty` is only ever added to; the rest belongs to whoever wrote it.
+ * key on past it meanwhile. `redirtied` may add to `dirty`, never remove; the rest belongs to
+ * whoever wrote it.
  */
 interface PullState {
   meta: SyncMeta;
@@ -75,7 +76,12 @@ function markDirty(meta: SyncMeta, collection: string, entityId: string): void {
   }
 }
 
+// A seq that is not one would ride the next push as its base and have the server refuse the batch.
 function recordSeq(pull: PullState, key: string, seq: number): void {
+  if (!isServerSeq(seq)) {
+    logger.warn('Ignoring a server record whose seq is not a seq', { key, seq });
+    return;
+  }
   pull.seqs.set(key, Math.max(pull.seqs.get(key) ?? 0, seq));
 }
 
@@ -299,12 +305,14 @@ function ackedRecords(batch: DirtyRecord[], response: PushResponse): DirtyRecord
 
 function recordAcks(fresh: SyncMeta, acked: DirtyRecord[], applied: AppliedRecord[]): void {
   clearAcked(fresh, acked);
-  for (const { collection, entityId, seq } of applied) {
-    if (seq === undefined) {
-      continue;
+  const appliedSeqs = new Map(
+    applied.map((a) => [SyncMetadataStore.entityKey(a.collection, a.entityId), a.seq])
+  );
+  for (const { key } of acked) {
+    const seq = appliedSeqs.get(key);
+    if (isServerSeq(seq)) {
+      fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
     }
-    const key = SyncMetadataStore.entityKey(collection, entityId);
-    fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
   }
 }
 
@@ -429,10 +437,8 @@ async function buildDirtyRecords(
       const entity = all[entityId] ?? null;
       const body: RecordBody = { entity, hlc };
       const record = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
-      const baseSeq = meta.seqs[key];
-      if (baseSeq !== undefined) {
-        record.baseSeq = baseSeq;
-      }
+      // 0 matches no row: a key this device never saw a seq for lands only where none exists.
+      record.baseSeq = meta.seqs[key] ?? 0;
       dirtyRecords.push({ collection, entityId, key, hlc, record });
     }
   }
@@ -606,7 +612,7 @@ async function resolveAndApply(
   if (binding === undefined) {
     if (!warnedUnknownCollections.has(rec.collection)) {
       warnedUnknownCollections.add(rec.collection);
-      logger.warn('Skipping pulled records for unknown collection', {
+      logger.warn('Skipping server records for unknown collection', {
         collection: rec.collection,
       });
     }

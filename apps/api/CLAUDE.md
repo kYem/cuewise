@@ -54,7 +54,7 @@ INSERT INTO records (..., seq, ...)
   ON CONFLICT (user_id, collection, entity_id) DO UPDATE SET seq = excluded.seq, ...
 ```
 
-The leading `UPDATE` bumps `last_seq` by `n`; each `INSERT`'s subquery re-reads that bumped value for its slot. **This must stay one `db.batch()`** — D1 runs a batch as one sequential transaction, the only reason each `INSERT` sees the `UPDATE`. Split it, and two concurrent pushes both apply their `UPDATE` first, so both `INSERT` sets read the same post-bump `last_seq` and hand out colliding `seq`s, breaking the monotonic cursor. (`d1-store.concurrency.test.ts` guards this.)
+The leading `UPDATE` bumps `last_seq` by `n`; each `INSERT`'s subquery re-reads that bumped value for its slot. With `baseSeq` the `DO UPDATE` carries `WHERE records.seq = ?`, so a refused record writes nothing and its reserved seq stays unused. **This must stay one `db.batch()`** — D1 runs a batch as one sequential transaction, the only reason each `INSERT` sees the `UPDATE`. Split it, and two concurrent pushes both apply their `UPDATE` first, so both `INSERT` sets read the same post-bump `last_seq` and hand out colliding `seq`s, breaking the monotonic cursor. (`d1-store.concurrency.test.ts` guards this.)
 
 ## API Surface
 
@@ -70,7 +70,7 @@ All endpoints are under `/v1`.
 | `GET` | `/v1/auth/google/callback` | Google's redirect target (GET — Apple's is a form_post); exchanges the auth code server-side, then mints a one-time code | No |
 | `POST` | `/v1/auth/logout` | Revoke the presented session token | Yes |
 | `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. 409 `resync_required` if `since` predates the purged-tombstone watermark — the client must resync from `since=0`. | Yes |
-| `POST` | `/v1/changes` | Batch push, ≤100 records, ≤64 KB ciphertext/record. A record may carry `baseSeq`, the seq the device last saw: it lands only if the row is still at that seq, or is gone. Answers `{cursor, applied, conflicts}`; conflicts are the current rows. Without `baseSeq` a record upserts unconditionally (legacy clients). | Yes |
+| `POST` | `/v1/changes` | Batch push, ≤100 records, ≤64 KB ciphertext/record. A record may carry `baseSeq`, the seq the device last saw: it lands only if the row is still at that seq, or is gone (`0` matches no row, so it lands only where none exists). Answers `{cursor, applied, conflicts}`; conflicts are the current rows. Without `baseSeq` a record upserts unconditionally (legacy clients). | Yes |
 | `GET` | `/v1/keys/recovery` | Fetch the caller's opaque recovery key envelope | Yes |
 | `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes. `{ifAbsent: true}` makes it create-only — 409 `key_envelope_exists` if one is already stored, no overwrite. | Yes |
 | `GET` | `/v1/sessions` | List the caller's live sessions (`id`, `deviceName`, `createdAt`, `lastUsedAt`, `current`). Revoked and expired rows are omitted. | Yes |

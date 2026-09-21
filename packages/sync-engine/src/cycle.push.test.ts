@@ -1,40 +1,22 @@
 import { generateDataKey } from '@cuewise/crypto';
-import {
-  configurePlatform,
-  hlcEncode,
-  logger,
-  type SyncRecord,
-  storageFailure,
-} from '@cuewise/shared';
+import { configurePlatform, hlcEncode, logger, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableAfterFirstWrite, requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
+import { sealServerRecord } from './__fixtures__/records';
 import { defaultBindings } from './collections';
 import { type CycleDeps, pushOnce } from './cycle';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
-import { toPushRecord } from './record-map';
 import { LwwHlcStrategy, type RecordBody } from './strategy';
 
 const KEY_ID = 'dk-1';
 const HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'device-a' });
 const OLDER_HLC = hlcEncode({ physical: 1_600_000_000_000, counter: 1, node: 'device-b' });
 const NEWER_HLC = hlcEncode({ physical: 1_800_000_000_000, counter: 1, node: 'device-b' });
-
-/** Seals a server row under `deps.dk` so a scripted conflict decrypts like a real one. */
-async function serverRow(
-  deps: CycleDeps,
-  collection: string,
-  entityId: string,
-  body: RecordBody,
-  seq: number
-): Promise<SyncRecord> {
-  const rec = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
-  return { ...rec, seq };
-}
 
 /** Stamps entityIds dirty for a collection with a fixed hlc, bypassing MutationTracker. */
 async function seedDirty(
@@ -276,7 +258,7 @@ describe('pushOnce', () => {
     expect(logged).not.toContain('g1');
   });
 
-  it('sends the seq it last saw as baseSeq and omits it for an entity it never saw a seq for', async () => {
+  it('sends the seq it last saw as baseSeq, and 0 for an entity it never saw a seq for', async () => {
     await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'g2' })]);
     const metaStore = new SyncMetadataStore(kv);
     await seedDirty(metaStore, 'goals', ['g1', 'g2']);
@@ -288,7 +270,34 @@ describe('pushOnce', () => {
 
     const [batch] = transport.pushedBatches;
     expect(batch.find((r) => r.entityId === 'g1')?.baseSeq).toBe(4);
-    expect('baseSeq' in (batch.find((r) => r.entityId === 'g2') ?? {})).toBe(false);
+    expect(batch.find((r) => r.entityId === 'g2')?.baseSeq).toBe(0);
+  });
+
+  it('settles, rather than overwrites, a row another device created for an id this one never saw', async () => {
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs, hlc: NEWER_HLC },
+        1
+      )
+    );
+
+    await pushOnce(deps);
+
+    expect(transport.serverRecords.get('goals/g1')?.seq).toBe(1);
+    expect(await getGoals()).toEqual([theirs]);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBe(1);
   });
 
   it('records the seq the server assigned to each applied record', async () => {
@@ -342,7 +351,14 @@ describe('pushOnce', () => {
     const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs, hlc: NEWER_HLC },
+        2
+      )
     );
 
     await pushOnce(deps);
@@ -367,7 +383,14 @@ describe('pushOnce', () => {
     const stale = goalFactory.build({ id: 'g1', text: 'stale' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: stale, hlc: OLDER_HLC }, 2)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: stale, hlc: OLDER_HLC },
+        2
+      )
     );
 
     await pushOnce(deps);
@@ -395,7 +418,7 @@ describe('pushOnce', () => {
     const deps = makeDeps(kv, transport, { meta: metaStore, bindings });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: mine, hlc: HLC }, 2)
+      await sealServerRecord(deps.dk, deps.keyId, 'goals', 'g1', { entity: mine, hlc: HLC }, 2)
     );
 
     await pushOnce(deps);
@@ -418,7 +441,14 @@ describe('pushOnce', () => {
     const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs, hlc: NEWER_HLC },
+        2
+      )
     );
     // Stamped above the sealed hlc but below the server's, so the conflict is genuinely lost.
     const tracker = new MutationTracker(metaStore, () => 1_750_000_000_000);
@@ -442,7 +472,14 @@ describe('pushOnce', () => {
     });
     const onQuarantine = vi.fn();
     const deps = makeDeps(kv, transport, { meta: metaStore, onQuarantine });
-    const sealed = await serverRow(deps, 'goals', 'g1', { entity: mine, hlc: OLDER_HLC }, 2);
+    const sealed = await sealServerRecord(
+      deps.dk,
+      deps.keyId,
+      'goals',
+      'g1',
+      { entity: mine, hlc: OLDER_HLC },
+      2
+    );
     transport.serverRecords.set('goals/g1', { ...sealed, ciphertext: 'garbage' });
 
     await pushOnce(deps);
@@ -472,7 +509,14 @@ describe('pushOnce', () => {
     const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs, hlc: NEWER_HLC },
+        2
+      )
     );
 
     await expect(pushOnce(deps)).rejects.toThrow(
@@ -512,11 +556,25 @@ describe('pushOnce', () => {
     const theirs1 = goalFactory.build({ id: 'g1', text: 'theirs 1' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: theirs1, hlc: NEWER_HLC }, 3)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs1, hlc: NEWER_HLC },
+        3
+      )
     );
     transport.serverRecords.set(
       'goals/g2',
-      await serverRow(deps, 'goals', 'g2', { entity: null, hlc: NEWER_HLC }, 4)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g2',
+        { entity: null, hlc: NEWER_HLC },
+        4
+      )
     );
 
     await expect(pushOnce(deps)).rejects.toThrow(
@@ -532,33 +590,57 @@ describe('pushOnce', () => {
     errorSpy.mockRestore();
   });
 
-  it('stops without writing the settled conflicts back when a disable lands mid-settle', async () => {
+  it('stops mid-settle once a disable lands, leaving later conflicts unapplied and the ledger untouched', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const mine2 = goalFactory.build({ id: 'g2', text: 'mine 2' });
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine 1' }), mine2]);
     const metaStore = new SyncMetadataStore(kv);
-    await seedDirty(metaStore, 'goals', ['g1']);
+    await seedDirty(metaStore, 'goals', ['g1', 'g2']);
     await metaStore.update((meta) => {
       meta.seqs['goals/g1'] = 1;
+      meta.seqs['goals/g2'] = 2;
     });
     const bindings = defaultBindings();
     const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
     const deps = makeDeps(kv, transport, { meta: metaStore, bindings, isCancelled });
-    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    const theirs1 = goalFactory.build({ id: 'g1', text: 'theirs 1' });
+    const theirs2 = goalFactory.build({ id: 'g2', text: 'theirs 2' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs1, hlc: NEWER_HLC },
+        3
+      )
+    );
+    transport.serverRecords.set(
+      'goals/g2',
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g2',
+        { entity: theirs2, hlc: NEWER_HLC },
+        4
+      )
     );
 
     const result = await pushOnce(deps);
 
     expect(result).toEqual({ kind: 'cancelled' });
+    expect(await getGoals()).toEqual([theirs1, mine2]);
     expect(errorSpy).toHaveBeenCalledWith(
       'Cloud sync stopped a push for a disconnected account; 1 server versions of its refused records had already been applied to this device'
     );
     const saved = await metaStore.load();
-    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.dirty.goals).toEqual(['g1', 'g2']);
     expect(saved.hlcs['goals/g1']).toBe(HLC);
+    expect(saved.hlcs['goals/g2']).toBe(HLC);
     expect(saved.seqs['goals/g1']).toBe(1);
+    expect(saved.seqs['goals/g2']).toBe(2);
     errorSpy.mockRestore();
   });
 
@@ -569,7 +651,14 @@ describe('pushOnce', () => {
     await seedDirty(metaStore, 'goals', ['g1']);
     const deps = makeDeps(kv, transport, { meta: metaStore });
     const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
-    const current = await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2);
+    const current = await sealServerRecord(
+      deps.dk,
+      deps.keyId,
+      'goals',
+      'g1',
+      { entity: theirs, hlc: NEWER_HLC },
+      2
+    );
     vi.spyOn(transport, 'pushChanges').mockResolvedValue({
       cursor: 3,
       applied: [{ collection: 'goals', entityId: 'g1', seq: 3 }],
@@ -586,6 +675,8 @@ describe('pushOnce', () => {
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toBeUndefined();
     expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    // The conflict's seq, not the ack's: a record settled as refused takes nothing from `applied`.
+    expect(saved.seqs['goals/g1']).toBe(2);
     warnSpy.mockRestore();
   });
 
@@ -601,7 +692,14 @@ describe('pushOnce', () => {
     const theirs = goalFactory.build({ id: 'g1', text: 'edited elsewhere' });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs, hlc: NEWER_HLC },
+        2
+      )
     );
 
     await pushOnce(deps);
@@ -625,7 +723,7 @@ describe('pushOnce', () => {
     const deps = makeDeps(kv, transport, { meta: metaStore });
     transport.serverRecords.set(
       'goals/g1',
-      await serverRow(deps, 'goals', 'g1', { entity: null, hlc: HLC }, 2)
+      await sealServerRecord(deps.dk, deps.keyId, 'goals', 'g1', { entity: null, hlc: HLC }, 2)
     );
 
     await pushOnce(deps);
@@ -670,14 +768,20 @@ describe('pushOnce', () => {
       entity: goalFactory.build({ id: 'g1', text: 'stale' }),
       hlc: OLDER_HLC,
     };
-    transport.serverRecords.set('goals/g1', await serverRow(deps, 'goals', 'g1', stale, 2));
+    transport.serverRecords.set(
+      'goals/g1',
+      await sealServerRecord(deps.dk, deps.keyId, 'goals', 'g1', stale, 2)
+    );
     // Another writer moves the row again between our first push and the retry.
     const pushChanges = transport.pushChanges.bind(transport);
     let calls = 0;
     vi.spyOn(transport, 'pushChanges').mockImplementation(async (records) => {
       calls += 1;
       if (calls === 2) {
-        transport.serverRecords.set('goals/g1', await serverRow(deps, 'goals', 'g1', stale, 9));
+        transport.serverRecords.set(
+          'goals/g1',
+          await sealServerRecord(deps.dk, deps.keyId, 'goals', 'g1', stale, 9)
+        );
       }
       return pushChanges(records);
     });

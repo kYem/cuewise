@@ -367,8 +367,8 @@ export class D1SyncStore implements SyncStore {
     });
     const conflicts = await this.currentRows(userId, refused);
     if (conflicts.length !== refused.length) {
-      // A purge or account delete between the batch and the read, or one entity pushed twice; the
-      // client keeps such a row pending and its next push inserts over the gap.
+      // A purge or account delete between the batch and the read, or one entity pushed twice. A row
+      // that vanished stays pending on the client, whose next push inserts over the gap.
       logger.error('Push refused rows whose current row vanished before it could be read', {
         refused: refused.length,
         found: conflicts.length,

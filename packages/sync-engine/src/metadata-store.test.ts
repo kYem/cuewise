@@ -68,6 +68,24 @@ describe('SyncMetadataStore', () => {
     expect(await kv.get(SYNC_META_QUARANTINE_KEY, 'local')).toBeNull();
   });
 
+  it('drops stored seqs that are not seqs, so none can ride a push as its base', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const meta = await store.load();
+    await kv.set(
+      SYNC_META_KEY,
+      { ...meta, seqs: { 'goals/g1': 4, 'goals/g2': null, 'goals/g3': -1, 'goals/g4': '5' } },
+      'local'
+    );
+
+    const loaded = await store.load();
+
+    expect(loaded.seqs).toEqual({ 'goals/g1': 4 });
+    expect(warnSpy).toHaveBeenCalledWith('Dropped 3 stored sync seq(s) that were not seqs');
+    warnSpy.mockRestore();
+  });
+
   describe('update', () => {
     // Every writer does load → mutate → save on one blob, so two that overlap must not both read
     // the same pre-state — the later save would otherwise erase the earlier one's change.

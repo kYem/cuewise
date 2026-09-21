@@ -83,14 +83,18 @@ describe('ApiClient', () => {
     warnSpy.mockRestore();
   });
 
-  it('rejects a push reply that names conflicts but no applied list as invalid_response', async () => {
-    const body = { cursor: 5, conflicts: [{ ...pushRecordFixture, entityId: 'q2', seq: 4 }] };
+  it.each([
+    ['conflicts without applied', { cursor: 5, conflicts: [] }],
+    ['applied without conflicts', { cursor: 5, applied: [] }],
+    ['applied that is not a list', { cursor: 5, applied: null, conflicts: [] }],
+  ])('rejects a push reply carrying %s as invalid_response', async (_label, body) => {
     const { fetchFn } = stubFetch([{ status: 200, body }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     await expect(client.pushChanges([pushRecordFixture])).rejects.toMatchObject({
       code: 'invalid_response',
       retryable: false,
+      message: expect.stringContaining('applied and conflicts'),
     });
   });
 

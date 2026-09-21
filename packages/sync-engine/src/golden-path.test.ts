@@ -1,4 +1,4 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, hlcDecode, hlcEncode } from '@cuewise/shared';
 import {
   getGoals,
   getQuotes,
@@ -15,6 +15,7 @@ import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { NoopStrategy } from './__fixtures__/noop-strategy';
+import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
 import { SyncEngine, type SyncEngineDeps } from './engine';
 import { RecoveryCodeRequiredError } from './key-lifecycle';
@@ -358,7 +359,7 @@ describe('compare-and-set: the server never regresses an entity', () => {
       throw new Error('expected B to have pushed g1');
     }
 
-    // Park A's cursor at the server head so its push goes first and the base does the refusing.
+    // Park A's cursor at the server head so the pull brings nothing and the base does the refusing.
     await new SyncMetadataStore(deviceA.kv).update((meta) => {
       meta.cursor = Math.max(...server.rows().map((r) => r.seq));
     });
@@ -399,24 +400,18 @@ describe('compare-and-set: the server never regresses an entity', () => {
     await deviceA.engine.markMutated('goals', 'g1');
     await deviceA.engine.syncNow();
 
-    // B edits with an older hlc and pushes like a client that predates compare-and-set: no base,
-    // and a cursor parked at the server's head so its pull brings nothing to lose to first.
-    useStorage(deviceB);
-    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'B stale' }));
-    await deviceB.engine.markMutated('goals', 'g1');
-    await new SyncMetadataStore(deviceB.kv).update((meta) => {
-      delete meta.seqs['goals/g1'];
-      meta.cursor = Math.max(...server.rows().map((r) => r.seq));
+    // A client that predates compare-and-set lands B's older edit over A's, no base asked.
+    const aHlc = hlcDecode((await new SyncMetadataStore(deviceA.kv).load()).hlcs['goals/g1']);
+    const before = await pushWithoutBase(deviceB.kv, server, 'goals', 'g1', {
+      entity: goalFactory.build({ id: 'g1', text: 'B stale' }),
+      hlc: hlcEncode({ ...aHlc, physical: aHlc.physical - 1 }),
     });
-    await deviceB.engine.syncNow();
-    const before = server.rows().find((r) => r.entityId === 'g1')?.seq;
-    expect(before).toBeGreaterThan(0);
 
     // A pulls the stale row, keeps its own (strictly newer), re-dirties and repairs in one cycle.
     useStorage(deviceA);
     await deviceA.engine.syncNow();
     const after = server.rows().find((r) => r.entityId === 'g1')?.seq;
-    expect(after).toBeGreaterThan(before ?? 0);
+    expect(after).toBeGreaterThan(before);
     expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('A newest');
 
     useStorage(deviceB);
