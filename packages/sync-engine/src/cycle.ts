@@ -39,11 +39,8 @@ export interface CycleDeps {
 }
 
 /**
- * The working ledger of one pull, or of one batch's conflict settling. `meta` is the snapshot it
- * resolves against and mutates as records apply; `applied` and `quarantined` name the keys it
- * decided something about, and it may claim each only while the stored ledger has not moved that
- * key on past it meanwhile. `redirtied` may add to `dirty`, never remove; the rest belongs to
- * whoever wrote it.
+ * The working ledger of one pull or one batch's conflict settling. It claims only what it decided,
+ * and only while the stored ledger has not moved that key past it; the rest is whoever wrote it.
  */
 interface PullState {
   meta: SyncMeta;
@@ -52,7 +49,7 @@ interface PullState {
   quarantined: Set<string>;
   /** Highest server seq seen per key: the server's fact about the row, merged by max, unguarded. */
   seqs: Map<string, number>;
-  /** Keys the local version outranked, re-dirtied so the next push repairs the server. */
+  /** Keys the local version outranked: added to `dirty` (never removed) so the push repairs them. */
   redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
@@ -155,13 +152,16 @@ const MAX_PUSH_BATCH = 100;
 // signals "more to fetch", so pullOnce loops again.
 export const PULL_PAGE = 500;
 
+/** The engine never pushes unconditionally; only the wire type leaves `baseSeq` optional. */
+type ConditionalPushRecord = PushRecord & { baseSeq: number };
+
 interface DirtyRecord {
   collection: string;
   entityId: string;
   key: string;
   /** The hlc that was sealed into `record`; the ack only speaks for that version — see clearAcked. */
   hlc: string;
-  record: PushRecord;
+  record: ConditionalPushRecord;
 }
 
 /**
@@ -220,14 +220,18 @@ type BatchesResult =
 async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promise<BatchesResult> {
   const landed: DirtyRecord[] = [];
   const retry = new Set<string>();
+  let stalled: string | null = null;
   for (let start = 0; start < dirtyRecords.length; start += MAX_PUSH_BATCH) {
     if (deps.isCancelled()) {
       return { kind: 'cancelled' };
     }
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
-    const response = await deps.transport.pushChanges(batch.map((item) => item.record));
-    // After the round trip: the server already holds these records, and that has to be said. The
-    // ledger write below is skipped outright — the applied seqs it records are not hlc-guarded.
+    const response = ownResponse(
+      batch,
+      await deps.transport.pushChanges(batch.map((item) => item.record))
+    );
+    // After the round trip: the server already holds the applied records, and that has to be said.
+    // The ledger write below is skipped outright — the applied seqs it records are not hlc-guarded.
     if (deps.isCancelled()) {
       logger.error(
         `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${response.applied.length} records`
@@ -261,11 +265,31 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
         retry.add(key);
       }
     }
-    if (settled.stalled !== null) {
-      throw new Error(`sync push stalled applying the server's version of ${settled.stalled}`);
-    }
+    // Later batches still go out: an inbound write failing must not hold outbound changes hostage.
+    stalled ??= settled.stalled;
+  }
+  if (stalled !== null) {
+    throw new Error(`sync push stalled applying the server's version of ${stalled}`);
   }
   return { kind: 'pushed', landed, retry };
+}
+
+/** The reply narrowed to the batch's own keys; anything else the server named is said and dropped. */
+function ownResponse(batch: DirtyRecord[], response: PushResponse): PushResponse {
+  const sent = new Set(batch.map((item) => item.key));
+  const own = (r: { collection: string; entityId: string }): boolean =>
+    sent.has(SyncMetadataStore.entityKey(r.collection, r.entityId));
+  const applied = response.applied.filter(own);
+  const conflicts = response.conflicts.filter(own);
+  const foreign = response.applied.length - applied.length;
+  const foreignConflicts = response.conflicts.length - conflicts.length;
+  if (foreign > 0 || foreignConflicts > 0) {
+    logger.warn('Push reply named records this batch did not send; ignoring them', {
+      applied: foreign,
+      conflicts: foreignConflicts,
+    });
+  }
+  return { cursor: response.cursor, applied, conflicts };
 }
 
 /** See cancelledPull: versions settled onto this device before the stop leave no hlc behind. */
@@ -308,10 +332,16 @@ function recordAcks(fresh: SyncMeta, acked: DirtyRecord[], applied: AppliedRecor
   const appliedSeqs = new Map(
     applied.map((a) => [SyncMetadataStore.entityKey(a.collection, a.entityId), a.seq])
   );
-  for (const { key } of acked) {
+  for (const { key, collection, entityId } of acked) {
     const seq = appliedSeqs.get(key);
     if (isServerSeq(seq)) {
       fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+    } else if (seq !== undefined) {
+      logger.warn('Ignoring an applied record whose seq is not a seq', {
+        collection,
+        entityId,
+        seq,
+      });
     }
   }
 }
@@ -436,9 +466,11 @@ async function buildDirtyRecords(
 
       const entity = all[entityId] ?? null;
       const body: RecordBody = { entity, hlc };
-      const record = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
-      // 0 matches no row: a key this device never saw a seq for lands only where none exists.
-      record.baseSeq = meta.seqs[key] ?? 0;
+      const record: ConditionalPushRecord = {
+        ...(await toPushRecord(deps.dk, deps.keyId, collection, entityId, body)),
+        // 0 matches no row: a key this device never saw a seq for lands only where none exists.
+        baseSeq: meta.seqs[key] ?? 0,
+      };
       dirtyRecords.push({ collection, entityId, key, hlc, record });
     }
   }

@@ -364,6 +364,45 @@ describe('pullOnce', () => {
     errorSpy.mockRestore();
   });
 
+  it('drops the repair mark once a later version of the same key applies over local', async () => {
+    const between = hlcEncode({ physical: 1_700_000_000_500, counter: 1, node: 'device-a' });
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', between);
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.pullRecords = [
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: OLDER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 5),
+    ];
+
+    const result = await pullOnce(makeDeps());
+
+    expect(result).toEqual({ kind: 'complete' });
+    expect(await getGoals()).toEqual([theirs]);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    expect(saved.seqs['goals/g1']).toBe(5);
+  });
+
+  it('records no seq from a server record whose seq is not a seq, and says so', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.pullRecords = [
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 1.5),
+    ];
+
+    await pullOnce(makeDeps());
+
+    expect(await getGoals()).toEqual([theirs]);
+    const saved = await metaStore.load();
+    expect(saved.seqs['goals/g1']).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith('Ignoring a server record whose seq is not a seq', {
+      key: 'goals/g1',
+      seq: 1.5,
+    });
+    warnSpy.mockRestore();
+  });
+
   it('keeps the progress made earlier in the page when a later record stalls the pull', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const goal = goalFactory.build({ id: 'g1' });

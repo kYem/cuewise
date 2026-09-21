@@ -75,14 +75,24 @@ describe('SyncMetadataStore', () => {
     const meta = await store.load();
     await kv.set(
       SYNC_META_KEY,
-      { ...meta, seqs: { 'goals/g1': 4, 'goals/g2': null, 'goals/g3': -1, 'goals/g4': '5' } },
+      {
+        ...meta,
+        seqs: {
+          'goals/g1': 4,
+          'goals/g2': null,
+          'goals/g3': -1,
+          'goals/g4': '5',
+          'goals/g5': 1.5,
+          'goals/g6': Number.MAX_SAFE_INTEGER + 1,
+        },
+      },
       'local'
     );
 
     const loaded = await store.load();
 
     expect(loaded.seqs).toEqual({ 'goals/g1': 4 });
-    expect(warnSpy).toHaveBeenCalledWith('Dropped 3 stored sync seq(s) that were not seqs');
+    expect(warnSpy).toHaveBeenCalledWith('Dropped 5 stored sync seq(s) that were not seqs');
     warnSpy.mockRestore();
   });
 

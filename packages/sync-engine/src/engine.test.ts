@@ -1995,7 +1995,11 @@ describe('SyncEngine.syncNow with a refused push', () => {
 
     const outcome = await device.engine.syncNow();
 
-    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(outcome).toMatchObject({
+      kind: 'failed',
+      reason: 'device',
+      error: expect.objectContaining({ message: expect.stringContaining('sync push stalled') }),
+    });
     expect((await meta.load()).dirty.goals).toEqual(['g1']);
   });
 
@@ -2129,7 +2133,7 @@ describe('SyncEngine.disableSync', () => {
   });
 });
 
-describe('SyncEngine ledger seqs on a re-enable', () => {
+describe('SyncEngine ledger seqs on enable, before the initial sync', () => {
   it('forgets per-entity seqs with the cursor, so no push carries a base from the last account', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

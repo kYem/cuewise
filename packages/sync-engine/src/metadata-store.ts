@@ -10,7 +10,7 @@ export interface SyncMeta {
   cursor: number; // last pulled seq
   dirty: Record<string, string[]>; // collection -> entityIds pending push
   hlcs: Record<string, string>; // "collection/entityId" -> hlcEncode
-  seqs: Record<string, number>; // "collection/entityId" -> highest server seq seen, less failed writes
+  seqs: Record<string, number>; // "collection/entityId" -> highest server seq seen (push base)
   tombstones: string[]; // "collection/entityId" that are deleted
   quarantine: string[]; // "collection/entityId" that failed decrypt
 }
@@ -53,12 +53,12 @@ function isStoredSyncMeta(value: unknown): value is StoredSyncMeta {
   );
 }
 
-/** What the server assigns rows and what it accepts as a base; anything else refuses a whole push. */
+/** A seq the server would assign or accept as a base; anything else refuses the whole push. */
 export function isServerSeq(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
-// An absent map or entry means "no seq known", so the entity pushes as a row the server has not got.
+// An absent map or entry means "no seq known": the entity pushes as a row the server has not got.
 function withSeqs(meta: StoredSyncMeta): SyncMeta {
   const seqs: Record<string, number> = {};
   if (typeof meta.seqs === 'object' && meta.seqs !== null) {

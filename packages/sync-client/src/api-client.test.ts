@@ -98,6 +98,24 @@ describe('ApiClient', () => {
     });
   });
 
+  it.each([
+    ['an empty object', {}],
+    ['null', null],
+    ['a cursor that is not a number', { cursor: '5' }],
+  ])('refuses %s as a push reply instead of acking as a legacy server', async (_label, body) => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const { fetchFn } = stubFetch([{ status: 200, body }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(client.pushChanges([pushRecordFixture])).rejects.toMatchObject({
+      code: 'invalid_response',
+      retryable: false,
+      message: expect.stringContaining('cursor'),
+    });
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it('GETs /v1/export and returns the records alongside their key envelopes', async () => {
     const body = {
       records: [{ ...pushRecordFixture, seq: 1 }],

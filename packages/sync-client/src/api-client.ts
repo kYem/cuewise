@@ -80,7 +80,14 @@ export class ApiClient {
       },
       { auth: true }
     );
-    const body = await this.parseSuccessBody<Partial<PushResponse> & { cursor: number }>(res);
+    const body = await this.parseSuccessBody<Partial<PushResponse> | null>(res);
+    // Anything but a push reply must be refused here: treated as a legacy reply, it would ack
+    // records that never reached the server.
+    if (body === null || typeof body !== 'object' || typeof body.cursor !== 'number') {
+      throw new ApiError('invalid_response', res.status, {
+        detail: 'push reply carried no numeric cursor',
+      });
+    }
     if (Array.isArray(body.applied) && Array.isArray(body.conflicts)) {
       return { cursor: body.cursor, applied: body.applied, conflicts: body.conflicts };
     }

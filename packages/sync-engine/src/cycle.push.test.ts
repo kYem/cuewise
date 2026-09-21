@@ -459,6 +459,7 @@ describe('pushOnce', () => {
     expect(await getGoals()).toEqual([theirs]);
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
     expect(saved.seqs['goals/g1']).toBe(2);
   });
 
@@ -792,5 +793,103 @@ describe('pushOnce', () => {
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
     expect(saved.seqs['goals/g1']).toBe(9);
+  });
+
+  it('still pushes the later batches when a conflict in an earlier one stalls, then rejects', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const ids = Array.from({ length: 101 }, (_, i) => `g${i}`);
+    await setGoals(ids.map((id) => goalFactory.build({ id, text: 'mine' })));
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ids);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g0'] = 1;
+    });
+    const bindings = defaultBindings();
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+      storageFailure('quota exceeded')
+    );
+    const deps = makeDeps(kv, transport, { meta: metaStore, bindings });
+    const theirs = goalFactory.build({ id: 'g0', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g0',
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g0',
+        { entity: theirs, hlc: NEWER_HLC },
+        2
+      )
+    );
+
+    await expect(pushOnce(deps)).rejects.toThrow(
+      "sync push stalled applying the server's version of goals/g0"
+    );
+
+    expect(transport.pushedBatches).toHaveLength(2);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g0']);
+    errorSpy.mockRestore();
+  });
+
+  it('ignores, and says so, records in the reply that this batch never sent', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const stray = goalFactory.build({ id: 'g9', text: 'nobody asked' });
+    const strayRow = await sealServerRecord(
+      deps.dk,
+      deps.keyId,
+      'goals',
+      'g9',
+      { entity: stray, hlc: NEWER_HLC },
+      7
+    );
+    vi.spyOn(transport, 'pushChanges').mockResolvedValue({
+      cursor: 8,
+      applied: [
+        { collection: 'goals', entityId: 'g1', seq: 8 },
+        { collection: 'goals', entityId: 'g8', seq: 6 },
+      ],
+      conflicts: [strayRow],
+    });
+
+    await pushOnce(deps);
+
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g1']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Push reply named records this batch did not send; ignoring them',
+      { applied: 1, conflicts: 1 }
+    );
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs).toEqual({ 'goals/g1': 8 });
+    warnSpy.mockRestore();
+  });
+
+  it('records no seq from an applied record whose seq is not a seq, and says so', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    vi.spyOn(transport, 'pushChanges').mockResolvedValue({
+      cursor: 2,
+      applied: [{ collection: 'goals', entityId: 'g1', seq: 1.5 }],
+      conflicts: [],
+    });
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith('Ignoring an applied record whose seq is not a seq', {
+      collection: 'goals',
+      entityId: 'g1',
+      seq: 1.5,
+    });
+    warnSpy.mockRestore();
   });
 });
