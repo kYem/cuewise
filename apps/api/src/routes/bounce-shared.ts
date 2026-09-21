@@ -11,7 +11,7 @@ export const CODE_VERIFIER_RE = new RegExp(
   `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
 );
 
-/** Picks the most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides pass/fail. */
+/** The most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides. */
 export function codeVerifierIssue(value: unknown): ValidationIssue {
   const pointer = '/codeVerifier';
   if (typeof value !== 'string' || value === '') {

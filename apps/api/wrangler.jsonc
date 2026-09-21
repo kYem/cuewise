@@ -35,8 +35,8 @@
     // localhost origins are auto-allowed only when DEV_FAKE_AUTH is on.
     "ALLOWED_ORIGINS": ""
     // STATE_SIGNING_KEY, GOOGLE_CLIENT_SECRET, NOTION_CLIENT_SECRET and PROVIDER_TOKEN_KEY are
-    // SECRETS, not vars (`wrangler secret put`);
-    // local dev sets them in .dev.vars. Unset ⇒ the auth routes fail closed with 500.
+    // SECRETS, not vars (`wrangler secret put`); local dev sets them in .dev.vars. Unset ⇒ the
+    // routes that need them fail closed (see apps/api/CLAUDE.md gotcha 3).
   },
   // Hand-authored config skips the dashboard default; without this, logger.error/warn never
   // reach Workers Logs in production.

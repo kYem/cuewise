@@ -5,8 +5,9 @@ import app from './index';
 import { createNotionClient } from './notion-client';
 import { revokeExpiredParkedGrants } from './routes/notion';
 
-// Deployment entry: the Hono app's fetch handler plus the scheduled tombstone purge (see the
-// `triggers.crons` in wrangler.jsonc). `index.ts` stays the app so tests drive it directly.
+// Deployment entry: the Hono app's fetch handler plus the daily purges (tombstones, expired
+// pairings, unclaimed Notion grants; see `triggers.crons` in wrangler.jsonc). `index.ts` stays
+// the app so tests drive it directly.
 export default {
   fetch: app.fetch,
   async scheduled(
@@ -30,13 +31,15 @@ export default {
       throw err;
     }
     try {
-      const revoked = await revokeExpiredParkedGrants(
+      const sweep = await revokeExpiredParkedGrants(
         new D1SyncStore(env.DB),
         createNotionClient(env),
         env,
         Date.now()
       );
-      logger.info(`scheduled purge revoked ${revoked} unclaimed notion grants`);
+      logger.info(
+        `scheduled purge swept ${sweep.swept} unclaimed notion grants: ${sweep.revoked} revoked, ${sweep.failed} not`
+      );
     } catch (err) {
       logger.error('scheduled parked-grant purge failed', err);
       throw err;

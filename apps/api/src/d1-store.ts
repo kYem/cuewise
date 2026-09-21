@@ -25,6 +25,7 @@ import {
   type PendingPairing,
   type ProviderConnection,
   type PushRecord,
+  type RenewalClaim,
   type SealedGrant,
   type SealedTokens,
   type Session,
@@ -259,12 +260,12 @@ export class D1SyncStore implements SyncStore {
     const codeHash = await sha256Hex(code);
     const ts = this.now();
     // Best-effort PII sweep: expired sign-in codes are purged on the next mint call, not by a
-    // timer. A parked Notion grant is left for purgeExpiredAuthCodes, which revokes it upstream.
+    // timer. A parked Notion grant is left for the cron, which revokes it upstream first.
     await this.db.batch([
       this.db
         .prepare(
           `DELETE FROM auth_codes
-            WHERE expires_at <= ? AND json_extract(payload, '$.provider') != 'notion'`
+            WHERE expires_at <= ? AND json_extract(payload, '$.provider') IS NOT 'notion'`
         )
         .bind(ts),
       this.db
@@ -547,7 +548,7 @@ export class D1SyncStore implements SyncStore {
     provider: string,
     used: { readonly ciphertext: string },
     staleAfterMs: number
-  ): Promise<number | null> {
+  ): Promise<RenewalClaim | null> {
     const now = this.now();
     const res = await this.db
       .prepare(
@@ -557,16 +558,20 @@ export class D1SyncStore implements SyncStore {
       )
       .bind(now, userId, provider, used.ciphertext, now - staleAfterMs)
       .run();
-    return (res.meta.changes ?? 0) > 0 ? now : null;
+    return (res.meta.changes ?? 0) > 0 ? (now as RenewalClaim) : null;
   }
 
-  async releaseProviderRenewal(userId: string, provider: string, claimedAt: number): Promise<void> {
+  async releaseProviderRenewal(
+    userId: string,
+    provider: string,
+    claim: RenewalClaim
+  ): Promise<void> {
     await this.db
       .prepare(
         `UPDATE provider_tokens SET renewal_started_at = NULL
           WHERE user_id = ? AND provider = ? AND renewal_started_at = ?`
       )
-      .bind(userId, provider, claimedAt)
+      .bind(userId, provider, claim)
       .run();
   }
 

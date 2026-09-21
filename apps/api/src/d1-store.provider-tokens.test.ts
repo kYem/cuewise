@@ -136,10 +136,12 @@ describe('provider connections', () => {
   it('hands the renewal claim to one caller until that caller releases it', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
-    const claimedAt = await store.claimProviderRenewal(userId, 'notion', CT, 30_000);
-    expect(claimedAt).not.toBeNull();
+    const claim = await store.claimProviderRenewal(userId, 'notion', CT, 30_000);
+    if (claim === null) {
+      throw new Error('expected the first claim to be taken');
+    }
     await expect(store.claimProviderRenewal(userId, 'notion', CT, 30_000)).resolves.toBeNull();
-    await store.releaseProviderRenewal(userId, 'notion', claimedAt ?? 0);
+    await store.releaseProviderRenewal(userId, 'notion', claim);
     await expect(store.claimProviderRenewal(userId, 'notion', CT, 30_000)).resolves.not.toBeNull();
   });
 
@@ -174,10 +176,14 @@ describe('provider connections', () => {
     const clockedUser = await newUser(clocked, 'provider-tokens-release');
     await clocked.putProviderGrant(clockedUser, 'notion', grant(REFRESH_PAIR));
     const first = await clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000);
+    expect(first).toBe(1_000_000);
+    if (first === null) {
+      throw new Error('expected the first claim to be taken');
+    }
     tick(31_000);
     await clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000);
 
-    await clocked.releaseProviderRenewal(clockedUser, 'notion', first ?? 0);
+    await clocked.releaseProviderRenewal(clockedUser, 'notion', first);
 
     await expect(
       clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000)

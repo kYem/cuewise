@@ -4,10 +4,48 @@ import {
   env,
   waitOnExecutionContext,
 } from 'cloudflare:test';
-import { describe, expect, it } from 'vitest';
-import { record } from './__fixtures__/api-test-helpers.fixtures';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clockedStore, record } from './__fixtures__/api-test-helpers.fixtures';
+import { notionEnv, TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY } from './__fixtures__/notion.fixtures';
+import { encryptSecret } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
 import worker from './worker';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('worker scheduled parked-grant purge', () => {
+  it('scheduled() revokes an expired parked notion grant upstream and drops its code', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(`${init?.method ?? 'GET'} ${String(input)}`);
+        return Response.json({});
+      })
+    );
+    const { store: clocked } = clockedStore(1_000);
+    const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+    await clocked.mintAuthCode(
+      {
+        provider: 'notion',
+        grant: { ...sealed, refreshCiphertext: null, refreshIv: null, workspace: null },
+      },
+      'c1'
+    );
+
+    const ctx = createExecutionContext();
+    await worker.scheduled(createScheduledController(), notionEnv(), ctx);
+    await waitOnExecutionContext(ctx);
+
+    expect(calls).toEqual(['POST https://api.notion.com/v1/oauth/revoke']);
+    const remaining = await env.DB.prepare('SELECT COUNT(*) AS count FROM auth_codes').first<{
+      count: number;
+    }>();
+    expect(remaining?.count).toBe(0);
+  });
+});
 
 describe('worker scheduled tombstone purge', () => {
   it('scheduled() reclaims tombstones past the retention window and leaves live rows', async () => {

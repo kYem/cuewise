@@ -299,14 +299,14 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('relays server_error from notion the same way as temporarily_unavailable', async () => {
+  it('relays server_error from notion as an outage too, not as our fault', async () => {
     const errorSpy = spyOnLoggerError();
     const warnSpy = spyOnLoggerWarn();
     const state = await signedState();
 
     const res = await app().request(callbackUrl(state, { error: 'server_error' }), {}, notionEnv());
 
-    expect(await res.text()).toContain('error=server_error');
+    expect(await res.text()).toContain('error=connect_failed');
     expect(warnSpy).toHaveBeenCalledWith('Notion authorize step unavailable', {
       error: 'server_error',
     });
@@ -344,7 +344,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(exchangeCode).not.toHaveBeenCalled();
   });
 
-  it('relays a notion outage during authorize as server_error, warning rather than erroring', async () => {
+  it('relays a notion outage during authorize as connect_failed — theirs — at warn', async () => {
     const errorSpy = spyOnLoggerError();
     const warnSpy = spyOnLoggerWarn();
     const state = await signedState();
@@ -355,7 +355,7 @@ describe('GET /v1/integrations/notion/callback', () => {
       notionEnv()
     );
 
-    expect(await res.text()).toContain('error=server_error');
+    expect(await res.text()).toContain('error=connect_failed');
     expect(warnSpy).toHaveBeenCalledWith('Notion authorize step unavailable', {
       error: 'temporarily_unavailable',
     });
@@ -491,7 +491,6 @@ describe('POST /v1/integrations/notion/claim', () => {
     const res = await claim(code, headers, 'short');
 
     expect(res.status).toBe(400);
-    // The code survives a malformed request, so a typo does not burn it.
     await expect(claim(code, headers)).resolves.toMatchObject({ status: 200 });
   });
 
@@ -715,15 +714,64 @@ describe('unclaimed parked grants', () => {
     expect(await res.text()).toContain('code=');
     tick(61_000);
 
-    const revoked = await revokeExpiredParkedGrants(
+    const sweep = await revokeExpiredParkedGrants(
       clocked,
       stubNotionClient({ revokeToken }),
       notionEnv(),
       62_000
     );
 
-    expect(revoked).toBe(1);
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0 });
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('counts a revoke that failed as failed, not revoked', async () => {
+    const revokeToken = vi.fn(async () => {
+      throw new NotionUnavailableError('notion unreachable');
+    });
+    const { store: clocked, tick } = clockedStore(1_000);
+    const state = await signedState();
+    await createApp({
+      notionClientFactory: () => stubNotionClient(),
+      storeFactory: () => clocked,
+    }).request(callbackUrl(state), {}, notionEnv());
+    tick(61_000);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      62_000
+    );
+
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1 });
+  });
+
+  it('skips an expired sign-in code: only the parked grant is revoked and counted', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
+    const { store: clocked, tick } = clockedStore(1_000);
+    const state = await signedState();
+    await createApp({
+      notionClientFactory: () => stubNotionClient(),
+      storeFactory: () => clocked,
+    }).request(callbackUrl(state), {}, notionEnv());
+    await clocked.mintAuthCode(
+      { provider: 'google', providerSub: 'g-1' },
+      await testCodeChallenge()
+    );
+    tick(61_000);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      62_000
+    );
+
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0 });
+    expect(revokeToken).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('leaves an unexpired parked grant alone', async () => {
@@ -735,14 +783,14 @@ describe('unclaimed parked grants', () => {
       storeFactory: () => clocked,
     }).request(callbackUrl(state), {}, notionEnv());
 
-    const revoked = await revokeExpiredParkedGrants(
+    const sweep = await revokeExpiredParkedGrants(
       clocked,
       stubNotionClient({ revokeToken }),
       notionEnv(),
       30_000
     );
 
-    expect(revoked).toBe(0);
+    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0 });
     expect(revokeToken).not.toHaveBeenCalled();
   });
 });

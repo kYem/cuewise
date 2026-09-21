@@ -15,7 +15,7 @@ const PROBLEM_DEFS = {
   pairing_not_found: { status: 404, title: 'No such pairing request.' },
   pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },
   provider_not_connected: { status: 404, title: 'No connection for that provider.' },
-  // Not `invalid_token`: the session is fine and the provider grant died — reconnect, don't sign in.
+  // Not `invalid_token`: the session is fine and the provider grant died — reconnect, not sign in.
   provider_reauth_required: { status: 401, title: 'The provider connection is no longer valid.' },
   provider_schema_unusable: {
     status: 422,

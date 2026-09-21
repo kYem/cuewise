@@ -32,7 +32,7 @@ export interface SignInCodePayload {
   email?: string;
 }
 
-/** Parked between Notion's redirect and /claim: the claiming session, not the minter, decides the account. */
+/** Parked between Notion's redirect and /claim: whoever claims it, not whoever minted the link, gets it. */
 export interface ProviderCodePayload {
   provider: 'notion';
   grant: SealedGrant;
@@ -48,6 +48,9 @@ export interface SealedGrant {
   refreshIv: string | null;
   workspace: string | null;
 }
+
+/** The stamp a renewal claim was taken at; branded so a timeout or Date.now() cannot release it. */
+export type RenewalClaim = number & { readonly __brand: 'RenewalClaim' };
 
 /** What a renewal may write: the tokens, never the workspace or the chosen table. */
 export type SealedTokens = Pick<
@@ -144,22 +147,21 @@ export interface SyncStore {
     provider: string,
     used: { readonly ciphertext: string }
   ): Promise<boolean>;
-  // One renewal per grant at a time, keyed on the ciphertext the caller opened — Notion rotates
-  // refresh tokens, so a losing or stale-view refresh would read invalid_grant. Answers the claim
-  // stamp, which release needs; a claim older than staleAfterMs is a crashed renewal.
+  // One renewal per grant at a time, keyed on the ciphertext the caller opened: Notion issues a new
+  // refresh token per renewal, so a second refresh with the same one reads invalid_grant.
   claimProviderRenewal(
     userId: string,
     provider: string,
     used: { readonly ciphertext: string },
     staleAfterMs: number
-  ): Promise<number | null>;
-  releaseProviderRenewal(userId: string, provider: string, claimedAt: number): Promise<void>;
+  ): Promise<RenewalClaim | null>;
+  // Releases only the claim it was handed; a claim older than staleAfterMs is a crashed renewal.
+  releaseProviderRenewal(userId: string, provider: string, claim: RenewalClaim): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
   // read-then-write window can revert a selection that lands in between.
   putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
   // Writes only while the row still holds the ciphertext the renewal started from, and releases
-  // the claim with it. COALESCE so a null refresh from the caller cannot erase a stored pair.
-  // Both answer false when nothing matched.
+  // the claim with it; a null refresh keeps the stored pair. False when nothing matched.
   updateProviderTokens(
     userId: string,
     provider: string,

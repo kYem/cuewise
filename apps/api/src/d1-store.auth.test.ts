@@ -164,6 +164,23 @@ describe('D1SyncStore auth', () => {
     expect(after?.count).toBe(1);
   });
 
+  it('mintAuthCode still sweeps an expired row whose payload names no provider', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await env.DB.prepare(
+      'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
+    )
+      .bind('legacy-hash', JSON.stringify({ legacy: true }), 2_000, 'c0')
+      .run();
+    tick(61_000);
+
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge5', email: 'p5@e.c' }, 'c5');
+
+    const row = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    expect(row?.count).toBe(1);
+  });
+
   it('refreshes identities.email and users.email when a later sign-in has a new email', async () => {
     const { store } = clockedStore(1_000);
     const identity = {

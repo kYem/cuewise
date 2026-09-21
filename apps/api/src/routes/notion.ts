@@ -23,7 +23,7 @@ import {
   NotionUnavailableError,
 } from '../notion-client';
 import { completionWrite, findCompletionProperty } from '../notion-schema';
-import { problem, type ValidationIssue } from '../problem-details';
+import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
 import type { ProviderConnection, SealedGrant, SyncStore } from '../store';
 import {
   CODE_CHALLENGE_RE,
@@ -99,16 +99,18 @@ async function revokeUpstream(
   client: NotionClient,
   accessToken: string,
   userId: string | null
-): Promise<void> {
+): Promise<boolean> {
   try {
     await client.revokeToken(accessToken);
+    return true;
   } catch (error) {
     if (error instanceof NotionAuthError || error instanceof NotionUnavailableError) {
       logger.warn('Could not revoke a Notion grant upstream', { userId, reason: reasonOf(error) });
-      return;
+      return false;
     }
     // Our config, or our bug: fails for every user, so it must be loud.
     logger.error('Notion revocation failed on our side', error, { userId });
+    return false;
   }
 }
 
@@ -118,13 +120,13 @@ async function revokeSealed(
   sealed: SealedSecret,
   env: Env,
   userId: string | null
-): Promise<void> {
+): Promise<boolean> {
   const key = env.PROVIDER_TOKEN_KEY;
   if (!isSecretKey(key)) {
     logger.error('PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation', {
       userId,
     });
-    return;
+    return false;
   }
   let accessToken: string;
   try {
@@ -135,9 +137,9 @@ async function revokeSealed(
       userId,
       reason: errorName(error),
     });
-    return;
+    return false;
   }
-  await revokeUpstream(client, accessToken, userId);
+  return revokeUpstream(client, accessToken, userId);
 }
 
 /** For account deletion: takes the row before the user goes, so Notion forgets that token. */
@@ -302,8 +304,8 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
       logger.warn('Notion grant was disconnected before renewal', { userId });
       return problem('provider_not_connected');
     }
-    // Another request holds the renewal, or already replaced the token this one opened; either
-    // way Notion would answer this request's refresh token with invalid_grant.
+    // Another request holds the renewal, or already replaced the token this one opened; this
+    // request's refresh token is about to be, or already is, the one Notion has rotated away.
     logger.warn('Notion renewal held or overtaken by another request', { userId });
     return problem('upstream_unavailable', { detail: 'Please retry.' });
   }
@@ -335,7 +337,12 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   } catch (error) {
     logger.error('Notion renewal could not be stored; revoked the new token', error, { userId });
     await revokeUpstream(client, grant.accessToken, userId);
-    await store.releaseProviderRenewal(userId, PROVIDER, claimedAt).catch(() => undefined);
+    await store.releaseProviderRenewal(userId, PROVIDER, claimedAt).catch((releaseError) => {
+      logger.warn('Could not release the Notion renewal claim; it goes stale in 30s', {
+        userId,
+        reason: reasonOf(releaseError),
+      });
+    });
     throw error;
   }
   if (!stored) {
@@ -353,21 +360,32 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   return { accessToken: grant.accessToken, ciphertext };
 }
 
+export interface ParkedGrantSweep {
+  swept: number;
+  revoked: number;
+  failed: number;
+}
+
 /** For the daily cron: expired parked grants were never claimed, so Notion must forget them. */
 export async function revokeExpiredParkedGrants(
   store: SyncStore,
   client: NotionClient,
   env: Env,
   now: number
-): Promise<number> {
-  let revoked = 0;
+): Promise<ParkedGrantSweep> {
+  const sweep: ParkedGrantSweep = { swept: 0, revoked: 0, failed: 0 };
   for (const payload of await store.purgeExpiredAuthCodes(now)) {
-    if (payload.provider === PROVIDER) {
-      await revokeParkedGrant(client, payload.grant, env);
-      revoked += 1;
+    if (payload.provider !== PROVIDER) {
+      continue;
+    }
+    sweep.swept += 1;
+    if (await revokeSealed(client, payload.grant, env, null)) {
+      sweep.revoked += 1;
+    } else {
+      sweep.failed += 1;
     }
   }
-  return revoked;
+  return sweep;
 }
 
 function refreshPair(connection: ProviderConnection): RefreshPair | null {
@@ -490,8 +508,11 @@ export function registerNotionRoutes(
       // Anyone holding a session can mint a state and hit this with any string, so only the
       // RFC 6749 codes that our authorize URL alone could cause are loud.
       if (denied === 'temporarily_unavailable' || denied === 'server_error') {
+        // Theirs and retryable, like an outage at the exchange step.
         logger.warn('Notion authorize step unavailable', { error: denied });
-      } else if (OUR_AUTHORIZE_FAULTS.has(denied)) {
+        return returnWithError(state.returnUri, 'connect_failed');
+      }
+      if (OUR_AUTHORIZE_FAULTS.has(denied)) {
         logger.error('Notion authorize step failed', { error: denied });
       } else {
         logger.warn('Notion authorize step failed', {
@@ -549,12 +570,7 @@ export function registerNotionRoutes(
     const code = record === null ? undefined : record.code;
     const codeVerifier = record === null ? undefined : record.codeVerifier;
     const issues: ValidationIssue[] = [];
-    if (typeof code !== 'string' || code === '' || code.length > MAX_ONE_TIME_CODE_LENGTH) {
-      issues.push({
-        pointer: '/code',
-        detail: `required non-empty string of at most ${MAX_ONE_TIME_CODE_LENGTH} characters`,
-      });
-    }
+    requireNonEmptyString(code, '/code', issues, { maxLength: MAX_ONE_TIME_CODE_LENGTH });
     if (typeof codeVerifier !== 'string' || !CODE_VERIFIER_RE.test(codeVerifier)) {
       issues.push(codeVerifierIssue(codeVerifier));
     }
@@ -575,12 +591,13 @@ export function registerNotionRoutes(
     // grant it parked can never be claimed now, so it must not stay live at Notion.
     if ((await sha256Base64Url(codeVerifier)) !== consumed.codeChallenge) {
       logger.warn('Notion claim failed the PKCE verifier check', { userId });
-      await revokeParkedGrant(client(c.env), grant, c.env);
+      await revokeSealed(client(c.env), grant, c.env, userId);
       return problem('invalid_token');
     }
     try {
       // A previous grant is overwritten, not revoked: Notion does not say whether revoke acts per
-      // token or per bot, so revoking it could kill the grant being claimed.
+      // token or per bot, and per bot it would kill the grant being claimed on every reconnect.
+      // Revoking an unstored grant (above, and the cron) risks a live one only on the same bot.
       await store.putProviderGrant(userId, PROVIDER, grant);
     } catch (error) {
       // The code is already burned, so this grant can never be claimed again. Revoke it rather

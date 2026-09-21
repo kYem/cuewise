@@ -3,7 +3,6 @@ import { checkboxSchema } from './__fixtures__/notion.fixtures';
 import {
   createNotionClient,
   MAX_QUERY_PAGES,
-  NOTION_VERSION,
   NotionAuthError,
   NotionConfigError,
   NotionResourceError,
@@ -56,7 +55,6 @@ describe('exchangeCode', () => {
       refreshToken: null,
       workspace: 'Acme',
     });
-    expect(NOTION_VERSION).toBe('2026-03-11');
   });
 
   it('sends the callback url notion will have validated the code against', async () => {
@@ -79,12 +77,6 @@ describe('exchangeCode', () => {
 
     await expect(failing).rejects.toBeInstanceOf(NotionAuthError);
     await expect(failing).rejects.toSatisfy(messageOmits('code-secret', 'csecret'));
-  });
-
-  it('treats an unauthorized client as our configuration even on a 401, never as a dead grant', async () => {
-    const notion = client(() => Response.json({ error: 'unauthorized_client' }, { status: 401 }));
-
-    await expect(notion.refreshGrant('r')).rejects.toBeInstanceOf(NotionConfigError);
   });
 
   it('treats a 404 from any oauth endpoint as our fault, never as a lost table', async () => {
@@ -263,6 +255,21 @@ describe('failure classification', () => {
     );
   });
 
+  it('drops an HTTP-date Retry-After rather than relaying NaN', async () => {
+    const notion = client(
+      () =>
+        new Response('', {
+          status: 429,
+          headers: { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' },
+        })
+    );
+
+    await expect(notion.queryRows('tok', 'ds1', checkboxProperty)).rejects.toHaveProperty(
+      'retryAfter',
+      null
+    );
+  });
+
   it('records the status of an unusable 200, so a caller can tell it from a transport fault', async () => {
     const notion = client(() => Response.json({ object: 'list' }));
 
@@ -271,6 +278,26 @@ describe('failure classification', () => {
 });
 
 describe('refresh and revoke', () => {
+  it('treats an unauthorized client as our configuration even on a 401, never as a dead grant', async () => {
+    const notion = client(() => Response.json({ error: 'unauthorized_client' }, { status: 401 }));
+
+    await expect(notion.refreshGrant('r')).rejects.toBeInstanceOf(NotionConfigError);
+  });
+
+  it('treats any 401 on a basic-auth call as our credentials, whatever the body says', async () => {
+    const notion = client(() => new Response('', { status: 401 }));
+
+    await expect(notion.refreshGrant('r')).rejects.toBeInstanceOf(NotionConfigError);
+    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
+    await expect(notion.revokeToken('t')).rejects.toBeInstanceOf(NotionConfigError);
+  });
+
+  it('counts a revoke answered 200 with no body as done', async () => {
+    const notion = client(() => new Response('', { status: 200 }));
+
+    await expect(notion.revokeToken('tok')).resolves.toBeUndefined();
+  });
+
   it('renews a grant with basic auth and the refresh grant type', async () => {
     const notion = client((url, init) => {
       expect(url).toBe('https://api.notion.com/v1/oauth/token');
@@ -591,6 +618,20 @@ describe('setCompletion', () => {
         return Response.json({ code: 'validation_error' }, { status: 400 });
       }
       return new Response('', { status: 502 });
+    });
+
+    const failing = notion.setCompletion('tok', 'pg1', WRITE);
+
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toHaveProperty('status', 400);
+  });
+
+  it('keeps the 400 when the look is refused: a 403 does not say the page is gone', async () => {
+    const notion = client((_url, init) => {
+      if (init.method === 'PATCH') {
+        return Response.json({ code: 'validation_error' }, { status: 400 });
+      }
+      return Response.json({ code: 'restricted_resource' }, { status: 403 });
     });
 
     const failing = notion.setCompletion('tok', 'pg1', WRITE);

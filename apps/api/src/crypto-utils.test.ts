@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
+import { TEST_FOREIGN_PROVIDER_KEY, TEST_PROVIDER_KEY } from './__fixtures__/notion.fixtures';
 import {
   base64UrlDecodeString,
   base64UrlEncodeString,
@@ -173,9 +174,8 @@ describe('signState / verifyState', () => {
 });
 
 describe('encryptSecret / decryptSecret', () => {
-  // 43 base64url chars decode to exactly 32 bytes.
-  const KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-  const OTHER_KEY = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+  const KEY = TEST_PROVIDER_KEY;
+  const OTHER_KEY = TEST_FOREIGN_PROVIDER_KEY;
 
   it('round-trips a token', async () => {
     const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);

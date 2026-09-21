@@ -47,7 +47,7 @@ export class NotionUnavailableError extends Error {
     this.retryAfter = details.retryAfter ?? null;
   }
 }
-/** The table or page is gone, or the token lacks permission on it. The user re-picks. */
+/** The table or page is gone, or the token lacks permission on it. Not retryable. */
 export class NotionResourceError extends Error {
   override readonly name = 'NotionResourceError';
   readonly status: 403 | 404;
@@ -90,7 +90,7 @@ export interface NotionClient {
   refreshGrant(refreshToken: string): Promise<NotionGrant>;
   /** Tells Notion to forget the grant, so disconnecting is not just local. */
   revokeToken(accessToken: string): Promise<void>;
-  /** The tables shared with the integration; the token response names none, hence a second phase. */
+  /** The tables shared with the integration; the token response names none, so a second phase. */
   searchDataSources(accessToken: string): Promise<NotionDataSource[]>;
   getPropertySchemas(accessToken: string, dataSourceId: string): Promise<PropertySchemas>;
   queryRows(
@@ -105,12 +105,23 @@ type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC
 
 // Classifies by status and a regex-bounded error code, never free text: no message here may carry
 // the authorization code, the access token or the client secret, since these reach the logger.
-function classify(status: number, body: unknown, retryAfter: number | null): Error {
+function classify(
+  status: number,
+  body: unknown,
+  retryAfter: number | null,
+  ourCredentials: boolean
+): Error {
   const record = asRecord(body) ?? {};
   const raw = record.error ?? record.code;
   const code =
     typeof raw === 'string' ? (ERROR_CODE_RE.test(raw) ? raw : 'unrecognised') : 'no code';
-  if (code === 'invalid_client' || code === 'unauthorized_client') {
+  // On a Basic-auth call the only credential a 401 can refuse is ours (RFC 6749 §5.2: a bad
+  // grant is a 400 invalid_grant), whatever the body says.
+  if (
+    code === 'invalid_client' ||
+    code === 'unauthorized_client' ||
+    (ourCredentials && status === 401)
+  ) {
     return new NotionConfigError(`notion rejected our client (${status}, ${code})`);
   }
   if (status === 401 || code === 'invalid_grant' || code === 'unauthorized') {
@@ -176,7 +187,12 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       readable = false;
     }
     if (!response.ok) {
-      throw classify(response.status, body, retryAfterOf(response));
+      throw classify(
+        response.status,
+        body,
+        retryAfterOf(response),
+        authorization.startsWith('Basic ')
+      );
     }
     // A 200 we cannot parse is an outage, not an empty result — reporting it as "no rows" would
     // tell the user they have nothing to do.
@@ -262,10 +278,18 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     },
 
     async revokeToken(accessToken) {
-      await callOurs('/oauth/revoke', basicAuth(), {
-        method: 'POST',
-        body: JSON.stringify({ token: accessToken }),
-      });
+      try {
+        await callOurs('/oauth/revoke', basicAuth(), {
+          method: 'POST',
+          body: JSON.stringify({ token: accessToken }),
+        });
+      } catch (error) {
+        // A 2xx is the whole answer here; an unreadable body is not a failed revoke.
+        if (error instanceof NotionUnavailableError && error.status === 200) {
+          return;
+        }
+        throw error;
+      }
     },
 
     async searchDataSources(accessToken) {
