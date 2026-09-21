@@ -16,7 +16,8 @@ language js(typescript)
     `setCollections`,
     `setCollectionsRaw`,
     `setReminders`,
-    `setRemindersRaw`
+    `setRemindersRaw`,
+    `setConceptCards`
   },
   $filename <: not r".*\.test\.tsx?$",
   $write <: not within or {
