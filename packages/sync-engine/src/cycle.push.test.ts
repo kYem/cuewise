@@ -1,6 +1,12 @@
 import { generateDataKey } from '@cuewise/crypto';
-import { configurePlatform, hlcEncode, logger } from '@cuewise/shared';
-import { setGoals } from '@cuewise/storage';
+import {
+  configurePlatform,
+  hlcEncode,
+  logger,
+  type SyncRecord,
+  storageFailure,
+} from '@cuewise/shared';
+import { getGoals, setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
@@ -9,10 +15,25 @@ import { defaultBindings } from './collections';
 import { type CycleDeps, pushOnce } from './cycle';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
-import { LwwHlcStrategy } from './strategy';
+import { toPushRecord } from './record-map';
+import { LwwHlcStrategy, type RecordBody } from './strategy';
 
 const KEY_ID = 'dk-1';
 const HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'device-a' });
+const OLDER_HLC = hlcEncode({ physical: 1_600_000_000_000, counter: 1, node: 'device-b' });
+const NEWER_HLC = hlcEncode({ physical: 1_800_000_000_000, counter: 1, node: 'device-b' });
+
+/** Seals a server row under `deps.dk` so a scripted conflict decrypts like a real one. */
+async function serverRow(
+  deps: CycleDeps,
+  collection: string,
+  entityId: string,
+  body: RecordBody,
+  seq: number
+): Promise<SyncRecord> {
+  const rec = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
+  return { ...rec, seq };
+}
 
 /** Stamps entityIds dirty for a collection with a fixed hlc, bypassing MutationTracker. */
 async function seedDirty(
@@ -252,5 +273,243 @@ describe('pushOnce', () => {
     });
     const logged = JSON.stringify(debugSpy.mock.calls);
     expect(logged).not.toContain('g1');
+  });
+
+  it('sends the seq it last saw as baseSeq and omits it for an entity it never saw a seq for', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'g2' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1', 'g2']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 4;
+    });
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const [batch] = transport.pushedBatches;
+    expect(batch.find((r) => r.entityId === 'g1')?.baseSeq).toBe(4);
+    expect('baseSeq' in (batch.find((r) => r.entityId === 'g2') ?? {})).toBe(false);
+  });
+
+  it('records the seq the server assigned to each applied record', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.seqs['goals/g1']).toBe(1);
+    expect(saved.dirty.goals).toBeUndefined();
+  });
+
+  it('records the applied seq even when the id was re-edited during the round trip, and keeps it dirty', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const tracker = new MutationTracker(metaStore, () => 1000);
+    duringPush(transport, () => tracker.markMutated('goals', 'g1'));
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.seqs['goals/g1']).toBe(1);
+  });
+
+  it('clears dirty and learns nothing about seqs from a server that predates compare-and-set', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    transport.legacyPushResponse = true;
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBeUndefined();
+  });
+
+  it('applies the server version and clears dirty when a conflict shows the server is newer', async () => {
+    const mine = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([mine]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+    );
+
+    await pushOnce(deps);
+
+    expect(await getGoals()).toEqual([theirs]);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    expect(saved.seqs['goals/g1']).toBe(2);
+    expect(transport.pushedBatches).toHaveLength(1);
+  });
+
+  it('re-pushes with the fresh base in the same call when a conflict shows the server is older', async () => {
+    const mine = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([mine]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const stale = goalFactory.build({ id: 'g1', text: 'stale' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: stale, hlc: OLDER_HLC }, 2)
+    );
+
+    await pushOnce(deps);
+
+    expect(transport.pushedBatches).toHaveLength(2);
+    expect(transport.pushedBatches[1][0]).toMatchObject({ entityId: 'g1', baseSeq: 2 });
+    const landed = transport.serverRecords.get('goals/g1')?.seq;
+    expect(landed).toBeGreaterThan(2);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBe(landed);
+    expect(await getGoals()).toEqual([mine]);
+  });
+
+  it('clears dirty without writing when a conflict shows the server already holds this version', async () => {
+    const mine = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([mine]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: mine, hlc: HLC }, 2)
+    );
+
+    await pushOnce(deps);
+
+    expect(transport.pushedBatches).toHaveLength(1);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBe(2);
+  });
+
+  it('keeps an id dirty through a conflict it lost when the user re-edited it during the round trip', async () => {
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+    );
+    const tracker = new MutationTracker(metaStore, () => 1_900_000_000_000);
+    duringPush(transport, () => tracker.markMutated('goals', 'g1'));
+
+    await pushOnce(deps);
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.seqs['goals/g1']).toBeGreaterThanOrEqual(2);
+  });
+
+  it('quarantines an undecryptable conflict, records its seq, and lands the retry over it', async () => {
+    const mine = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([mine]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const onQuarantine = vi.fn();
+    const deps = makeDeps(kv, transport, { meta: metaStore, onQuarantine });
+    const sealed = await serverRow(deps, 'goals', 'g1', { entity: mine, hlc: OLDER_HLC }, 2);
+    transport.serverRecords.set('goals/g1', { ...sealed, ciphertext: 'garbage' });
+
+    await pushOnce(deps);
+
+    expect(onQuarantine).toHaveBeenCalledWith('goals/g1');
+    expect(transport.pushedBatches).toHaveLength(2);
+    expect(transport.serverRecords.get('goals/g1')?.ciphertext).not.toBe('garbage');
+    const saved = await metaStore.load();
+    expect(saved.quarantine).toEqual(['goals/g1']);
+    expect(saved.dirty.goals).toBeUndefined();
+  });
+
+  it('rejects, naming the record, when the server version of a conflict cannot be written locally', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const bindings = defaultBindings();
+    const goalsBinding = bindings.find((b) => b.name === 'goals');
+    if (goalsBinding === undefined) {
+      throw new Error('goals binding missing');
+    }
+    vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+    const deps = makeDeps(kv, transport, { meta: metaStore, bindings });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+    );
+
+    await expect(pushOnce(deps)).rejects.toThrow(
+      "sync push stalled applying the server's version of goals/g1"
+    );
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.seqs['goals/g1']).toBe(2);
+    errorSpy.mockRestore();
+  });
+
+  it('retries a conflict at most once per call, leaving a still-moving row for the next cycle', async () => {
+    const mine = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([mine]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const stale: RecordBody = {
+      entity: goalFactory.build({ id: 'g1', text: 'stale' }),
+      hlc: OLDER_HLC,
+    };
+    transport.serverRecords.set('goals/g1', await serverRow(deps, 'goals', 'g1', stale, 2));
+    // Another writer moves the row again between our first push and the retry.
+    const pushChanges = transport.pushChanges.bind(transport);
+    let calls = 0;
+    vi.spyOn(transport, 'pushChanges').mockImplementation(async (records) => {
+      calls += 1;
+      if (calls === 2) {
+        transport.serverRecords.set('goals/g1', await serverRow(deps, 'goals', 'g1', stale, 9));
+      }
+      return pushChanges(records);
+    });
+
+    await pushOnce(deps);
+
+    expect(calls).toBe(2);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.seqs['goals/g1']).toBe(9);
   });
 });
