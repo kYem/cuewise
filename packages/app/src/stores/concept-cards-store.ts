@@ -209,8 +209,7 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   updateCard: async (id: string, updates: ConceptCardUpdates) => {
-    const existing = get().cards.find((card) => card.id === id);
-    if (!existing) {
+    if (!get().cards.some((card) => card.id === id)) {
       return false;
     }
     if (updates.term !== undefined && !updates.term.trim()) {

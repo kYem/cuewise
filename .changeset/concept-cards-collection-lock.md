@@ -5,4 +5,4 @@
 '@cuewise/storage': patch
 ---
 
-A concept card saved from another tab or in the background is no longer overwritten by the next edit.
+A concept card saved from another tab is no longer overwritten by the next edit.
