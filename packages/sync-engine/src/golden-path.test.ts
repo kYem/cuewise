@@ -337,6 +337,98 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
   });
 });
 
+describe('compare-and-set: the server never regresses an entity', () => {
+  it('an older edit pushed after a newer one is refused and adopts the newer, with no repair push', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'seed' })]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    // Both edit; B (newer clock) pushes first, A (older) second with the base it saw at enrol time.
+    const goalsBinding = getBinding('goals');
+    useStorage(deviceA);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'A older' }));
+    await deviceA.engine.markMutated('goals', 'g1');
+    useStorage(deviceB);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'B newer' }));
+    await deviceB.engine.markMutated('goals', 'g1');
+    await deviceB.engine.syncNow();
+    const bRow = server.rows().find((r) => r.entityId === 'g1');
+    if (bRow === undefined) {
+      throw new Error('expected B to have pushed g1');
+    }
+
+    const pushSpy = vi.spyOn(server, 'pushChanges');
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+
+    // A's pull brought B's version first, so A's older edit lost locally and never reached the
+    // server: every g1 record A pushed carries B's clock (a re-push of the applied content) and a
+    // base, never A's older edit. Had the pull been slower, the base would have refused it instead.
+    const g1Pushes = pushSpy.mock.calls.flatMap(([records]) =>
+      records.filter((r) => r.entityId === 'g1')
+    );
+    expect(g1Pushes.every((r) => r.baseSeq !== undefined)).toBe(true);
+    expect(g1Pushes.every((r) => r.clientUpdatedAt >= bRow.clientUpdatedAt)).toBe(true);
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
+  });
+
+  it('a stale write that reached the server unconditionally is repaired by the device holding the newer edit', async () => {
+    const server = new FakeSyncServer();
+    // A's clock is ahead here: A's edits outrank B's.
+    const deviceA = createDevice(server, makeClock(9_000_000));
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'seed' })]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    const goalsBinding = getBinding('goals');
+    useStorage(deviceA);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'A newest' }));
+    await deviceA.engine.markMutated('goals', 'g1');
+    await deviceA.engine.syncNow();
+
+    // B edits with an older hlc and pushes like a client that predates compare-and-set: no base,
+    // and a cursor parked at the server's head so its pull brings nothing to lose to first.
+    useStorage(deviceB);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'B stale' }));
+    await deviceB.engine.markMutated('goals', 'g1');
+    await new SyncMetadataStore(deviceB.kv).update((meta) => {
+      delete meta.seqs['goals/g1'];
+      meta.cursor = Math.max(...server.rows().map((r) => r.seq));
+    });
+    await deviceB.engine.syncNow();
+    const before = server.rows().find((r) => r.entityId === 'g1')?.seq;
+    expect(before).toBeGreaterThan(0);
+
+    // A pulls the stale row, keeps its own (strictly newer), re-dirties, and repairs in the same cycle.
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+    const after = server.rows().find((r) => r.entityId === 'g1')?.seq;
+    expect(after).toBeGreaterThan(before ?? 0);
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('A newest');
+
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('A newest');
+  });
+});
+
 describe('settings: an enrolling device claims only the keys it explicitly wrote', () => {
   it('a choice stored before sync was enabled reaches the account through the backfill alone', async () => {
     const server = new FakeSyncServer();

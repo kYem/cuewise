@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   unwrapDataKey,
 } from '@cuewise/crypto';
-import { configurePlatform, logger, storageFailure } from '@cuewise/shared';
+import { configurePlatform, hlcEncode, logger, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import {
   ApiError,
@@ -32,6 +32,7 @@ import {
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
+import { toPushRecord } from './record-map';
 
 interface Device {
   kv: FakeKvStore;
@@ -1962,6 +1963,45 @@ describe('SyncEngine.syncNow', () => {
 
     expect(outcome).toEqual({ kind: 'signed-out' });
     expect(device.engine.getStatus()).toBe('signed_out');
+  });
+});
+
+describe('SyncEngine.syncNow with a refused push', () => {
+  it('reports failed/device and keeps the id dirty when the server version of a conflict cannot be written', async () => {
+    const server = new FakeSyncServer();
+    const bindings = defaultBindings();
+    const device = createDevice(server, { bindings });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    // The server moves on (a newer version under the same key) while this device edits g1 again.
+    const stored = await loadPersistedDataKey(device.kv);
+    if (stored === null) {
+      throw new Error('expected a persisted data key');
+    }
+    const newer = await toPushRecord(stored.dk, stored.keyId, 'goals', 'g1', {
+      entity: goalFactory.build({ id: 'g1', text: 'theirs' }),
+      hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
+    });
+    server.pushChanges([newer]);
+    const meta = new SyncMetadataStore(device.kv);
+    await meta.update((m) => {
+      // Park the cursor so the pull brings nothing and the conflict surfaces on the push.
+      m.cursor = Math.max(...server.rows().map((r) => r.seq));
+    });
+    const goalsBinding = bindings.find((b) => b.name === 'goals');
+    if (goalsBinding === undefined) {
+      throw new Error('goals binding missing');
+    }
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
+    await device.engine.markMutated('goals', 'g1');
+    vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect((await meta.load()).dirty.goals).toEqual(['g1']);
   });
 });
 
