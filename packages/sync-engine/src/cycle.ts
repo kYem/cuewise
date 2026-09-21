@@ -47,8 +47,35 @@ interface PullState {
   applied: Set<string>;
   /** Keys whose quarantine membership this pull changed — not merely re-observed. */
   quarantined: Set<string>;
+  /** Highest server seq seen per key. The server's fact about the row, so it merges by max, unguarded. */
+  seqs: Map<string, number>;
+  /** Keys whose local version outranked the pulled one; re-dirtied so the next push repairs the server. */
+  redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
+}
+
+function newPullState(meta: SyncMeta): PullState {
+  return {
+    meta,
+    applied: new Set(),
+    quarantined: new Set(),
+    seqs: new Map(),
+    redirtied: new Map(),
+    cursorReset: false,
+  };
+}
+
+/** Adds an id to a collection's dirty list without duplicating it. */
+function markDirty(meta: SyncMeta, collection: string, entityId: string): void {
+  const ids = meta.dirty[collection] ?? [];
+  if (!ids.includes(entityId)) {
+    meta.dirty[collection] = [...ids, entityId];
+  }
+}
+
+function recordSeq(pull: PullState, key: string, seq: number): void {
+  pull.seqs.set(key, Math.max(pull.seqs.get(key) ?? 0, seq));
 }
 
 /** One key's membership in a ledger list, mirrored from what the pull decided for it. */
@@ -83,6 +110,12 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
     }
     fresh.hlcs[key] = pull.meta.hlcs[key];
     fresh.tombstones = withMembership(fresh.tombstones, key, pull.meta.tombstones.includes(key));
+  }
+  for (const [key, seq] of pull.seqs) {
+    fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+  }
+  for (const { collection, entityId } of pull.redirtied.values()) {
+    markDirty(fresh, collection, entityId);
   }
 }
 
@@ -238,12 +271,7 @@ export type PullResult =
 
 /** Pulls remote changes in seq order, resolves each via the strategy, and applies the winners. */
 export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
-  const pull: PullState = {
-    meta: await deps.meta.load(),
-    applied: new Set(),
-    quarantined: new Set(),
-    cursorReset: false,
-  };
+  const pull = newPullState(await deps.meta.load());
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
   let appliedCount = 0;
@@ -303,14 +331,42 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
 /** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */
 type ApplyResult = 'wrote' | 'skipped' | 'failed';
 
+/** What resolving one server record against local did; the pull and the push's conflict path share it. */
+type ApplyOutcome =
+  | { kind: 'applied' }
+  | { kind: 'kept'; reason: 'newer' | 'same' }
+  | { kind: 'quarantined' }
+  | { kind: 'unknown-collection' }
+  | { kind: 'failed' };
+
 async function applyPulledRecord(
   deps: CycleDeps,
   pull: PullState,
   rec: SyncRecord,
   warnedUnknownCollections: Set<string>
 ): Promise<ApplyResult> {
+  const outcome = await resolveAndApply(deps, pull, rec, warnedUnknownCollections);
+  if (outcome.kind === 'failed') {
+    return 'failed';
+  }
+  advanceCursor(pull.meta, rec.seq);
+  return outcome.kind === 'applied' ? 'wrote' : 'skipped';
+}
+
+/**
+ * Decrypts, resolves and applies one server record into `pull`'s ledger snapshot. Never touches
+ * the cursor: the push's conflict path applies records the cursor has not reached yet.
+ */
+async function resolveAndApply(
+  deps: CycleDeps,
+  pull: PullState,
+  rec: SyncRecord,
+  warnedUnknownCollections: Set<string>
+): Promise<ApplyOutcome> {
   const { meta } = pull;
   const key = SyncMetadataStore.entityKey(rec.collection, rec.entityId);
+  // Whatever happens below, the server holds this row at this seq.
+  recordSeq(pull, key, rec.seq);
 
   let incoming: RecordBody;
   try {
@@ -330,8 +386,7 @@ async function applyPulledRecord(
         seq: rec.seq,
       });
     }
-    advanceCursor(meta, rec.seq);
-    return 'skipped';
+    return { kind: 'quarantined' };
   }
 
   // Decrypt succeeded: a previously-quarantined key has recovered (spec §5.3 self-heal).
@@ -348,8 +403,7 @@ async function applyPulledRecord(
         collection: rec.collection,
       });
     }
-    advanceCursor(meta, rec.seq);
-    return 'skipped';
+    return { kind: 'unknown-collection' };
   }
 
   const all = await binding.readAll();
@@ -361,35 +415,38 @@ async function applyPulledRecord(
     localHlc === undefined ? null : { entity: localEntity ?? null, hlc: localHlc };
 
   const resolution = deps.strategy.resolve(local, incoming);
-  if (resolution.winner === 'incoming') {
-    const res = await binding.writeOne(rec.entityId, resolution.body.entity);
-    if (!res.success) {
-      // Without this, a wedged pull (e.g. persistent quota) is undiagnosable —
-      // nothing else connects "cursor stalled at seq N" to the failing write.
-      logger.error('Pull-cycle write failed; stopping before advancing the cursor', {
-        collection: rec.collection,
-        entityId: rec.entityId,
-        seq: rec.seq,
-        error: res.error,
-      });
-      return 'failed';
+  if (resolution.winner === 'local') {
+    if (resolution.reason === 'newer') {
+      pull.redirtied.set(key, { collection: rec.collection, entityId: rec.entityId });
     }
-    meta.hlcs[key] = resolution.body.hlc;
-    pull.applied.add(key);
-    meta.clock = hlcEncode(
-      hlcReceive(hlcDecode(meta.clock), hlcDecode(resolution.body.hlc), (deps.now ?? Date.now)())
-    );
-    if (resolution.body.entity === null) {
-      if (!meta.tombstones.includes(key)) {
-        meta.tombstones.push(key);
-      }
-    } else {
-      meta.tombstones = meta.tombstones.filter((t) => t !== key);
-    }
+    return { kind: 'kept', reason: resolution.reason };
   }
 
-  advanceCursor(meta, rec.seq);
-  return resolution.winner === 'incoming' ? 'wrote' : 'skipped';
+  const res = await binding.writeOne(rec.entityId, resolution.body.entity);
+  if (!res.success) {
+    // Without this, a wedged pull (e.g. persistent quota) is undiagnosable —
+    // nothing else connects "cursor stalled at seq N" to the failing write.
+    logger.error('Pull-cycle write failed; stopping before advancing the cursor', {
+      collection: rec.collection,
+      entityId: rec.entityId,
+      seq: rec.seq,
+      error: res.error,
+    });
+    return { kind: 'failed' };
+  }
+  meta.hlcs[key] = resolution.body.hlc;
+  pull.applied.add(key);
+  meta.clock = hlcEncode(
+    hlcReceive(hlcDecode(meta.clock), hlcDecode(resolution.body.hlc), (deps.now ?? Date.now)())
+  );
+  if (resolution.body.entity === null) {
+    if (!meta.tombstones.includes(key)) {
+      meta.tombstones.push(key);
+    }
+  } else {
+    meta.tombstones = meta.tombstones.filter((t) => t !== key);
+  }
+  return { kind: 'applied' };
 }
 
 // The server-issued cursor only moves forward — a backward value is dropped, not applied.

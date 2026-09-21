@@ -123,6 +123,8 @@ describe('pullOnce', () => {
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(1);
     expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    expect(saved.seqs['goals/g1']).toBe(1);
+    expect(saved.dirty.goals).toBeUndefined();
   });
 
   it('keeps local when incoming is older, without writing, but still advances the cursor', async () => {
@@ -143,6 +145,90 @@ describe('pullOnce', () => {
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(1);
     expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    // ENG-126: the server holds the older version, so the local winner goes back on the push list.
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.seqs['goals/g1']).toBe(1);
+  });
+
+  it('does not re-dirty an echo of its own push (identical hlc), but records its seq', async () => {
+    const local = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([local]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', NEWER_HLC);
+    const echo = await sealRecord(dk, 'goals', 'g1', { entity: local, hlc: NEWER_HLC }, 3);
+    transport.pullRecords = [echo];
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBe(3);
+    expect(saved.cursor).toBe(3);
+  });
+
+  it('re-dirties on equal physical time when the local counter is higher', async () => {
+    const localHlc = hlcEncode({ physical: 1_700_000_000_000, counter: 2, node: 'device-a' });
+    const incomingHlc = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'device-b' });
+    const local = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([local]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', localHlc);
+    transport.pullRecords = [
+      await sealRecord(
+        dk,
+        'goals',
+        'g1',
+        { entity: { ...local, text: 'theirs' }, hlc: incomingHlc },
+        1
+      ),
+    ];
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).dirty.goals).toEqual(['g1']);
+    expect(await getGoals()).toEqual([local]);
+  });
+
+  it('keeps the seq the pull saw even when an edit stamped the key during the round trip', async () => {
+    // The hlc guard protects content; the seq is the server's fact about the row and always merges.
+    const local = goalFactory.build({ id: 'g1', text: 'local' });
+    await setGoals([local]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
+    const incoming = goalFactory.build({ id: 'g1', text: 'incoming' });
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: incoming, hlc: NEWER_HLC }, 7),
+    ];
+    const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
+    duringPull(transport, () => tracker.markMutated('goals', 'g1'));
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.seqs['goals/g1']).toBe(7);
+    expect(saved.hlcs['goals/g1']).not.toBe(NEWER_HLC);
+    expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('never lowers a seq the ledger already holds', async () => {
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 9;
+    });
+    const goal = goalFactory.build({ id: 'g1' });
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 2),
+    ];
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).seqs['goals/g1']).toBe(9);
+  });
+
+  it('records the seq of a quarantined record too', async () => {
+    const goal = goalFactory.build({ id: 'g1' });
+    const rec = await sealRecord(dk, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 4);
+    transport.pullRecords = [{ ...rec, ciphertext: 'garbage' }];
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).seqs['goals/g1']).toBe(4);
   });
 
   it('quarantines a poison record, skips the write, fires onQuarantine once, and still advances the cursor', async () => {
