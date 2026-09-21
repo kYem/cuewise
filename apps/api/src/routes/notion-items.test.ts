@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { spyOnLoggerError } from '../__fixtures__/logger.fixtures';
+import { spyOnLoggerError, spyOnLoggerWarn } from '../__fixtures__/logger.fixtures';
 import {
   connectedNotionUser,
   FailingWriteStore,
@@ -12,6 +12,7 @@ import {
   stubNotionClient,
   TEST_ACCESS_TOKEN,
   TEST_DATA_SOURCE_ID,
+  TEST_FOREIGN_PROVIDER_KEY,
   TEST_PAGE_ID,
   TEST_PROVIDER_KEY,
   TEST_REFRESH_TOKEN,
@@ -21,7 +22,12 @@ import {
 } from '../__fixtures__/notion.fixtures';
 import { encryptSecret } from '../crypto-utils';
 import { createApp } from '../index';
-import { NotionAuthError, NotionResourceError, NotionUnavailableError } from '../notion-client';
+import {
+  NotionAuthError,
+  NotionConfigError,
+  NotionResourceError,
+  NotionUnavailableError,
+} from '../notion-client';
 
 function app(client = stubNotionClient()) {
   return createApp({ notionClientFactory: () => client });
@@ -107,8 +113,9 @@ describe('GET /v1/integrations/notion/items', () => {
     const queryRows = vi.fn(async () => ({ items: [], truncated: false }));
     const { headers } = await connectedNotionUser();
 
-    await getItems(headers, stubNotionClient({ queryRows }));
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
 
+    await expect(res.json()).resolves.toMatchObject({ truncated: false });
     expect(queryRows).toHaveBeenCalledWith(
       TEST_ACCESS_TOKEN,
       TEST_DATA_SOURCE_ID,
@@ -132,7 +139,7 @@ describe('GET /v1/integrations/notion/items', () => {
 
   it('answers 404 table_unavailable when the table was deleted or un-shared', async () => {
     const queryRows = vi.fn(async () => {
-      throw new NotionResourceError('gone');
+      throw new NotionResourceError(404, 'gone');
     });
     const { headers, store, userId } = await connectedNotionUser();
 
@@ -151,7 +158,7 @@ describe('GET /v1/integrations/notion/items', () => {
     const res = await app().request(
       ITEMS,
       { headers },
-      notionEnv({ PROVIDER_TOKEN_KEY: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' })
+      notionEnv({ PROVIDER_TOKEN_KEY: TEST_FOREIGN_PROVIDER_KEY })
     );
     const body = (await res.json()) as { code: string };
 
@@ -196,6 +203,20 @@ describe('GET /v1/integrations/notion/items', () => {
 
     expect(res.status).toBe(404);
     expect(body.code).toBe('provider_not_connected');
+  });
+
+  it('answers 500 and keeps the grant when the client throws something that is not a notion fault', async () => {
+    const errorSpy = spyOnLoggerError();
+    const queryRows = vi.fn(async () => {
+      throw new TypeError('our bug');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
+
+    expect(res.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalledWith('Unhandled API error', expect.any(TypeError));
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
   it('prompts to re-validate when the completion property has gone', async () => {
@@ -253,8 +274,12 @@ describe('token renewal', () => {
     const { queryRows } = expiringQuery();
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
 
-    await getItems(headers, stubNotionClient({ queryRows }));
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
 
+    expect(res.status).toBe(200);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: TEST_REFRESHED_TOKEN,
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       workspace: 'Acme',
     });
@@ -336,7 +361,7 @@ describe('token renewal', () => {
 
     expect(res.status).toBe(401);
     expect(body.code).toBe('provider_reauth_required');
-    expect(queryRows).toHaveBeenCalled();
+    expect(queryRows).toHaveBeenCalledTimes(1);
     expect(refreshGrant).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledWith(
       'Stored Notion refresh token does not decrypt under the current key',
@@ -502,9 +527,10 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     expect(setCompletion).not.toHaveBeenCalled();
   });
 
-  it('answers not_found for a deleted page, without un-picking the table', async () => {
+  it('answers not_found for a deleted page, without un-picking the table, and logs it', async () => {
+    const warnSpy = spyOnLoggerWarn();
     const setCompletion = vi.fn(async () => {
-      throw new NotionResourceError('page gone');
+      throw new NotionResourceError(404, 'page gone');
     });
     const { headers, store, userId } = await connectedNotionUser();
 
@@ -513,6 +539,55 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
 
     expect(res.status).toBe(404);
     expect(body.code).toBe('not_found');
+    expect(warnSpy).toHaveBeenCalledWith('Notion page is gone; not writing', {
+      userId,
+      reason: 'page gone',
+    });
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceId: TEST_DATA_SOURCE_ID,
+    });
+  });
+
+  it('answers 503, not success, when the write itself hits an outage', async () => {
+    const setCompletion = vi.fn(async () => {
+      throw new NotionUnavailableError('down');
+    });
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(headers, true, stubNotionClient({ setCompletion }));
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(503);
+    expect(body.code).toBe('upstream_unavailable');
+  });
+
+  it('renews the grant and re-runs the write when the write is what 401s', async () => {
+    const tokens: string[] = [];
+    const setCompletion = vi.fn(async (token: string) => {
+      tokens.push(token);
+      if (tokens.length === 1) {
+        throw new NotionAuthError('expired');
+      }
+    });
+    const { headers } = await connectedNotionUser({ withRefreshToken: true });
+
+    const res = await patchDone(headers, true, stubNotionClient({ setCompletion }));
+
+    expect(res.status).toBe(204);
+    expect(tokens).toEqual([TEST_ACCESS_TOKEN, TEST_REFRESHED_TOKEN]);
+  });
+
+  it('answers 500 and keeps the table when the write is refused — our capability, not the page', async () => {
+    const errorSpy = spyOnLoggerError();
+    const setCompletion = vi.fn(async () => {
+      throw new NotionConfigError('notion refused the write (403, restricted_resource)');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+
+    const res = await patchDone(headers, true, stubNotionClient({ setCompletion }));
+
+    expect(res.status).toBe(500);
+    expect(errorSpy).toHaveBeenCalled();
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       dataSourceId: TEST_DATA_SOURCE_ID,
     });
@@ -520,7 +595,7 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
 
   it('answers table_unavailable when the table itself is gone', async () => {
     const getPropertySchemas = vi.fn(async () => {
-      throw new NotionResourceError('table gone');
+      throw new NotionResourceError(404, 'table gone');
     });
     const { headers } = await connectedNotionUser();
 

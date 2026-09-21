@@ -10,8 +10,7 @@ export interface Env {
   PUBLIC_BASE_URL: string;
   ALLOWED_RETURN_URIS: string;
   STATE_SIGNING_KEY: string;
-  // Secret (wrangler secret put), 32 bytes base64url. Encrypts third-party provider tokens at
-  // rest — the Worker must be able to read those, so deliberately not the user's sync key.
+  // Secret (wrangler secret put), 32 bytes base64url; seals third-party provider tokens at rest.
   PROVIDER_TOKEN_KEY: string;
   NOTION_CLIENT_ID: string;
   // Secret (wrangler secret put) — Notion is a confidential client, so the exchange is server-side.

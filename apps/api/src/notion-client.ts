@@ -33,10 +33,23 @@ export class NotionConfigError extends Error {
 /** Notion is down, rate-limiting, unreadable, or the row changed under a write. Retryable, not ours. */
 export class NotionUnavailableError extends Error {
   override readonly name = 'NotionUnavailableError';
+  /** Seconds, from a 429's Retry-After; null when Notion named none. */
+  readonly retryAfter: number | null;
+
+  constructor(message: string, retryAfter: number | null = null) {
+    super(message);
+    this.retryAfter = retryAfter;
+  }
 }
 /** The table or page is gone or un-shared. Not retryable; the user re-picks or moves on. */
 export class NotionResourceError extends Error {
   override readonly name = 'NotionResourceError';
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }
 
 export interface NotionItem {
@@ -59,15 +72,15 @@ export interface NotionDataSource {
 
 export interface NotionGrant {
   accessToken: string;
-  // `string | null` because that is exactly how Notion's token response declares it. Null means
-  // the access token is long-lived; a value means it can expire and this is how to renew it.
+  // `string | null` because that is exactly how Notion's token response declares it, with no
+  // expires_in. We treat null as a grant that does not expire, and a value as the way to renew one.
   refreshToken: string | null;
   workspace: string | null;
 }
 
 export interface NotionClient {
   exchangeCode(code: string): Promise<NotionGrant>;
-  /** Trades a refresh token for a fresh grant. Notion may rotate the refresh token too. */
+  /** Trades a refresh token for a fresh grant; Notion issues a new refresh token with it. */
   refreshGrant(refreshToken: string): Promise<NotionGrant>;
   /** Best-effort: tells Notion to forget the grant, so disconnecting is not just local. */
   revokeToken(accessToken: string): Promise<void>;
@@ -92,7 +105,7 @@ type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC
  * Classifies a failure by shape, never by content: no message here may carry the code, the
  * access token or the client secret, since these reach the logger.
  */
-function classify(status: number, body: unknown): Error {
+function classify(status: number, body: unknown, retryAfter: number | null): Error {
   const record = asRecord(body) ?? {};
   const raw = record.error ?? record.code;
   const code =
@@ -103,10 +116,10 @@ function classify(status: number, body: unknown): Error {
   if (status === 401 || code === 'invalid_grant' || code === 'unauthorized') {
     return new NotionAuthError(`notion grant is unusable (${status}, ${code})`);
   }
-  // 403 restricted_resource is the user un-sharing; 404 object_not_found is a deleted table.
-  // Neither is ours to fix and neither clears on retry.
+  // 403 restricted_resource is a capability we lack; 404 object_not_found is a table deleted or
+  // un-shared. Neither clears on retry.
   if (status === 403 || status === 404) {
-    return new NotionResourceError(`notion resource unreachable (${status}, ${code})`);
+    return new NotionResourceError(status, `notion resource unreachable (${status}, ${code})`);
   }
   // validation_error (schema drift under a write) and a 409 collision are Notion's retryable 4xx;
   // any other is a request only we could have malformed (Notion-Version, invalid_json).
@@ -119,7 +132,12 @@ function classify(status: number, body: unknown): Error {
   ) {
     return new NotionConfigError(`notion rejected our request (${status}, ${code})`);
   }
-  return new NotionUnavailableError(`notion answered ${status} (${code})`);
+  return new NotionUnavailableError(`notion answered ${status} (${code})`, retryAfter);
+}
+
+function retryAfterOf(response: Response): number | null {
+  const seconds = Number(response.headers.get('Retry-After'));
+  return Number.isInteger(seconds) && seconds > 0 ? seconds : null;
 }
 
 export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fetch): NotionClient {
@@ -153,7 +171,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       readable = false;
     }
     if (!response.ok) {
-      throw classify(response.status, body);
+      throw classify(response.status, body, retryAfterOf(response));
     }
     // A 200 we cannot parse is an outage, not an empty result — reporting it as "no rows" would
     // tell the user they have nothing to do.
@@ -161,6 +179,23 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       throw new NotionUnavailableError('notion answered 200 with an unreadable body');
     }
     return body;
+  }
+
+  // For endpoints that name no user resource: a 403/404 there is our integration's capabilities
+  // or our URL, never a table the user un-shared, so the picker cannot fix it.
+  async function callOurs(
+    path: string,
+    authorization: string,
+    init: RequestInit
+  ): Promise<unknown> {
+    try {
+      return await call(path, authorization, init);
+    } catch (error) {
+      if (error instanceof NotionResourceError) {
+        throw new NotionConfigError(`notion refused our endpoint (${error.message})`);
+      }
+      throw error;
+    }
   }
 
   function basicAuth(): string {
@@ -185,13 +220,12 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
   return {
     async exchangeCode(code) {
       return toGrant(
-        await call('/oauth/token', basicAuth(), {
+        await callOurs('/oauth/token', basicAuth(), {
           method: 'POST',
           body: JSON.stringify({
             grant_type: 'authorization_code',
             code,
-            // Required here: it was set in the authorize URL, and the connection has more than
-            // one redirect URI registered.
+            // Required here because it was set in the authorize URL.
             redirect_uri: `${env.PUBLIC_BASE_URL}/v1/integrations/notion/callback`,
           }),
         })
@@ -200,7 +234,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
 
     async refreshGrant(refreshToken) {
       return toGrant(
-        await call('/oauth/token', basicAuth(), {
+        await callOurs('/oauth/token', basicAuth(), {
           method: 'POST',
           body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: refreshToken }),
         })
@@ -208,30 +242,20 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     },
 
     async revokeToken(accessToken) {
-      await call('/oauth/revoke', basicAuth(), {
+      await callOurs('/oauth/revoke', basicAuth(), {
         method: 'POST',
         body: JSON.stringify({ token: accessToken }),
       });
     },
 
     async searchDataSources(accessToken) {
-      let body: unknown;
-      try {
-        body = await call('/search', `Bearer ${accessToken}`, {
-          method: 'POST',
-          body: JSON.stringify({
-            filter: { property: 'object', value: 'data_source' },
-            page_size: PAGE_SIZE,
-          }),
-        });
-      } catch (error) {
-        // Search names no resource the user could un-share: a 403 here is our integration's
-        // capabilities (a 404 would be our URL), and the picker cannot fix either.
-        if (error instanceof NotionResourceError) {
-          throw new NotionConfigError(`notion search is forbidden (${error.message})`);
-        }
-        throw error;
-      }
+      const body = await callOurs('/search', `Bearer ${accessToken}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          filter: { property: 'object', value: 'data_source' },
+          page_size: PAGE_SIZE,
+        }),
+      });
       const results = asRecord(body)?.results;
       if (!Array.isArray(results)) {
         throw new NotionUnavailableError('notion search answered without a results array');
@@ -313,10 +337,19 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         write.kind === 'checkbox'
           ? { [write.name]: { checkbox: write.checkbox } }
           : { [write.name]: { status: { id: write.optionId } } };
-      await call(`/pages/${encodeURIComponent(pageId)}`, `Bearer ${accessToken}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ properties: value }),
-      });
+      try {
+        await call(`/pages/${encodeURIComponent(pageId)}`, `Bearer ${accessToken}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ properties: value }),
+        });
+      } catch (error) {
+        // A page that was just read cannot be un-shared for writing only: a 403 on the write is
+        // our integration's update capability, which no re-pick can fix.
+        if (error instanceof NotionResourceError && error.status === 403) {
+          throw new NotionConfigError(`notion refused the write (${error.message})`);
+        }
+        throw error;
+      }
     },
   };
 }

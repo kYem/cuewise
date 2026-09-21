@@ -85,6 +85,40 @@ describe('provider connections', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
+  it('deleteProviderConnectionIfUnchanged drops the row only while it holds that ciphertext', async () => {
+    await store.putProviderGrant(userId, 'notion', grant({ ciphertext: 'ct-1' }));
+
+    await expect(
+      store.deleteProviderConnectionIfUnchanged(userId, 'notion', 'ct-other')
+    ).resolves.toBe(false);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
+    await expect(store.deleteProviderConnectionIfUnchanged(userId, 'notion', 'ct-1')).resolves.toBe(
+      true
+    );
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('putProviderGrant clears the refresh pair when the new grant carries none', async () => {
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
+
+    await store.putProviderGrant(userId, 'notion', grant());
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      refreshCiphertext: null,
+      refreshIv: null,
+    });
+  });
+
+  it('refuses a half refresh pair, so a ciphertext can never sit beside the wrong iv', async () => {
+    await expect(
+      store.putProviderGrant(
+        userId,
+        'notion',
+        grant({ refreshCiphertext: 'r-ct', refreshIv: null })
+      )
+    ).rejects.toThrow();
+  });
+
   it('treats deleting an absent connection as a no-op', async () => {
     await expect(store.deleteProviderConnection(userId, 'notion')).resolves.toBeUndefined();
   });
@@ -138,7 +172,7 @@ describe('provider connections', () => {
     );
   });
 
-  it('narrow writers answer false for an account with no grant, and write nothing', async () => {
+  it('narrow writers answer false for an account with no grant', async () => {
     await expect(store.setProviderDataSource(userId, 'notion', 'ds1')).resolves.toBe(false);
     await expect(
       store.updateProviderTokens(userId, 'notion', {

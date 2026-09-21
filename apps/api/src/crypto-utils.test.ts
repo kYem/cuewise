@@ -173,7 +173,7 @@ describe('signState / verifyState', () => {
 });
 
 describe('encryptSecret / decryptSecret', () => {
-  // 43 base64url chars decode to exactly 32 bytes; all-'A' keeps these deterministic.
+  // 43 base64url chars decode to exactly 32 bytes.
   const KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
   const OTHER_KEY = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 

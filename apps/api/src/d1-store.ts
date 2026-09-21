@@ -515,7 +515,6 @@ export class D1SyncStore implements SyncStore {
     provider: string,
     tokens: SealedTokens
   ): Promise<boolean> {
-    // COALESCE keeps the stored refresh pair when the renewal carried none.
     const res = await this.db
       .prepare(
         `UPDATE provider_tokens
@@ -581,6 +580,18 @@ export class D1SyncStore implements SyncStore {
       .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ?')
       .bind(userId, provider)
       .run();
+  }
+
+  async deleteProviderConnectionIfUnchanged(
+    userId: string,
+    provider: string,
+    ciphertext: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ? AND ciphertext = ?')
+      .bind(userId, provider, ciphertext)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
   }
 
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's

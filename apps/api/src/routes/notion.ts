@@ -63,7 +63,7 @@ function reasonOf(error: unknown): string {
 }
 
 // `name`, not `message`, for decrypt failures: WebCrypto's message is runtime-authored and not
-// guaranteed secret-free, and the class already says which step failed.
+// guaranteed secret-free, and the log message says which step failed.
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'unknown';
 }
@@ -117,7 +117,6 @@ async function revokeSealed(
 ): Promise<void> {
   const key = env.PROVIDER_TOKEN_KEY;
   if (!isSecretKey(key)) {
-    // Notion tokens never expire on their own, so this one stays live until someone notices.
     logger.error('PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation', {
       userId,
     });
@@ -127,7 +126,8 @@ async function revokeSealed(
   try {
     accessToken = await decryptSecret(sealed.ciphertext, sealed.iv, key);
   } catch (error) {
-    logger.warn('Could not decrypt a Notion grant to revoke it upstream', {
+    // A rotated key is systemic, and the token this row held stays live at Notion.
+    logger.error('Could not decrypt a Notion grant to revoke it upstream', {
       userId,
       reason: errorName(error),
     });
@@ -208,25 +208,32 @@ async function openGrant(
 async function providerProblem(
   error: unknown,
   open: OpenGrant,
-  usedCiphertext: string
+  used: { readonly ciphertext: string }
 ): Promise<Response> {
   const { store, userId } = open;
   if (error instanceof NotionAuthError) {
+    const dropped = await store.deleteProviderConnectionIfUnchanged(
+      userId,
+      PROVIDER,
+      used.ciphertext
+    );
+    if (dropped) {
+      logger.warn('Dropped the Notion grant after an auth fault', {
+        userId,
+        reason: error.message,
+      });
+      return problem('provider_reauth_required');
+    }
     const current = await store.getProviderConnection(userId, PROVIDER);
     if (current === null) {
       // Disconnected mid-request: nothing to drop, and "reconnect" would be the wrong prompt.
       return problem('provider_not_connected');
     }
-    if (current.ciphertext !== usedCiphertext) {
-      logger.warn('Notion grant was renewed by a concurrent request; not dropping it', {
-        userId,
-        reason: error.message,
-      });
-      return problem('upstream_unavailable', { detail: 'Please retry.' });
-    }
-    logger.warn('Dropping the Notion grant after an auth fault', { userId, reason: error.message });
-    await store.deleteProviderConnection(userId, PROVIDER);
-    return problem('provider_reauth_required');
+    logger.warn('Notion grant was renewed by a concurrent request; not dropping it', {
+      userId,
+      reason: error.message,
+    });
+    return problem('upstream_unavailable', { detail: 'Please retry.' });
   }
   if (error instanceof NotionResourceError) {
     // The reason carries restricted_resource vs object_not_found — a capability we lack in
@@ -236,11 +243,14 @@ async function providerProblem(
   }
   if (error instanceof NotionUnavailableError) {
     logger.warn('Notion upstream unavailable', { userId, reason: error.message });
-    return problem('upstream_unavailable', { detail: error.message });
+    return problem('upstream_unavailable', {
+      detail: error.message,
+      ...(error.retryAfter === null ? {} : { retryAfter: error.retryAfter }),
+    });
   }
   if (error instanceof NotionConfigError) {
     // Our credentials or our request, not the user's grant — nothing they can do, so it must be loud.
-    logger.error('Notion rejected our client or request', error);
+    logger.error('Notion rejected our client or request', error, { userId });
     return problem('internal');
   }
   throw error;
@@ -285,7 +295,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
     // Named separately from the primary call's fault: an operator must be able to see that
     // renewal is what keeps failing.
     logger.warn('Notion grant renewal failed', { userId, reason: reasonOf(error) });
-    return providerProblem(error, open, open.connection.ciphertext);
+    return providerProblem(error, open, open.connection);
   }
   const { ciphertext, iv, refreshCiphertext, refreshIv } = sealed;
   let stored: boolean;
@@ -331,7 +341,7 @@ async function withFreshToken<T>(
   } catch (error) {
     const refresh = refreshPair(open.connection);
     if (!(error instanceof NotionAuthError) || refresh === null) {
-      return providerProblem(error, open, open.connection.ciphertext);
+      return providerProblem(error, open, open.connection);
     }
     const outcome = await renewGrant(open, refresh);
     if (outcome instanceof Response) {
@@ -342,7 +352,7 @@ async function withFreshToken<T>(
   try {
     return await attempt(renewed.accessToken);
   } catch (error) {
-    return providerProblem(error, open, renewed.ciphertext);
+    return providerProblem(error, open, renewed);
   }
 }
 
@@ -401,9 +411,8 @@ export function registerNotionRoutes(
     return c.json({ authorizeUrl: url.toString() });
   });
 
-  // Unauthenticated by necessity: Notion redirects a browser here. It never stores the grant
-  // against an account — it parks it behind a one-time PKCE-bound code that rides the deep link
-  // to whichever device authorised, and that device's session claims it.
+  // Unauthenticated: Notion redirects a browser here. It parks the grant behind a one-time
+  // PKCE-bound code on the deep link; /claim binds it to a session.
   app.get('/v1/integrations/notion/callback', async (c) => {
     const signingKey = requireStateSigningKey(c.env);
     if (signingKey === null) {
@@ -430,7 +439,7 @@ export function registerNotionRoutes(
       if (denied === 'access_denied') {
         return returnWithError(state.returnUri, 'access_denied');
       }
-      // temporarily_unavailable / server_error are Notion's outage codes; anything else is a
+      // temporarily_unavailable / server_error are the OAuth outage codes; anything else is a
       // fault in our authorize URL or integration config. Neither is a user cancel.
       if (denied === 'temporarily_unavailable' || denied === 'server_error') {
         logger.warn('Notion authorize step unavailable', { error: denied });
@@ -471,8 +480,9 @@ export function registerNotionRoutes(
         logger.warn('Notion connect did not complete', { reason: error.message });
         return returnWithError(state.returnUri, 'connect_failed');
       }
+      // Ours: a store failure parking the grant, or a fault in our own code.
       logger.error('Notion connect failed', error);
-      return returnWithError(state.returnUri, 'connect_failed');
+      return returnWithError(state.returnUri, 'server_error');
     }
   });
 
@@ -514,7 +524,9 @@ export function registerNotionRoutes(
     }
     const grant = consumed.payload.grant;
     try {
-      // Keeps an already-chosen table: sharing one more page must not un-pick it.
+      // Keeps an already-chosen table: sharing one more page must not un-pick it. A previous grant
+      // is overwritten, not revoked: Notion does not say whether revoke acts per token or per bot,
+      // so revoking it could kill the grant being claimed. Verify live before changing that.
       await store.putProviderGrant(userId, PROVIDER, grant);
     } catch (error) {
       // The code is already burned, so this grant can never be claimed again. Revoke it rather
@@ -638,9 +650,13 @@ export function registerNotionRoutes(
       try {
         await grant.client.setCompletion(token, pageId, write);
       } catch (error) {
-        // A 403/404 on the PAGE means that row is gone or un-shared — not the table. Sending
-        // the user back to the picker for a task someone just deleted would un-pick a good table.
+        // A 404 on the PAGE means that row is gone — not the table. Sending the user back to
+        // the picker for a task someone just deleted would un-pick a good table.
         if (error instanceof NotionResourceError) {
+          logger.warn('Notion page is gone; not writing', {
+            userId: grant.userId,
+            reason: error.message,
+          });
           return 'page_gone';
         }
         throw error;

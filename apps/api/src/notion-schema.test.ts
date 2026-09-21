@@ -84,7 +84,6 @@ describe('findCompletionProperty', () => {
   });
 
   it('refuses a renamed or localized Complete group even when a Done checkbox exists', () => {
-    // Falling through to the checkbox here would read every task as not-done, silently.
     const localized = asSchemas({
       Statut: {
         type: 'status',

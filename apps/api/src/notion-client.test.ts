@@ -41,6 +41,7 @@ describe('exchangeCode', () => {
       const headers = new Headers(init.headers);
       expect(headers.get('Notion-Version')).toBe('2026-03-11');
       expect(headers.get('Authorization')).toBe(`Basic ${btoa('cid:csecret')}`);
+      expect(init.signal).toBeInstanceOf(AbortSignal);
       return Response.json({ access_token: 'tok', workspace_name: 'Acme' });
     });
 
@@ -70,8 +71,17 @@ describe('exchangeCode', () => {
 
     const error = await notion.exchangeCode('code-secret').catch((thrown: unknown) => thrown);
 
+    expect(error).toBeInstanceOf(NotionAuthError);
     expect(String(error)).not.toContain('code-secret');
     expect(String(error)).not.toContain('csecret');
+  });
+
+  it('treats a 403 or 404 from the token endpoint as our fault, never as a lost table', async () => {
+    const notion = client(() => Response.json({ code: 'object_not_found' }, { status: 404 }));
+
+    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
+    await expect(notion.refreshGrant('r')).rejects.toBeInstanceOf(NotionConfigError);
+    await expect(notion.revokeToken('t')).rejects.toBeInstanceOf(NotionConfigError);
   });
 
   it('treats a bad code as an auth fault', async () => {
@@ -134,7 +144,7 @@ describe('failure classification', () => {
     expect(new NotionAuthError('x').name).toBe('NotionAuthError');
     expect(new NotionConfigError('x').name).toBe('NotionConfigError');
     expect(new NotionUnavailableError('x').name).toBe('NotionUnavailableError');
-    expect(new NotionResourceError('x').name).toBe('NotionResourceError');
+    expect(new NotionResourceError(404, 'x').name).toBe('NotionResourceError');
   });
 
   it('maps a network fault to retryable, naming the fault class but nothing sensitive', async () => {
@@ -212,12 +222,26 @@ describe('failure classification', () => {
     expect(String(error)).not.toContain('secret');
   });
 
-  it('maps rate limiting to retryable', async () => {
-    const notion = client(() => new Response('', { status: 429 }));
+  it('maps rate limiting to retryable, carrying Retry-After', async () => {
+    const notion = client(() => new Response('', { status: 429, headers: { 'Retry-After': '7' } }));
 
-    await expect(notion.queryRows('tok', 'ds1', checkboxProperty)).rejects.toBeInstanceOf(
-      NotionUnavailableError
-    );
+    const error = await notion
+      .queryRows('tok', 'ds1', checkboxProperty)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(NotionUnavailableError);
+    expect((error as NotionUnavailableError).retryAfter).toBe(7);
+  });
+
+  it('carries no Retry-After when notion named none', async () => {
+    const notion = client(() => new Response('', { status: 503 }));
+
+    const error = await notion
+      .queryRows('tok', 'ds1', checkboxProperty)
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(NotionUnavailableError);
+    expect((error as NotionUnavailableError).retryAfter).toBeNull();
   });
 });
 
@@ -252,8 +276,6 @@ describe('refresh and revoke', () => {
   });
 });
 
-// Shapes checked against the live API on 2026-09-11: results carry `object: 'data_source'`,
-// a string `id`, `title[].plain_text`, and `in_trash`.
 describe('searchDataSources', () => {
   it('filters for data sources and reads the rich-text title', async () => {
     const notion = client((url, init) => {
@@ -301,6 +323,14 @@ describe('searchDataSources', () => {
     );
 
     await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'Live' }]);
+  });
+
+  it('skips a result with no string id rather than offering an undefined table', async () => {
+    const notion = client(() =>
+      Response.json({ results: [{ title: [{ plain_text: 'orphan' }] }, { id: 'ds1', title: [] }] })
+    );
+
+    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'ds1' }]);
   });
 
   it('falls back to the id when a result carries no title at all', async () => {
@@ -384,6 +414,8 @@ describe('queryRows', () => {
 
     expect(rows.items.map((i) => i.pageId)).toEqual(['pg1', 'pg2']);
     expect(rows.truncated).toBe(false);
+    expect(bodies[0]).toMatchObject({ result_type: 'page' });
+    expect(bodies[0]).not.toHaveProperty('start_cursor');
     expect(bodies[1]).toMatchObject({ start_cursor: 'cursor-2', result_type: 'page' });
   });
 
@@ -469,6 +501,22 @@ describe('queryRows', () => {
 });
 
 describe('setCompletion', () => {
+  it('treats a 403 on the write as our update capability, since the page was just read', async () => {
+    const notion = client(() => Response.json({ code: 'restricted_resource' }, { status: 403 }));
+
+    await expect(
+      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
+    ).rejects.toBeInstanceOf(NotionConfigError);
+  });
+
+  it('keeps a 404 on the write as the page being gone', async () => {
+    const notion = client(() => Response.json({ code: 'object_not_found' }, { status: 404 }));
+
+    await expect(
+      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
+    ).rejects.toBeInstanceOf(NotionResourceError);
+  });
+
   it('patches the status option, url-encoding the page id', async () => {
     const notion = client((url, init) => {
       expect(url).toBe('https://api.notion.com/v1/pages/pg%2F1');

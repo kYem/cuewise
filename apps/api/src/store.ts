@@ -32,12 +32,7 @@ export interface SignInCodePayload {
   email?: string;
 }
 
-/**
- * A third-party grant parked between the provider's redirect and the app claiming it. The
- * callback runs in a browser with no session, so it cannot know whose account this is; the
- * device that fires the deep link redeems the code with its own session, which is what binds
- * the grant to whoever actually authorised — not to whoever minted the link.
- */
+/** A grant parked between Notion's redirect and /claim: the claiming session, not the minter, decides the account. */
 export interface ProviderCodePayload {
   provider: 'notion';
   grant: SealedGrant;
@@ -45,7 +40,7 @@ export interface ProviderCodePayload {
 
 export type AuthCodePayload = SignInCodePayload | ProviderCodePayload;
 
-/** Access and refresh tokens as stored: AES-GCM under PROVIDER_TOKEN_KEY. */
+/** Access and refresh tokens as stored (AES-GCM under PROVIDER_TOKEN_KEY), plus the workspace name. */
 export interface SealedGrant {
   ciphertext: string;
   iv: string;
@@ -89,7 +84,6 @@ export class StorageQuotaExceededError extends Error {
   }
 }
 
-// dataSourceId is the table queried — Notion's schema lives on the data source, not the database.
 export interface ProviderConnection extends SealedGrant {
   provider: string;
   dataSourceId: string | null;
@@ -138,6 +132,13 @@ export interface SyncStore {
   // in a client-only key. No whole-row writer, so a renewal and a selection cannot clobber each other.
   getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
   deleteProviderConnection(userId: string, provider: string): Promise<void>;
+  // Drops the row only while it still holds `ciphertext`, in one statement: the loser of a renewal
+  // race must not delete the winner's grant, and a read-then-delete leaves a window for that.
+  deleteProviderConnectionIfUnchanged(
+    userId: string,
+    provider: string,
+    ciphertext: string
+  ): Promise<boolean>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
   // read-then-write window can revert a selection that lands in between.
   putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;

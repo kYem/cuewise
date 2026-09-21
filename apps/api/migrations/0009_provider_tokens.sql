@@ -3,7 +3,7 @@
 -- own table is what lets that guarantee stay literally true of sync data.
 -- ciphertext/iv are AES-GCM under PROVIDER_TOKEN_KEY, never the user's sync key.
 -- The refresh pair is nullable: Notion's token response declares refresh_token as `string | null`
--- and documents no expires_in, so only some grants expire and only those can be renewed.
+-- and documents no expires_in; we treat a null one as a grant that does not expire.
 -- data_source_id is the table queried; Notion's schema lives on the data source, not the database.
 CREATE TABLE provider_tokens (
   user_id            TEXT NOT NULL REFERENCES users(id),
@@ -15,5 +15,6 @@ CREATE TABLE provider_tokens (
   workspace          TEXT,
   data_source_id     TEXT,
   created_at         INTEGER NOT NULL,
-  PRIMARY KEY (user_id, provider)
+  PRIMARY KEY (user_id, provider),
+  CHECK ((refresh_ciphertext IS NULL) = (refresh_iv IS NULL))
 );

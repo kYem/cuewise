@@ -18,7 +18,7 @@ export type CompletionProperty =
     }
   | { kind: 'checkbox'; name: string };
 
-/** What to PATCH onto a page. Total: a property that cannot express `done` yields null. */
+/** What to PATCH onto a page. */
 export type CompletionWrite =
   | { kind: 'checkbox'; name: string; checkbox: boolean }
   | { kind: 'status'; name: string; optionId: string };
@@ -112,6 +112,7 @@ export function findCompletionProperty(properties: PropertySchemas): CompletionP
   return null;
 }
 
+/** Null when the property cannot express not-done: a status with no To-do group. */
 export function completionWrite(
   property: CompletionProperty,
   done: boolean

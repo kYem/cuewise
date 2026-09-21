@@ -77,9 +77,8 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
-  // Listed one by one rather than as /v1/integrations/* on purpose: the provider callback must
-  // stay unauthenticated (a browser reaches it with no Bearer token; it parks the grant behind a
-  // one-time code that /claim redeems with a session), and a wildcard would cover it too.
+  // One by one, not /v1/integrations/*: the callback must stay unauthenticated, and a wildcard
+  // would cover it too.
   app.use('/v1/integrations/notion', auth);
   app.use('/v1/integrations/notion/start', auth);
   app.use('/v1/integrations/notion/tables', auth);

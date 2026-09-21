@@ -180,11 +180,6 @@ export function isSecretKey(rawKey: string): boolean {
   }
 }
 
-/**
- * AES-GCM under a Worker secret, for third-party provider tokens. Deliberately not the user's
- * sync key: the Worker has to read these to call the provider, which is the one place the
- * ciphertext-only guarantee cannot reach.
- */
 async function importSecretKey(rawKey: string): Promise<CryptoKey> {
   const bytes = base64UrlDecodeBytes(rawKey);
   if (bytes.length !== PROVIDER_KEY_BYTES) {

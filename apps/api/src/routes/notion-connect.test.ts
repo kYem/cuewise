@@ -11,6 +11,7 @@ import {
   TEST_ACCESS_TOKEN,
   TEST_CODE_VERIFIER,
   TEST_DATA_SOURCE_ID,
+  TEST_FOREIGN_PROVIDER_KEY,
   TEST_REFRESH_TOKEN,
   TEST_REFRESHED_TOKEN,
   TEST_ROTATED_REFRESH_TOKEN,
@@ -126,7 +127,6 @@ describe('GET /v1/integrations/notion/start', () => {
       string,
       unknown
     >;
-    // The account is decided at /claim by a session, so a leaked link can never name one.
     expect(decoded).not.toHaveProperty('userId');
     expect(JSON.stringify(decoded)).not.toContain(userId);
   });
@@ -138,6 +138,18 @@ describe('GET /v1/integrations/notion/start', () => {
       await startUrl(),
       { headers },
       notionEnv({ NOTION_CLIENT_ID: '' })
+    );
+
+    expect(res.status).toBe(500);
+  });
+
+  it('fails closed when the client secret is missing, not just the client id', async () => {
+    const { headers } = await signedInWithoutNotion();
+
+    const res = await app().request(
+      await startUrl(),
+      { headers },
+      notionEnv({ NOTION_CLIENT_SECRET: '' })
     );
 
     expect(res.status).toBe(500);
@@ -247,8 +259,27 @@ describe('GET /v1/integrations/notion/callback', () => {
       storeFactory: () => new FailingWriteStore('mintAuthCode'),
     }).request(callbackUrl(state), {}, notionEnv());
 
-    expect(await res.text()).toContain('error=connect_failed');
+    // A store failure is ours, so the app is told server_error, as Google's callback does.
+    expect(await res.text()).toContain('error=server_error');
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('relays a notion outage during authorize as server_error, warning rather than erroring', async () => {
+    const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
+    const state = await signedState();
+
+    const res = await app().request(
+      callbackUrl(state, { error: 'temporarily_unavailable' }),
+      {},
+      notionEnv()
+    );
+
+    expect(await res.text()).toContain('error=server_error');
+    expect(warnSpy).toHaveBeenCalledWith('Notion authorize step unavailable', {
+      error: 'temporarily_unavailable',
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('logs an authorize error only when it is shaped like an oauth code', async () => {
@@ -445,9 +476,10 @@ describe('POST /v1/integrations/notion/claim', () => {
     const second = await signedInWithoutNotion();
     const code = await parkedCode();
 
-    await claim(code, first.headers);
+    const claimed = await claim(code, first.headers);
     const replay = await claim(code, second.headers);
 
+    expect(claimed.status).toBe(200);
     expect(replay.status).toBe(401);
     await expect(second.store.getProviderConnection(second.userId, 'notion')).resolves.toBeNull();
   });
@@ -490,14 +522,16 @@ describe('POST /v1/integrations/notion/claim', () => {
 
   it('keeps a selection made while the reconnect was in flight', async () => {
     const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+    const before = await store.getProviderConnection(userId, 'notion');
     const code = await parkedCode();
     await store.setProviderDataSource(userId, 'notion', TEST_DATA_SOURCE_ID);
 
-    await claim(code, headers);
+    const res = await claim(code, headers);
 
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
-      dataSourceId: TEST_DATA_SOURCE_ID,
-    });
+    expect(res.status).toBe(200);
+    const after = await store.getProviderConnection(userId, 'notion');
+    expect(after?.dataSourceId).toBe(TEST_DATA_SOURCE_ID);
+    expect(after?.ciphertext).not.toBe(before?.ciphertext);
   });
 });
 
@@ -578,8 +612,28 @@ describe('GET /v1/integrations/notion/tables', () => {
     );
 
     expect(res.status).toBe(500);
-    expect(errorSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Notion rejected our client or request',
+      expect.any(NotionConfigError),
+      { userId }
+    );
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
+  });
+
+  it("passes notion's Retry-After through when it is rate limiting us", async () => {
+    const searchDataSources = vi.fn(async () => {
+      throw new NotionUnavailableError('notion answered 429 (rate_limited)', 7);
+    });
+    const { headers } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await app(stubNotionClient({ searchDataSources })).request(
+      '/v1/integrations/notion/tables',
+      { headers },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('7');
   });
 });
 
@@ -607,10 +661,19 @@ describe('PUT /v1/integrations/notion/selection', () => {
   });
 
   it('rejects anything that is not a Notion id, so nothing odd reaches an upstream path', async () => {
+    const getPropertySchemas = vi.fn(async () => statusSchema);
     const { headers } = await connectedNotionUser({ dataSourceId: null });
 
-    expect((await select(headers, 'x/../../users')).status).toBe(400);
-    expect((await select(headers, '')).status).toBe(400);
+    const traversal = await select(
+      headers,
+      'x/../../users',
+      stubNotionClient({ getPropertySchemas })
+    );
+    const empty = await select(headers, '', stubNotionClient({ getPropertySchemas }));
+
+    expect(traversal.status).toBe(400);
+    expect(empty.status).toBe(400);
+    expect(getPropertySchemas).not.toHaveBeenCalled();
   });
 
   it('refuses a table with no usable completion property, naming the requirement', async () => {
@@ -770,7 +833,7 @@ describe('DELETE /v1/integrations/notion', () => {
   it('warns, not errors, when notion answers the revoke with a 403 or 404', async () => {
     const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => {
-      throw new NotionResourceError('restricted_resource');
+      throw new NotionResourceError(403, 'restricted_resource');
     });
     const { headers, store, userId } = await connectedNotionUser();
 
@@ -804,7 +867,7 @@ describe('DELETE /v1/integrations/notion', () => {
     const res = await app().request(
       '/v1/integrations/notion',
       { method: 'DELETE', headers },
-      notionEnv({ PROVIDER_TOKEN_KEY: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' })
+      notionEnv({ PROVIDER_TOKEN_KEY: TEST_FOREIGN_PROVIDER_KEY })
     );
 
     expect(res.status).toBe(204);

@@ -9,6 +9,8 @@ import { signedInToken } from './api-test-helpers.fixtures';
 
 /** 43 base64url chars decode to the 32 bytes AES-GCM needs. */
 export const TEST_PROVIDER_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+/** Well-formed but not the key anything was sealed under: what a rotation looks like. */
+export const TEST_FOREIGN_PROVIDER_KEY = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 export const TEST_STATE_SIGNING_KEY = 'notion-signing-key-for-tests';
 export const TEST_ACCESS_TOKEN = 'notion-access-token';
 export const TEST_REFRESH_TOKEN = 'notion-refresh-token';
@@ -19,11 +21,13 @@ export const TEST_PAGE_ID = '6bcd9e9c72457244f19ab98fb56fdbfa';
 // 43 unreserved chars, the minimum RFC 7636 accepts.
 export const TEST_CODE_VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 
-export const checkboxSchema = {
-  Done: { id: 'p', type: 'checkbox', checkbox: {} },
-} as unknown as PropertySchemas;
+export function asSchemas(value: Record<string, unknown>): PropertySchemas {
+  return value as PropertySchemas;
+}
 
-export const statusSchema = {
+export const checkboxSchema = asSchemas({ Done: { id: 'p', type: 'checkbox', checkbox: {} } });
+
+export const statusSchema = asSchemas({
   Status: {
     type: 'status',
     status: {
@@ -37,11 +41,7 @@ export const statusSchema = {
       ],
     },
   },
-} as unknown as PropertySchemas;
-
-export function asSchemas(value: Record<string, unknown>): PropertySchemas {
-  return value as PropertySchemas;
-}
+});
 
 /** No completion property at all: what a table looks like after the user removed it. */
 export const titleOnlySchema = asSchemas({ Name: { type: 'title', title: [] } });
@@ -143,11 +143,11 @@ export async function connectedNotionUser(
   return user;
 }
 
-/** Reseals only the refresh pair under a different key, so the access token opens and the refresh one cannot. */
+/** Re-encrypts the refresh pair under a foreign key: the access token opens, the refresh one cannot. */
 export async function sealRefreshUnderForeignKey(store: SyncStore, userId: string): Promise<void> {
   const current = await storedNotionTokens(store, userId);
   const access = await encryptSecret(current.accessToken, TEST_PROVIDER_KEY);
-  const foreign = await encryptSecret(TEST_REFRESH_TOKEN, 'B'.repeat(43));
+  const foreign = await encryptSecret(TEST_REFRESH_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
   await store.updateProviderTokens(userId, 'notion', {
     ciphertext: access.ciphertext,
     iv: access.iv,
