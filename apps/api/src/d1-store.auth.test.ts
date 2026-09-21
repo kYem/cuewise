@@ -134,6 +134,36 @@ describe('D1SyncStore auth', () => {
     expect(row.count).toBe(1);
   });
 
+  it('mintAuthCode leaves an expired parked notion grant for the purge that revokes it', async () => {
+    const { store, tick } = clockedStore(1_000);
+    const sealed = {
+      ciphertext: 'ct',
+      iv: 'iv',
+      refreshCiphertext: null,
+      refreshIv: null,
+      workspace: null,
+    };
+    await store.mintAuthCode({ provider: 'notion', grant: sealed }, 'c1');
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge3', email: 'p3@e.c' }, 'c2');
+    tick(61_000);
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge4', email: 'p4@e.c' }, 'c3');
+    const row = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    if (row === null) {
+      throw new Error('expected a count row');
+    }
+    expect(row.count).toBe(2);
+
+    const purged = await store.purgeExpiredAuthCodes(62_000);
+
+    expect(purged).toEqual([{ provider: 'notion', grant: sealed }]);
+    const after = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    expect(after?.count).toBe(1);
+  });
+
   it('refreshes identities.email and users.email when a later sign-in has a new email', async () => {
     const { store } = clockedStore(1_000);
     const identity = {

@@ -33,6 +33,12 @@ function checkboxRow(id: string, done: boolean) {
 }
 
 const checkboxProperty: CompletionProperty = { kind: 'checkbox', name: 'Done' };
+const WRITE = { kind: 'checkbox', name: 'Done', checkbox: true } as const;
+
+/** True when the rejection's message carries none of `secrets`. */
+function messageOmits(...secrets: string[]) {
+  return (error: unknown) => secrets.every((secret) => !String(error).includes(secret));
+}
 
 describe('exchangeCode', () => {
   it('pins the api version and authenticates as a confidential client', async () => {
@@ -69,14 +75,19 @@ describe('exchangeCode', () => {
   it('keeps the code and the client secret out of any thrown message', async () => {
     const notion = client(() => Response.json({ error: 'invalid_grant' }, { status: 400 }));
 
-    const error = await notion.exchangeCode('code-secret').catch((thrown: unknown) => thrown);
+    const failing = notion.exchangeCode('code-secret');
 
-    expect(error).toBeInstanceOf(NotionAuthError);
-    expect(String(error)).not.toContain('code-secret');
-    expect(String(error)).not.toContain('csecret');
+    await expect(failing).rejects.toBeInstanceOf(NotionAuthError);
+    await expect(failing).rejects.toSatisfy(messageOmits('code-secret', 'csecret'));
   });
 
-  it('treats a 403 or 404 from the token endpoint as our fault, never as a lost table', async () => {
+  it('treats an unauthorized client as our configuration even on a 401, never as a dead grant', async () => {
+    const notion = client(() => Response.json({ error: 'unauthorized_client' }, { status: 401 }));
+
+    await expect(notion.refreshGrant('r')).rejects.toBeInstanceOf(NotionConfigError);
+  });
+
+  it('treats a 404 from any oauth endpoint as our fault, never as a lost table', async () => {
     const notion = client(() => Response.json({ code: 'object_not_found' }, { status: 404 }));
 
     await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
@@ -148,16 +159,16 @@ describe('failure classification', () => {
   });
 
   it('maps a network fault to retryable, naming the fault class but nothing sensitive', async () => {
-    const failing = vi.fn(() =>
+    const failingFetch = vi.fn(() =>
       Promise.reject(new TypeError('bad url'))
     ) as unknown as typeof fetch;
-    const notion = createNotionClient(ENV, failing);
+    const notion = createNotionClient(ENV, failingFetch);
 
-    const error = await notion.exchangeCode('code-secret').catch((thrown: unknown) => thrown);
+    const failing = notion.exchangeCode('code-secret');
 
-    expect(error).toBeInstanceOf(NotionUnavailableError);
-    expect(String(error)).toContain('TypeError');
-    expect(String(error)).not.toContain('code-secret');
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toThrow('TypeError');
+    await expect(failing).rejects.toSatisfy(messageOmits('code-secret'));
   });
 
   it('treats a 200 with an unreadable body as an outage, never as an empty table list', async () => {
@@ -194,9 +205,9 @@ describe('failure classification', () => {
   it('keeps a 409 collision retryable, since a concurrent edit to the page causes it', async () => {
     const notion = client(() => Response.json({ code: 'conflict_error' }, { status: 409 }));
 
-    await expect(
-      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
-    ).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(notion.setCompletion('tok', 'pg1', WRITE)).rejects.toBeInstanceOf(
+      NotionUnavailableError
+    );
   });
 
   it('treats a 401 with no readable code as the grant being unusable, not our config', async () => {
@@ -216,32 +227,46 @@ describe('failure classification', () => {
   it('logs only an enum-shaped error code, never whatever the body carried', async () => {
     const notion = client(() => Response.json({ code: 'tok <secret>' }, { status: 400 }));
 
-    const error = await notion.exchangeCode('c').catch((thrown: unknown) => thrown);
+    const failing = notion.exchangeCode('c');
 
-    expect(String(error)).toContain('unrecognised');
-    expect(String(error)).not.toContain('secret');
+    await expect(failing).rejects.toThrow('unrecognised');
+    await expect(failing).rejects.toSatisfy(messageOmits('secret'));
   });
 
   it('maps rate limiting to retryable, carrying Retry-After', async () => {
     const notion = client(() => new Response('', { status: 429, headers: { 'Retry-After': '7' } }));
 
-    const error = await notion
-      .queryRows('tok', 'ds1', checkboxProperty)
-      .catch((thrown: unknown) => thrown);
+    const failing = notion.queryRows('tok', 'ds1', checkboxProperty);
 
-    expect(error).toBeInstanceOf(NotionUnavailableError);
-    expect((error as NotionUnavailableError).retryAfter).toBe(7);
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toHaveProperty('retryAfter', 7);
+    await expect(failing).rejects.toHaveProperty('status', 429);
   });
 
   it('carries no Retry-After when notion named none', async () => {
     const notion = client(() => new Response('', { status: 503 }));
 
-    const error = await notion
-      .queryRows('tok', 'ds1', checkboxProperty)
-      .catch((thrown: unknown) => thrown);
+    const failing = notion.queryRows('tok', 'ds1', checkboxProperty);
 
-    expect(error).toBeInstanceOf(NotionUnavailableError);
-    expect((error as NotionUnavailableError).retryAfter).toBeNull();
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toHaveProperty('retryAfter', null);
+  });
+
+  it('clamps an absurd Retry-After rather than relaying it', async () => {
+    const notion = client(
+      () => new Response('', { status: 429, headers: { 'Retry-After': '99999999' } })
+    );
+
+    await expect(notion.queryRows('tok', 'ds1', checkboxProperty)).rejects.toHaveProperty(
+      'retryAfter',
+      3600
+    );
+  });
+
+  it('records the status of an unusable 200, so a caller can tell it from a transport fault', async () => {
+    const notion = client(() => Response.json({ object: 'list' }));
+
+    await expect(notion.searchDataSources('tok')).rejects.toHaveProperty('status', 200);
   });
 });
 
@@ -504,20 +529,18 @@ describe('setCompletion', () => {
   it('keeps a 403 on the write as a resource fault carrying its status — the user may lack edit access', async () => {
     const notion = client(() => Response.json({ code: 'restricted_resource' }, { status: 403 }));
 
-    const error = await notion
-      .setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
-      .catch((thrown: unknown) => thrown);
+    const failing = notion.setCompletion('tok', 'pg1', WRITE);
 
-    expect(error).toBeInstanceOf(NotionResourceError);
-    expect((error as NotionResourceError).status).toBe(403);
+    await expect(failing).rejects.toBeInstanceOf(NotionResourceError);
+    await expect(failing).rejects.toHaveProperty('status', 403);
   });
 
   it('keeps a 404 on the write as the page being gone', async () => {
     const notion = client(() => Response.json({ code: 'object_not_found' }, { status: 404 }));
 
-    await expect(
-      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
-    ).rejects.toBeInstanceOf(NotionResourceError);
+    await expect(notion.setCompletion('tok', 'pg1', WRITE)).rejects.toBeInstanceOf(
+      NotionResourceError
+    );
   });
 
   it('answers a write to a trashed page as the page being gone, after one look', async () => {
@@ -530,16 +553,63 @@ describe('setCompletion', () => {
       return Response.json({ object: 'page', id: 'pg1', in_trash: true });
     });
 
-    const error = await notion
-      .setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
-      .catch((thrown: unknown) => thrown);
+    const failing = notion.setCompletion('tok', 'pg1', WRITE);
 
-    expect(error).toBeInstanceOf(NotionResourceError);
-    expect((error as NotionResourceError).status).toBe(404);
+    await expect(failing).rejects.toBeInstanceOf(NotionResourceError);
+    await expect(failing).rejects.toHaveProperty('status', 404);
     expect(calls).toEqual([
       'PATCH https://api.notion.com/v1/pages/pg1',
       'GET https://api.notion.com/v1/pages/pg1',
     ]);
+  });
+
+  it('treats an archived page the same as a trashed one', async () => {
+    const notion = client((_url, init) => {
+      if (init.method === 'PATCH') {
+        return Response.json({ code: 'validation_error' }, { status: 400 });
+      }
+      return Response.json({ object: 'page', id: 'pg1', archived: true });
+    });
+
+    await expect(notion.setCompletion('tok', 'pg1', WRITE)).rejects.toHaveProperty('status', 404);
+  });
+
+  it('answers the page as gone when the look itself finds it gone', async () => {
+    const notion = client((_url, init) => {
+      if (init.method === 'PATCH') {
+        return Response.json({ code: 'validation_error' }, { status: 400 });
+      }
+      return Response.json({ code: 'object_not_found' }, { status: 404 });
+    });
+
+    await expect(notion.setCompletion('tok', 'pg1', WRITE)).rejects.toHaveProperty('status', 404);
+  });
+
+  it('keeps the 400 retryable when the look itself fails, rather than calling the page gone', async () => {
+    const notion = client((_url, init) => {
+      if (init.method === 'PATCH') {
+        return Response.json({ code: 'validation_error' }, { status: 400 });
+      }
+      return new Response('', { status: 502 });
+    });
+
+    const failing = notion.setCompletion('tok', 'pg1', WRITE);
+
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toHaveProperty('status', 400);
+  });
+
+  it('does not look at the page on any failure but a 400', async () => {
+    let calls = 0;
+    const notion = client(() => {
+      calls += 1;
+      return new Response('', { status: 502 });
+    });
+
+    await expect(notion.setCompletion('tok', 'pg1', WRITE)).rejects.toBeInstanceOf(
+      NotionUnavailableError
+    );
+    expect(calls).toBe(1);
   });
 
   it('keeps a 400 on a live page retryable, so schema drift under a write is not called deletion', async () => {
@@ -550,21 +620,9 @@ describe('setCompletion', () => {
       return Response.json({ object: 'page', id: 'pg1', in_trash: false });
     });
 
-    await expect(
-      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
-    ).rejects.toBeInstanceOf(NotionUnavailableError);
-  });
-
-  it('clamps an absurd Retry-After rather than relaying it', async () => {
-    const notion = client(
-      () => new Response('', { status: 429, headers: { 'Retry-After': '99999999' } })
+    await expect(notion.setCompletion('tok', 'pg1', WRITE)).rejects.toBeInstanceOf(
+      NotionUnavailableError
     );
-
-    const error = await notion
-      .queryRows('tok', 'ds1', checkboxProperty)
-      .catch((thrown: unknown) => thrown);
-
-    expect((error as NotionUnavailableError).retryAfter).toBe(3600);
   });
 
   it('patches the status option, url-encoding the page id', async () => {
@@ -588,6 +646,6 @@ describe('setCompletion', () => {
       return Response.json({ id: 'pg1' });
     });
 
-    await notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true });
+    await notion.setCompletion('tok', 'pg1', WRITE);
   });
 });

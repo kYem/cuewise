@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import { spyOnLoggerError, spyOnLoggerWarn } from '../__fixtures__/logger.fixtures';
 import {
@@ -22,6 +23,7 @@ import {
   titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
 import { encryptSecret } from '../crypto-utils';
+import { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
 import {
   NotionAuthError,
@@ -125,6 +127,7 @@ describe('GET /v1/integrations/notion/items', () => {
   });
 
   it('drops the grant when notion reports it revoked and nothing can renew it', async () => {
+    const warnSpy = spyOnLoggerWarn();
     const queryRows = vi.fn(async () => {
       throw new NotionAuthError('revoked');
     });
@@ -135,6 +138,10 @@ describe('GET /v1/integrations/notion/items', () => {
 
     expect(res.status).toBe(401);
     expect(body.code).toBe('provider_reauth_required');
+    expect(warnSpy).toHaveBeenCalledWith('Notion auth fault', { userId, reason: 'revoked' });
+    expect(warnSpy).toHaveBeenCalledWith('Dropped the Notion grant after an auth fault', {
+      userId,
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -196,7 +203,7 @@ describe('GET /v1/integrations/notion/items', () => {
     const warnSpy = spyOnLoggerWarn();
     const { headers, store, userId } = await connectedNotionUser();
     const queryRows = vi.fn(async () => {
-      await store.deleteProviderConnection(userId, 'notion');
+      await store.takeProviderConnection(userId, 'notion');
       throw new NotionAuthError('revoked');
     });
 
@@ -207,7 +214,6 @@ describe('GET /v1/integrations/notion/items', () => {
     expect(body.code).toBe('provider_not_connected');
     expect(warnSpy).toHaveBeenCalledWith('Notion auth fault on a grant already disconnected', {
       userId,
-      reason: 'revoked',
     });
   });
 
@@ -343,16 +349,12 @@ describe('token renewal', () => {
 
   it('hands notion the stored refresh token, not the access token it just rejected', async () => {
     const { queryRows } = expiringQuery();
-    const refreshGrant = vi.fn(async () => ({
-      accessToken: TEST_REFRESHED_TOKEN,
-      refreshToken: TEST_ROTATED_REFRESH_TOKEN,
-      workspace: null,
-    }));
+    const client = stubNotionClient({ queryRows });
     const { headers } = await connectedNotionUser({ withRefreshToken: true });
 
-    await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
+    await getItems(headers, client);
 
-    expect(refreshGrant).toHaveBeenCalledWith(TEST_REFRESH_TOKEN);
+    expect(client.refreshGrant).toHaveBeenCalledWith(TEST_REFRESH_TOKEN);
   });
 
   it('asks to reconnect when the refresh token no longer decrypts, keeping the row', async () => {
@@ -398,6 +400,14 @@ describe('token renewal', () => {
       expect.any(Error),
       { userId }
     );
+    // The claim is released too, so the next request is not told to retry for 30s.
+    const row = await new D1SyncStore(env.DB).getProviderConnection(userId, 'notion');
+    if (row === null) {
+      throw new Error('expected the grant to survive');
+    }
+    await expect(
+      new D1SyncStore(env.DB).claimProviderRenewal(userId, 'notion', row, 30_000)
+    ).resolves.not.toBeNull();
   });
 
   it('answers retry, without calling notion, while another request holds the renewal', async () => {
@@ -407,8 +417,13 @@ describe('token renewal', () => {
     const refreshGrant = vi.fn(async () => {
       throw new Error('must not renew while another request holds the claim');
     });
+    const warnSpy = spyOnLoggerWarn();
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
-    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(true);
+    const row = await store.getProviderConnection(userId, 'notion');
+    if (row === null) {
+      throw new Error('expected a stored grant');
+    }
+    await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
 
     const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
     const body = (await res.json()) as { code: string; detail: string };
@@ -417,6 +432,9 @@ describe('token renewal', () => {
     expect(body.code).toBe('upstream_unavailable');
     expect(body.detail).toBe('Please retry.');
     expect(refreshGrant).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('Notion renewal held or overtaken by another request', {
+      userId,
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
@@ -431,7 +449,12 @@ describe('token renewal', () => {
 
     await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
-    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(true);
+    expect(refreshGrant).toHaveBeenCalledTimes(1);
+    const row = await store.getProviderConnection(userId, 'notion');
+    if (row === null) {
+      throw new Error('expected the grant to survive');
+    }
+    await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
   });
 
   it('drops the grant when the renewal itself is rejected', async () => {
@@ -465,12 +488,13 @@ describe('token renewal', () => {
   });
 
   it('mints nothing when the grant was disconnected before renewal could start', async () => {
+    const warnSpy = spyOnLoggerWarn();
     const refreshGrant = vi.fn(async () => {
       throw new Error('must not renew a grant that is already gone');
     });
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
     const queryRows = vi.fn(async () => {
-      await store.deleteProviderConnection(userId, 'notion');
+      await store.takeProviderConnection(userId, 'notion');
       throw new NotionAuthError('expired');
     });
 
@@ -480,22 +504,99 @@ describe('token renewal', () => {
     expect(res.status).toBe(404);
     expect(body.code).toBe('provider_not_connected');
     expect(refreshGrant).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('Notion grant was disconnected before renewal', {
+      userId,
+    });
   });
 
-  it('does not drop a grant a concurrent request already renewed', async () => {
-    // This request's token 401s, but by the time it reacts another request has stored a fresh one.
-    const { store, userId, headers } = await connectedNotionUser();
-    const renewed = await encryptSecret(TEST_REFRESHED_TOKEN, TEST_PROVIDER_KEY);
-    const queryRows = vi.fn(async () => {
-      await store.updateProviderTokens(userId, 'notion', {
-        ciphertext: renewed.ciphertext,
-        iv: renewed.iv,
+  it('answers retry and revokes its token when a reconnect replaced the grant during renewal', async () => {
+    const warnSpy = spyOnLoggerWarn();
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+    const replacement = await encryptSecret('reconnected-token', TEST_PROVIDER_KEY);
+    const refreshGrant = vi.fn(async () => {
+      // The user completes /claim while this renewal is talking to Notion.
+      await store.putProviderGrant(userId, 'notion', {
+        ciphertext: replacement.ciphertext,
+        iv: replacement.iv,
         refreshCiphertext: null,
         refreshIv: null,
+        workspace: 'Other',
       });
+      return { accessToken: TEST_REFRESHED_TOKEN, refreshToken: null, workspace: null };
+    });
+    const queryRows = vi.fn(async () => {
       throw new NotionAuthError('expired');
     });
 
+    const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant, revokeToken }));
+    const body = (await res.json()) as { code: string; detail: string };
+
+    expect(res.status).toBe(503);
+    expect(body.detail).toBe('Please retry.');
+    expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Notion grant was replaced during renewal; revoked the new token',
+      { userId }
+    );
+    await expect(storedNotionTokens(store, userId)).resolves.toEqual({
+      accessToken: 'reconnected-token',
+      refreshToken: null,
+    });
+  });
+
+  it('never re-renews from a stale view: a token the row no longer holds cannot claim', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+    const refreshGrant = vi.fn(async () => {
+      throw new Error('must not refresh with a token the row no longer holds');
+    });
+    const renewedElsewhere = await encryptSecret(TEST_REFRESHED_TOKEN, TEST_PROVIDER_KEY);
+    const queryRows = vi.fn(async () => {
+      const row = await store.getProviderConnection(userId, 'notion');
+      if (row === null) {
+        throw new Error('expected a stored grant');
+      }
+      await store.updateProviderTokens(
+        userId,
+        'notion',
+        {
+          ciphertext: renewedElsewhere.ciphertext,
+          iv: renewedElsewhere.iv,
+          refreshCiphertext: null,
+          refreshIv: null,
+        },
+        row
+      );
+      throw new NotionAuthError('expired');
+    });
+
+    const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
+
+    expect(res.status).toBe(503);
+    expect(refreshGrant).not.toHaveBeenCalled();
+  });
+
+  it('does not drop a grant a concurrent request already renewed', async () => {
+    const { store, userId, headers } = await connectedNotionUser();
+    const renewed = await encryptSecret(TEST_REFRESHED_TOKEN, TEST_PROVIDER_KEY);
+    const queryRows = vi.fn(async () => {
+      const row = await store.getProviderConnection(userId, 'notion');
+      if (row === null) {
+        throw new Error('expected a stored grant');
+      }
+      await store.updateProviderTokens(
+        userId,
+        'notion',
+        {
+          ciphertext: renewed.ciphertext,
+          iv: renewed.iv,
+          refreshCiphertext: null,
+          refreshIv: null,
+        },
+        row
+      );
+      throw new NotionAuthError('expired');
+    });
     const warnSpy = spyOnLoggerWarn();
 
     const res = await getItems(headers, stubNotionClient({ queryRows }));
@@ -506,7 +607,7 @@ describe('token renewal', () => {
     expect(body.detail).toBe('Please retry.');
     expect(warnSpy).toHaveBeenCalledWith(
       'Notion grant was renewed by a concurrent request; not dropping it',
-      { userId, reason: 'expired' }
+      { userId }
     );
     await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
       accessToken: TEST_REFRESHED_TOKEN,
@@ -518,7 +619,7 @@ describe('token renewal', () => {
     const revokeToken = vi.fn(async () => undefined);
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
     const refreshGrant = vi.fn(async () => {
-      await store.deleteProviderConnection(userId, 'notion');
+      await store.takeProviderConnection(userId, 'notion');
       return { accessToken: TEST_REFRESHED_TOKEN, refreshToken: null, workspace: null };
     });
     const queryRows = vi.fn(async () => {

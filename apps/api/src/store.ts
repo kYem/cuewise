@@ -32,7 +32,7 @@ export interface SignInCodePayload {
   email?: string;
 }
 
-/** A grant parked between Notion's redirect and /claim: the claiming session, not the minter, decides the account. */
+/** Parked between Notion's redirect and /claim: the claiming session, not the minter, decides the account. */
 export interface ProviderCodePayload {
   provider: 'notion';
   grant: SealedGrant;
@@ -40,7 +40,7 @@ export interface ProviderCodePayload {
 
 export type AuthCodePayload = SignInCodePayload | ProviderCodePayload;
 
-/** Access and refresh tokens as stored (AES-GCM under PROVIDER_TOKEN_KEY), plus the workspace name. */
+/** Access and refresh tokens as stored (AES-GCM under PROVIDER_TOKEN_KEY), plus the workspace. */
 export interface SealedGrant {
   ciphertext: string;
   iv: string;
@@ -106,6 +106,9 @@ export interface SyncStore {
   renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean>;
   revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
+  // Deletes every expired code and returns what they parked, so a Notion grant nobody claimed
+  // can be revoked upstream rather than left live.
+  purgeExpiredAuthCodes(now: number): Promise<AuthCodePayload[]>;
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
@@ -129,11 +132,10 @@ export interface SyncStore {
   // already does — the caller maps that to a 409, closing the "two devices both generate a key" race.
   putKeyEnvelopeIfAbsent(userId: string, kind: string, envelope: string): Promise<boolean>;
   // The only credential the server decrypts itself: a provider token is useless to us wrapped
-  // in a client-only key. No whole-row writer, so a renewal and a selection cannot clobber each other.
+  // in a client-only key. No whole-row writer, so a renewal and a selection cannot clobber.
   getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
-  deleteProviderConnection(userId: string, provider: string): Promise<void>;
   // Deletes and returns the row in one statement, so a disconnect revokes exactly the token it
-  // removed and a renewal landing meanwhile is not silently lost.
+  // removed and cannot leave a token nobody holds live at the provider.
   takeProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
   // Drops the row only while it still holds that ciphertext, in one statement: the loser of a
   // renewal race must not delete the winner's grant.
@@ -142,17 +144,28 @@ export interface SyncStore {
     provider: string,
     used: { readonly ciphertext: string }
   ): Promise<boolean>;
-  // One renewal at a time per grant: two requests refreshing the same token would have the loser
-  // read invalid_grant and drop a grant the winner is about to store. A claim older than
-  // staleAfterMs is a crashed renewal and may be taken over. updateProviderTokens releases it.
-  claimProviderRenewal(userId: string, provider: string, staleAfterMs: number): Promise<boolean>;
-  releaseProviderRenewal(userId: string, provider: string): Promise<void>;
+  // One renewal per grant at a time, keyed on the ciphertext the caller opened — Notion rotates
+  // refresh tokens, so a losing or stale-view refresh would read invalid_grant. Answers the claim
+  // stamp, which release needs; a claim older than staleAfterMs is a crashed renewal.
+  claimProviderRenewal(
+    userId: string,
+    provider: string,
+    used: { readonly ciphertext: string },
+    staleAfterMs: number
+  ): Promise<number | null>;
+  releaseProviderRenewal(userId: string, provider: string, claimedAt: number): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
   // read-then-write window can revert a selection that lands in between.
   putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
-  // `null` refresh means "keep the stored one" — a renewal that does not rotate the refresh
-  // token must not erase it. Both answer false when no row exists.
-  updateProviderTokens(userId: string, provider: string, tokens: SealedTokens): Promise<boolean>;
+  // Writes only while the row still holds the ciphertext the renewal started from, and releases
+  // the claim with it. COALESCE so a null refresh from the caller cannot erase a stored pair.
+  // Both answer false when nothing matched.
+  updateProviderTokens(
+    userId: string,
+    provider: string,
+    tokens: SealedTokens,
+    used: { readonly ciphertext: string }
+  ): Promise<boolean>;
   setProviderDataSource(userId: string, provider: string, dataSourceId: string): Promise<boolean>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.

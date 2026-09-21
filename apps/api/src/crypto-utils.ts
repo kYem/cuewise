@@ -188,7 +188,7 @@ async function importSecretKey(rawKey: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-/** One AES-GCM seal: the ciphertext and the IV it was sealed with, which only mean anything together. */
+/** One AES-GCM seal: the ciphertext and the IV it was sealed with, meaningless apart. */
 export interface SealedSecret {
   readonly ciphertext: string;
   readonly iv: string;

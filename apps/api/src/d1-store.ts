@@ -258,10 +258,15 @@ export class D1SyncStore implements SyncStore {
     const code = randomToken();
     const codeHash = await sha256Hex(code);
     const ts = this.now();
-    // Best-effort PII sweep: expired codes are purged on the next mint call, not by a
-    // timer, so an unredeemed row can outlive its 60s TTL until someone else authenticates.
+    // Best-effort PII sweep: expired sign-in codes are purged on the next mint call, not by a
+    // timer. A parked Notion grant is left for purgeExpiredAuthCodes, which revokes it upstream.
     await this.db.batch([
-      this.db.prepare('DELETE FROM auth_codes WHERE expires_at <= ?').bind(ts),
+      this.db
+        .prepare(
+          `DELETE FROM auth_codes
+            WHERE expires_at <= ? AND json_extract(payload, '$.provider') != 'notion'`
+        )
+        .bind(ts),
       this.db
         .prepare(
           'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
@@ -269,6 +274,14 @@ export class D1SyncStore implements SyncStore {
         .bind(codeHash, JSON.stringify(payload), ts + AUTH_CODE_TTL_MS, codeChallenge),
     ]);
     return code;
+  }
+
+  async purgeExpiredAuthCodes(now: number): Promise<AuthCodePayload[]> {
+    const res = await this.db
+      .prepare('DELETE FROM auth_codes WHERE expires_at <= ? RETURNING payload')
+      .bind(now)
+      .all<{ payload: string }>();
+    return res.results.map((row) => JSON.parse(row.payload) as AuthCodePayload);
   }
 
   async consumeAuthCode(
@@ -532,33 +545,36 @@ export class D1SyncStore implements SyncStore {
   async claimProviderRenewal(
     userId: string,
     provider: string,
+    used: { readonly ciphertext: string },
     staleAfterMs: number
-  ): Promise<boolean> {
+  ): Promise<number | null> {
     const now = this.now();
     const res = await this.db
       .prepare(
         `UPDATE provider_tokens SET renewal_started_at = ?
-          WHERE user_id = ? AND provider = ?
+          WHERE user_id = ? AND provider = ? AND ciphertext = ?
             AND (renewal_started_at IS NULL OR renewal_started_at < ?)`
       )
-      .bind(now, userId, provider, now - staleAfterMs)
+      .bind(now, userId, provider, used.ciphertext, now - staleAfterMs)
       .run();
-    return (res.meta.changes ?? 0) > 0;
+    return (res.meta.changes ?? 0) > 0 ? now : null;
   }
 
-  async releaseProviderRenewal(userId: string, provider: string): Promise<void> {
+  async releaseProviderRenewal(userId: string, provider: string, claimedAt: number): Promise<void> {
     await this.db
       .prepare(
-        'UPDATE provider_tokens SET renewal_started_at = NULL WHERE user_id = ? AND provider = ?'
+        `UPDATE provider_tokens SET renewal_started_at = NULL
+          WHERE user_id = ? AND provider = ? AND renewal_started_at = ?`
       )
-      .bind(userId, provider)
+      .bind(userId, provider, claimedAt)
       .run();
   }
 
   async updateProviderTokens(
     userId: string,
     provider: string,
-    tokens: SealedTokens
+    tokens: SealedTokens,
+    used: { readonly ciphertext: string }
   ): Promise<boolean> {
     const res = await this.db
       .prepare(
@@ -567,7 +583,7 @@ export class D1SyncStore implements SyncStore {
                 refresh_ciphertext = COALESCE(?, refresh_ciphertext),
                 refresh_iv = COALESCE(?, refresh_iv),
                 renewal_started_at = NULL
-          WHERE user_id = ? AND provider = ?`
+          WHERE user_id = ? AND provider = ? AND ciphertext = ?`
       )
       .bind(
         tokens.ciphertext,
@@ -575,7 +591,8 @@ export class D1SyncStore implements SyncStore {
         tokens.refreshCiphertext,
         tokens.refreshIv,
         userId,
-        provider
+        provider,
+        used.ciphertext
       )
       .run();
     return (res.meta.changes ?? 0) > 0;
@@ -606,7 +623,8 @@ export class D1SyncStore implements SyncStore {
            refresh_ciphertext = excluded.refresh_ciphertext,
            refresh_iv = excluded.refresh_iv,
            workspace = excluded.workspace,
-           data_source_id = provider_tokens.data_source_id`
+           data_source_id = provider_tokens.data_source_id,
+           renewal_started_at = NULL`
       )
       .bind(
         userId,
@@ -618,13 +636,6 @@ export class D1SyncStore implements SyncStore {
         grant.workspace,
         this.now()
       )
-      .run();
-  }
-
-  async deleteProviderConnection(userId: string, provider: string): Promise<void> {
-    await this.db
-      .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ?')
-      .bind(userId, provider)
       .run();
   }
 

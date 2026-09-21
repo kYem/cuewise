@@ -15,14 +15,14 @@ const PROBLEM_DEFS = {
   pairing_not_found: { status: 404, title: 'No such pairing request.' },
   pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },
   provider_not_connected: { status: 404, title: 'No connection for that provider.' },
-  // Not `invalid_token`: the session is fine, the third-party grant died — reconnect that, not sign in.
+  // Not `invalid_token`: the session is fine and the provider grant died — reconnect, don't sign in.
   provider_reauth_required: { status: 401, title: 'The provider connection is no longer valid.' },
   provider_schema_unusable: {
     status: 422,
     title: 'That table has no status with a Complete group, and no Done checkbox.',
   },
-  // The user's Notion access to the table is read-only; the token acts as the user.
-  provider_write_forbidden: { status: 403, title: "You can't edit that table in Notion." },
+  // Notion refused the page write for this token: permission, or a workspace block limit.
+  provider_write_forbidden: { status: 403, title: 'Notion refused the write for that table.' },
   // The table is usable for reading and completing; only "not done" has nowhere to go.
   provider_todo_group_missing: {
     status: 422,
@@ -31,8 +31,8 @@ const PROBLEM_DEFS = {
   // Connected, but the picker step has not happened. Distinct from not_connected so the client
   // shows the table picker rather than the connect button.
   provider_table_unselected: { status: 409, title: 'No table has been chosen yet.' },
-  // The chosen table was deleted or un-shared. Terminal for that selection — retrying will not
-  // clear it, so the client sends the user back to the picker.
+  // The chosen table was deleted, un-shared, or the token lost permission on it. Terminal for
+  // that selection — retrying will not clear it, so the client sends the user back to the picker.
   provider_table_unavailable: { status: 404, title: 'The connected table is no longer reachable.' },
   internal: { status: 500, title: 'Internal error' },
   // Distinct from `internal` so a client can tell "provider is down, retry later" from

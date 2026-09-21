@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 import { decryptSecret, encryptSecret, sha256Base64Url } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import type { Env } from '../env';
-import type { NotionClient } from '../notion-client';
+import type { NotionClient, NotionGrant } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
 import type { AuthCodePayload, SealedGrant, SealedTokens, SyncStore } from '../store';
 import { signedInToken } from './api-test-helpers.fixtures';
@@ -19,6 +19,12 @@ export const TEST_REFRESHED_TOKEN = 'notion-access-token-v2';
 export const TEST_ROTATED_REFRESH_TOKEN = 'notion-refresh-token-v2';
 export const TEST_DATA_SOURCE_ID = '3f9a855f-8bd8-4d4c-a3a4-caf40bac8df2';
 export const TEST_PAGE_ID = '6bcd9e9c72457244f19ab98fb56fdbfa';
+/** What exchangeCode answers for a grant Notion issued without a refresh token. */
+export const GRANT_WITHOUT_REFRESH: NotionGrant = {
+  accessToken: TEST_ACCESS_TOKEN,
+  refreshToken: null,
+  workspace: 'Acme',
+};
 // 43 unreserved chars, the minimum RFC 7636 accepts.
 export const TEST_CODE_VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 
@@ -149,17 +155,24 @@ export async function connectedNotionUser(
   return user;
 }
 
-/** Re-encrypts the refresh pair under a foreign key: the access token opens, the refresh one cannot. */
+/** Re-encrypts the refresh pair under a foreign key: the access token opens, the refresh cannot. */
 export async function sealRefreshUnderForeignKey(store: SyncStore, userId: string): Promise<void> {
-  const current = await storedNotionTokens(store, userId);
-  const access = await encryptSecret(current.accessToken, TEST_PROVIDER_KEY);
+  const row = await store.getProviderConnection(userId, 'notion');
+  if (row === null) {
+    throw new Error('expected a stored Notion grant');
+  }
   const foreign = await encryptSecret(TEST_REFRESH_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
-  await store.updateProviderTokens(userId, 'notion', {
-    ciphertext: access.ciphertext,
-    iv: access.iv,
-    refreshCiphertext: foreign.ciphertext,
-    refreshIv: foreign.iv,
-  });
+  await store.updateProviderTokens(
+    userId,
+    'notion',
+    {
+      ciphertext: row.ciphertext,
+      iv: row.iv,
+      refreshCiphertext: foreign.ciphertext,
+      refreshIv: foreign.iv,
+    },
+    row
+  );
 }
 
 export interface StoredNotionTokens {
@@ -187,7 +200,7 @@ export async function storedNotionTokens(
   return { accessToken, refreshToken };
 }
 
-type FailingWrite = 'mintAuthCode' | 'putProviderGrant' | 'updateProviderTokens';
+type FailingWrite = 'mintAuthCode' | 'putProviderGrant' | 'updateProviderTokens' | 'deleteUser';
 
 /** A real store whose one named write throws, so a route's cleanup path runs against real rows. */
 export class FailingWriteStore extends D1SyncStore {
@@ -216,14 +229,22 @@ export class FailingWriteStore extends D1SyncStore {
     return super.putProviderGrant(userId, provider, grant);
   }
 
+  override async deleteUser(userId: string): Promise<void> {
+    if (this.failing === 'deleteUser') {
+      throw new Error('D1 write failed');
+    }
+    return super.deleteUser(userId);
+  }
+
   override async updateProviderTokens(
     userId: string,
     provider: string,
-    tokens: SealedTokens
+    tokens: SealedTokens,
+    used: { readonly ciphertext: string }
   ): Promise<boolean> {
     if (this.failing === 'updateProviderTokens') {
       throw new Error('D1 write failed');
     }
-    return super.updateProviderTokens(userId, provider, tokens);
+    return super.updateProviderTokens(userId, provider, tokens, used);
   }
 }
