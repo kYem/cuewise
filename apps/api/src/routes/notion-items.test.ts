@@ -68,6 +68,16 @@ function expiringQuery() {
   return { queryRows, tokens };
 }
 
+/** A fresh claim succeeds only once the last one was released; a held one blocks for 30s. */
+async function expectClaimReleased(userId: string): Promise<void> {
+  const store = new D1SyncStore(env.DB);
+  const row = await store.getProviderConnection(userId, 'notion');
+  if (row === null) {
+    throw new Error('expected the grant to survive');
+  }
+  await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
+}
+
 describe('GET /v1/integrations/notion/items', () => {
   it('401s without a session', async () => {
     const res = await app().request(ITEMS, {}, notionEnv());
@@ -347,7 +357,7 @@ describe('token renewal', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
-  it('still answers the outage when the claim cannot be released after it', async () => {
+  it('still answers the outage, and warns, when the claim cannot be released', async () => {
     const warnSpy = spyOnLoggerWarn();
     const queryRows = vi.fn(async () => {
       throw new NotionAuthError('expired');
@@ -404,7 +414,7 @@ describe('token renewal', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
-  it('revokes the renewed token when storing it fails, and says so before the 500', async () => {
+  it('revokes the token, frees the claim and says so when storing the renewal fails', async () => {
     const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => undefined);
     const { queryRows } = expiringQuery();
@@ -418,21 +428,14 @@ describe('token renewal', () => {
     expect(res.status).toBe(500);
     expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
     expect(errorSpy).toHaveBeenCalledWith(
-      'Notion renewal could not be stored; revoked the new token',
+      'Notion renewal could not be stored; revoking the new token',
       expect.any(Error),
       { userId }
     );
-    // The claim is released too, so the next request is not told to retry for 30s.
-    const row = await new D1SyncStore(env.DB).getProviderConnection(userId, 'notion');
-    if (row === null) {
-      throw new Error('expected the grant to survive');
-    }
-    await expect(
-      new D1SyncStore(env.DB).claimProviderRenewal(userId, 'notion', row, 30_000)
-    ).resolves.not.toBeNull();
+    await expectClaimReleased(userId);
   });
 
-  it('revokes the renewed token when sealing it fails, naming the fault but not its message', async () => {
+  it('keeps the grant and revokes the new token when sealing fails, logged by name', async () => {
     const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => undefined);
     const { queryRows } = expiringQuery();
@@ -444,18 +447,35 @@ describe('token renewal', () => {
     expect(res.status).toBe(500);
     expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
     expect(errorSpy).toHaveBeenCalledWith(
-      'Notion renewal could not be sealed; revoked the new token',
+      'Notion renewal could not be sealed; revoking the new token',
       { userId, reason: 'Error' }
     );
+    expect(errorSpy.mock.calls.flat().map(String).join('\n')).not.toContain('WebCrypto fault');
     await expect(storedNotionTokens(store, userId)).resolves.toEqual({
       accessToken: TEST_ACCESS_TOKEN,
       refreshToken: TEST_REFRESH_TOKEN,
     });
-    const row = await store.getProviderConnection(userId, 'notion');
-    if (row === null) {
-      throw new Error('expected the grant to survive');
-    }
-    await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
+    await expectClaimReleased(userId);
+  });
+
+  it('keeps answering 500 and warns when a seal failure leaves the claim held', async () => {
+    const warnSpy = spyOnLoggerWarn();
+    const revokeToken = vi.fn(async () => undefined);
+    const { queryRows } = expiringQuery();
+    const { headers, userId } = await connectedNotionUser({ withRefreshToken: true });
+    vi.spyOn(crypto.subtle, 'encrypt').mockRejectedValueOnce(new Error('WebCrypto fault'));
+
+    const res = await createApp({
+      notionClientFactory: () => stubNotionClient({ queryRows, revokeToken }),
+      storeFactory: () => new FailingWriteStore('releaseProviderRenewal'),
+    }).request(ITEMS, { headers }, notionEnv());
+
+    expect(res.status).toBe(500);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_REFRESHED_TOKEN);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Could not release the Notion renewal claim; it goes stale in 30s',
+      { userId, reason: 'D1 write failed' }
+    );
   });
 
   it('answers retry, without calling notion, while another request holds the renewal', async () => {

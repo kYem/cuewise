@@ -281,10 +281,10 @@ async function releaseClaim(store: SyncStore, userId: string, claim: RenewalClai
   try {
     await store.releaseProviderRenewal(userId, PROVIDER, claim);
   } catch (error) {
-    logger.warn('Could not release the Notion renewal claim; it goes stale in 30s', {
-      userId,
-      reason: reasonOf(error),
-    });
+    logger.warn(
+      `Could not release the Notion renewal claim; it goes stale in ${RENEWAL_STALE_MS / 1000}s`,
+      { userId, reason: reasonOf(error) }
+    );
   }
 }
 
@@ -338,13 +338,14 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   try {
     sealed = await sealGrant(grant, open.key);
   } catch (error) {
-    logger.error('Notion renewal could not be sealed; revoked the new token', {
+    // Answered here, not thrown: onError would log the runtime's message after all.
+    logger.error('Notion renewal could not be sealed; revoking the new token', {
       userId,
       reason: errorName(error),
     });
     await revokeUpstream(client, grant.accessToken, userId);
     await releaseClaim(store, userId, claimedAt);
-    throw error;
+    return problem('internal');
   }
   const { ciphertext, iv, refreshCiphertext, refreshIv } = sealed;
   let stored: boolean;
@@ -356,13 +357,13 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
       open.connection
     );
   } catch (error) {
-    logger.error('Notion renewal could not be stored; revoked the new token', error, { userId });
+    logger.error('Notion renewal could not be stored; revoking the new token', error, { userId });
     await revokeUpstream(client, grant.accessToken, userId);
     await releaseClaim(store, userId, claimedAt);
     throw error;
   }
   if (!stored) {
-    // The row was disconnected or replaced by a reconnect while this renewal ran. Same orphan.
+    // The row was disconnected or replaced by a reconnect while this renewal ran.
     await revokeUpstream(client, grant.accessToken, userId);
     if ((await store.getProviderConnection(userId, PROVIDER)) === null) {
       logger.warn('Notion grant was disconnected during renewal; revoked the new token', {

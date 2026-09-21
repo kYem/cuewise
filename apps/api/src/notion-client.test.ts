@@ -27,6 +27,14 @@ function client(handler: (url: string, init: RequestInit) => Response) {
   return createNotionClient(ENV, withFetch(handler));
 }
 
+/** A client whose every request fails before notion answers, as a bad URL or a dead network does. */
+function clientWithoutNetwork() {
+  const failingFetch = vi.fn(() =>
+    Promise.reject(new TypeError('bad url'))
+  ) as unknown as typeof fetch;
+  return createNotionClient(ENV, failingFetch);
+}
+
 function checkboxRow(id: string, done: boolean) {
   return { id, properties: { Done: { type: 'checkbox', checkbox: done } } };
 }
@@ -151,10 +159,7 @@ describe('failure classification', () => {
   });
 
   it('maps a network fault to retryable, naming the fault class but nothing sensitive', async () => {
-    const failingFetch = vi.fn(() =>
-      Promise.reject(new TypeError('bad url'))
-    ) as unknown as typeof fetch;
-    const notion = createNotionClient(ENV, failingFetch);
+    const notion = clientWithoutNetwork();
 
     const failing = notion.exchangeCode('code-secret');
 
@@ -310,10 +315,7 @@ describe('refresh and revoke', () => {
   });
 
   it('does not count a revoke that never reached notion as done', async () => {
-    const failingFetch = vi.fn(() =>
-      Promise.reject(new TypeError('bad url'))
-    ) as unknown as typeof fetch;
-    const notion = createNotionClient(ENV, failingFetch);
+    const notion = clientWithoutNetwork();
 
     const failing = notion.revokeToken('tok');
 

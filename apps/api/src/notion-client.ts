@@ -33,7 +33,7 @@ export class NotionConfigError extends Error {
 /** Notion is down, rate-limiting, unreadable, or the row changed under a write. Retryable. */
 export class NotionUnavailableError extends Error {
   override readonly name = 'NotionUnavailableError';
-  /** The status of a non-2xx answer or an unusable 2xx; null for a transport failure. */
+  /** Notion's status, or 200 for a readable answer we could not use; null for a transport fault. */
   readonly status: number | null;
   /** Seconds from the response's Retry-After, clamped; null unless a positive integer. */
   readonly retryAfter: number | null;
