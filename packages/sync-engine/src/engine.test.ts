@@ -2715,7 +2715,7 @@ describe('SyncEngine.start / stop', () => {
     await device.engine.markMutated('goals', 'g1');
     vi.spyOn(device.apiClient, 'pushChanges').mockImplementation(async () => {
       await device.engine.disableSync();
-      return { cursor: 1 };
+      return { cursor: 1, applied: [], conflicts: [] };
     });
 
     const outcome = await device.engine.syncNow();

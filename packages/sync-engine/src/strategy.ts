@@ -7,7 +7,13 @@ export interface RecordBody {
   hlc: string; // hlcEncode
 }
 
-export type Resolution = { winner: 'incoming'; body: RecordBody } | { winner: 'local' };
+/**
+ * `same` is what a device sees when its own push echoes back on the next pull; only `newer` means
+ * the server holds something older than this device and needs repairing.
+ */
+export type Resolution =
+  | { winner: 'incoming'; body: RecordBody }
+  | { winner: 'local'; reason: 'newer' | 'same' };
 
 export interface ConflictStrategy {
   // Compare an incoming decrypted body against the local one; decide who wins.
@@ -20,9 +26,13 @@ export class LwwHlcStrategy implements ConflictStrategy {
     if (local === null) {
       return { winner: 'incoming', body: incoming };
     }
-    if (hlcCompare(hlcDecode(incoming.hlc), hlcDecode(local.hlc)) > 0) {
+    const cmp = hlcCompare(hlcDecode(incoming.hlc), hlcDecode(local.hlc));
+    if (cmp > 0) {
       return { winner: 'incoming', body: incoming };
     }
-    return { winner: 'local' };
+    if (cmp === 0) {
+      return { winner: 'local', reason: 'same' };
+    }
+    return { winner: 'local', reason: 'newer' };
   }
 }

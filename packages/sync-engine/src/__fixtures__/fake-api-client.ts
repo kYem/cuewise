@@ -8,6 +8,7 @@ import type {
   ExchangeTokenRequest,
   KeyEnvelopeRecord,
   PushRecord,
+  PushResponse,
   SyncRecord,
   SyncSession,
 } from '@cuewise/shared';
@@ -67,21 +68,43 @@ export class FakeSyncServer {
     this.recoveryEnvelope = envelope;
   }
 
-  // Upsert-by-id, like the real store's push handler — a retried push is a no-op on content.
-  pushChanges(records: PushRecord[]): { cursor: number } {
+  /**
+   * Upsert-by-id with compare-and-set, like the real store: a record whose `baseSeq` is not the
+   * row's current seq is refused and comes back under `conflicts`; one without `baseSeq` overwrites.
+   */
+  pushChanges(records: PushRecord[]): PushResponse {
+    const response: PushResponse = { cursor: this.nextSeq, applied: [], conflicts: [] };
     for (const rec of records) {
       const idx = this.records.findIndex(
         (r) => r.collection === rec.collection && r.entityId === rec.entityId
       );
+      const current = idx === -1 ? undefined : this.records[idx];
+      // Like the real store: every row reserves a seq, used or not.
       this.nextSeq += 1;
-      const stored: SyncRecord = { ...rec, seq: this.nextSeq };
+      if (rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq) {
+        response.conflicts.push({ collection: rec.collection, entityId: rec.entityId, current });
+        continue;
+      }
+      const { baseSeq: _base, ...wire } = rec;
+      const stored: SyncRecord = { ...wire, seq: this.nextSeq };
       if (idx === -1) {
         this.records.push(stored);
       } else {
         this.records[idx] = stored;
       }
+      response.applied.push({
+        collection: rec.collection,
+        entityId: rec.entityId,
+        seq: this.nextSeq,
+      });
     }
-    return { cursor: this.nextSeq };
+    response.cursor = this.nextSeq;
+    return response;
+  }
+
+  /** The rows as the server holds them, for assertions about what a push did or did not change. */
+  rows(): readonly SyncRecord[] {
+    return this.records;
   }
 
   getChanges(since: number): { records: SyncRecord[]; cursor: number } {
@@ -471,7 +494,7 @@ export class FakeApiClient implements EngineApiClient {
     return this.server.getChanges(since);
   }
 
-  async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
+  async pushChanges(records: PushRecord[]): Promise<PushResponse> {
     this.callOrder.push('pushChanges');
     this.assertAuthorized();
     if (this.nextPushChangesError !== null) {

@@ -12,7 +12,7 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 |---|---|---|
 | `exchangeToken(req)` | `POST /v1/auth/token` | No |
 | `getChanges(since)` | `GET /v1/changes?since=` | Yes |
-| `pushChanges(records)` | `POST /v1/changes` | Yes |
+| `pushChanges(records)` | `POST /v1/changes` → `{cursor, applied, conflicts}` | Yes |
 | `logout()` | `POST /v1/auth/logout` | Yes |
 | `exportData()` | `GET /v1/export` | Yes |
 | `deleteAccount()` | `DELETE /v1/account` | Yes |
@@ -29,6 +29,8 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `revealPairing(id, publicKey, nonce)` | `PUT /v1/pairings/:id/reveal` | Yes |
 | `putPairingEnvelope(id, envelope)` | `PUT /v1/pairings/:id/envelope` | Yes |
 | `deletePairing(id)` | `DELETE /v1/pairings/:id` | Yes |
+
+A record's optional `baseSeq` makes its push conditional on the server row still being at that seq; refused rows come back under `conflicts` with the current row, and an older server's bare `{cursor}` is normalised to empty arrays.
 
 **Pairing key material is branded** (ENG-101). `createPairing`/`commitPairing`/`revealPairing`/`putPairingEnvelope` take `PairingCommitment` / `PairingPublicKeyB64` / `PairingNonceB64` / `PeerWrappedEnvelope` from `@cuewise/crypto` rather than `string`, and `getPairing`/`listPairings` return the same brands on `PairingForRequester`/`PendingPairing`: a swapped `revealPairing(id, nonce, publicKey)` would otherwise compile, clear the server's length checks, and be read by the approver as a substituted key. That is why the package depends on `@cuewise/crypto` at all — it imports the brands **type-only**, and still calls no crypto function and re-exports none. The brands carry positional identity only, never a validity claim, so a decode of one still needs its own guard. `pairing-brands.test.ts` fails the build if they collapse back to `string`.
 
