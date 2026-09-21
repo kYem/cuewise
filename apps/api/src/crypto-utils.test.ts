@@ -179,7 +179,7 @@ describe('encryptSecret / decryptSecret', () => {
 
   it('round-trips a token', async () => {
     const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
-    await expect(decryptSecret(ciphertext, iv, KEY)).resolves.toBe('secret-abc');
+    await expect(decryptSecret({ ciphertext, iv }, KEY)).resolves.toBe('secret-abc');
   });
 
   it('keeps the plaintext out of its own output', async () => {
@@ -197,18 +197,18 @@ describe('encryptSecret / decryptSecret', () => {
 
   it('rejects a wrong key rather than returning garbage', async () => {
     const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
-    await expect(decryptSecret(ciphertext, iv, OTHER_KEY)).rejects.toThrow();
+    await expect(decryptSecret({ ciphertext, iv }, OTHER_KEY)).rejects.toThrow();
   });
 
   it('rejects a tampered ciphertext', async () => {
     const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
     const flipped = `${ciphertext.startsWith('A') ? 'B' : 'A'}${ciphertext.slice(1)}`;
-    await expect(decryptSecret(flipped, iv, KEY)).rejects.toThrow();
+    await expect(decryptSecret({ ciphertext: flipped, iv }, KEY)).rejects.toThrow();
   });
 
   it('round-trips a token carrying non-ascii', async () => {
     const { ciphertext, iv } = await encryptSecret('naïve—token', KEY);
-    await expect(decryptSecret(ciphertext, iv, KEY)).resolves.toBe('naïve—token');
+    await expect(decryptSecret({ ciphertext, iv }, KEY)).resolves.toBe('naïve—token');
   });
 
   it('refuses a key that does not decode to 32 bytes', async () => {

@@ -89,12 +89,12 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant({ ciphertext: 'ct-1' }));
 
     await expect(
-      store.deleteProviderConnectionIfUnchanged(userId, 'notion', 'ct-other')
+      store.deleteProviderConnectionIfUnchanged(userId, 'notion', { ciphertext: 'ct-other' })
     ).resolves.toBe(false);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
-    await expect(store.deleteProviderConnectionIfUnchanged(userId, 'notion', 'ct-1')).resolves.toBe(
-      true
-    );
+    await expect(
+      store.deleteProviderConnectionIfUnchanged(userId, 'notion', { ciphertext: 'ct-1' })
+    ).resolves.toBe(true);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -116,7 +116,66 @@ describe('provider connections', () => {
         'notion',
         grant({ refreshCiphertext: 'r-ct', refreshIv: null })
       )
-    ).rejects.toThrow();
+    ).rejects.toThrow(/CHECK constraint/);
+    await expect(
+      store.putProviderGrant(
+        userId,
+        'notion',
+        grant({ refreshCiphertext: null, refreshIv: 'r-iv' })
+      )
+    ).rejects.toThrow(/CHECK constraint/);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('takeProviderConnection returns the row it deleted, and null when there was none', async () => {
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
+
+    await expect(store.takeProviderConnection(userId, 'notion')).resolves.toEqual(
+      connection(REFRESH_PAIR)
+    );
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+    await expect(store.takeProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('hands the renewal claim to one caller until it is released', async () => {
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
+
+    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(true);
+    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(false);
+    await store.releaseProviderRenewal(userId, 'notion');
+    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(true);
+  });
+
+  it('lets a stale renewal claim be taken over, so a crashed renewal cannot block forever', async () => {
+    const { store: clocked, tick } = clockedStore(1_000_000);
+    const clockedUser = await newUser(clocked, 'provider-tokens-renewal');
+    await clocked.putProviderGrant(clockedUser, 'notion', grant(REFRESH_PAIR));
+    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', 30_000)).resolves.toBe(true);
+
+    tick(29_000);
+    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', 30_000)).resolves.toBe(false);
+    tick(2_000);
+    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', 30_000)).resolves.toBe(true);
+  });
+
+  it('updateProviderTokens releases the renewal claim with the tokens it stores', async () => {
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
+    await store.claimProviderRenewal(userId, 'notion', 30_000);
+
+    await expect(
+      store.updateProviderTokens(userId, 'notion', {
+        ciphertext: 'ct-2',
+        iv: 'iv-2',
+        refreshCiphertext: null,
+        refreshIv: null,
+      })
+    ).resolves.toBe(true);
+
+    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(true);
+  });
+
+  it('claimProviderRenewal answers false for an account with no grant', async () => {
+    await expect(store.claimProviderRenewal(userId, 'notion', 30_000)).resolves.toBe(false);
   });
 
   it('treats deleting an absent connection as a no-op', async () => {

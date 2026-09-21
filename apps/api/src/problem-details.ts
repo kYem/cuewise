@@ -15,14 +15,14 @@ const PROBLEM_DEFS = {
   pairing_not_found: { status: 404, title: 'No such pairing request.' },
   pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },
   provider_not_connected: { status: 404, title: 'No connection for that provider.' },
-  // Distinct from `invalid_token`, which is about the caller's own Cuewise session: here the
-  // session is fine and the third-party grant is what died, so the client must reconnect that
-  // provider rather than sign in again.
+  // Not `invalid_token`: the session is fine, the third-party grant died — reconnect that, not sign in.
   provider_reauth_required: { status: 401, title: 'The provider connection is no longer valid.' },
   provider_schema_unusable: {
     status: 422,
     title: 'That table has no status with a Complete group, and no Done checkbox.',
   },
+  // The user's Notion access to the table is read-only; the token acts as the user.
+  provider_write_forbidden: { status: 403, title: "You can't edit that table in Notion." },
   // The table is usable for reading and completing; only "not done" has nowhere to go.
   provider_todo_group_missing: {
     status: 422,

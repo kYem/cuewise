@@ -22,7 +22,7 @@ export const PAGE_SIZE = 100;
 export const MAX_QUERY_PAGES = 5;
 
 // Each sets `name` so a log line can tell them apart; `extends Error {}` alone reports "Error".
-/** The user's grant is unusable — revoked, expired, or never valid. The route answers 401. */
+/** The user's grant is unusable — revoked, expired, or never valid. */
 export class NotionAuthError extends Error {
   override readonly name = 'NotionAuthError';
 }
@@ -33,20 +33,26 @@ export class NotionConfigError extends Error {
 /** Notion is down, rate-limiting, unreadable, or the row changed under a write. Retryable, not ours. */
 export class NotionUnavailableError extends Error {
   override readonly name = 'NotionUnavailableError';
+  /** The HTTP status, or null when no response arrived. */
+  readonly status: number | null;
   /** Seconds, from a 429's Retry-After; null when Notion named none. */
   readonly retryAfter: number | null;
 
-  constructor(message: string, retryAfter: number | null = null) {
+  constructor(
+    message: string,
+    details: { status?: number | null; retryAfter?: number | null } = {}
+  ) {
     super(message);
-    this.retryAfter = retryAfter;
+    this.status = details.status ?? null;
+    this.retryAfter = details.retryAfter ?? null;
   }
 }
-/** The table or page is gone or un-shared. Not retryable; the user re-picks or moves on. */
+/** The table or page is gone, un-shared, or not the user's to write. The user re-picks or moves on. */
 export class NotionResourceError extends Error {
   override readonly name = 'NotionResourceError';
-  readonly status: number;
+  readonly status: 403 | 404;
 
-  constructor(status: number, message: string) {
+  constructor(status: 403 | 404, message: string) {
     super(message);
     this.status = status;
   }
@@ -82,13 +88,9 @@ export interface NotionClient {
   exchangeCode(code: string): Promise<NotionGrant>;
   /** Trades a refresh token for a fresh grant; Notion issues a new refresh token with it. */
   refreshGrant(refreshToken: string): Promise<NotionGrant>;
-  /** Best-effort: tells Notion to forget the grant, so disconnecting is not just local. */
+  /** Tells Notion to forget the grant, so disconnecting is not just local. */
   revokeToken(accessToken: string): Promise<void>;
-  /**
-   * The tables the user shared during consent. Needed because the token response names none of
-   * them — page access is granted in Notion's own UI, so candidates are only discoverable after
-   * the grant exists. This is what makes connecting two phases rather than one.
-   */
+  /** The tables shared with the integration; the token response names none, so this is a second phase. */
   searchDataSources(accessToken: string): Promise<NotionDataSource[]>;
   getPropertySchemas(accessToken: string, dataSourceId: string): Promise<PropertySchemas>;
   queryRows(
@@ -102,8 +104,8 @@ export interface NotionClient {
 type NotionEnv = Pick<Env, 'NOTION_CLIENT_ID' | 'NOTION_CLIENT_SECRET' | 'PUBLIC_BASE_URL'>;
 
 /**
- * Classifies a failure by shape, never by content: no message here may carry the code, the
- * access token or the client secret, since these reach the logger.
+ * Classifies a failure by shape, never by content: no message here may carry the authorization
+ * code, the access token or the client secret, since these reach the logger.
  */
 function classify(status: number, body: unknown, retryAfter: number | null): Error {
   const record = asRecord(body) ?? {};
@@ -121,8 +123,8 @@ function classify(status: number, body: unknown, retryAfter: number | null): Err
   if (status === 403 || status === 404) {
     return new NotionResourceError(status, `notion resource unreachable (${status}, ${code})`);
   }
-  // validation_error (schema drift under a write) and a 409 collision are Notion's retryable 4xx;
-  // any other is a request only we could have malformed (Notion-Version, invalid_json).
+  // 409 is Notion's retryable collision; validation_error is retryable by our policy, since a
+  // property renamed under a write causes it. Any other 4xx is a request only we could have malformed.
   if (
     status >= 400 &&
     status < 500 &&
@@ -132,12 +134,18 @@ function classify(status: number, body: unknown, retryAfter: number | null): Err
   ) {
     return new NotionConfigError(`notion rejected our request (${status}, ${code})`);
   }
-  return new NotionUnavailableError(`notion answered ${status} (${code})`, retryAfter);
+  return new NotionUnavailableError(`notion answered ${status} (${code})`, { status, retryAfter });
 }
+
+// Clamped: an absurd upstream value would reach the client as a malformed header.
+const MAX_RETRY_AFTER_SECONDS = 3600;
 
 function retryAfterOf(response: Response): number | null {
   const seconds = Number(response.headers.get('Retry-After'));
-  return Number.isInteger(seconds) && seconds > 0 ? seconds : null;
+  if (!Number.isInteger(seconds) || seconds <= 0) {
+    return null;
+  }
+  return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
 }
 
 export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fetch): NotionClient {
@@ -158,8 +166,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (error) {
-      // error.name separates a timeout from a DNS fault from a TypeError we caused; none of
-      // those carry a secret. weather.ts logs the same field for the same reason.
+      // error.name separates a timeout from a DNS fault from a TypeError we caused; none carry a secret.
       const name = error instanceof Error ? error.name : 'unknown';
       throw new NotionUnavailableError(`notion request did not complete (${name})`);
     }
@@ -196,6 +203,17 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       }
       throw error;
     }
+  }
+
+  async function isInTrash(path: string, accessToken: string): Promise<boolean> {
+    let page: unknown;
+    try {
+      page = await call(path, `Bearer ${accessToken}`);
+    } catch {
+      return false;
+    }
+    const record = asRecord(page);
+    return record !== null && (record.in_trash === true || record.archived === true);
   }
 
   function basicAuth(): string {
@@ -260,15 +278,12 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       if (!Array.isArray(results)) {
         throw new NotionUnavailableError('notion search answered without a results array');
       }
-      // Verified against the live API (2026-09-11): results carry a string `id`, a rich-text
-      // `title[].plain_text`, and `in_trash`.
       return results.flatMap((entry) => {
         const item = asRecord(entry);
         if (item === null || typeof item.id !== 'string') {
           return [];
         }
-        // Search returns trashed tables too; offering one would let someone connect a table
-        // that is on its way to deletion.
+        // Defensive: a table on its way to deletion must not be offered.
         if (item.in_trash === true) {
           return [];
         }
@@ -337,16 +352,22 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         write.kind === 'checkbox'
           ? { [write.name]: { checkbox: write.checkbox } }
           : { [write.name]: { status: { id: write.optionId } } };
+      const path = `/pages/${encodeURIComponent(pageId)}`;
       try {
-        await call(`/pages/${encodeURIComponent(pageId)}`, `Bearer ${accessToken}`, {
+        await call(path, `Bearer ${accessToken}`, {
           method: 'PATCH',
           body: JSON.stringify({ properties: value }),
         });
       } catch (error) {
-        // A page that was just read cannot be un-shared for writing only: a 403 on the write is
-        // our integration's update capability, which no re-pick can fix.
-        if (error instanceof NotionResourceError && error.status === 403) {
-          throw new NotionConfigError(`notion refused the write (${error.message})`);
+        // A write to a trashed page answers 400, not 404. Looking once turns a stale list's toggle
+        // into "that page is gone" rather than an outage the client retries.
+        if (error instanceof NotionUnavailableError && error.status === 400) {
+          if (await isInTrash(path, accessToken)) {
+            throw new NotionResourceError(
+              404,
+              'notion page is in the trash (400, validation_error)'
+            );
+          }
         }
         throw error;
       }

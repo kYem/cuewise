@@ -1,5 +1,3 @@
-// Pure property-shape reading, so the schema logic is testable without a network.
-
 // Notion files status options into named groups. The GROUP name is the contract, not the option
 // names: a user whose Complete group holds "Shipped" and "Archived" needs no configuration.
 const COMPLETE_GROUP = 'Complete';
@@ -23,9 +21,8 @@ export type CompletionWrite =
   | { kind: 'checkbox'; name: string; checkbox: boolean }
   | { kind: 'status'; name: string; optionId: string };
 
-// A page's property VALUES (`status: {id}`), as opposed to a data source's property SCHEMAS
-// (`status: {options, groups}`). Same outer shape, different contents — the brand keeps
-// findCompletionProperty from being handed a page by mistake.
+// A page's property VALUES (`status: {id}`) and a data source's property SCHEMAS (`status:
+// {options, groups}`) share an outer shape; the brand keeps a page out of findCompletionProperty.
 export type PropertySchemas = Record<string, unknown> & { readonly __brand: 'PropertySchemas' };
 export type PropertyValues = Record<string, unknown> & { readonly __brand: 'PropertyValues' };
 
@@ -74,11 +71,8 @@ function groupOptionIds(groups: unknown, groupName: string): string[] {
   return [];
 }
 
-/**
- * A status property always wins, and a status property whose groups do not match refuses rather
- * than falling through: a renamed or localized Complete group would otherwise read completion
- * from an unused checkbox — every task not-done, every write invisible — with no prompt.
- */
+// A status property whose groups do not match refuses rather than falling through: a renamed
+// Complete group would otherwise read completion from an unused checkbox, with no prompt.
 export function findCompletionProperty(properties: PropertySchemas): CompletionProperty | null {
   let sawStatus = false;
   for (const [name, value] of Object.entries(properties)) {

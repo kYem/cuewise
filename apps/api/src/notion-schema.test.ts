@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { asSchemas, checkboxSchema, noTodoStatusSchema } from './__fixtures__/notion.fixtures';
+import {
+  asSchemas,
+  checkboxSchema,
+  noTodoStatusSchema,
+  statusSchema,
+} from './__fixtures__/notion.fixtures';
 import {
   type CompletionProperty,
   completionWrite,
@@ -9,27 +14,6 @@ import {
   type PropertyValues,
   rowTitle,
 } from './notion-schema';
-
-// Complete group holds custom option names, so a name match on the options would fail.
-const statusSchema = asSchemas({
-  Status: {
-    id: 'p1',
-    type: 'status',
-    status: {
-      options: [
-        { id: 'o1', name: 'Not started', color: 'default' },
-        { id: 'o2', name: 'In progress', color: 'blue' },
-        { id: 'o3', name: 'Shipped', color: 'green' },
-        { id: 'o4', name: 'Archived', color: 'gray' },
-      ],
-      groups: [
-        { id: 'g1', name: 'To-do', color: 'default', option_ids: ['o1'] },
-        { id: 'g2', name: 'In Progress', color: 'blue', option_ids: ['o2'] },
-        { id: 'g3', name: 'Complete', color: 'green', option_ids: ['o3', 'o4'] },
-      ],
-    },
-  },
-});
 
 function page(properties: Record<string, unknown>): NotionPage {
   return { id: 'pg1', properties: properties as PropertyValues };
@@ -44,6 +28,18 @@ function statusProperty(schema = statusSchema): CompletionProperty {
 }
 
 describe('findCompletionProperty', () => {
+  it('ignores a Done property that is not a checkbox', () => {
+    expect(
+      findCompletionProperty(asSchemas({ Done: { type: 'rich_text', rich_text: {} } }))
+    ).toBeNull();
+  });
+
+  it('refuses the checkbox fallback when a status property has no readable body', () => {
+    expect(
+      findCompletionProperty(asSchemas({ Status: { type: 'status' }, ...checkboxSchema }))
+    ).toBeNull();
+  });
+
   it('reads completion from the Complete group rather than option names', () => {
     expect(findCompletionProperty(statusSchema)).toEqual({
       kind: 'status',

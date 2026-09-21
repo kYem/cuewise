@@ -188,10 +188,13 @@ async function importSecretKey(rawKey: string): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-export async function encryptSecret(
-  plaintext: string,
-  rawKey: string
-): Promise<{ ciphertext: string; iv: string }> {
+/** One AES-GCM seal: the ciphertext and the IV it was sealed with, which only mean anything together. */
+export interface SealedSecret {
+  readonly ciphertext: string;
+  readonly iv: string;
+}
+
+export async function encryptSecret(plaintext: string, rawKey: string): Promise<SealedSecret> {
   const key = await importSecretKey(rawKey);
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const sealed = await crypto.subtle.encrypt(
@@ -202,16 +205,12 @@ export async function encryptSecret(
   return { ciphertext: base64UrlEncode(new Uint8Array(sealed)), iv: base64UrlEncode(iv) };
 }
 
-export async function decryptSecret(
-  ciphertext: string,
-  iv: string,
-  rawKey: string
-): Promise<string> {
+export async function decryptSecret(sealed: SealedSecret, rawKey: string): Promise<string> {
   const key = await importSecretKey(rawKey);
   const opened = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64UrlDecodeBytes(iv) },
+    { name: 'AES-GCM', iv: base64UrlDecodeBytes(sealed.iv) },
     key,
-    base64UrlDecodeBytes(ciphertext)
+    base64UrlDecodeBytes(sealed.ciphertext)
   );
   return decoder.decode(opened);
 }

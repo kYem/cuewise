@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { vi } from 'vitest';
 import { decryptSecret, encryptSecret, sha256Base64Url } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
+import type { Env } from '../env';
 import type { NotionClient } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
 import type { AuthCodePayload, SealedGrant, SealedTokens, SyncStore } from '../store';
@@ -27,17 +28,22 @@ export function asSchemas(value: Record<string, unknown>): PropertySchemas {
 
 export const checkboxSchema = asSchemas({ Done: { id: 'p', type: 'checkbox', checkbox: {} } });
 
+/** The Complete group holds custom option names, so a name match on options would fail. */
 export const statusSchema = asSchemas({
   Status: {
+    id: 'p1',
     type: 'status',
     status: {
       options: [
-        { id: 'o1', name: 'Not started' },
-        { id: 'o3', name: 'Shipped' },
+        { id: 'o1', name: 'Not started', color: 'default' },
+        { id: 'o2', name: 'In progress', color: 'blue' },
+        { id: 'o3', name: 'Shipped', color: 'green' },
+        { id: 'o4', name: 'Archived', color: 'gray' },
       ],
       groups: [
-        { id: 'g1', name: 'To-do', option_ids: ['o1'] },
-        { id: 'g3', name: 'Complete', option_ids: ['o3'] },
+        { id: 'g1', name: 'To-do', color: 'default', option_ids: ['o1'] },
+        { id: 'g2', name: 'In Progress', color: 'blue', option_ids: ['o2'] },
+        { id: 'g3', name: 'Complete', color: 'green', option_ids: ['o3', 'o4'] },
       ],
     },
   },
@@ -57,7 +63,7 @@ export const noTodoStatusSchema = asSchemas({
   },
 });
 
-export function notionEnv(overrides: Record<string, string> = {}): typeof env {
+export function notionEnv(overrides: Partial<Env> = {}): typeof env {
   return {
     ...env,
     PROVIDER_TOKEN_KEY: TEST_PROVIDER_KEY,
@@ -170,13 +176,12 @@ export async function storedNotionTokens(
   if (stored === null) {
     throw new Error('expected a stored Notion grant');
   }
-  const accessToken = await decryptSecret(stored.ciphertext, stored.iv, TEST_PROVIDER_KEY);
+  const accessToken = await decryptSecret(stored, TEST_PROVIDER_KEY);
   if (stored.refreshCiphertext === null || stored.refreshIv === null) {
     return { accessToken, refreshToken: null };
   }
   const refreshToken = await decryptSecret(
-    stored.refreshCiphertext,
-    stored.refreshIv,
+    { ciphertext: stored.refreshCiphertext, iv: stored.refreshIv },
     TEST_PROVIDER_KEY
   );
   return { accessToken, refreshToken };

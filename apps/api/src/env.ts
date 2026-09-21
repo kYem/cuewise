@@ -13,7 +13,7 @@ export interface Env {
   // Secret (wrangler secret put), 32 bytes base64url; seals third-party provider tokens at rest.
   PROVIDER_TOKEN_KEY: string;
   NOTION_CLIENT_ID: string;
-  // Secret (wrangler secret put) — Notion is a confidential client, so the exchange is server-side.
+  // Secret (wrangler secret put) — a Notion integration is a confidential client, so the exchange is server-side.
   NOTION_CLIENT_SECRET: string;
   DEV_FAKE_AUTH?: string;
   // Comma-separated browser origins allowed CORS access (e.g. the future web app).

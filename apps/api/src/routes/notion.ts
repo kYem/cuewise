@@ -6,6 +6,7 @@ import {
   encryptSecret,
   isSecretKey,
   randomToken,
+  type SealedSecret,
   sha256Base64Url,
   signState,
   verifyState,
@@ -43,8 +44,6 @@ const NOTION_ID_RE =
 
 /** Sanitized vocabulary for the deep link; nothing attacker-shaped rides back to the app. */
 type ConnectOutcome = 'access_denied' | 'connect_failed' | 'server_error';
-
-type SealedSecret = Pick<SealedGrant, 'ciphertext' | 'iv'>;
 
 function returnWithCode(returnUri: string, code: string): Response {
   const target = new URL(returnUri);
@@ -95,11 +94,7 @@ async function revokeUpstream(
   try {
     await client.revokeToken(accessToken);
   } catch (error) {
-    if (
-      error instanceof NotionAuthError ||
-      error instanceof NotionUnavailableError ||
-      error instanceof NotionResourceError
-    ) {
+    if (error instanceof NotionAuthError || error instanceof NotionUnavailableError) {
       logger.warn('Could not revoke a Notion grant upstream', { userId, reason: reasonOf(error) });
       return;
     }
@@ -108,12 +103,12 @@ async function revokeUpstream(
   }
 }
 
-/** `revokeUpstream` for a stored grant; one that cannot be opened is logged and skipped. */
+/** `revokeUpstream` for a sealed grant; one that cannot be opened is logged and skipped. */
 async function revokeSealed(
   client: NotionClient,
   sealed: SealedSecret,
   env: Env,
-  userId: string
+  userId: string | null
 ): Promise<void> {
   const key = env.PROVIDER_TOKEN_KEY;
   if (!isSecretKey(key)) {
@@ -124,7 +119,7 @@ async function revokeSealed(
   }
   let accessToken: string;
   try {
-    accessToken = await decryptSecret(sealed.ciphertext, sealed.iv, key);
+    accessToken = await decryptSecret(sealed, key);
   } catch (error) {
     // A rotated key is systemic, and the token this row held stays live at Notion.
     logger.error('Could not decrypt a Notion grant to revoke it upstream', {
@@ -136,18 +131,27 @@ async function revokeSealed(
   await revokeUpstream(client, accessToken, userId);
 }
 
-/** For account deletion: the row goes with the user, but Notion should forget the grant too. */
+/** For account deletion: takes the row before the user goes, so Notion forgets exactly that token. */
 export async function revokeNotionGrant(
   store: SyncStore,
   client: NotionClient,
   env: Env,
   userId: string
 ): Promise<void> {
-  const existing = await store.getProviderConnection(userId, PROVIDER);
-  if (existing === null) {
+  const removed = await store.takeProviderConnection(userId, PROVIDER);
+  if (removed === null) {
     return;
   }
-  await revokeSealed(client, existing, env, userId);
+  await revokeSealed(client, removed, env, userId);
+}
+
+/** A parked grant that can never be claimed — its code is burned — must not stay live at Notion. */
+export async function revokeParkedGrant(
+  client: NotionClient,
+  grant: SealedGrant,
+  env: Env
+): Promise<void> {
+  await revokeSealed(client, grant, env, null);
 }
 
 async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> {
@@ -189,7 +193,7 @@ async function openGrant(
   }
   let accessToken: string;
   try {
-    accessToken = await decryptSecret(connection.ciphertext, connection.iv, key);
+    accessToken = await decryptSecret(connection, key);
   } catch (error) {
     logger.error('Stored Notion grant does not decrypt under the current key', {
       userId,
@@ -200,11 +204,8 @@ async function openGrant(
   return { store, client, userId, key, connection, accessToken };
 }
 
-/**
- * Maps a provider failure onto the error contract. An auth fault drops the grant, but only if the
- * row still holds the token this request used: a concurrent request may have renewed it, and
- * the loser of that race must not delete the winner's working grant.
- */
+// Maps a provider failure onto the error contract. An auth fault drops the grant only while the
+// row still holds the token this request used: the loser of a renewal race must not delete the winner's.
 async function providerProblem(
   error: unknown,
   open: OpenGrant,
@@ -212,11 +213,7 @@ async function providerProblem(
 ): Promise<Response> {
   const { store, userId } = open;
   if (error instanceof NotionAuthError) {
-    const dropped = await store.deleteProviderConnectionIfUnchanged(
-      userId,
-      PROVIDER,
-      used.ciphertext
-    );
+    const dropped = await store.deleteProviderConnectionIfUnchanged(userId, PROVIDER, used);
     if (dropped) {
       logger.warn('Dropped the Notion grant after an auth fault', {
         userId,
@@ -227,6 +224,10 @@ async function providerProblem(
     const current = await store.getProviderConnection(userId, PROVIDER);
     if (current === null) {
       // Disconnected mid-request: nothing to drop, and "reconnect" would be the wrong prompt.
+      logger.warn('Notion auth fault on a grant already disconnected', {
+        userId,
+        reason: error.message,
+      });
       return problem('provider_not_connected');
     }
     logger.warn('Notion grant was renewed by a concurrent request; not dropping it', {
@@ -267,12 +268,18 @@ interface RefreshPair {
   readonly refreshIv: string;
 }
 
+// A renewal that has not stored a result within this long is taken to have crashed.
+const RENEWAL_STALE_MS = 30_000;
+
 /** Trades the stored refresh token for a new grant and persists it — tokens only, never the row. */
 async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<RenewedGrant | Response> {
   const { userId, client, store } = open;
   let refreshToken: string;
   try {
-    refreshToken = await decryptSecret(refresh.refreshCiphertext, refresh.refreshIv, open.key);
+    refreshToken = await decryptSecret(
+      { ciphertext: refresh.refreshCiphertext, iv: refresh.refreshIv },
+      open.key
+    );
   } catch (error) {
     // The access token opened under this key moments ago, so the row is inconsistent and will stay
     // so: only a reconnect fixes it, and 500s would never prompt one.
@@ -281,6 +288,15 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
       reason: errorName(error),
     });
     return problem('provider_reauth_required');
+  }
+  const claimed = await store.claimProviderRenewal(userId, PROVIDER, RENEWAL_STALE_MS);
+  if (!claimed) {
+    if ((await store.getProviderConnection(userId, PROVIDER)) === null) {
+      logger.warn('Notion grant was disconnected before renewal', { userId });
+      return problem('provider_not_connected');
+    }
+    // Another request is renewing; Notion would answer our stale refresh token with invalid_grant.
+    return problem('upstream_unavailable', { detail: 'Please retry.' });
   }
   let grant: NotionGrant | null = null;
   let sealed: SealedGrant;
@@ -292,6 +308,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
       // Minted but never stored: nobody holds this token, so do not leave it live.
       await revokeUpstream(client, grant.accessToken, userId);
     }
+    await store.releaseProviderRenewal(userId, PROVIDER);
     // Named separately from the primary call's fault: an operator must be able to see that
     // renewal is what keeps failing.
     logger.warn('Notion grant renewal failed', { userId, reason: reasonOf(error) });
@@ -314,6 +331,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   if (!stored) {
     // Disconnected mid-request. Same orphan, different cause.
     await revokeUpstream(client, grant.accessToken, userId);
+    logger.warn('Notion grant was disconnected during renewal; revoked the new token', { userId });
     return problem('provider_not_connected');
   }
   return { accessToken: grant.accessToken, ciphertext };
@@ -326,11 +344,8 @@ function refreshPair(connection: ProviderConnection): RefreshPair | null {
   return { refreshCiphertext: connection.refreshCiphertext, refreshIv: connection.refreshIv };
 }
 
-/**
- * Runs one Notion call, renewing the grant once on an auth fault when a refresh token is held
- * (Notion documents no expires_in, so a 401 is the only signal a grant expired). Every provider
- * failure is answered here; anything else propagates to onError as a 500.
- */
+// Runs one Notion call, renewing the grant once on an auth fault when a refresh token is held.
+// Every provider failure is answered here; anything else propagates to onError as a 500.
 async function withFreshToken<T>(
   open: OpenGrant,
   attempt: (accessToken: string) => Promise<T>
@@ -362,7 +377,7 @@ function invalidId(pointer: string): Response {
   });
 }
 
-type WriteOutcome = 'written' | 'unusable' | 'no_todo_group' | 'page_gone';
+type WriteOutcome = 'written' | 'unusable' | 'no_todo_group' | 'page_gone' | 'write_forbidden';
 
 export function registerNotionRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
@@ -439,14 +454,15 @@ export function registerNotionRoutes(
       if (denied === 'access_denied') {
         return returnWithError(state.returnUri, 'access_denied');
       }
-      // temporarily_unavailable / server_error are the OAuth outage codes; anything else is a
-      // fault in our authorize URL or integration config. Neither is a user cancel.
+      // temporarily_unavailable / server_error are the OAuth outage codes; any other OAuth code is
+      // a fault in our authorize URL or integration config. Neither is a user cancel.
       if (denied === 'temporarily_unavailable' || denied === 'server_error') {
         logger.warn('Notion authorize step unavailable', { error: denied });
+      } else if (ERROR_CODE_RE.test(denied)) {
+        logger.error('Notion authorize step failed', { error: denied });
       } else {
-        logger.error('Notion authorize step failed', {
-          error: ERROR_CODE_RE.test(denied) ? denied : 'unrecognised',
-        });
+        // Anyone holding a session can mint a state and hit this with any string; not our fault.
+        logger.warn('Notion authorize step failed', { error: 'unrecognised' });
       }
       return returnWithError(state.returnUri, 'server_error');
     }
@@ -513,20 +529,21 @@ export function registerNotionRoutes(
       logger.warn('Notion claim with an unknown, expired, or already-used code', { userId });
       return problem('invalid_token');
     }
-    // Burned before verifying, like the sign-in bounces: a wrong verifier kills the code.
-    if ((await sha256Base64Url(codeVerifier)) !== consumed.codeChallenge) {
-      logger.warn('Notion claim failed the PKCE verifier check', { userId });
-      return problem('invalid_token');
-    }
     if (consumed.payload.provider !== PROVIDER) {
       logger.warn('Notion claim presented a sign-in code', { userId });
       return problem('invalid_token');
     }
     const grant = consumed.payload.grant;
+    // Burned before verifying, like the sign-in bounces: a wrong verifier kills the code, and the
+    // grant it parked can never be claimed now, so it must not stay live at Notion.
+    if ((await sha256Base64Url(codeVerifier)) !== consumed.codeChallenge) {
+      logger.warn('Notion claim failed the PKCE verifier check', { userId });
+      await revokeParkedGrant(client(c.env), grant, c.env);
+      return problem('invalid_token');
+    }
     try {
-      // Keeps an already-chosen table: sharing one more page must not un-pick it. A previous grant
-      // is overwritten, not revoked: Notion does not say whether revoke acts per token or per bot,
-      // so revoking it could kill the grant being claimed. Verify live before changing that.
+      // A previous grant is overwritten, not revoked: Notion does not say whether revoke acts per
+      // token or per bot, so revoking it could kill the grant being claimed. Verify live first.
       await store.putProviderGrant(userId, PROVIDER, grant);
     } catch (error) {
       // The code is already burned, so this grant can never be claimed again. Revoke it rather
@@ -650,14 +667,14 @@ export function registerNotionRoutes(
       try {
         await grant.client.setCompletion(token, pageId, write);
       } catch (error) {
-        // A 404 on the PAGE means that row is gone — not the table. Sending the user back to
-        // the picker for a task someone just deleted would un-pick a good table.
+        // On the PAGE, not the table: a 404 is a row someone deleted, a 403 is a table the user
+        // can read but not edit (the token acts as the user). Neither should un-pick a good table.
         if (error instanceof NotionResourceError) {
-          logger.warn('Notion page is gone; not writing', {
+          logger.warn('Notion refused the page write', {
             userId: grant.userId,
             reason: error.message,
           });
-          return 'page_gone';
+          return error.status === 404 ? 'page_gone' : 'write_forbidden';
         }
         throw error;
       }
@@ -675,6 +692,9 @@ export function registerNotionRoutes(
     if (outcome === 'page_gone') {
       return problem('not_found', { detail: 'That task no longer exists in Notion.' });
     }
+    if (outcome === 'write_forbidden') {
+      return problem('provider_write_forbidden');
+    }
     return c.body(null, 204);
   });
 
@@ -683,12 +703,11 @@ export function registerNotionRoutes(
   app.delete('/v1/integrations/notion', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
-    const existing = await store.getProviderConnection(userId, PROVIDER);
-    if (existing === null) {
+    const removed = await store.takeProviderConnection(userId, PROVIDER);
+    if (removed === null) {
       return problem('provider_not_connected');
     }
-    await revokeSealed(client(c.env), existing, c.env, userId);
-    await store.deleteProviderConnection(userId, PROVIDER);
+    await revokeSealed(client(c.env), removed, c.env, userId);
     return c.body(null, 204);
   });
 }

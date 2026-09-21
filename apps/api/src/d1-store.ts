@@ -51,6 +51,31 @@ export interface D1SyncStoreLimits {
   changesPageSize?: number;
 }
 
+const PROVIDER_CONNECTION_COLUMNS =
+  'provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id';
+
+interface ProviderConnectionRow {
+  provider: string;
+  ciphertext: string;
+  iv: string;
+  refresh_ciphertext: string | null;
+  refresh_iv: string | null;
+  workspace: string | null;
+  data_source_id: string | null;
+}
+
+function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
+  return {
+    provider: row.provider,
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    refreshCiphertext: row.refresh_ciphertext,
+    refreshIv: row.refresh_iv,
+    workspace: row.workspace,
+    dataSourceId: row.data_source_id,
+  };
+}
+
 export class D1SyncStore implements SyncStore {
   private maxRecordsPerUser: number;
   private changesPageSize: number;
@@ -483,31 +508,51 @@ export class D1SyncStore implements SyncStore {
   ): Promise<ProviderConnection | null> {
     const row = await this.db
       .prepare(
-        `SELECT provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id
-           FROM provider_tokens WHERE user_id = ? AND provider = ?`
+        `SELECT ${PROVIDER_CONNECTION_COLUMNS} FROM provider_tokens WHERE user_id = ? AND provider = ?`
       )
       .bind(userId, provider)
-      .first<{
-        provider: string;
-        ciphertext: string;
-        iv: string;
-        refresh_ciphertext: string | null;
-        refresh_iv: string | null;
-        workspace: string | null;
-        data_source_id: string | null;
-      }>();
-    if (row === null) {
-      return null;
-    }
-    return {
-      provider: row.provider,
-      ciphertext: row.ciphertext,
-      iv: row.iv,
-      refreshCiphertext: row.refresh_ciphertext,
-      refreshIv: row.refresh_iv,
-      workspace: row.workspace,
-      dataSourceId: row.data_source_id,
-    };
+      .first<ProviderConnectionRow>();
+    return row === null ? null : toProviderConnection(row);
+  }
+
+  async takeProviderConnection(
+    userId: string,
+    provider: string
+  ): Promise<ProviderConnection | null> {
+    const row = await this.db
+      .prepare(
+        `DELETE FROM provider_tokens WHERE user_id = ? AND provider = ?
+         RETURNING ${PROVIDER_CONNECTION_COLUMNS}`
+      )
+      .bind(userId, provider)
+      .first<ProviderConnectionRow>();
+    return row === null ? null : toProviderConnection(row);
+  }
+
+  async claimProviderRenewal(
+    userId: string,
+    provider: string,
+    staleAfterMs: number
+  ): Promise<boolean> {
+    const now = this.now();
+    const res = await this.db
+      .prepare(
+        `UPDATE provider_tokens SET renewal_started_at = ?
+          WHERE user_id = ? AND provider = ?
+            AND (renewal_started_at IS NULL OR renewal_started_at < ?)`
+      )
+      .bind(now, userId, provider, now - staleAfterMs)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async releaseProviderRenewal(userId: string, provider: string): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE provider_tokens SET renewal_started_at = NULL WHERE user_id = ? AND provider = ?'
+      )
+      .bind(userId, provider)
+      .run();
   }
 
   async updateProviderTokens(
@@ -520,7 +565,8 @@ export class D1SyncStore implements SyncStore {
         `UPDATE provider_tokens
             SET ciphertext = ?, iv = ?,
                 refresh_ciphertext = COALESCE(?, refresh_ciphertext),
-                refresh_iv = COALESCE(?, refresh_iv)
+                refresh_iv = COALESCE(?, refresh_iv),
+                renewal_started_at = NULL
           WHERE user_id = ? AND provider = ?`
       )
       .bind(
@@ -585,11 +631,11 @@ export class D1SyncStore implements SyncStore {
   async deleteProviderConnectionIfUnchanged(
     userId: string,
     provider: string,
-    ciphertext: string
+    used: { readonly ciphertext: string }
   ): Promise<boolean> {
     const res = await this.db
       .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ? AND ciphertext = ?')
-      .bind(userId, provider, ciphertext)
+      .bind(userId, provider, used.ciphertext)
       .run();
     return (res.meta.changes ?? 0) > 0;
   }

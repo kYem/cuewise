@@ -501,12 +501,15 @@ describe('queryRows', () => {
 });
 
 describe('setCompletion', () => {
-  it('treats a 403 on the write as our update capability, since the page was just read', async () => {
+  it('keeps a 403 on the write as a resource fault carrying its status — the user may lack edit access', async () => {
     const notion = client(() => Response.json({ code: 'restricted_resource' }, { status: 403 }));
 
-    await expect(
-      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
-    ).rejects.toBeInstanceOf(NotionConfigError);
+    const error = await notion
+      .setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(NotionResourceError);
+    expect((error as NotionResourceError).status).toBe(403);
   });
 
   it('keeps a 404 on the write as the page being gone', async () => {
@@ -515,6 +518,53 @@ describe('setCompletion', () => {
     await expect(
       notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
     ).rejects.toBeInstanceOf(NotionResourceError);
+  });
+
+  it('answers a write to a trashed page as the page being gone, after one look', async () => {
+    const calls: string[] = [];
+    const notion = client((url, init) => {
+      calls.push(`${init.method ?? 'GET'} ${url}`);
+      if (init.method === 'PATCH') {
+        return Response.json({ code: 'validation_error' }, { status: 400 });
+      }
+      return Response.json({ object: 'page', id: 'pg1', in_trash: true });
+    });
+
+    const error = await notion
+      .setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(NotionResourceError);
+    expect((error as NotionResourceError).status).toBe(404);
+    expect(calls).toEqual([
+      'PATCH https://api.notion.com/v1/pages/pg1',
+      'GET https://api.notion.com/v1/pages/pg1',
+    ]);
+  });
+
+  it('keeps a 400 on a live page retryable, so schema drift under a write is not called deletion', async () => {
+    const notion = client((_url, init) => {
+      if (init.method === 'PATCH') {
+        return Response.json({ code: 'validation_error' }, { status: 400 });
+      }
+      return Response.json({ object: 'page', id: 'pg1', in_trash: false });
+    });
+
+    await expect(
+      notion.setCompletion('tok', 'pg1', { kind: 'checkbox', name: 'Done', checkbox: true })
+    ).rejects.toBeInstanceOf(NotionUnavailableError);
+  });
+
+  it('clamps an absurd Retry-After rather than relaying it', async () => {
+    const notion = client(
+      () => new Response('', { status: 429, headers: { 'Retry-After': '99999999' } })
+    );
+
+    const error = await notion
+      .queryRows('tok', 'ds1', checkboxProperty)
+      .catch((thrown: unknown) => thrown);
+
+    expect((error as NotionUnavailableError).retryAfter).toBe(3600);
   });
 
   it('patches the status option, url-encoding the page id', async () => {

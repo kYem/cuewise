@@ -143,6 +143,18 @@ describe('GET /v1/integrations/notion/start', () => {
     expect(res.status).toBe(500);
   });
 
+  it('fails closed on /start when the signing key is missing', async () => {
+    const { headers } = await signedInWithoutNotion();
+
+    const res = await app().request(
+      await startUrl(),
+      { headers },
+      notionEnv({ STATE_SIGNING_KEY: '' })
+    );
+
+    expect(res.status).toBe(500);
+  });
+
   it('fails closed when the client secret is missing, not just the client id', async () => {
     const { headers } = await signedInWithoutNotion();
 
@@ -250,7 +262,7 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(exchangeCode).not.toHaveBeenCalled();
   });
 
-  it('revokes the exchanged grant when it cannot be parked, so no live token is orphaned', async () => {
+  it('revokes the exchanged grant when it cannot be parked, and calls the failure ours', async () => {
     const revokeToken = vi.fn(async () => undefined);
     const state = await signedState();
 
@@ -259,7 +271,6 @@ describe('GET /v1/integrations/notion/callback', () => {
       storeFactory: () => new FailingWriteStore('mintAuthCode'),
     }).request(callbackUrl(state), {}, notionEnv());
 
-    // A store failure is ours, so the app is told server_error, as Google's callback does.
     expect(await res.text()).toContain('error=server_error');
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
   });
@@ -282,15 +293,15 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('logs an authorize error only when it is shaped like an oauth code', async () => {
+  it('logs an unrecognised authorize error at warn, never its content — anyone with a session can send one', async () => {
     const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
     const state = await signedState();
 
     await app().request(callbackUrl(state, { error: '<script>x</script>' }), {}, notionEnv());
 
-    expect(errorSpy).toHaveBeenCalledWith('Notion authorize step failed', {
-      error: 'unrecognised',
-    });
+    expect(warnSpy).toHaveBeenCalledWith('Notion authorize step failed', { error: 'unrecognised' });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('relays a user cancel as access_denied', async () => {
@@ -339,9 +350,11 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('distinguishes our own misconfiguration from a bad code', async () => {
+  it('distinguishes our own misconfiguration from a bad code, logging it as ours', async () => {
+    const errorSpy = spyOnLoggerError();
+    const thrown = new NotionConfigError('invalid_client');
     const exchangeCode = vi.fn(async () => {
-      throw new NotionConfigError('invalid_client');
+      throw thrown;
     });
     const state = await signedState();
 
@@ -352,6 +365,36 @@ describe('GET /v1/integrations/notion/callback', () => {
     );
 
     expect(await res.text()).toContain('error=server_error');
+    expect(errorSpy).toHaveBeenCalledWith('Notion rejected our client or request', thrown);
+  });
+
+  it('relays an outage during the exchange as connect_failed — theirs, not ours', async () => {
+    const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
+    const exchangeCode = vi.fn(async () => {
+      throw new NotionUnavailableError('notion answered 503 (no code)');
+    });
+    const state = await signedState();
+
+    const res = await app(stubNotionClient({ exchangeCode })).request(
+      callbackUrl(state),
+      {},
+      notionEnv()
+    );
+
+    expect(await res.text()).toContain('error=connect_failed');
+    expect(warnSpy).toHaveBeenCalledWith('Notion connect did not complete', {
+      reason: 'notion answered 503 (no code)',
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('answers 500 rather than a deep link when the callback has no signing key', async () => {
+    const state = await signedState();
+
+    const res = await app().request(callbackUrl(state), {}, notionEnv({ STATE_SIGNING_KEY: '' }));
+
+    expect(res.status).toBe(500);
   });
 });
 
@@ -484,15 +527,27 @@ describe('POST /v1/integrations/notion/claim', () => {
     await expect(second.store.getProviderConnection(second.userId, 'notion')).resolves.toBeNull();
   });
 
-  it('burns the code on a wrong verifier, failing closed', async () => {
+  it('burns the code on a wrong verifier, failing closed, and revokes the grant it parked', async () => {
+    const revokeToken = vi.fn(async () => undefined);
     const { headers, store, userId } = await signedInWithoutNotion();
     const code = await parkedCode();
 
-    const wrong = await claim(code, headers, `${TEST_CODE_VERIFIER.slice(0, -1)}X`);
+    const wrong = await createApp({
+      notionClientFactory: () => stubNotionClient({ revokeToken }),
+    }).request(
+      '/v1/integrations/notion/claim',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code, codeVerifier: `${TEST_CODE_VERIFIER.slice(0, -1)}X` }),
+      },
+      notionEnv()
+    );
     const retry = await claim(code, headers);
 
     expect(wrong.status).toBe(401);
     expect(retry.status).toBe(401);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -536,10 +591,11 @@ describe('POST /v1/integrations/notion/claim', () => {
 });
 
 describe('a parked grant cannot be redeemed as a sign-in', () => {
-  it('POST /v1/auth/token refuses it', async () => {
+  it('POST /v1/auth/token refuses it and revokes the grant, since its code is now burned', async () => {
+    const revokeToken = vi.fn(async () => undefined);
     const code = await parkedCode();
 
-    const res = await app().request(
+    const res = await app(stubNotionClient({ revokeToken })).request(
       '/v1/auth/token',
       {
         method: 'POST',
@@ -555,6 +611,7 @@ describe('a parked grant cannot be redeemed as a sign-in', () => {
     );
 
     expect(res.status).toBe(401);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
   });
 });
 
@@ -622,7 +679,10 @@ describe('GET /v1/integrations/notion/tables', () => {
 
   it("passes notion's Retry-After through when it is rate limiting us", async () => {
     const searchDataSources = vi.fn(async () => {
-      throw new NotionUnavailableError('notion answered 429 (rate_limited)', 7);
+      throw new NotionUnavailableError('notion answered 429 (rate_limited)', {
+        status: 429,
+        retryAfter: 7,
+      });
     });
     const { headers } = await connectedNotionUser({ dataSourceId: null });
 
@@ -710,6 +770,26 @@ describe('PUT /v1/integrations/notion/selection', () => {
     });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       dataSourceId: TEST_DATA_SOURCE_ID,
+    });
+  });
+
+  it('answers table_unavailable, not unusable, when the picked table is already gone', async () => {
+    const getPropertySchemas = vi.fn(async () => {
+      throw new NotionResourceError(404, 'table gone');
+    });
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await select(
+      headers,
+      TEST_DATA_SOURCE_ID,
+      stubNotionClient({ getPropertySchemas })
+    );
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_table_unavailable');
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceId: null,
     });
   });
 
@@ -818,6 +898,7 @@ describe('DELETE /v1/integrations/notion', () => {
 
   it('warns, not errors, when notion already considers the grant dead', async () => {
     const errorSpy = spyOnLoggerError();
+    const warnSpy = spyOnLoggerWarn();
     const revokeToken = vi.fn(async () => {
       throw new NotionAuthError('invalid_token');
     });
@@ -827,20 +908,31 @@ describe('DELETE /v1/integrations/notion', () => {
 
     expect(res.status).toBe(204);
     expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith('Could not revoke a Notion grant upstream', {
+      userId,
+      reason: 'invalid_token',
+    });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('warns, not errors, when notion answers the revoke with a 403 or 404', async () => {
-    const errorSpy = spyOnLoggerError();
+  it('takes the row before revoking, so a renewal landing during the revoke is not silently lost', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+    let lateRenewalStored: boolean | null = null;
     const revokeToken = vi.fn(async () => {
-      throw new NotionResourceError(403, 'restricted_resource');
+      lateRenewalStored = await store.updateProviderTokens(userId, 'notion', {
+        ciphertext: 'late',
+        iv: 'late',
+        refreshCiphertext: null,
+        refreshIv: null,
+      });
     });
-    const { headers, store, userId } = await connectedNotionUser();
 
     const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
-    expect(errorSpy).not.toHaveBeenCalled();
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+    // The renewal that landed during the revoke round-trip found no row, rather than a row about to vanish.
+    expect(lateRenewalStored).toBe(false);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -861,16 +953,26 @@ describe('DELETE /v1/integrations/notion', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('still disconnects when the stored token cannot be decrypted', async () => {
+  it('still disconnects when the stored token cannot be decrypted, logging the skipped revoke', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
     const { headers, store, userId } = await connectedNotionUser();
 
-    const res = await app().request(
+    const res = await app(stubNotionClient({ revokeToken })).request(
       '/v1/integrations/notion',
       { method: 'DELETE', headers },
       notionEnv({ PROVIDER_TOKEN_KEY: TEST_FOREIGN_PROVIDER_KEY })
     );
 
     expect(res.status).toBe(204);
+    expect(revokeToken).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Could not decrypt a Notion grant to revoke it upstream',
+      {
+        userId,
+        reason: 'OperationError',
+      }
+    );
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 

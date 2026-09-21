@@ -132,13 +132,21 @@ export interface SyncStore {
   // in a client-only key. No whole-row writer, so a renewal and a selection cannot clobber each other.
   getProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
   deleteProviderConnection(userId: string, provider: string): Promise<void>;
-  // Drops the row only while it still holds `ciphertext`, in one statement: the loser of a renewal
-  // race must not delete the winner's grant, and a read-then-delete leaves a window for that.
+  // Deletes and returns the row in one statement, so a disconnect revokes exactly the token it
+  // removed and a renewal landing meanwhile is not silently lost.
+  takeProviderConnection(userId: string, provider: string): Promise<ProviderConnection | null>;
+  // Drops the row only while it still holds that ciphertext, in one statement: the loser of a
+  // renewal race must not delete the winner's grant.
   deleteProviderConnectionIfUnchanged(
     userId: string,
     provider: string,
-    ciphertext: string
+    used: { readonly ciphertext: string }
   ): Promise<boolean>;
+  // One renewal at a time per grant: two requests refreshing the same token would have the loser
+  // read invalid_grant and drop a grant the winner is about to store. A claim older than
+  // staleAfterMs is a crashed renewal and may be taken over. updateProviderTokens releases it.
+  claimProviderRenewal(userId: string, provider: string, staleAfterMs: number): Promise<boolean>;
+  releaseProviderRenewal(userId: string, provider: string): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
   // read-then-write window can revert a selection that lands in between.
   putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
