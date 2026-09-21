@@ -54,6 +54,7 @@ interface LandedRow {
   entity_id: string;
   seq: number;
 }
+
 // Caps one pull/export query so a large account can't force the worker to buffer an unbounded
 // result set into memory (OOM) — the caller pages by re-pulling from the returned cursor.
 export const MAX_CHANGES_PAGE_SIZE = 500;
