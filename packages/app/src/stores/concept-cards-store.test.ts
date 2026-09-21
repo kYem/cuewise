@@ -1,4 +1,4 @@
-import { storageFailure } from '@cuewise/shared';
+import { type ConceptCard, storageFailure } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,13 @@ import { useConceptCardsStore } from './concept-cards-store';
 vi.mock('@cuewise/storage', () => ({
   getConceptCards: vi.fn(),
   setConceptCards: vi.fn(),
+  // A faithful stand-in, not a stub: updateConceptCards' whole point is that it reads inside the
+  // write, so a mock that skipped the read would let a stale-snapshot regression pass.
+  updateConceptCards: vi.fn(async (mutate: (cards: ConceptCard[]) => ConceptCard[]) => {
+    const cards = mutate((await storage.getConceptCards()) ?? []);
+    return { result: await storage.setConceptCards(cards), cards };
+  }),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
 }));
 
 const toastError = vi.fn();
@@ -25,6 +32,10 @@ describe('Concept Cards Store', () => {
     useConceptCardsStore.setState({ cards: [], isLoading: true, error: null });
     vi.clearAllMocks();
     vi.mocked(storage.setConceptCards).mockResolvedValue({ success: true });
+    // Storage holds what the store holds: the read inside the write sees the seeded deck.
+    vi.mocked(storage.getConceptCards).mockImplementation(
+      async () => useConceptCardsStore.getState().cards
+    );
   });
 
   describe('initialize', () => {
@@ -77,6 +88,20 @@ describe('Concept Cards Store', () => {
       expect(ok).toBe(false);
       expect(useConceptCardsStore.getState().cards).toHaveLength(0);
       expect(toastError).toHaveBeenCalled();
+    });
+
+    it('keeps a card written elsewhere when it appends its own', async () => {
+      const theirs = conceptCardFactory.build({ id: 'theirs', term: 'Saved from the popup' });
+      vi.mocked(storage.getConceptCards).mockResolvedValue([theirs]);
+
+      await useConceptCardsStore.getState().addCard('Mine', 'Added in this tab.');
+
+      const persisted = vi.mocked(storage.setConceptCards).mock.lastCall?.[0] ?? [];
+      expect(persisted.map((card) => card.term)).toEqual(['Saved from the popup', 'Mine']);
+      expect(useConceptCardsStore.getState().cards.map((card) => card.term)).toEqual([
+        'Saved from the popup',
+        'Mine',
+      ]);
     });
   });
 

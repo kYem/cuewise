@@ -7,10 +7,7 @@ import {
   newConceptSchedule,
   reviewConceptCard,
 } from '@cuewise/shared';
-import {
-  getConceptCards as loadConceptCards,
-  setConceptCards as saveConceptCards,
-} from '@cuewise/storage';
+import { getConceptCards as loadConceptCards, updateConceptCards } from '@cuewise/storage';
 import { create } from 'zustand';
 import { useToastStore } from './toast-store';
 
@@ -121,13 +118,12 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
         schedule: newConceptSchedule(now),
       };
 
-      const updatedCards = [...get().cards, newCard];
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const { result, cards } = await updateConceptCards((current) => [...current, newCard]);
+      if (result.success === false) {
         return reportError(set, SAVE_ERROR_MESSAGE);
       }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error adding concept card', error);
@@ -136,13 +132,10 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   addCards: async (inputs: ConceptCardInput[]) => {
-    const existing = get().cards;
-    // Case-insensitive dedup against the deck and within the incoming batch.
-    const seen = new Set(existing.map((card) => card.term.trim().toLowerCase()));
     const now = new Date();
     const createdAt = now.toISOString();
-
-    const newCards: ConceptCard[] = [];
+    const seenInBatch = new Set<string>();
+    const batch: ConceptCard[] = [];
     for (const input of inputs) {
       const term = input.term.trim();
       const definition = input.definition.trim();
@@ -150,11 +143,11 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
         continue;
       }
       const key = term.toLowerCase();
-      if (seen.has(key)) {
+      if (seenInBatch.has(key)) {
         continue;
       }
-      seen.add(key);
-      newCards.push({
+      seenInBatch.add(key);
+      batch.push({
         id: generateId(),
         term,
         definition,
@@ -168,20 +161,24 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       });
     }
 
-    if (newCards.length === 0) {
+    if (batch.length === 0) {
       return 0;
     }
 
     try {
-      const updatedCards = [...existing, ...newCards];
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      let added: ConceptCard[] = [];
+      const { result, cards } = await updateConceptCards((current) => {
+        const inDeck = new Set(current.map((card) => card.term.trim().toLowerCase()));
+        added = batch.filter((card) => !inDeck.has(card.term.toLowerCase()));
+        return [...current, ...added];
+      });
+      if (result.success === false) {
         reportError(set, SAVE_ERROR_MESSAGE);
         return null;
       }
 
-      set({ cards: updatedCards, error: null });
-      return newCards.length;
+      set({ cards, error: null });
+      return added.length;
     } catch (error) {
       logger.error('Error adding concept cards', error);
       reportError(set, SAVE_ERROR_MESSAGE);
@@ -190,8 +187,7 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   updateCard: async (id: string, updates: ConceptCardUpdates) => {
-    const { cards } = get();
-    const existing = cards.find((card) => card.id === id);
+    const existing = get().cards.find((card) => card.id === id);
     if (!existing) {
       return false;
     }
@@ -203,15 +199,14 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     }
 
     try {
-      const updatedCards = cards.map((card) =>
-        card.id === id ? applyCardUpdates(card, updates) : card
+      const { result, cards } = await updateConceptCards((current) =>
+        current.map((card) => (card.id === id ? applyCardUpdates(card, updates) : card))
       );
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      if (result.success === false) {
         return reportError(set, SAVE_ERROR_MESSAGE);
       }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error updating concept card', error);
@@ -221,13 +216,14 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
 
   deleteCard: async (id: string) => {
     try {
-      const updatedCards = get().cards.filter((card) => card.id !== id);
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const { result, cards } = await updateConceptCards((current) =>
+        current.filter((card) => card.id !== id)
+      );
+      if (result.success === false) {
         return reportError(set, DELETE_ERROR_MESSAGE);
       }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error deleting concept card', error);
@@ -236,21 +232,20 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   reviewCard: async (id: string, grade: ConceptGrade) => {
-    const { cards } = get();
-    const existing = cards.find((card) => card.id === id);
-    if (!existing) {
+    if (!get().cards.some((card) => card.id === id)) {
       return false;
     }
 
     try {
-      const reviewed = reviewConceptCard(existing, grade, new Date());
-      const updatedCards = cards.map((card) => (card.id === id ? reviewed : card));
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const now = new Date();
+      const { result, cards } = await updateConceptCards((current) =>
+        current.map((card) => (card.id === id ? reviewConceptCard(card, grade, now) : card))
+      );
+      if (result.success === false) {
         return reportError(set, REVIEW_ERROR_MESSAGE);
       }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error reviewing concept card', error);
