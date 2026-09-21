@@ -6,9 +6,11 @@ import {
   logger,
   newConceptSchedule,
   reviewConceptCard,
+  STORAGE_KEYS,
 } from '@cuewise/shared';
 import { getConceptCards as loadConceptCards, updateConceptCards } from '@cuewise/storage';
 import { create } from 'zustand';
+import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 const SAVE_ERROR_MESSAGE = 'Failed to save concept. Please try again.';
@@ -81,12 +83,30 @@ function applyCardUpdates(card: ConceptCard, updates: ConceptCardUpdates): Conce
   return next;
 }
 
+const STALE_CONCEPTS_MESSAGE =
+  "Cuewise couldn't re-read your concepts just now, so what you see may be out of date.";
+
+const conceptCardsObserver = createStorageObserver(
+  'concept cards',
+  [STORAGE_KEYS.CONCEPT_CARDS],
+  async () => {
+    const cards = await loadConceptCards();
+    if (sameEntities(useConceptCardsStore.getState().cards, cards)) {
+      return;
+    }
+    useConceptCardsStore.setState({ cards });
+  },
+  createStaleLatch((message) => useToastStore.getState().warning(message), STALE_CONCEPTS_MESSAGE)
+);
+
 export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   cards: [],
   isLoading: true,
   error: null,
 
   initialize: async () => {
+    // Before the read: a write landing during it is otherwise announced to nobody.
+    conceptCardsObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
       const cards = await loadConceptCards();
@@ -96,6 +116,8 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       set({ isLoading: false });
       reportError(set, 'Failed to load concepts. Please refresh the page.');
     }
+    // Awaited, last, and outside the try so a failed load still reconciles.
+    await conceptCardsObserver.reconcile();
   },
 
   addCard: async (term: string, definition: string, extras: ConceptCardExtras = {}) => {
