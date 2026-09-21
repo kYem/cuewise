@@ -10,6 +10,7 @@ export interface SyncMeta {
   cursor: number; // last pulled seq
   dirty: Record<string, string[]>; // collection -> entityIds pending push
   hlcs: Record<string, string>; // "collection/entityId" -> hlcEncode
+  seqs: Record<string, number>; // "collection/entityId" -> last server seq seen; the push's baseSeq
   tombstones: string[]; // "collection/entityId" that are deleted
   quarantine: string[]; // "collection/entityId" that failed decrypt
 }
@@ -21,6 +22,7 @@ export function defaultMeta(deviceNode: string): SyncMeta {
     cursor: 0,
     dirty: {},
     hlcs: {},
+    seqs: {},
     tombstones: [],
     quarantine: [],
   };
@@ -48,6 +50,15 @@ function isSyncMeta(value: unknown): value is SyncMeta {
   );
 }
 
+// Ledgers written before seqs existed load as-is; an absent map means "no seq known", which is
+// exactly what an unconditional first push needs.
+function withSeqs(meta: SyncMeta): SyncMeta {
+  if (typeof meta.seqs === 'object' && meta.seqs !== null) {
+    return meta;
+  }
+  return { ...meta, seqs: {} };
+}
+
 /** The engine's private bookkeeping: dirty-set, per-entity HLCs, cursor, tombstones, quarantine. */
 export class SyncMetadataStore {
   // Tail of the serialised update queue; see `update`.
@@ -71,7 +82,7 @@ export class SyncMetadataStore {
         throw new Error('The stored sync metadata is unreadable');
       }
       if (isSyncMeta(entry.value)) {
-        return entry.value;
+        return withSeqs(entry.value);
       }
       await this.quarantineUnrecognised(entry.value);
     }

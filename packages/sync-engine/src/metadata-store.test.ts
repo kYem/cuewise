@@ -37,6 +37,37 @@ describe('SyncMetadataStore', () => {
     await expect(store.save(meta)).rejects.toThrow();
   });
 
+  it('starts with no seqs and round-trips them', async () => {
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const meta = await store.load();
+    expect(meta.seqs).toEqual({});
+    meta.seqs['goals/g1'] = 4;
+    await store.save(meta);
+    expect((await store.load()).seqs).toEqual({ 'goals/g1': 4 });
+  });
+
+  it('fills in seqs for a ledger stored before they existed, without disturbing the rest', async () => {
+    const kv = new FakeKvStore();
+    const legacy = {
+      deviceNode: 'node-1',
+      clock: 'legacy-clock',
+      cursor: 9,
+      dirty: { goals: ['g1'] },
+      hlcs: { 'goals/g1': 'legacy-hlc' },
+      tombstones: [],
+      quarantine: [],
+    };
+    await kv.set(SYNC_META_KEY, legacy, 'local');
+
+    const meta = await new SyncMetadataStore(kv).load();
+
+    expect(meta.seqs).toEqual({});
+    expect(meta.cursor).toBe(9);
+    expect(meta.dirty).toEqual({ goals: ['g1'] });
+    expect(await kv.get(SYNC_META_QUARANTINE_KEY, 'local')).toBeNull();
+  });
+
   describe('update', () => {
     // Every writer does load → mutate → save on one blob, so two that overlap must not both read
     // the same pre-state — the later save would otherwise erase the earlier one's change.

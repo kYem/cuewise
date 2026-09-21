@@ -1743,11 +1743,12 @@ export class SyncEngine {
     }
   }
 
-  // Only the cursor: widening this would drop the quarantine list too, and the device would
-  // re-quarantine the same records on its next pull, re-toasting the user every time.
+  // Only the cursor and the seqs it vouched for: widening this would drop the quarantine list too,
+  // and the device would re-quarantine the same records on its next pull, re-toasting the user.
   private async resetPullCursor(): Promise<void> {
     await this.meta.update((meta) => {
       meta.cursor = 0;
+      meta.seqs = {};
     });
   }
 
@@ -1756,6 +1757,7 @@ export class SyncEngine {
       meta.cursor = 0;
       meta.dirty = {};
       meta.hlcs = {};
+      meta.seqs = {};
       meta.tombstones = [];
       meta.quarantine = [];
     });

@@ -2055,6 +2055,37 @@ describe('SyncEngine.disableSync', () => {
 
     expect(cold.getLastCycle()).toEqual({ known: true, cycle: null });
   });
+
+  it('forgets every per-entity seq along with the rest of the ledger', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 3;
+    });
+
+    await device.engine.disableSync();
+
+    expect((await metaStore.load()).seqs).toEqual({});
+  });
+});
+
+describe('SyncEngine ledger seqs on a re-enable', () => {
+  it('forgets per-entity seqs with the cursor, so the first push is unconditional', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 3;
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect((await metaStore.load()).seqs).toEqual({});
+  });
 });
 
 describe('SyncEngine.refreshRecoveryEnvelope', () => {
