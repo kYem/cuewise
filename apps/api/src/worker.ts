@@ -5,9 +5,8 @@ import app from './index';
 import { createNotionClient } from './notion-client';
 import { revokeExpiredParkedGrants } from './routes/notion';
 
-// Deployment entry: the Hono app's fetch handler plus the daily purges (tombstones, expired
-// pairings, unclaimed Notion grants; see `triggers.crons` in wrangler.jsonc). `index.ts` stays
-// the app so tests drive it directly.
+// Deployment entry: the Hono app's fetch handler plus the daily purges (see `triggers.crons` in
+// wrangler.jsonc). `index.ts` stays the app so tests drive it directly.
 export default {
   fetch: app.fetch,
   async scheduled(

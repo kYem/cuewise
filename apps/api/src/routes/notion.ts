@@ -24,7 +24,7 @@ import {
 } from '../notion-client';
 import { completionWrite, findCompletionProperty } from '../notion-schema';
 import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
-import type { ProviderConnection, SealedGrant, SyncStore } from '../store';
+import type { ProviderConnection, RenewalClaim, SealedGrant, SyncStore } from '../store';
 import {
   CODE_CHALLENGE_RE,
   CODE_VERIFIER_RE,
@@ -94,7 +94,8 @@ function credentialsConfigured(env: Env): boolean {
   return requireProviderTokenKey(env) !== null;
 }
 
-/** Best-effort and never throws, so no cleanup path can be trapped by Notion being down. */
+// Best-effort and never throws, so no cleanup path can be trapped by Notion being down. Should
+// Notion revoke per bot rather than per token, this also kills a stored grant on the same bot.
 async function revokeUpstream(
   client: NotionClient,
   accessToken: string,
@@ -275,6 +276,18 @@ interface RefreshPair {
 // A renewal that has not stored a result within this long is taken to have crashed.
 const RENEWAL_STALE_MS = 30_000;
 
+// Never throws: on every failure path the claim is a courtesy, and it goes stale on its own.
+async function releaseClaim(store: SyncStore, userId: string, claim: RenewalClaim): Promise<void> {
+  try {
+    await store.releaseProviderRenewal(userId, PROVIDER, claim);
+  } catch (error) {
+    logger.warn('Could not release the Notion renewal claim; it goes stale in 30s', {
+      userId,
+      reason: reasonOf(error),
+    });
+  }
+}
+
 /** Trades the stored refresh token for a new grant and persists it — tokens only, never the row. */
 async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<RenewedGrant | Response> {
   const { userId, client, store } = open;
@@ -309,21 +322,29 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
     logger.warn('Notion renewal held or overtaken by another request', { userId });
     return problem('upstream_unavailable', { detail: 'Please retry.' });
   }
-  let grant: NotionGrant | null = null;
-  let sealed: SealedGrant;
+  let grant: NotionGrant;
   try {
     grant = await client.refreshGrant(refreshToken);
-    sealed = await sealGrant(grant, open.key);
   } catch (error) {
     // Named separately from the primary call's fault: an operator must be able to see that
     // renewal is what keeps failing.
     logger.warn('Notion grant renewal failed', { userId, reason: reasonOf(error) });
-    if (grant !== null) {
-      // Minted but never stored: nobody holds this token, so do not leave it live.
-      await revokeUpstream(client, grant.accessToken, userId);
-    }
-    await store.releaseProviderRenewal(userId, PROVIDER, claimedAt);
+    await releaseClaim(store, userId, claimedAt);
     return providerProblem(error, open, open.connection);
+  }
+  // From here the new token is minted but unstored: every failure revokes it, so it is not left
+  // live with nobody holding it.
+  let sealed: SealedGrant;
+  try {
+    sealed = await sealGrant(grant, open.key);
+  } catch (error) {
+    logger.error('Notion renewal could not be sealed; revoked the new token', {
+      userId,
+      reason: errorName(error),
+    });
+    await revokeUpstream(client, grant.accessToken, userId);
+    await releaseClaim(store, userId, claimedAt);
+    throw error;
   }
   const { ciphertext, iv, refreshCiphertext, refreshIv } = sealed;
   let stored: boolean;
@@ -337,12 +358,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   } catch (error) {
     logger.error('Notion renewal could not be stored; revoked the new token', error, { userId });
     await revokeUpstream(client, grant.accessToken, userId);
-    await store.releaseProviderRenewal(userId, PROVIDER, claimedAt).catch((releaseError) => {
-      logger.warn('Could not release the Notion renewal claim; it goes stale in 30s', {
-        userId,
-        reason: reasonOf(releaseError),
-      });
-    });
+    await releaseClaim(store, userId, claimedAt);
     throw error;
   }
   if (!stored) {
@@ -597,7 +613,6 @@ export function registerNotionRoutes(
     try {
       // A previous grant is overwritten, not revoked: Notion does not say whether revoke acts per
       // token or per bot, and per bot it would kill the grant being claimed on every reconnect.
-      // Revoking an unstored grant (above, and the cron) risks a live one only on the same bot.
       await store.putProviderGrant(userId, PROVIDER, grant);
     } catch (error) {
       // The code is already burned, so this grant can never be claimed again. Revoke it rather

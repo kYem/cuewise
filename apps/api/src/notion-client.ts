@@ -33,7 +33,7 @@ export class NotionConfigError extends Error {
 /** Notion is down, rate-limiting, unreadable, or the row changed under a write. Retryable. */
 export class NotionUnavailableError extends Error {
   override readonly name = 'NotionUnavailableError';
-  /** The status of a non-2xx answer or an unusable 200; null for a transport failure. */
+  /** The status of a non-2xx answer or an unusable 2xx; null for a transport failure. */
   readonly status: number | null;
   /** Seconds from the response's Retry-After, clamped; null unless a positive integer. */
   readonly retryAfter: number | null;
@@ -157,6 +157,10 @@ function retryAfterOf(response: Response): number | null {
   return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
 }
 
+function isSuccess(status: number | null): boolean {
+  return status !== null && status >= 200 && status < 300;
+}
+
 export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fetch): NotionClient {
   async function call(
     path: string,
@@ -194,12 +198,13 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         authorization.startsWith('Basic ')
       );
     }
-    // A 200 we cannot parse is an outage, not an empty result — reporting it as "no rows" would
+    // A 2xx we cannot parse is an outage, not an empty result — reporting it as "no rows" would
     // tell the user they have nothing to do.
     if (!readable) {
-      throw new NotionUnavailableError('notion answered 200 with an unreadable body', {
-        status: response.status,
-      });
+      throw new NotionUnavailableError(
+        `notion answered ${response.status} with an unreadable body`,
+        { status: response.status }
+      );
     }
     return body;
   }
@@ -285,7 +290,7 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         });
       } catch (error) {
         // A 2xx is the whole answer here; an unreadable body is not a failed revoke.
-        if (error instanceof NotionUnavailableError && error.status === 200) {
+        if (error instanceof NotionUnavailableError && isSuccess(error.status)) {
           return;
         }
         throw error;

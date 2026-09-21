@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { clockedStore } from '../__fixtures__/api-test-helpers.fixtures';
+import {
+  decodeState,
+  TEST_CODE_VERIFIER,
+  WRONG_CODE_VERIFIER,
+} from '../__fixtures__/bounce.fixtures';
 import { spyOnLoggerError, spyOnLoggerWarn } from '../__fixtures__/logger.fixtures';
 import {
   connectedNotionUser,
@@ -11,7 +16,6 @@ import {
   storedNotionTokens,
   stubNotionClient,
   TEST_ACCESS_TOKEN,
-  TEST_CODE_VERIFIER,
   TEST_DATA_SOURCE_ID,
   TEST_FOREIGN_PROVIDER_KEY,
   TEST_REFRESH_TOKEN,
@@ -21,7 +25,7 @@ import {
   testCodeChallenge,
   titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
-import { base64UrlDecodeString, signState } from '../crypto-utils';
+import { signState } from '../crypto-utils';
 import { createApp } from '../index';
 import {
   NotionAuthError,
@@ -126,10 +130,7 @@ describe('GET /v1/integrations/notion/start', () => {
       'https://api.example.test/v1/integrations/notion/callback'
     );
     const state = url.searchParams.get('state') ?? '';
-    const decoded = JSON.parse(base64UrlDecodeString(state.split('.')[0])) as Record<
-      string,
-      unknown
-    >;
+    const decoded = decodeState(state);
     expect(decoded).not.toHaveProperty('userId');
     expect(JSON.stringify(decoded)).not.toContain(userId);
   });
@@ -495,7 +496,6 @@ describe('POST /v1/integrations/notion/claim', () => {
   });
 
   it('binds the grant to the session that claims it — the account is never in the link', async () => {
-    // A second account exists so "landed somewhere" and "landed on the claimer" differ.
     const bystander = await signedInWithoutNotion();
     const { headers, store, userId } = await signedInWithoutNotion();
     const code = await parkedCode();
@@ -619,7 +619,7 @@ describe('POST /v1/integrations/notion/claim', () => {
       {
         method: 'POST',
         headers,
-        body: JSON.stringify({ code, codeVerifier: `${TEST_CODE_VERIFIER.slice(0, -1)}X` }),
+        body: JSON.stringify({ code, codeVerifier: WRONG_CODE_VERIFIER }),
       },
       notionEnv()
     );

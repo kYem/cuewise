@@ -32,7 +32,7 @@ export interface SignInCodePayload {
   email?: string;
 }
 
-/** Parked between Notion's redirect and /claim: whoever claims it, not whoever minted the link, gets it. */
+/** Parked between Notion's redirect and /claim: the claimer gets it, not the link's minter. */
 export interface ProviderCodePayload {
   provider: 'notion';
   grant: SealedGrant;
@@ -155,7 +155,7 @@ export interface SyncStore {
     used: { readonly ciphertext: string },
     staleAfterMs: number
   ): Promise<RenewalClaim | null>;
-  // Releases only the claim it was handed; a claim older than staleAfterMs is a crashed renewal.
+  // Keyed on the stamp, so a crashed renewal's late release cannot free the claim that took over.
   releaseProviderRenewal(userId: string, provider: string, claim: RenewalClaim): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
   // read-then-write window can revert a selection that lands in between.

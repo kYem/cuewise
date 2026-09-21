@@ -285,17 +285,40 @@ describe('refresh and revoke', () => {
   });
 
   it('treats any 401 on a basic-auth call as our credentials, whatever the body says', async () => {
-    const notion = client(() => new Response('', { status: 401 }));
+    const notion = client(() => Response.json({ code: 'unauthorized' }, { status: 401 }));
 
     await expect(notion.refreshGrant('r')).rejects.toBeInstanceOf(NotionConfigError);
     await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
     await expect(notion.revokeToken('t')).rejects.toBeInstanceOf(NotionConfigError);
   });
 
-  it('counts a revoke answered 200 with no body as done', async () => {
-    const notion = client(() => new Response('', { status: 200 }));
+  for (const status of [200, 204]) {
+    it(`counts a revoke answered ${status} with no body as done`, async () => {
+      const notion = client(() => new Response(null, { status }));
 
-    await expect(notion.revokeToken('tok')).resolves.toBeUndefined();
+      await expect(notion.revokeToken('tok')).resolves.toBeUndefined();
+    });
+  }
+
+  it('lets a revoke outage propagate as retryable, carrying its status', async () => {
+    const notion = client(() => new Response('', { status: 503 }));
+
+    const failing = notion.revokeToken('tok');
+
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toHaveProperty('status', 503);
+  });
+
+  it('does not count a revoke that never reached notion as done', async () => {
+    const failingFetch = vi.fn(() =>
+      Promise.reject(new TypeError('bad url'))
+    ) as unknown as typeof fetch;
+    const notion = createNotionClient(ENV, failingFetch);
+
+    const failing = notion.revokeToken('tok');
+
+    await expect(failing).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(failing).rejects.toHaveProperty('status', null);
   });
 
   it('renews a grant with basic auth and the refresh grant type', async () => {

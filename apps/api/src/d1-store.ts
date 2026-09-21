@@ -260,7 +260,7 @@ export class D1SyncStore implements SyncStore {
     const codeHash = await sha256Hex(code);
     const ts = this.now();
     // Best-effort PII sweep: expired sign-in codes are purged on the next mint call, not by a
-    // timer. A parked Notion grant is left for the cron, which revokes it upstream first.
+    // timer. A parked Notion grant is left for the cron, which also revokes it upstream.
     await this.db.batch([
       this.db
         .prepare(

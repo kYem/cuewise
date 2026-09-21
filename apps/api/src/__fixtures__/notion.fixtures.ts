@@ -5,8 +5,9 @@ import { D1SyncStore } from '../d1-store';
 import type { Env } from '../env';
 import type { NotionClient, NotionGrant } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
-import type { AuthCodePayload, SealedGrant, SealedTokens, SyncStore } from '../store';
+import type { AuthCodePayload, RenewalClaim, SealedGrant, SealedTokens, SyncStore } from '../store';
 import { signedInToken } from './api-test-helpers.fixtures';
+import { TEST_CODE_VERIFIER } from './bounce.fixtures';
 
 /** 43 base64url chars decode to the 32 bytes AES-GCM needs. */
 export const TEST_PROVIDER_KEY = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -25,8 +26,6 @@ export const GRANT_WITHOUT_REFRESH: NotionGrant = {
   refreshToken: null,
   workspace: 'Acme',
 };
-// 43 unreserved chars, the minimum RFC 7636 accepts.
-export const TEST_CODE_VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 
 export function asSchemas(value: Record<string, unknown>): PropertySchemas {
   return value as PropertySchemas;
@@ -200,7 +199,12 @@ export async function storedNotionTokens(
   return { accessToken, refreshToken };
 }
 
-type FailingWrite = 'mintAuthCode' | 'putProviderGrant' | 'updateProviderTokens' | 'deleteUser';
+type FailingWrite =
+  | 'mintAuthCode'
+  | 'putProviderGrant'
+  | 'updateProviderTokens'
+  | 'releaseProviderRenewal'
+  | 'deleteUser';
 
 /** A real store whose one named write throws, so a route's cleanup path runs against real rows. */
 export class FailingWriteStore extends D1SyncStore {
@@ -246,5 +250,16 @@ export class FailingWriteStore extends D1SyncStore {
       throw new Error('D1 write failed');
     }
     return super.updateProviderTokens(userId, provider, tokens, used);
+  }
+
+  override async releaseProviderRenewal(
+    userId: string,
+    provider: string,
+    claim: RenewalClaim
+  ): Promise<void> {
+    if (this.failing === 'releaseProviderRenewal') {
+      throw new Error('D1 write failed');
+    }
+    return super.releaseProviderRenewal(userId, provider, claim);
   }
 }

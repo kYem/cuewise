@@ -1,11 +1,11 @@
 {
   "name": "cuewise-api",
-  // Deployment entry wraps the Hono app (src/index.ts) with the scheduled tombstone-purge handler.
+  // Deployment entry wraps the Hono app (src/index.ts) with the scheduled purge handler.
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-01",
   // Production custom domain (cuewise.app zone on this account); wrangler manages the DNS + cert.
   "routes": [{ "pattern": "api.cuewise.app", "custom_domain": true }],
-  // Daily 03:00 UTC tombstone purge (see worker.ts scheduled()).
+  // Daily 03:00 UTC purges (see worker.ts scheduled()).
   "triggers": { "crons": ["0 3 * * *"] },
   // database_id from `wrangler d1 create cuewise-sync`; local dev/tests never touch Cloudflare.
   "d1_databases": [
