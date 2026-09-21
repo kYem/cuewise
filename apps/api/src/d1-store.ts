@@ -16,7 +16,9 @@ import {
   sha256Hex,
 } from './crypto-utils';
 import {
+  type AppliedRecord,
   type AuthCodePayload,
+  type ConflictRecord,
   type Identity,
   type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
@@ -24,6 +26,7 @@ import {
   type PairingForRequester,
   type PendingPairing,
   type PushRecord,
+  type PushResponse,
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
@@ -33,6 +36,24 @@ import {
 
 export const SESSION_TTL_MS = 90 * DAY_IN_MS;
 export const AUTH_CODE_TTL_MS = 60_000;
+
+// D1 caps bound parameters per statement at 100; a conflict lookup binds two per row plus the user.
+const CONFLICT_LOOKUP_CHUNK = 40;
+
+const UPSERT_RECORD = `INSERT INTO records (user_id, collection, entity_id, seq, ciphertext, deleted, client_updated_at, server_received_at)
+  VALUES (?, ?, ?, (SELECT last_seq FROM users WHERE id = ?) - ?, ?, ?, ?, ?)
+  ON CONFLICT (user_id, collection, entity_id) DO UPDATE SET
+    seq = excluded.seq, ciphertext = excluded.ciphertext, deleted = excluded.deleted,
+    client_updated_at = excluded.client_updated_at, server_received_at = excluded.server_received_at`;
+
+// A row that landed (inserted, or updated because the WHERE held) is returned; a refused row is not.
+const RETURNING_LANDED = ' RETURNING collection, entity_id, seq';
+
+interface LandedRow {
+  collection: string;
+  entity_id: string;
+  seq: number;
+}
 // Caps one pull/export query so a large account can't force the worker to buffer an unbounded
 // result set into memory (OOM) — the caller pages by re-pulling from the returned cursor.
 export const MAX_CHANGES_PAGE_SIZE = 500;
@@ -273,7 +294,7 @@ export class D1SyncStore implements SyncStore {
     };
   }
 
-  async applyChanges(userId: string, changes: PushRecord[]): Promise<number> {
+  async applyChanges(userId: string, changes: PushRecord[]): Promise<PushResponse> {
     const ts = this.now();
     const n = changes.length;
     if (n > 0) {
@@ -298,37 +319,92 @@ export class D1SyncStore implements SyncStore {
       );
     }
     changes.forEach((change, i) => {
-      stmts.push(
-        this.db
-          .prepare(
-            `INSERT INTO records (user_id, collection, entity_id, seq, ciphertext, deleted, client_updated_at, server_received_at)
-             VALUES (?, ?, ?, (SELECT last_seq FROM users WHERE id = ?) - ?, ?, ?, ?, ?)
-             ON CONFLICT (user_id, collection, entity_id) DO UPDATE SET
-               seq = excluded.seq, ciphertext = excluded.ciphertext, deleted = excluded.deleted,
-               client_updated_at = excluded.client_updated_at, server_received_at = excluded.server_received_at`
-          )
-          .bind(
-            userId,
-            change.collection,
-            change.entityId,
-            userId,
-            n - 1 - i,
-            change.ciphertext,
-            change.deleted ? 1 : 0,
-            change.clientUpdatedAt,
-            ts
-          )
-      );
+      const binds: unknown[] = [
+        userId,
+        change.collection,
+        change.entityId,
+        userId,
+        n - 1 - i,
+        change.ciphertext,
+        change.deleted ? 1 : 0,
+        change.clientUpdatedAt,
+        ts,
+      ];
+      // A stale base makes the DO UPDATE's WHERE false: nothing is written and nothing is returned.
+      let sql = UPSERT_RECORD;
+      if (change.baseSeq !== undefined) {
+        sql += ' WHERE records.seq = ?';
+        binds.push(change.baseSeq);
+      }
+      stmts.push(this.db.prepare(sql + RETURNING_LANDED).bind(...binds));
     });
     stmts.push(this.db.prepare('SELECT last_seq FROM users WHERE id = ?').bind(userId));
     // Must stay a single db.batch: every INSERT reads the post-UPDATE last_seq set by the
     // leading UPDATE in this same batch; splitting this reintroduces a multi-device race.
-    const results = await this.db.batch<{ last_seq: number }>(stmts);
+    const results = await this.db.batch<LandedRow & { last_seq: number }>(stmts);
     const tail = results[results.length - 1];
     if (tail === undefined || tail.results[0] === undefined) {
       throw new Error('applyChanges: missing cursor result');
     }
-    return tail.results[0].last_seq;
+    const applied: AppliedRecord[] = [];
+    const refused: PushRecord[] = [];
+    changes.forEach((change, i) => {
+      // Offset 1: results[0] is the leading UPDATE.
+      const landed = results[1 + i]?.results[0];
+      if (landed === undefined) {
+        refused.push(change);
+      } else {
+        applied.push({
+          collection: landed.collection,
+          entityId: landed.entity_id,
+          seq: landed.seq,
+        });
+      }
+    });
+    const conflicts = await this.currentRows(userId, refused);
+    return { cursor: tail.results[0].last_seq, applied, conflicts };
+  }
+
+  /**
+   * What the server holds for each refused row, so the client resolves without a second round
+   * trip. Read after the batch, so it can be newer than what refused the push; the client's
+   * re-push then simply conflicts again.
+   */
+  private async currentRows(userId: string, refused: PushRecord[]): Promise<ConflictRecord[]> {
+    const conflicts: ConflictRecord[] = [];
+    for (let start = 0; start < refused.length; start += CONFLICT_LOOKUP_CHUNK) {
+      const chunk = refused.slice(start, start + CONFLICT_LOOKUP_CHUNK);
+      const where = chunk.map(() => '(collection = ? AND entity_id = ?)').join(' OR ');
+      const binds = chunk.flatMap((change) => [change.collection, change.entityId]);
+      const { results } = await this.db
+        .prepare(
+          `SELECT collection, entity_id, seq, ciphertext, deleted, client_updated_at FROM records WHERE user_id = ? AND (${where})`
+        )
+        .bind(userId, ...binds)
+        .all<{
+          collection: string;
+          entity_id: string;
+          seq: number;
+          ciphertext: string;
+          deleted: number;
+          client_updated_at: number;
+        }>();
+      for (const row of results) {
+        conflicts.push({
+          collection: row.collection,
+          entityId: row.entity_id,
+          current: {
+            collection: row.collection,
+            entityId: row.entity_id,
+            seq: row.seq,
+            ciphertext: row.ciphertext,
+            deleted: row.deleted === 1,
+            clientUpdatedAt: row.client_updated_at,
+          },
+        });
+      }
+    }
+    return conflicts;
   }
 
   async listChanges(

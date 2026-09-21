@@ -57,6 +57,14 @@ function recordSchema(nowMs: number) {
       })
     ),
     deleted: z.boolean({ error: 'required boolean' }),
+    // One check, one message: a value can only fail this once, so the pointer never reports twice.
+    baseSeq: z.optional(
+      z.number({ error: 'must be a non-negative safe integer' }).check(
+        z.refine((value: number) => Number.isSafeInteger(value) && value >= 0, {
+          error: 'must be a non-negative safe integer',
+        })
+      )
+    ),
   });
 }
 

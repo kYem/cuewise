@@ -70,7 +70,7 @@ All endpoints are under `/v1`.
 | `GET` | `/v1/auth/google/callback` | Google's redirect target (GET — Apple's is a form_post); exchanges the auth code server-side, then mints a one-time code | No |
 | `POST` | `/v1/auth/logout` | Revoke the presented session token | Yes |
 | `GET` | `/v1/changes?since=<seq>` | Incremental pull, ≤500 records/page (`since=0` = fresh-device bootstrap). A full page means pull again from the returned `cursor`. 409 `resync_required` if `since` predates the purged-tombstone watermark — the client must resync from `since=0`. | Yes |
-| `POST` | `/v1/changes` | Atomic batch push, ≤100 records, ≤64 KB ciphertext/record | Yes |
+| `POST` | `/v1/changes` | Batch push, ≤100 records, ≤64 KB ciphertext/record. A record may carry `baseSeq`, the seq the device last saw: it lands only if the row is still at that seq. Answers `{cursor, applied, conflicts}`; conflicts carry the current row. Without `baseSeq` a record upserts unconditionally (legacy clients). | Yes |
 | `GET` | `/v1/keys/recovery` | Fetch the caller's opaque recovery key envelope | Yes |
 | `PUT` | `/v1/keys/recovery` | Store/replace the caller's opaque recovery key envelope, ≤1024 bytes. `{ifAbsent: true}` makes it create-only — 409 `key_envelope_exists` if one is already stored, no overwrite. | Yes |
 | `GET` | `/v1/sessions` | List the caller's live sessions (`id`, `deviceName`, `createdAt`, `lastUsedAt`, `current`). Revoked and expired rows are omitted. | Yes |

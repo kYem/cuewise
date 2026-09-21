@@ -5,15 +5,27 @@ import type {
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
 import type {
+  AppliedRecord,
+  ConflictRecord,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
+  PushResponse,
   SyncRecord,
   SyncSession,
 } from '@cuewise/shared';
 import type { RawSessionToken, SessionId, SessionTokenHash } from './crypto-utils';
 
-export type { KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
+export type {
+  AppliedRecord,
+  ConflictRecord,
+  KeyEnvelopeExport,
+  KeyEnvelopeRecord,
+  PushRecord,
+  PushResponse,
+  SyncRecord,
+  SyncSession,
+};
 
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
@@ -81,8 +93,10 @@ export interface SyncStore {
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
-  // Throws StorageQuotaExceededError when the push would exceed the per-user record cap.
-  applyChanges(userId: string, changes: PushRecord[]): Promise<number>;
+  // Rows whose `baseSeq` matches (or is omitted) land and come back under `applied` with their new
+  // seq; rows whose `baseSeq` is stale are refused and come back under `conflicts` with the current
+  // row. Throws StorageQuotaExceededError when the push would exceed the per-user record cap.
+  applyChanges(userId: string, changes: PushRecord[]): Promise<PushResponse>;
   // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
   // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;

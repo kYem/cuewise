@@ -13,7 +13,7 @@ describe('D1SyncStore records', () => {
   it('pushing 2 records returns cursor 2 and listChanges(0) returns both in seq order', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u1');
-    const cursor = await store.applyChanges(userId, [
+    const { cursor } = await store.applyChanges(userId, [
       record({ entityId: 'a' }),
       record({ entityId: 'b' }),
     ]);
@@ -37,7 +37,7 @@ describe('D1SyncStore records', () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u1');
     await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'first' })]);
-    const cursor = await store.applyChanges(userId, [
+    const { cursor } = await store.applyChanges(userId, [
       record({ entityId: 'a', ciphertext: 'second' }),
     ]);
     expect(cursor).toBe(2);
@@ -115,7 +115,7 @@ describe('D1SyncStore records', () => {
     const userId = await newUser(store, 'u-quota-exact');
     await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
     // 2 existing + 1 = 3 == cap: must succeed (guard is `> cap`, not `>= cap`).
-    const cursor = await store.applyChanges(userId, [record({ entityId: 'c' })]);
+    const { cursor } = await store.applyChanges(userId, [record({ entityId: 'c' })]);
     expect(cursor).toBe(3);
   });
 
@@ -230,7 +230,7 @@ describe('D1SyncStore records', () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u1');
     await store.applyChanges(userId, [record({ entityId: 'a' })]);
-    const cursor = await store.applyChanges(userId, []);
+    const { cursor } = await store.applyChanges(userId, []);
     expect(cursor).toBe(1);
     const countRow = await env.DB.prepare('SELECT COUNT(*) as count FROM records WHERE user_id = ?')
       .bind(userId)
@@ -239,5 +239,100 @@ describe('D1SyncStore records', () => {
       throw new Error('expected a count row');
     }
     expect(countRow.count).toBe(1);
+  });
+
+  it('lands an update whose baseSeq matches and answers its new seq under applied', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-ok');
+    await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v1' })]);
+
+    const result = await store.applyChanges(userId, [
+      record({ entityId: 'a', ciphertext: 'v2', baseSeq: 1 }),
+    ]);
+
+    expect(result).toEqual({
+      cursor: 2,
+      applied: [{ collection: 'quotes', entityId: 'a', seq: 2 }],
+      conflicts: [],
+    });
+    const { records } = await store.listChanges(userId, 0);
+    expect(records[0]?.ciphertext).toBe('v2');
+  });
+
+  it('refuses an update whose baseSeq is stale and returns the current row as a conflict', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-stale');
+    await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v1' })]);
+    await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v2', baseSeq: 1 })]);
+
+    const result = await store.applyChanges(userId, [
+      record({ entityId: 'a', ciphertext: 'stale', baseSeq: 1 }),
+    ]);
+
+    expect(result.applied).toEqual([]);
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0]).toMatchObject({
+      collection: 'quotes',
+      entityId: 'a',
+      current: { collection: 'quotes', entityId: 'a', seq: 2, ciphertext: 'v2', deleted: false },
+    });
+    const { records } = await store.listChanges(userId, 0);
+    expect(records[0]?.ciphertext).toBe('v2');
+  });
+
+  it('upserts unconditionally when baseSeq is omitted, as a client that predates it would', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-legacy');
+    await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v1' })]);
+    await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v2', baseSeq: 1 })]);
+
+    const result = await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v3' })]);
+
+    expect(result.conflicts).toEqual([]);
+    expect(result.applied).toEqual([{ collection: 'quotes', entityId: 'a', seq: 3 }]);
+  });
+
+  it('inserts when baseSeq names a row that no longer exists', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-missing');
+
+    const result = await store.applyChanges(userId, [record({ entityId: 'a', baseSeq: 5 })]);
+
+    expect(result.applied).toEqual([{ collection: 'quotes', entityId: 'a', seq: 1 }]);
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it('conflicts against a live tombstone, handing the tombstone back as current', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-tombstone');
+    await store.applyChanges(userId, [record({ entityId: 'a' })]);
+    await store.applyChanges(userId, [record({ entityId: 'a', deleted: true, baseSeq: 1 })]);
+
+    const result = await store.applyChanges(userId, [record({ entityId: 'a', baseSeq: 1 })]);
+
+    expect(result.conflicts[0]?.current).toMatchObject({ seq: 2, deleted: true });
+  });
+
+  it('applies the fresh rows of a mixed batch, leaves seq gaps for the refused ones, and pages across them', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-mixed');
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]); // seqs 1, 2
+    await store.applyChanges(userId, [record({ entityId: 'a', baseSeq: 1 })]); // a -> 3
+
+    const result = await store.applyChanges(userId, [
+      record({ entityId: 'a', baseSeq: 1 }), // stale: reserved seq 4 goes unused
+      record({ entityId: 'b', baseSeq: 2 }), // fresh: seq 5
+      record({ entityId: 'c' }), // new: seq 6
+    ]);
+
+    expect(result.cursor).toBe(6);
+    expect(result.applied).toEqual([
+      { collection: 'quotes', entityId: 'b', seq: 5 },
+      { collection: 'quotes', entityId: 'c', seq: 6 },
+    ]);
+    expect(result.conflicts.map((c) => c.entityId)).toEqual(['a']);
+    const page = await store.listChanges(userId, 3);
+    expect(page.records.map((r) => r.seq)).toEqual([5, 6]);
+    expect(page.cursor).toBe(6);
   });
 });

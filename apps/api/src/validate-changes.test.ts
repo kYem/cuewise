@@ -195,3 +195,33 @@ describe('the push validation error contract', () => {
     ]);
   });
 });
+
+describe('validatePushBody baseSeq', () => {
+  it('passes a non-negative integer baseSeq through and leaves a record without one alone', () => {
+    const result = validatePushBody(
+      { records: [{ ...record(), baseSeq: 7 }, record()] },
+      Date.now()
+    );
+    if ('problemCode' in result) {
+      throw new Error(`unexpected problem: ${result.problemCode}`);
+    }
+    expect(result.records[0].baseSeq).toBe(7);
+    expect('baseSeq' in result.records[1]).toBe(false);
+  });
+
+  it.each([
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    '7',
+    null,
+  ])('rejects baseSeq %p as a non-negative safe integer fault', (baseSeq) => {
+    const result = validatePushBody({ records: [{ ...record(), baseSeq }] }, Date.now());
+    expect(result).toEqual({
+      problemCode: 'invalid_record',
+      issues: [
+        { index: 0, pointer: '/records/0/baseSeq', detail: 'must be a non-negative safe integer' },
+      ],
+    });
+  });
+});
