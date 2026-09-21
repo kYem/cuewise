@@ -2003,6 +2003,39 @@ describe('SyncEngine.syncNow with a refused push', () => {
     expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
     expect((await meta.load()).dirty.goals).toEqual(['g1']);
   });
+
+  it('never lands a local edit over a newer server version it failed to write during the pull', async () => {
+    const server = new FakeSyncServer();
+    const bindings = defaultBindings();
+    const device = createDevice(server, { bindings });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const stored = await loadPersistedDataKey(device.kv);
+    if (stored === null) {
+      throw new Error('expected a persisted data key');
+    }
+    const newer = await toPushRecord(stored.dk, stored.keyId, 'goals', 'g1', {
+      entity: goalFactory.build({ id: 'g1', text: 'theirs' }),
+      hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
+    });
+    const { applied } = server.pushChanges([newer]);
+    const goalsBinding = bindings.find((b) => b.name === 'goals');
+    if (goalsBinding === undefined) {
+      throw new Error('goals binding missing');
+    }
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
+    await device.engine.markMutated('goals', 'g1');
+    // The pull sees the newer version but cannot write it; the push that follows must not win.
+    vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(server.rows().find((r) => r.entityId === 'g1')?.seq).toBe(applied[0]?.seq);
+    expect((await new SyncMetadataStore(device.kv).load()).dirty.goals).toEqual(['g1']);
+  });
 });
 
 describe('SyncEngine.resumeEnrollWithCode', () => {

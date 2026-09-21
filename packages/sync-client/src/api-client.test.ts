@@ -34,17 +34,11 @@ describe('ApiClient', () => {
     expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
   });
 
-  it('POSTs { records } to /v1/changes and returns the cursor with what landed and what conflicted', async () => {
+  it('POSTs { records } to /v1/changes and returns the cursor with what landed and what was refused', async () => {
     const body = {
       cursor: 5,
       applied: [{ collection: 'quotes', entityId: 'q1', seq: 5 }],
-      conflicts: [
-        {
-          collection: 'quotes',
-          entityId: 'q2',
-          current: { ...pushRecordFixture, entityId: 'q2', seq: 4 },
-        },
-      ],
+      conflicts: [{ ...pushRecordFixture, entityId: 'q2', seq: 4 }],
     };
     const { fetchFn, calls } = stubFetch([{ status: 200, body }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
@@ -57,13 +51,17 @@ describe('ApiClient', () => {
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ records: [pushRecordFixture] });
   });
 
-  it('treats a bare { cursor } from an older server as every record applied with no conflicts', async () => {
+  it('treats a bare { cursor } from an older server as every record applied, seqs unknown', async () => {
     const { fetchFn } = stubFetch([{ status: 200, body: { cursor: 5 } }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     const result = await client.pushChanges([pushRecordFixture]);
 
-    expect(result).toEqual({ cursor: 5, applied: [], conflicts: [] });
+    expect(result).toEqual({
+      cursor: 5,
+      applied: [{ collection: 'quotes', entityId: 'q1' }],
+      conflicts: [],
+    });
   });
 
   it('GETs /v1/export and returns the records alongside their key envelopes', async () => {

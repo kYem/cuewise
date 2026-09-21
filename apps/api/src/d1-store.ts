@@ -18,7 +18,6 @@ import {
 import {
   type AppliedRecord,
   type AuthCodePayload,
-  type ConflictRecord,
   type Identity,
   type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
@@ -46,7 +45,7 @@ const UPSERT_RECORD = `INSERT INTO records (user_id, collection, entity_id, seq,
     seq = excluded.seq, ciphertext = excluded.ciphertext, deleted = excluded.deleted,
     client_updated_at = excluded.client_updated_at, server_received_at = excluded.server_received_at`;
 
-// A row that landed (inserted, or updated because the WHERE held) is returned; a refused row is not.
+// A row that landed (inserted, or updated as the WHERE held) is returned; a refused row is not.
 const RETURNING_LANDED = ' RETURNING collection, entity_id, seq';
 
 interface LandedRow {
@@ -363,16 +362,21 @@ export class D1SyncStore implements SyncStore {
       }
     });
     const conflicts = await this.currentRows(userId, refused);
+    if (conflicts.length !== refused.length) {
+      // Only a purge or account delete between the batch and the read can do this; the client keeps
+      // such a row pending and its next push inserts over the gap.
+      logger.error('Push refused rows whose current row vanished before it could be read', {
+        refused: refused.length,
+        found: conflicts.length,
+      });
+    }
     return { cursor: tail.results[0].last_seq, applied, conflicts };
   }
 
-  /**
-   * What the server holds for each refused row, so the client resolves without a second round
-   * trip. Read after the batch, so it can be newer than what refused the push; the client's
-   * re-push then simply conflicts again.
-   */
-  private async currentRows(userId: string, refused: PushRecord[]): Promise<ConflictRecord[]> {
-    const conflicts: ConflictRecord[] = [];
+  // Read after the batch, so a row can be newer than what refused the push; the client's re-push
+  // then simply conflicts again.
+  private async currentRows(userId: string, refused: PushRecord[]): Promise<SyncRecord[]> {
+    const conflicts: SyncRecord[] = [];
     for (let start = 0; start < refused.length; start += CONFLICT_LOOKUP_CHUNK) {
       const chunk = refused.slice(start, start + CONFLICT_LOOKUP_CHUNK);
       const where = chunk.map(() => '(collection = ? AND entity_id = ?)').join(' OR ');
@@ -394,14 +398,10 @@ export class D1SyncStore implements SyncStore {
         conflicts.push({
           collection: row.collection,
           entityId: row.entity_id,
-          current: {
-            collection: row.collection,
-            entityId: row.entity_id,
-            seq: row.seq,
-            ciphertext: row.ciphertext,
-            deleted: row.deleted === 1,
-            clientUpdatedAt: row.client_updated_at,
-          },
+          seq: row.seq,
+          ciphertext: row.ciphertext,
+          deleted: row.deleted === 1,
+          clientUpdatedAt: row.client_updated_at,
         });
       }
     }

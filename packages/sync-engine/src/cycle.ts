@@ -1,5 +1,6 @@
 import { type DataKey, DecryptError, EnvelopeParseError } from '@cuewise/crypto';
 import {
+  type AppliedRecord,
   hlcCompare,
   hlcDecode,
   hlcEncode,
@@ -48,9 +49,9 @@ interface PullState {
   applied: Set<string>;
   /** Keys whose quarantine membership this pull changed — not merely re-observed. */
   quarantined: Set<string>;
-  /** Highest server seq seen per key. The server's fact about the row, so it merges by max, unguarded. */
+  /** Highest server seq seen per key: the server's fact about the row, merged by max, unguarded. */
   seqs: Map<string, number>;
-  /** Keys whose local version outranked the pulled one; re-dirtied so the next push repairs the server. */
+  /** Keys the local version outranked, re-dirtied so the next push repairs the server. */
   redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
@@ -67,7 +68,6 @@ function newPullState(meta: SyncMeta): PullState {
   };
 }
 
-/** Adds an id to a collection's dirty list without duplicating it. */
 function markDirty(meta: SyncMeta, collection: string, entityId: string): void {
   const ids = meta.dirty[collection] ?? [];
   if (!ids.includes(entityId)) {
@@ -185,7 +185,8 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
   if (first.kind === 'cancelled') {
     return first;
   }
-  let sent = dirtyRecords.length;
+  const landed = [...first.landed];
+  let leftover = first.retry;
   if (first.retry.size > 0) {
     // One more round for ids a conflict left dirty under a fresh base. A row still moving after
     // that waits for the next cycle rather than looping here.
@@ -194,17 +195,24 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     if (second.kind === 'cancelled') {
       return second;
     }
-    sent += again.length;
+    landed.push(...second.landed);
+    leftover = second.retry;
   }
-  logger.debug(`Sync push sent ${sent} record(s)`, {
-    byCollection: tallyByCollection(dirtyRecords.map((item) => item.collection)),
+  if (leftover.size > 0) {
+    logger.debug(`Sync push left ${leftover.size} record(s) for the next cycle: rows moved twice`);
+  }
+  logger.debug(`Sync push sent ${landed.length} record(s)`, {
+    byCollection: tallyByCollection(landed.map((item) => item.collection)),
   });
   return { kind: 'complete' };
 }
 
-type BatchesResult = { kind: 'cancelled' } | { kind: 'pushed'; retry: Set<string> };
+type BatchesResult =
+  | { kind: 'cancelled' }
+  | { kind: 'pushed'; landed: DirtyRecord[]; retry: Set<string> };
 
 async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promise<BatchesResult> {
+  const landed: DirtyRecord[] = [];
   const retry = new Set<string>();
   for (let start = 0; start < dirtyRecords.length; start += MAX_PUSH_BATCH) {
     if (deps.isCancelled()) {
@@ -213,23 +221,34 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     const response = await deps.transport.pushChanges(batch.map((item) => item.record));
     // After the round trip: the server already holds these records, and that has to be said. The
-    // skipped write is belt-and-braces — clearAcked's hlc guard no-ops on a reset ledger anyway.
+    // ledger write below is skipped outright — its seqs and re-dirty marks are not hlc-guarded.
     if (deps.isCancelled()) {
       logger.error(
-        `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${batch.length - response.conflicts.length} records`
+        `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${response.applied.length} records`
       );
       return { kind: 'cancelled' };
     }
-    const settled = await settleConflicts(deps, response);
+    const acked = ackedRecords(batch, response);
+    // A delta, not the snapshot above: anything marked dirty during the round trip must survive.
+    await deps.meta.update((fresh) => recordAcks(fresh, acked, response.applied));
+    landed.push(...acked);
+    if (response.conflicts.length > 0) {
+      logger.debug(`Sync push had ${response.conflicts.length} record(s) refused`, {
+        byCollection: tallyByCollection(response.conflicts.map((c) => c.collection)),
+      });
+    }
+    const settled = await settleConflicts(deps, response.conflicts);
     // Re-checked: settling awaited (decrypts, local writes), and the enqueue below must follow a
     // check with no await between them, or a disable's ledger reset could be undone by this delta.
     if (deps.isCancelled()) {
-      return { kind: 'cancelled' };
+      return cancelledPush(settled.state?.applied.size ?? 0);
     }
-    // A delta, not the snapshot above: anything marked dirty during the round trip must survive.
-    await deps.meta.update((fresh) =>
-      recordBatch(fresh, batch, response, settled, (deps.now ?? Date.now)())
-    );
+    if (settled.state !== null) {
+      const state = settled.state;
+      await deps.meta.update((fresh) =>
+        recordSettled(fresh, batch, state, settled.cleared, (deps.now ?? Date.now)())
+      );
+    }
     for (const key of settled.retry) {
       retry.add(key);
     }
@@ -237,14 +256,60 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
       throw new Error(`sync push stalled applying the server's version of ${settled.stalled}`);
     }
   }
-  return { kind: 'pushed', retry };
+  return { kind: 'pushed', landed, retry };
 }
 
-/** What settling a batch's conflicts against local decided; `state` is null when there were none. */
+/** See cancelledPull: versions settled onto this device before the stop leave no hlc behind. */
+function cancelledPush(applied: number): BatchesResult {
+  if (applied > 0) {
+    logger.error(
+      `Cloud sync stopped a push for a disconnected account; ${applied} server versions of its refused records had already been applied to this device`
+    );
+  }
+  return { kind: 'cancelled' };
+}
+
+/**
+ * The batch records the server named in `applied`. A record in neither list is left pending and
+ * said so: silently treating it as landed would drop a local edit.
+ */
+function ackedRecords(batch: DirtyRecord[], response: PushResponse): DirtyRecord[] {
+  const applied = new Set(
+    response.applied.map((a) => SyncMetadataStore.entityKey(a.collection, a.entityId))
+  );
+  const refused = new Set(
+    response.conflicts.map((c) => SyncMetadataStore.entityKey(c.collection, c.entityId))
+  );
+  const acked: DirtyRecord[] = [];
+  for (const item of batch) {
+    if (applied.has(item.key)) {
+      acked.push(item);
+    } else if (!refused.has(item.key)) {
+      logger.warn('Push record neither applied nor refused; keeping it pending', {
+        collection: item.collection,
+        entityId: item.entityId,
+      });
+    }
+  }
+  return acked;
+}
+
+function recordAcks(fresh: SyncMeta, acked: DirtyRecord[], applied: AppliedRecord[]): void {
+  clearAcked(fresh, acked);
+  for (const { collection, entityId, seq } of applied) {
+    if (seq === undefined) {
+      continue;
+    }
+    const key = SyncMetadataStore.entityKey(collection, entityId);
+    fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+  }
+}
+
+/** What settling a batch's conflicts decided; `state` is null when there were none. */
 interface SettledConflicts {
   state: PullState | null;
-  /** Conflicts whose dirty mark may clear: the server's version was applied, or was already ours. */
-  cleared: Set<string>;
+  /** Conflicts whose dirty mark may clear: the server's version applied, or was already ours. */
+  cleared: Map<string, 'applied' | 'same'>;
   /** Conflicts still dirty, now with the server's seq as their base. */
   retry: Set<string>;
   /** The key whose server version could not be written locally, if any. */
@@ -255,38 +320,40 @@ interface SettledConflicts {
  * Resolves each refused record against local through the same path a pull uses, minus the cursor.
  * The server never chooses: a conflict only means "you did not see this version yet".
  */
-async function settleConflicts(deps: CycleDeps, response: PushResponse): Promise<SettledConflicts> {
+async function settleConflicts(
+  deps: CycleDeps,
+  conflicts: SyncRecord[]
+): Promise<SettledConflicts> {
   const settled: SettledConflicts = {
     state: null,
-    cleared: new Set(),
+    cleared: new Map(),
     retry: new Set(),
     stalled: null,
   };
-  if (response.conflicts.length === 0) {
+  if (conflicts.length === 0) {
     return settled;
   }
   const state = newPullState(await deps.meta.load());
   settled.state = state;
   const warnedUnknownCollections = new Set<string>();
-  for (const conflict of response.conflicts) {
+  for (const conflict of conflicts) {
     if (deps.isCancelled()) {
       return settled;
     }
     const key = SyncMetadataStore.entityKey(conflict.collection, conflict.entityId);
-    const outcome = await resolveAndApply(deps, state, conflict.current, warnedUnknownCollections);
-    if (outcome.kind === 'applied' || outcome.kind === 'unknown-collection') {
-      settled.cleared.add(key);
+    const outcome = await resolveAndApply(deps, state, conflict, warnedUnknownCollections);
+    if (outcome.kind === 'applied') {
+      settled.cleared.set(key, 'applied');
     } else if (outcome.kind === 'kept') {
       if (outcome.reason === 'same') {
-        settled.cleared.add(key);
+        settled.cleared.set(key, 'same');
       } else {
         settled.retry.add(key);
       }
     } else if (outcome.kind === 'quarantined') {
-      // Parity with the unconditional push this replaces: a version this device can read outranks
-      // a row it cannot, so the retry lands over it under the recorded seq.
+      // A version this device can read outranks a row it cannot: the retry lands over it.
       settled.retry.add(key);
-    } else {
+    } else if (outcome.kind === 'failed') {
       settled.stalled = key;
       return settled;
     }
@@ -294,35 +361,25 @@ async function settleConflicts(deps: CycleDeps, response: PushResponse): Promise
   return settled;
 }
 
-/** One batch's ledger delta: acks, applied seqs, and whatever settling its conflicts decided. */
-function recordBatch(
+/** One batch's conflict delta: what settling applied, and the dirty marks it may clear. */
+function recordSettled(
   fresh: SyncMeta,
   batch: DirtyRecord[],
-  response: PushResponse,
-  settled: SettledConflicts,
+  state: PullState,
+  cleared: Map<string, 'applied' | 'same'>,
   wallMs: number
 ): void {
-  const conflicted = new Set(
-    response.conflicts.map((c) => SyncMetadataStore.entityKey(c.collection, c.entityId))
-  );
-  clearAcked(
-    fresh,
-    batch.filter((item) => !conflicted.has(item.key))
-  );
-  for (const applied of response.applied) {
-    const key = SyncMetadataStore.entityKey(applied.collection, applied.entityId);
-    fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, applied.seq);
-  }
-  if (settled.state === null) {
-    return;
-  }
   // Decided before the merge moves any hlc: an id re-edited during the round trip keeps its mark.
   const clearable = batch.filter(
-    (item) => settled.cleared.has(item.key) && fresh.hlcs[item.key] === item.hlc
+    (item) => cleared.has(item.key) && fresh.hlcs[item.key] === item.hlc
   );
-  mergePull(fresh, settled.state, wallMs);
-  for (const { collection, entityId } of clearable) {
-    clearDirty(fresh, collection, entityId);
+  mergePull(fresh, state, wallMs);
+  for (const item of clearable) {
+    clearDirty(fresh, item.collection, item.entityId);
+    // The server already held this exact version, which is an ack in all but name.
+    if (cleared.get(item.key) === 'same') {
+      fresh.tombstones = fresh.tombstones.filter((t) => t !== item.key);
+    }
   }
 }
 
@@ -359,7 +416,6 @@ async function buildDirtyRecords(
       const entity = all[entityId] ?? null;
       const body: RecordBody = { entity, hlc };
       const record = await toPushRecord(deps.dk, deps.keyId, collection, entityId, body);
-      // Known seq ⇒ conditional push; unknown ⇒ unconditional, as before compare-and-set existed.
       const baseSeq = meta.seqs[key];
       if (baseSeq !== undefined) {
         record.baseSeq = baseSeq;
@@ -468,7 +524,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
 /** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */
 type ApplyResult = 'wrote' | 'skipped' | 'failed';
 
-/** What resolving one server record against local did; the pull and the push's conflict path share it. */
+/** What resolving one server record against local did; the pull and conflict paths share it. */
 type ApplyOutcome =
   | { kind: 'applied' }
   | { kind: 'kept'; reason: 'newer' | 'same' }
@@ -561,9 +617,12 @@ async function resolveAndApply(
 
   const res = await binding.writeOne(rec.entityId, resolution.body.entity);
   if (!res.success) {
-    // Without this, a wedged pull (e.g. persistent quota) is undiagnosable —
-    // nothing else connects "cursor stalled at seq N" to the failing write.
-    logger.error('Pull-cycle write failed; stopping before advancing the cursor', {
+    // A seq this device could not act on must not become its next push's base, or that push would
+    // land over the very version it just judged newer.
+    pull.seqs.delete(key);
+    // Without this, a wedged cycle (e.g. persistent quota) is undiagnosable —
+    // nothing else connects "stalled at seq N" to the failing write.
+    logger.error('Sync write failed applying a server record; it stays pending', {
       collection: rec.collection,
       entityId: rec.entityId,
       seq: rec.seq,
@@ -573,6 +632,7 @@ async function resolveAndApply(
   }
   meta.hlcs[key] = resolution.body.hlc;
   pull.applied.add(key);
+  pull.redirtied.delete(key);
   meta.clock = hlcEncode(
     hlcReceive(hlcDecode(meta.clock), hlcDecode(resolution.body.hlc), (deps.now ?? Date.now)())
   );

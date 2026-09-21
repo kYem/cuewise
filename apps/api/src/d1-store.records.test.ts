@@ -274,7 +274,9 @@ describe('D1SyncStore records', () => {
     expect(result.conflicts[0]).toMatchObject({
       collection: 'quotes',
       entityId: 'a',
-      current: { collection: 'quotes', entityId: 'a', seq: 2, ciphertext: 'v2', deleted: false },
+      seq: 2,
+      ciphertext: 'v2',
+      deleted: false,
     });
     const { records } = await store.listChanges(userId, 0);
     expect(records[0]?.ciphertext).toBe('v2');
@@ -310,14 +312,41 @@ describe('D1SyncStore records', () => {
 
     const result = await store.applyChanges(userId, [record({ entityId: 'a', baseSeq: 1 })]);
 
-    expect(result.conflicts[0]?.current).toMatchObject({ seq: 2, deleted: true });
+    expect(result.conflicts[0]).toMatchObject({ seq: 2, deleted: true });
+  });
+
+  it('hands back every refused row of a full batch, across the conflict-lookup chunks', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await newUser(store, 'u-cas-chunks');
+    const ids = Array.from({ length: 100 }, (_, i) => `e${i}`);
+    await store.applyChanges(
+      userId,
+      ids.map((entityId) => record({ entityId }))
+    ); // seqs 1..100
+    const bumped = await store.applyChanges(
+      userId,
+      ids.map((entityId, i) => record({ entityId, ciphertext: 'v2', baseSeq: i + 1 }))
+    );
+    expect(bumped.applied).toHaveLength(100);
+
+    const result = await store.applyChanges(
+      userId,
+      ids.map((entityId, i) => record({ entityId, ciphertext: 'stale', baseSeq: i + 1 }))
+    );
+
+    expect(result.applied).toEqual([]);
+    expect(result.conflicts).toHaveLength(100);
+    expect(new Set(result.conflicts.map((c) => c.entityId))).toEqual(new Set(ids));
+    const bumpedSeqs = new Map(bumped.applied.map((a) => [a.entityId, a.seq]));
+    expect(result.conflicts.every((c) => c.seq === bumpedSeqs.get(c.entityId))).toBe(true);
+    expect(result.conflicts.every((c) => c.ciphertext === 'v2')).toBe(true);
   });
 
   it('applies the fresh rows of a mixed batch, leaves seq gaps for the refused ones, and pages across them', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u-cas-mixed');
-    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]); // seqs 1, 2
-    await store.applyChanges(userId, [record({ entityId: 'a', baseSeq: 1 })]); // a -> 3
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
+    await store.applyChanges(userId, [record({ entityId: 'a', baseSeq: 1 })]); // a: 1 -> 3
 
     const result = await store.applyChanges(userId, [
       record({ entityId: 'a', baseSeq: 1 }), // stale: reserved seq 4 goes unused

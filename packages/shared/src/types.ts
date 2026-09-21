@@ -696,7 +696,10 @@ export interface PushRecord {
   ciphertext: string;
   clientUpdatedAt: number;
   deleted: boolean;
-  /** The server seq this device last saw for the entity; omitted when unknown (then the push is unconditional). */
+  /**
+   * The server seq this device last saw for the entity; omitted when unknown, which makes the push
+   * unconditional.
+   */
   baseSeq?: number;
 }
 
@@ -707,20 +710,18 @@ export interface SyncRecord extends Omit<PushRecord, 'baseSeq'> {
 export interface AppliedRecord {
   collection: string;
   entityId: string;
-  seq: number;
+  /** Omitted only when an older server answered a bare cursor: the record landed, its seq is unknown. */
+  seq?: number;
 }
 
-/** A refused push: the row moved past `baseSeq`; `current` is what the server holds now. */
-export interface ConflictRecord {
-  collection: string;
-  entityId: string;
-  current: SyncRecord;
-}
-
+/**
+ * Every pushed record is in exactly one list: `applied` landed, `conflicts` were refused because the
+ * row moved past their `baseSeq` and carry the row as the server holds it now.
+ */
 export interface PushResponse {
   cursor: number;
   applied: AppliedRecord[];
-  conflicts: ConflictRecord[];
+  conflicts: SyncRecord[];
 }
 
 export interface KeyEnvelopeRecord {

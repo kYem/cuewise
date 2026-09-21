@@ -68,7 +68,6 @@ export class ApiClient {
     return this.parseSuccessBody<{ records: SyncRecord[]; cursor: number }>(res);
   }
 
-  /** A server that predates compare-and-set answers a bare `{cursor}`: nothing conflicted, seqs unknown. */
   async pushChanges(records: PushRecord[]): Promise<PushResponse> {
     const res = await this.request(
       '/v1/changes',
@@ -80,7 +79,10 @@ export class ApiClient {
       { auth: true }
     );
     const body = await this.parseSuccessBody<Partial<PushResponse> & { cursor: number }>(res);
-    return { cursor: body.cursor, applied: body.applied ?? [], conflicts: body.conflicts ?? [] };
+    // A pre-compare-and-set server answers a bare cursor: everything landed, no seqs to report.
+    const applied =
+      body.applied ?? records.map((r) => ({ collection: r.collection, entityId: r.entityId }));
+    return { cursor: body.cursor, applied, conflicts: body.conflicts ?? [] };
   }
 
   async logout(): Promise<void> {

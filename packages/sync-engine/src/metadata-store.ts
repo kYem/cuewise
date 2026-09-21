@@ -50,7 +50,7 @@ function isSyncMeta(value: unknown): value is SyncMeta {
   );
 }
 
-// Ledgers written before seqs existed load as-is; an absent map means "no seq known", which is
+// Ledgers persisted before `seqs` existed still load; an absent map means "no seq known", which is
 // exactly what an unconditional first push needs.
 function withSeqs(meta: SyncMeta): SyncMeta {
   if (typeof meta.seqs === 'object' && meta.seqs !== null) {

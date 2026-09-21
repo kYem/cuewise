@@ -42,11 +42,11 @@ describe('POST /v1/changes then GET /v1/changes', () => {
     expect(res.status).toBe(200);
     const body = await res.json<{
       applied: unknown[];
-      conflicts: Array<{ entityId: string; current: { seq: number; ciphertext: string } }>;
+      conflicts: Array<{ entityId: string; seq: number; ciphertext: string }>;
     }>();
     expect(body.applied).toEqual([]);
     expect(body.conflicts).toHaveLength(1);
-    expect(body.conflicts[0]?.current).toMatchObject({ seq: 2, ciphertext: 'v2' });
+    expect(body.conflicts[0]).toMatchObject({ entityId: 'a', seq: 2, ciphertext: 'v2' });
   });
 
   it('GET since=0 returns both pushed records with round-tripped fields', async () => {

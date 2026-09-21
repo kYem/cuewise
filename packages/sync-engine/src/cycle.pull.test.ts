@@ -127,7 +127,7 @@ describe('pullOnce', () => {
     expect(saved.dirty.goals).toBeUndefined();
   });
 
-  it('keeps local when incoming is older, without writing, but still advances the cursor', async () => {
+  it('keeps local when incoming is older, advances the cursor, and re-dirties the key so the push repairs the server', async () => {
     const local = goalFactory.build({ id: 'g1', text: 'local' });
     await setGoals([local]);
     await seedLocalHlc(metaStore, 'goals', 'g1', NEWER_HLC);
@@ -145,7 +145,6 @@ describe('pullOnce', () => {
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(1);
     expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
-    // ENG-126: the server holds the older version, so the local winner goes back on the push list.
     expect(saved.dirty.goals).toEqual(['g1']);
     expect(saved.seqs['goals/g1']).toBe(1);
   });
@@ -188,7 +187,6 @@ describe('pullOnce', () => {
   });
 
   it('keeps the seq the pull saw even when an edit stamped the key during the round trip', async () => {
-    // The hlc guard protects content; the seq is the server's fact about the row and always merges.
     const local = goalFactory.build({ id: 'g1', text: 'local' });
     await setGoals([local]);
     await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
@@ -293,7 +291,7 @@ describe('pullOnce', () => {
     expect(saved.hlcs['goals/g1']).toBeUndefined();
     // The stall must be diagnosable: the log names the record and the error.
     expect(errorSpy).toHaveBeenCalledWith(
-      'Pull-cycle write failed; stopping before advancing the cursor',
+      'Sync write failed applying a server record; it stays pending',
       expect.objectContaining({
         collection: 'goals',
         entityId: 'g1',
@@ -301,6 +299,35 @@ describe('pullOnce', () => {
         error: expect.objectContaining({ message: 'quota exceeded' }),
       })
     );
+    errorSpy.mockRestore();
+  });
+
+  it('records no seq for a record it could not write, so the push cannot land over it', async () => {
+    // Otherwise the same cycle's push would carry this seq as its base and overwrite the very
+    // version it just judged newer, with the server none the wiser.
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
+    await metaStore.update((meta) => {
+      meta.dirty.goals = ['g1'];
+      meta.seqs['goals/g1'] = 2;
+    });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 5),
+    ];
+    const bindings = defaultBindings();
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+      storageFailure('quota exceeded')
+    );
+
+    const result = await pullOnce(makeDeps({ bindings }));
+
+    expect(result).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g1' });
+    const saved = await metaStore.load();
+    expect(saved.seqs['goals/g1']).toBe(2);
+    expect(saved.cursor).toBe(0);
+    expect(saved.dirty.goals).toEqual(['g1']);
     errorSpy.mockRestore();
   });
 

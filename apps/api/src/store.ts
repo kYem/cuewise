@@ -6,7 +6,6 @@ import type {
 } from '@cuewise/crypto';
 import type {
   AppliedRecord,
-  ConflictRecord,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
@@ -18,7 +17,6 @@ import type { RawSessionToken, SessionId, SessionTokenHash } from './crypto-util
 
 export type {
   AppliedRecord,
-  ConflictRecord,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
@@ -93,9 +91,8 @@ export interface SyncStore {
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
-  // Rows whose `baseSeq` matches (or is omitted) land and come back under `applied` with their new
-  // seq; rows whose `baseSeq` is stale are refused and come back under `conflicts` with the current
-  // row. Throws StorageQuotaExceededError when the push would exceed the per-user record cap.
+  // Rows whose `baseSeq` is stale are refused and answered under `conflicts` as the current row; the
+  // rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
   applyChanges(userId: string, changes: PushRecord[]): Promise<PushResponse>;
   // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
   // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).

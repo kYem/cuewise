@@ -6,7 +6,6 @@ import type {
 } from '@cuewise/crypto';
 import type {
   AppliedRecord,
-  ConflictRecord,
   ExchangeTokenRequest,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
@@ -18,7 +17,6 @@ import type {
 
 export type {
   AppliedRecord,
-  ConflictRecord,
   ExchangeTokenRequest,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,

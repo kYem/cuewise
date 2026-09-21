@@ -476,8 +476,77 @@ describe('pushOnce', () => {
 
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
-    expect(saved.seqs['goals/g1']).toBe(2);
+    // Not 2: a seq this device could not act on must not become the next push's base.
+    expect(saved.seqs['goals/g1']).toBe(1);
     errorSpy.mockRestore();
+  });
+
+  it('resurrects a tombstone this device pushed when the conflict shows a newer edit elsewhere', async () => {
+    await setGoals([]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.tombstones.push('goals/g1');
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const theirs = goalFactory.build({ id: 'g1', text: 'edited elsewhere' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+    );
+
+    await pushOnce(deps);
+
+    expect(transport.pushedBatches[0][0].deleted).toBe(true);
+    expect(await getGoals()).toEqual([theirs]);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.tombstones).not.toContain('goals/g1');
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+  });
+
+  it('prunes the tombstone entry when a conflict shows the server already holds this delete', async () => {
+    await setGoals([]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.tombstones.push('goals/g1');
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: null, hlc: HLC }, 2)
+    );
+
+    await pushOnce(deps);
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.tombstones).not.toContain('goals/g1');
+  });
+
+  it('keeps a record pending and says so when the server lists it as neither applied nor refused', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    vi.spyOn(transport, 'pushChanges').mockResolvedValue({
+      cursor: 1,
+      applied: [],
+      conflicts: [],
+    });
+
+    await pushOnce(makeDeps(kv, transport, { meta: metaStore }));
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Push record neither applied nor refused; keeping it pending',
+      { collection: 'goals', entityId: 'g1' }
+    );
+    warnSpy.mockRestore();
   });
 
   it('retries a conflict at most once per call, leaving a still-moving row for the next cycle', async () => {

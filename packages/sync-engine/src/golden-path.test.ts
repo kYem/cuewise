@@ -365,21 +365,24 @@ describe('compare-and-set: the server never regresses an entity', () => {
       throw new Error('expected B to have pushed g1');
     }
 
-    const pushSpy = vi.spyOn(server, 'pushChanges');
+    // Park A's cursor at the server head so its push goes first and the base does the refusing.
+    await new SyncMetadataStore(deviceA.kv).update((meta) => {
+      meta.cursor = Math.max(...server.rows().map((r) => r.seq));
+    });
     useStorage(deviceA);
     await deviceA.engine.syncNow();
 
-    // A's pull brought B's version first, so A's older edit lost locally and never reached the
-    // server: every g1 record A pushed carries B's clock (a re-push of the applied content) and a
-    // base, never A's older edit. Had the pull been slower, the base would have refused it instead.
+    expect(server.rows().find((r) => r.entityId === 'g1')?.seq).toBe(bRow.seq);
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
+    expect((await new SyncMetadataStore(deviceA.kv).load()).dirty.goals).toBeUndefined();
+
+    const pushSpy = vi.spyOn(server, 'pushChanges');
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
     const g1Pushes = pushSpy.mock.calls.flatMap(([records]) =>
       records.filter((r) => r.entityId === 'g1')
     );
-    expect(g1Pushes.every((r) => r.baseSeq !== undefined)).toBe(true);
-    expect(g1Pushes.every((r) => r.clientUpdatedAt >= bRow.clientUpdatedAt)).toBe(true);
-    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
-    useStorage(deviceB);
-    await deviceB.engine.syncNow();
+    expect(g1Pushes).toEqual([]);
     expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
   });
 
@@ -416,7 +419,7 @@ describe('compare-and-set: the server never regresses an entity', () => {
     const before = server.rows().find((r) => r.entityId === 'g1')?.seq;
     expect(before).toBeGreaterThan(0);
 
-    // A pulls the stale row, keeps its own (strictly newer), re-dirties, and repairs in the same cycle.
+    // A pulls the stale row, keeps its own (strictly newer), re-dirties and repairs in one cycle.
     useStorage(deviceA);
     await deviceA.engine.syncNow();
     const after = server.rows().find((r) => r.entityId === 'g1')?.seq;

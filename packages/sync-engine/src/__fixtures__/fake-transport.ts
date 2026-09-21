@@ -7,11 +7,11 @@ export class FakeTransport implements SyncTransport {
   readonly pushedBatches: PushRecord[][] = [];
   rejectPush = false;
   /**
-   * Server rows the push checks `baseSeq` against and assigns seqs into, keyed "collection/entityId".
-   * Seed one to script a conflict; a push without `baseSeq` overwrites it like a legacy client.
+   * Server rows the push checks `baseSeq` against and assigns seqs into, keyed
+   * "collection/entityId". Seed one to script a conflict; a push without `baseSeq` overwrites it.
    */
   readonly serverRecords = new Map<string, SyncRecord>();
-  /** When true, answers a bare cursor as ApiClient normalises an older server's reply: nothing named. */
+  /** A pre-compare-and-set server: ignores `baseSeq` and answers as ApiClient normalises it. */
   legacyPushResponse = false;
   /** Canned server-side records for getChanges to page through, sorted by seq. */
   pullRecords: SyncRecord[] = [];
@@ -42,22 +42,25 @@ export class FakeTransport implements SyncTransport {
       const current = this.serverRecords.get(key);
       // Like the real store: every row reserves a seq, used or not.
       this.cursor += 1;
-      if (rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq) {
-        response.conflicts.push({ collection: rec.collection, entityId: rec.entityId, current });
+      const stale =
+        rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq;
+      if (stale && !this.legacyPushResponse) {
+        response.conflicts.push(current);
         continue;
       }
       const { baseSeq: _base, ...wire } = rec;
       this.serverRecords.set(key, { ...wire, seq: this.cursor });
-      response.applied.push({
-        collection: rec.collection,
-        entityId: rec.entityId,
-        seq: this.cursor,
-      });
+      if (this.legacyPushResponse) {
+        response.applied.push({ collection: rec.collection, entityId: rec.entityId });
+      } else {
+        response.applied.push({
+          collection: rec.collection,
+          entityId: rec.entityId,
+          seq: this.cursor,
+        });
+      }
     }
     response.cursor = this.cursor;
-    if (this.legacyPushResponse) {
-      return { cursor: this.cursor, applied: [], conflicts: [] };
-    }
     return response;
   }
 

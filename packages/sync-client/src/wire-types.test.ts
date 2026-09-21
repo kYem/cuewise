@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { AppliedRecord, ConflictRecord, PushRecord, PushResponse, SyncRecord } from './types';
+import type { AppliedRecord, PushRecord, PushResponse, SyncRecord } from './types';
 
 describe('sync wire types', () => {
   it('a push may carry the seq it last saw, a pulled record never does', () => {
@@ -9,9 +9,8 @@ describe('sync wire types', () => {
     expectTypeOf<SyncRecord['seq']>().toEqualTypeOf<number>();
   });
 
-  it('a push response names what landed and what was refused', () => {
+  it('a push response names what landed and hands back the current row for what was refused', () => {
     expectTypeOf<PushResponse['applied']>().toEqualTypeOf<AppliedRecord[]>();
-    expectTypeOf<PushResponse['conflicts']>().toEqualTypeOf<ConflictRecord[]>();
-    expectTypeOf<ConflictRecord['current']>().toEqualTypeOf<SyncRecord>();
+    expectTypeOf<PushResponse['conflicts']>().toEqualTypeOf<SyncRecord[]>();
   });
 });

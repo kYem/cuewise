@@ -70,7 +70,7 @@ export class FakeSyncServer {
 
   /**
    * Upsert-by-id with compare-and-set, like the real store: a record whose `baseSeq` is not the
-   * row's current seq is refused and comes back under `conflicts`; one without `baseSeq` overwrites.
+   * row's current seq is refused under `conflicts`; one without `baseSeq` overwrites.
    */
   pushChanges(records: PushRecord[]): PushResponse {
     const response: PushResponse = { cursor: this.nextSeq, applied: [], conflicts: [] };
@@ -82,7 +82,7 @@ export class FakeSyncServer {
       // Like the real store: every row reserves a seq, used or not.
       this.nextSeq += 1;
       if (rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq) {
-        response.conflicts.push({ collection: rec.collection, entityId: rec.entityId, current });
+        response.conflicts.push(current);
         continue;
       }
       const { baseSeq: _base, ...wire } = rec;
