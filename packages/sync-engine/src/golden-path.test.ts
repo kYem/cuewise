@@ -10,6 +10,7 @@ import {
 import { SessionManager } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
@@ -81,14 +82,6 @@ function useStorage(device: Pick<Device, 'kv'>): void {
 
 function getBinding(name: string): CollectionBinding {
   return requireBinding(defaultBindings(), name);
-}
-
-function requireBinding(bindings: CollectionBinding[], name: string): CollectionBinding {
-  const binding = bindings.find((b) => b.name === name);
-  if (binding === undefined) {
-    throw new Error(`no binding named ${name}`);
-  }
-  return binding;
 }
 
 describe('golden path: two devices converge through one shared fake server', () => {

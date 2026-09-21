@@ -316,6 +316,7 @@ describe('D1SyncStore records', () => {
   });
 
   it('hands back every refused row of a full batch, across the conflict-lookup chunks', async () => {
+    // The local D1 emulator does not enforce the bind cap, so this proves the reassembly, not it.
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u-cas-chunks');
     const ids = Array.from({ length: 100 }, (_, i) => `e${i}`);

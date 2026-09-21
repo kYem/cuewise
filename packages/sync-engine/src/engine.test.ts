@@ -15,6 +15,7 @@ import {
 } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
@@ -167,18 +168,31 @@ async function replayFromScratch(device: Pick<Device, 'kv'>): Promise<void> {
   await setGoals([]);
 }
 
-/** Finds the goals binding or fails loudly — avoids a non-null assertion at call sites. */
-function requireGoalsBinding(bindings: CollectionBinding[]): CollectionBinding {
-  const goals = bindings.find((binding) => binding.name === 'goals');
-  if (goals === undefined) {
-    throw new Error('binding not found: goals');
+/**
+ * Lands a newer version of an entity on the server from "another device", sealed under the key
+ * this device enrolled with; answers the seq it took.
+ */
+async function seedServerVersion(
+  device: Device,
+  server: FakeSyncServer,
+  collection: string,
+  entityId: string,
+  entity: unknown
+): Promise<number | undefined> {
+  const stored = await loadPersistedDataKey(device.kv);
+  if (stored === null) {
+    throw new Error('expected a persisted data key');
   }
-  return goals;
+  const newer = await toPushRecord(stored.dk, stored.keyId, collection, entityId, {
+    entity,
+    hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
+  });
+  return server.pushChanges([newer]).applied[0]?.seq;
 }
 
 /** A disable landing mid-pull: it fires once, while the first pulled goal is being written. */
 function disableWhileWritingGoals(bindings: CollectionBinding[], engine: SyncEngine): void {
-  const goals = requireGoalsBinding(bindings);
+  const goals = requireBinding(bindings, 'goals');
   const write = goals.writeOne.bind(goals);
   let disabled = false;
   vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
@@ -344,7 +358,7 @@ describe('SyncEngine.enableSync', () => {
     const device = createDevice(server, { bindings });
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    const goals = requireGoalsBinding(bindings);
+    const goals = requireBinding(bindings, 'goals');
     const readAll = goals.readAll.bind(goals);
     // Returns the real library, so backfillDirty still writes to the ledger the disable cleared.
     vi.spyOn(goals, 'readAll').mockImplementation(async () => {
@@ -1975,25 +1989,14 @@ describe('SyncEngine.syncNow with a refused push', () => {
     await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
-    // The server moves on (a newer version under the same key) while this device edits g1 again.
-    const stored = await loadPersistedDataKey(device.kv);
-    if (stored === null) {
-      throw new Error('expected a persisted data key');
-    }
-    const newer = await toPushRecord(stored.dk, stored.keyId, 'goals', 'g1', {
-      entity: goalFactory.build({ id: 'g1', text: 'theirs' }),
-      hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
-    });
-    server.pushChanges([newer]);
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    await seedServerVersion(device, server, 'goals', 'g1', theirs);
     const meta = new SyncMetadataStore(device.kv);
     await meta.update((m) => {
       // Park the cursor so the pull brings nothing and the conflict surfaces on the push.
       m.cursor = Math.max(...server.rows().map((r) => r.seq));
     });
-    const goalsBinding = bindings.find((b) => b.name === 'goals');
-    if (goalsBinding === undefined) {
-      throw new Error('goals binding missing');
-    }
+    const goalsBinding = requireBinding(bindings, 'goals');
     await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
     await device.engine.markMutated('goals', 'g1');
     vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
@@ -2012,28 +2015,17 @@ describe('SyncEngine.syncNow with a refused push', () => {
     await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
-    const stored = await loadPersistedDataKey(device.kv);
-    if (stored === null) {
-      throw new Error('expected a persisted data key');
-    }
-    const newer = await toPushRecord(stored.dk, stored.keyId, 'goals', 'g1', {
-      entity: goalFactory.build({ id: 'g1', text: 'theirs' }),
-      hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
-    });
-    const { applied } = server.pushChanges([newer]);
-    const goalsBinding = bindings.find((b) => b.name === 'goals');
-    if (goalsBinding === undefined) {
-      throw new Error('goals binding missing');
-    }
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    const theirSeq = await seedServerVersion(device, server, 'goals', 'g1', theirs);
+    const goalsBinding = requireBinding(bindings, 'goals');
     await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
     await device.engine.markMutated('goals', 'g1');
-    // The pull sees the newer version but cannot write it; the push that follows must not win.
     vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
 
     const outcome = await device.engine.syncNow();
 
     expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
-    expect(server.rows().find((r) => r.entityId === 'g1')?.seq).toBe(applied[0]?.seq);
+    expect(server.rows().find((r) => r.entityId === 'g1')?.seq).toBe(theirSeq);
     expect((await new SyncMetadataStore(device.kv).load()).dirty.goals).toEqual(['g1']);
   });
 });
@@ -2157,7 +2149,7 @@ describe('SyncEngine ledger seqs on a re-enable', () => {
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
-    expect((await metaStore.load()).seqs).toEqual({});
+    expect((await metaStore.load()).seqs['goals/g1']).toBeUndefined();
   });
 });
 

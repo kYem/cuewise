@@ -4,6 +4,7 @@ import type {
   PairingPublicKeyB64,
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
+import { logger } from '@cuewise/shared';
 import { ApiError } from './api-error';
 import type {
   ExchangeTokenRequest,
@@ -37,6 +38,7 @@ export class ApiClient {
   private readonly opts: ApiClientOptions;
   private readonly fetchFn: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
+  private warnedLegacyPush = false;
 
   constructor(opts: ApiClientOptions) {
     this.opts = opts;
@@ -79,10 +81,23 @@ export class ApiClient {
       { auth: true }
     );
     const body = await this.parseSuccessBody<Partial<PushResponse> & { cursor: number }>(res);
-    // A pre-compare-and-set server answers a bare cursor: everything landed, no seqs to report.
-    const applied =
-      body.applied ?? records.map((r) => ({ collection: r.collection, entityId: r.entityId }));
-    return { cursor: body.cursor, applied, conflicts: body.conflicts ?? [] };
+    if (body.applied !== undefined && body.conflicts !== undefined) {
+      return { cursor: body.cursor, applied: body.applied, conflicts: body.conflicts };
+    }
+    // Half a reply is neither shape; a pre-compare-and-set server answers a bare cursor, meaning
+    // everything landed with no seqs to report.
+    if (body.applied !== undefined || body.conflicts !== undefined) {
+      throw new ApiError('invalid_response', res.status);
+    }
+    if (!this.warnedLegacyPush) {
+      this.warnedLegacyPush = true;
+      logger.warn('Sync server predates compare-and-set; pushes are unconditional');
+    }
+    return {
+      cursor: body.cursor,
+      applied: records.map((r) => ({ collection: r.collection, entityId: r.entityId })),
+      conflicts: [],
+    };
   }
 
   async logout(): Promise<void> {

@@ -710,13 +710,13 @@ export interface SyncRecord extends Omit<PushRecord, 'baseSeq'> {
 export interface AppliedRecord {
   collection: string;
   entityId: string;
-  /** Omitted only when an older server answered a bare cursor: the record landed, its seq is unknown. */
+  /** Absent only when an older server answered a bare cursor: the record landed, seq unknown. */
   seq?: number;
 }
 
 /**
- * Every pushed record is in exactly one list: `applied` landed, `conflicts` were refused because the
- * row moved past their `baseSeq` and carry the row as the server holds it now.
+ * `applied` landed. `conflicts` were refused because the row moved past their `baseSeq` and carry
+ * the row as the server holds it now.
  */
 export interface PushResponse {
   cursor: number;

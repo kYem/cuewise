@@ -30,7 +30,7 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `putPairingEnvelope(id, envelope)` | `PUT /v1/pairings/:id/envelope` | Yes |
 | `deletePairing(id)` | `DELETE /v1/pairings/:id` | Yes |
 
-A record's optional `baseSeq` makes its push conditional on the server row still being at that seq; refused rows come back under `conflicts` with the current row, and an older server's bare `{cursor}` is normalised to empty arrays.
+A record's optional `baseSeq` makes its push conditional on the server row still being at that seq, or gone; refused rows come back under `conflicts` with the current row. An older server's bare `{cursor}` is normalised to every record under `applied` (no `seq`) and no `conflicts`, with one warning per client; a reply carrying only one of the two arrays is an `invalid_response`.
 
 **Pairing key material is branded** (ENG-101). `createPairing`/`commitPairing`/`revealPairing`/`putPairingEnvelope` take `PairingCommitment` / `PairingPublicKeyB64` / `PairingNonceB64` / `PeerWrappedEnvelope` from `@cuewise/crypto` rather than `string`, and `getPairing`/`listPairings` return the same brands on `PairingForRequester`/`PendingPairing`: a swapped `revealPairing(id, nonce, publicKey)` would otherwise compile, clear the server's length checks, and be read by the approver as a substituted key. That is why the package depends on `@cuewise/crypto` at all — it imports the brands **type-only**, and still calls no crypto function and re-exports none. The brands carry positional identity only, never a validity claim, so a decode of one still needs its own guard. `pairing-brands.test.ts` fails the build if they collapse back to `string`.
 

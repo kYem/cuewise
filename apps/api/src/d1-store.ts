@@ -25,7 +25,7 @@ import {
   type PairingForRequester,
   type PendingPairing,
   type PushRecord,
-  type PushResponse,
+  type ServerPushResponse,
   type Session,
   StorageQuotaExceededError,
   type SyncRecord,
@@ -294,7 +294,7 @@ export class D1SyncStore implements SyncStore {
     };
   }
 
-  async applyChanges(userId: string, changes: PushRecord[]): Promise<PushResponse> {
+  async applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse> {
     const ts = this.now();
     const n = changes.length;
     if (n > 0) {
@@ -342,11 +342,15 @@ export class D1SyncStore implements SyncStore {
     // Must stay a single db.batch: every INSERT reads the post-UPDATE last_seq set by the
     // leading UPDATE in this same batch; splitting this reintroduces a multi-device race.
     const results = await this.db.batch<LandedRow & { last_seq: number }>(stmts);
+    // Positional reads below: a short reply would otherwise pass as "every record refused".
+    if (results.length !== stmts.length) {
+      throw new Error(`applyChanges: expected ${stmts.length} result sets, got ${results.length}`);
+    }
     const tail = results[results.length - 1];
     if (tail === undefined || tail.results[0] === undefined) {
       throw new Error('applyChanges: missing cursor result');
     }
-    const applied: AppliedRecord[] = [];
+    const applied: Required<AppliedRecord>[] = [];
     const refused: PushRecord[] = [];
     changes.forEach((change, i) => {
       // Offset 1: results[0] is the leading UPDATE.
@@ -363,8 +367,8 @@ export class D1SyncStore implements SyncStore {
     });
     const conflicts = await this.currentRows(userId, refused);
     if (conflicts.length !== refused.length) {
-      // Only a purge or account delete between the batch and the read can do this; the client keeps
-      // such a row pending and its next push inserts over the gap.
+      // A purge or account delete between the batch and the read, or one entity pushed twice; the
+      // client keeps such a row pending and its next push inserts over the gap.
       logger.error('Push refused rows whose current row vanished before it could be read', {
         refused: refused.length,
         found: conflicts.length,

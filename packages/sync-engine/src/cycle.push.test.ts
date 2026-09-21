@@ -9,6 +9,7 @@ import {
 import { getGoals, setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { disableAfterFirstWrite, requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
 import { defaultBindings } from './collections';
@@ -389,7 +390,9 @@ describe('pushOnce', () => {
     await metaStore.update((meta) => {
       meta.seqs['goals/g1'] = 1;
     });
-    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const bindings = defaultBindings();
+    const writeOneSpy = vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne');
+    const deps = makeDeps(kv, transport, { meta: metaStore, bindings });
     transport.serverRecords.set(
       'goals/g1',
       await serverRow(deps, 'goals', 'g1', { entity: mine, hlc: HLC }, 2)
@@ -398,6 +401,7 @@ describe('pushOnce', () => {
     await pushOnce(deps);
 
     expect(transport.pushedBatches).toHaveLength(1);
+    expect(writeOneSpy).not.toHaveBeenCalled();
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toBeUndefined();
     expect(saved.seqs['goals/g1']).toBe(2);
@@ -416,14 +420,16 @@ describe('pushOnce', () => {
       'goals/g1',
       await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
     );
-    const tracker = new MutationTracker(metaStore, () => 1_900_000_000_000);
+    // Stamped above the sealed hlc but below the server's, so the conflict is genuinely lost.
+    const tracker = new MutationTracker(metaStore, () => 1_750_000_000_000);
     duringPush(transport, () => tracker.markMutated('goals', 'g1'));
 
     await pushOnce(deps);
 
+    expect(await getGoals()).toEqual([theirs]);
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
-    expect(saved.seqs['goals/g1']).toBeGreaterThanOrEqual(2);
+    expect(saved.seqs['goals/g1']).toBe(2);
   });
 
   it('quarantines an undecryptable conflict, records its seq, and lands the retry over it', async () => {
@@ -443,6 +449,7 @@ describe('pushOnce', () => {
 
     expect(onQuarantine).toHaveBeenCalledWith('goals/g1');
     expect(transport.pushedBatches).toHaveLength(2);
+    expect(transport.pushedBatches[1][0].baseSeq).toBe(2);
     expect(transport.serverRecords.get('goals/g1')?.ciphertext).not.toBe('garbage');
     const saved = await metaStore.load();
     expect(saved.quarantine).toEqual(['goals/g1']);
@@ -458,11 +465,9 @@ describe('pushOnce', () => {
       meta.seqs['goals/g1'] = 1;
     });
     const bindings = defaultBindings();
-    const goalsBinding = bindings.find((b) => b.name === 'goals');
-    if (goalsBinding === undefined) {
-      throw new Error('goals binding missing');
-    }
-    vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+      storageFailure('quota exceeded')
+    );
     const deps = makeDeps(kv, transport, { meta: metaStore, bindings });
     const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
     transport.serverRecords.set(
@@ -476,9 +481,112 @@ describe('pushOnce', () => {
 
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.hlcs['goals/g1']).toBe(HLC);
     // Not 2: a seq this device could not act on must not become the next push's base.
     expect(saved.seqs['goals/g1']).toBe(1);
     errorSpy.mockRestore();
+  });
+
+  it('keeps the conflicts settled before a failed write, leaving only the stalled one dirty', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await setGoals([
+      goalFactory.build({ id: 'g1', text: 'mine 1' }),
+      goalFactory.build({ id: 'g2', text: 'mine 2' }),
+    ]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1', 'g2']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+      meta.seqs['goals/g2'] = 2;
+    });
+    const bindings = defaultBindings();
+    const goals = requireBinding(bindings, 'goals');
+    const write = goals.writeOne.bind(goals);
+    vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+      if (entityId === 'g2') {
+        return storageFailure('quota exceeded');
+      }
+      return write(entityId, entity);
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore, bindings });
+    const theirs1 = goalFactory.build({ id: 'g1', text: 'theirs 1' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: theirs1, hlc: NEWER_HLC }, 3)
+    );
+    transport.serverRecords.set(
+      'goals/g2',
+      await serverRow(deps, 'goals', 'g2', { entity: null, hlc: NEWER_HLC }, 4)
+    );
+
+    await expect(pushOnce(deps)).rejects.toThrow(
+      "sync push stalled applying the server's version of goals/g2"
+    );
+
+    expect((await getGoals()).find((g) => g.id === 'g1')).toEqual(theirs1);
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g2']);
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    expect(saved.seqs['goals/g1']).toBe(3);
+    expect(saved.seqs['goals/g2']).toBe(2);
+    errorSpy.mockRestore();
+  });
+
+  it('stops without writing the settled conflicts back when a disable lands mid-settle', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const bindings = defaultBindings();
+    const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
+    const deps = makeDeps(kv, transport, { meta: metaStore, bindings, isCancelled });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2)
+    );
+
+    const result = await pushOnce(deps);
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync stopped a push for a disconnected account; 1 server versions of its refused records had already been applied to this device'
+    );
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1']);
+    expect(saved.hlcs['goals/g1']).toBe(HLC);
+    expect(saved.seqs['goals/g1']).toBe(1);
+    errorSpy.mockRestore();
+  });
+
+  it('settles a record the server lists as both applied and refused as a refusal, and says so', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    const current = await serverRow(deps, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 2);
+    vi.spyOn(transport, 'pushChanges').mockResolvedValue({
+      cursor: 3,
+      applied: [{ collection: 'goals', entityId: 'g1', seq: 3 }],
+      conflicts: [current],
+    });
+
+    await pushOnce(deps);
+
+    expect(await getGoals()).toEqual([theirs]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Push record both applied and refused; settling it as refused',
+      { collection: 'goals', entityId: 'g1' }
+    );
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.hlcs['goals/g1']).toBe(NEWER_HLC);
+    warnSpy.mockRestore();
   });
 
   it('resurrects a tombstone this device pushed when the conflict shows a newer edit elsewhere', async () => {

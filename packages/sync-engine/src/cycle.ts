@@ -39,10 +39,10 @@ export interface CycleDeps {
 }
 
 /**
- * One pull's working ledger. `meta` is the snapshot it resolves conflicts against and mutates as
- * records apply; `applied` and `quarantined` name the keys it decided something about, and it may
- * claim each only while the stored ledger has not moved that key on past it meanwhile. Everything
- * else in the stored ledger — above all `dirty` — belongs to whoever wrote it.
+ * The working ledger of one pull, or of one batch's conflict settling. `meta` is the snapshot it
+ * resolves against and mutates as records apply; `applied` and `quarantined` name the keys it
+ * decided something about, and it may claim each only while the stored ledger has not moved that
+ * key on past it meanwhile. `dirty` is only ever added to; the rest belongs to whoever wrote it.
  */
 interface PullState {
   meta: SyncMeta;
@@ -173,7 +173,7 @@ function tallyByCollection(collections: readonly string[]): Record<string, numbe
 /** Batches before a `cancelled` still reached the server. */
 export type PushResult = { kind: 'complete' } | { kind: 'cancelled' };
 
-/** Seals every dirty entity and pushes it in batches, clearing dirty/tombstones as each batch acks. */
+/** Seals every dirty entity and pushes it in batches; acks clear dirty, refusals settle locally. */
 export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
   const meta = await deps.meta.load();
   const dirtyRecords = await buildDirtyRecords(deps, meta);
@@ -221,7 +221,7 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
     const batch = dirtyRecords.slice(start, start + MAX_PUSH_BATCH);
     const response = await deps.transport.pushChanges(batch.map((item) => item.record));
     // After the round trip: the server already holds these records, and that has to be said. The
-    // ledger write below is skipped outright — its seqs and re-dirty marks are not hlc-guarded.
+    // ledger write below is skipped outright — the applied seqs it records are not hlc-guarded.
     if (deps.isCancelled()) {
       logger.error(
         `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${response.applied.length} records`
@@ -229,7 +229,8 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
       return { kind: 'cancelled' };
     }
     const acked = ackedRecords(batch, response);
-    // A delta, not the snapshot above: anything marked dirty during the round trip must survive.
+    // Enqueued synchronously after the check above, so nothing may await between the two. A delta,
+    // not the snapshot the batch was sealed from: anything marked dirty meanwhile must survive.
     await deps.meta.update((fresh) => recordAcks(fresh, acked, response.applied));
     landed.push(...acked);
     if (response.conflicts.length > 0) {
@@ -246,11 +247,13 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
     if (settled.state !== null) {
       const state = settled.state;
       await deps.meta.update((fresh) =>
-        recordSettled(fresh, batch, state, settled.cleared, (deps.now ?? Date.now)())
+        recordSettled(fresh, batch, state, settled.decisions, (deps.now ?? Date.now)())
       );
     }
-    for (const key of settled.retry) {
-      retry.add(key);
+    for (const [key, decision] of settled.decisions) {
+      if (decision === 'retry') {
+        retry.add(key);
+      }
     }
     if (settled.stalled !== null) {
       throw new Error(`sync push stalled applying the server's version of ${settled.stalled}`);
@@ -270,8 +273,8 @@ function cancelledPush(applied: number): BatchesResult {
 }
 
 /**
- * The batch records the server named in `applied`. A record in neither list is left pending and
- * said so: silently treating it as landed would drop a local edit.
+ * The batch records the server named in `applied` and did not also refuse. Either other case is
+ * said out loud: a record in neither list stays pending, one in both settles as a refusal.
  */
 function ackedRecords(batch: DirtyRecord[], response: PushResponse): DirtyRecord[] {
   const applied = new Set(
@@ -282,13 +285,13 @@ function ackedRecords(batch: DirtyRecord[], response: PushResponse): DirtyRecord
   );
   const acked: DirtyRecord[] = [];
   for (const item of batch) {
-    if (applied.has(item.key)) {
+    const named = { collection: item.collection, entityId: item.entityId };
+    if (applied.has(item.key) && refused.has(item.key)) {
+      logger.warn('Push record both applied and refused; settling it as refused', named);
+    } else if (applied.has(item.key)) {
       acked.push(item);
     } else if (!refused.has(item.key)) {
-      logger.warn('Push record neither applied nor refused; keeping it pending', {
-        collection: item.collection,
-        entityId: item.entityId,
-      });
+      logger.warn('Push record neither applied nor refused; keeping it pending', named);
     }
   }
   return acked;
@@ -305,13 +308,16 @@ function recordAcks(fresh: SyncMeta, acked: DirtyRecord[], applied: AppliedRecor
   }
 }
 
+/**
+ * What one refused record came to: the server's version now sits locally (`incoming`), it was this
+ * device's own version already (`same`), or local still outranks it and pushes again (`retry`).
+ */
+type ConflictDecision = 'incoming' | 'same' | 'retry';
+
 /** What settling a batch's conflicts decided; `state` is null when there were none. */
 interface SettledConflicts {
   state: PullState | null;
-  /** Conflicts whose dirty mark may clear: the server's version applied, or was already ours. */
-  cleared: Map<string, 'applied' | 'same'>;
-  /** Conflicts still dirty, now with the server's seq as their base. */
-  retry: Set<string>;
+  decisions: Map<string, ConflictDecision>;
   /** The key whose server version could not be written locally, if any. */
   stalled: string | null;
 }
@@ -324,38 +330,44 @@ async function settleConflicts(
   deps: CycleDeps,
   conflicts: SyncRecord[]
 ): Promise<SettledConflicts> {
-  const settled: SettledConflicts = {
-    state: null,
-    cleared: new Map(),
-    retry: new Set(),
-    stalled: null,
-  };
+  const settled: SettledConflicts = { state: null, decisions: new Map(), stalled: null };
   if (conflicts.length === 0) {
     return settled;
   }
   const state = newPullState(await deps.meta.load());
   settled.state = state;
   const warnedUnknownCollections = new Set<string>();
-  for (const conflict of conflicts) {
+  for (const [index, conflict] of conflicts.entries()) {
     if (deps.isCancelled()) {
       return settled;
     }
     const key = SyncMetadataStore.entityKey(conflict.collection, conflict.entityId);
     const outcome = await resolveAndApply(deps, state, conflict, warnedUnknownCollections);
-    if (outcome.kind === 'applied') {
-      settled.cleared.set(key, 'applied');
-    } else if (outcome.kind === 'kept') {
-      if (outcome.reason === 'same') {
-        settled.cleared.set(key, 'same');
-      } else {
-        settled.retry.add(key);
+    switch (outcome.kind) {
+      case 'applied':
+        settled.decisions.set(key, 'incoming');
+        break;
+      case 'kept':
+        settled.decisions.set(key, outcome.reason === 'same' ? 'same' : 'retry');
+        break;
+      case 'quarantined':
+        // A version this device can read outranks a row it cannot: the retry lands over it.
+        settled.decisions.set(key, 'retry');
+        break;
+      case 'unknown-collection':
+        break;
+      case 'failed': {
+        settled.stalled = key;
+        const unsettled = conflicts.length - index - 1;
+        if (unsettled > 0) {
+          logger.debug(`Sync push left ${unsettled} conflict(s) unsettled behind a failed write`);
+        }
+        return settled;
       }
-    } else if (outcome.kind === 'quarantined') {
-      // A version this device can read outranks a row it cannot: the retry lands over it.
-      settled.retry.add(key);
-    } else if (outcome.kind === 'failed') {
-      settled.stalled = key;
-      return settled;
+      default: {
+        const unhandled: never = outcome;
+        throw new Error(`unhandled conflict outcome: ${JSON.stringify(unhandled)}`);
+      }
     }
   }
   return settled;
@@ -366,18 +378,19 @@ function recordSettled(
   fresh: SyncMeta,
   batch: DirtyRecord[],
   state: PullState,
-  cleared: Map<string, 'applied' | 'same'>,
+  decisions: Map<string, ConflictDecision>,
   wallMs: number
 ): void {
   // Decided before the merge moves any hlc: an id re-edited during the round trip keeps its mark.
-  const clearable = batch.filter(
-    (item) => cleared.has(item.key) && fresh.hlcs[item.key] === item.hlc
-  );
+  const clearable = batch.filter((item) => {
+    const decision = decisions.get(item.key);
+    return decision !== undefined && decision !== 'retry' && fresh.hlcs[item.key] === item.hlc;
+  });
   mergePull(fresh, state, wallMs);
   for (const item of clearable) {
     clearDirty(fresh, item.collection, item.entityId);
     // The server already held this exact version, which is an ack in all but name.
-    if (cleared.get(item.key) === 'same') {
+    if (decisions.get(item.key) === 'same') {
       fresh.tombstones = fresh.tombstones.filter((t) => t !== item.key);
     }
   }
@@ -558,7 +571,8 @@ async function resolveAndApply(
 ): Promise<ApplyOutcome> {
   const { meta } = pull;
   const key = SyncMetadataStore.entityKey(rec.collection, rec.entityId);
-  // Whatever happens below, the server holds this row at this seq.
+  // Even a row this device cannot read or place has a server seq; only a failed write forgets it.
+  const priorSeq = pull.seqs.get(key);
   recordSeq(pull, key, rec.seq);
 
   let incoming: RecordBody;
@@ -609,17 +623,24 @@ async function resolveAndApply(
 
   const resolution = deps.strategy.resolve(local, incoming);
   if (resolution.winner === 'local') {
-    if (resolution.reason === 'newer') {
+    if (resolution.reason === 'newer' && local !== null) {
       pull.redirtied.set(key, { collection: rec.collection, entityId: rec.entityId });
+    } else {
+      pull.redirtied.delete(key);
     }
     return { kind: 'kept', reason: resolution.reason };
   }
 
   const res = await binding.writeOne(rec.entityId, resolution.body.entity);
   if (!res.success) {
-    // A seq this device could not act on must not become its next push's base, or that push would
-    // land over the very version it just judged newer.
-    pull.seqs.delete(key);
+    // Neither this seq nor a repair mark may outlive the failure: the next push would use them to
+    // land the older local version over the very one it just judged newer.
+    if (priorSeq === undefined) {
+      pull.seqs.delete(key);
+    } else {
+      pull.seqs.set(key, priorSeq);
+    }
+    pull.redirtied.delete(key);
     // Without this, a wedged cycle (e.g. persistent quota) is undiagnosable —
     // nothing else connects "stalled at seq N" to the failing write.
     logger.error('Sync write failed applying a server record; it stays pending', {

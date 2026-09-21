@@ -10,7 +10,7 @@ export interface SyncMeta {
   cursor: number; // last pulled seq
   dirty: Record<string, string[]>; // collection -> entityIds pending push
   hlcs: Record<string, string>; // "collection/entityId" -> hlcEncode
-  seqs: Record<string, number>; // "collection/entityId" -> last server seq seen; the push's baseSeq
+  seqs: Record<string, number>; // "collection/entityId" -> last server seq applied or outranked
   tombstones: string[]; // "collection/entityId" that are deleted
   quarantine: string[]; // "collection/entityId" that failed decrypt
 }
@@ -28,15 +28,18 @@ export function defaultMeta(deviceNode: string): SyncMeta {
   };
 }
 
+/** A ledger as persisted: one written before `seqs` existed carries no map. */
+type StoredSyncMeta = Omit<SyncMeta, 'seqs'> & { seqs?: unknown };
+
 /**
  * `readable` proves the bytes decoded, not that they decoded into a ledger: a stored `null` or a
  * shape from another build sails through the cast, then throws on `Object.keys(meta.dirty)`.
  */
-function isSyncMeta(value: unknown): value is SyncMeta {
+function isStoredSyncMeta(value: unknown): value is StoredSyncMeta {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
-  const meta = value as Partial<SyncMeta>;
+  const meta = value as Partial<StoredSyncMeta>;
   return (
     typeof meta.deviceNode === 'string' &&
     typeof meta.clock === 'string' &&
@@ -50,16 +53,15 @@ function isSyncMeta(value: unknown): value is SyncMeta {
   );
 }
 
-// Ledgers persisted before `seqs` existed still load; an absent map means "no seq known", which is
-// exactly what an unconditional first push needs.
-function withSeqs(meta: SyncMeta): SyncMeta {
+// An absent map means "no seq known", which is exactly what an unconditional first push needs.
+function withSeqs(meta: StoredSyncMeta): SyncMeta {
   if (typeof meta.seqs === 'object' && meta.seqs !== null) {
-    return meta;
+    return { ...meta, seqs: meta.seqs as Record<string, number> };
   }
   return { ...meta, seqs: {} };
 }
 
-/** The engine's private bookkeeping: dirty-set, per-entity HLCs, cursor, tombstones, quarantine. */
+/** The engine's bookkeeping: dirty set, per-entity hlcs and seqs, cursor, tombstones, quarantine. */
 export class SyncMetadataStore {
   // Tail of the serialised update queue; see `update`.
   private chain: Promise<void> = Promise.resolve();
@@ -81,7 +83,7 @@ export class SyncMetadataStore {
       if (!entry.readable) {
         throw new Error('The stored sync metadata is unreadable');
       }
-      if (isSyncMeta(entry.value)) {
+      if (isStoredSyncMeta(entry.value)) {
         return withSeqs(entry.value);
       }
       await this.quarantineUnrecognised(entry.value);
@@ -93,7 +95,7 @@ export class SyncMetadataStore {
 
   /**
    * Parked, not overwritten: the fresh ledger about to replace it would otherwise discard whatever
-   * dirty set, HLCs, cursor, tombstones and quarantine list the stored value was carrying.
+   * dirty set, HLCs, seqs, cursor, tombstones and quarantine list the stored value was carrying.
    */
   private async quarantineUnrecognised(value: unknown): Promise<void> {
     const result = await this.store.set(SYNC_META_QUARANTINE_KEY, value, 'local');

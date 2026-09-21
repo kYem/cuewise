@@ -10,9 +10,10 @@ import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { disableAfterFirstWrite, requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
-import { type CollectionBinding, defaultBindings } from './collections';
+import { defaultBindings } from './collections';
 import { type CycleDeps, PULL_PAGE, pullOnce } from './cycle';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -35,27 +36,6 @@ async function sealRecord(
 ): Promise<SyncRecord> {
   const pushRecord = await toPushRecord(dk, KEY_ID, collection, entityId, body);
   return { ...pushRecord, seq };
-}
-
-/** Finds a named binding or fails loudly — avoids a non-null assertion at call sites. */
-function requireBinding(bindings: CollectionBinding[], name: string): CollectionBinding {
-  const binding = bindings.find((b) => b.name === name);
-  if (binding === undefined) {
-    throw new Error(`binding not found: ${name}`);
-  }
-  return binding;
-}
-
-/** A disable landing while the page is being applied: the flag flips once one record is written. */
-function disableAfterFirstWrite(binding: CollectionBinding): { isCancelled: () => boolean } {
-  const write = binding.writeOne.bind(binding);
-  let disabled = false;
-  vi.spyOn(binding, 'writeOne').mockImplementation(async (entityId, entity) => {
-    const result = await write(entityId, entity);
-    disabled = true;
-    return result;
-  });
-  return { isCancelled: () => disabled };
 }
 
 /** Runs `landing` inside the pull's round trip — after it loaded the ledger, before it saves. */
@@ -303,8 +283,6 @@ describe('pullOnce', () => {
   });
 
   it('records no seq for a record it could not write, so the push cannot land over it', async () => {
-    // Otherwise the same cycle's push would carry this seq as its base and overwrite the very
-    // version it just judged newer, with the server none the wiser.
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
     await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
@@ -328,6 +306,30 @@ describe('pullOnce', () => {
     expect(saved.seqs['goals/g1']).toBe(2);
     expect(saved.cursor).toBe(0);
     expect(saved.dirty.goals).toEqual(['g1']);
+    errorSpy.mockRestore();
+  });
+
+  it('keeps the seq it outranked and drops the repair mark when a later version of the same key cannot be written', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const between = hlcEncode({ physical: 1_700_000_000_500, counter: 1, node: 'device-a' });
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', between);
+    transport.pullRecords = [
+      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: OLDER_HLC }, 1),
+      await sealRecord(dk, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 5),
+    ];
+    const bindings = defaultBindings();
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+      storageFailure('quota exceeded')
+    );
+
+    const result = await pullOnce(makeDeps({ bindings }));
+
+    expect(result).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g1' });
+    const saved = await metaStore.load();
+    expect(saved.seqs['goals/g1']).toBe(1);
+    expect(saved.cursor).toBe(1);
+    expect(saved.dirty.goals).toBeUndefined();
     errorSpy.mockRestore();
   });
 

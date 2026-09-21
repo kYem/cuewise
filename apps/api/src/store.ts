@@ -25,6 +25,11 @@ export type {
   SyncSession,
 };
 
+/** The wire type leaves `seq` optional for older servers; this server always knows it. */
+export interface ServerPushResponse extends PushResponse {
+  applied: Required<AppliedRecord>[];
+}
+
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
   providerSub: string;
@@ -91,9 +96,9 @@ export interface SyncStore {
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
-  // Rows whose `baseSeq` is stale are refused and answered under `conflicts` as the current row; the
-  // rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
-  applyChanges(userId: string, changes: PushRecord[]): Promise<PushResponse>;
+  // A row whose `baseSeq` is stale is refused and answered under `conflicts` as the current row;
+  // the rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
+  applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse>;
   // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
   // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;

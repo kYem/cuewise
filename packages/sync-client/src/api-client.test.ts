@@ -1,3 +1,4 @@
+import { logger } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { problemResponse, stubFetch } from './__fixtures__/fetch.fixtures';
 import { wire } from './__fixtures__/pairing.fixtures';
@@ -61,6 +62,35 @@ describe('ApiClient', () => {
       cursor: 5,
       applied: [{ collection: 'quotes', entityId: 'q1' }],
       conflicts: [],
+    });
+  });
+
+  it('warns once per client that an older server makes every push unconditional', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const { fetchFn } = stubFetch([
+      { status: 200, body: { cursor: 5 } },
+      { status: 200, body: { cursor: 6 } },
+    ]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await client.pushChanges([pushRecordFixture]);
+    await client.pushChanges([pushRecordFixture]);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Sync server predates compare-and-set; pushes are unconditional'
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('rejects a push reply that names conflicts but no applied list as invalid_response', async () => {
+    const body = { cursor: 5, conflicts: [{ ...pushRecordFixture, entityId: 'q2', seq: 4 }] };
+    const { fetchFn } = stubFetch([{ status: 200, body }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(client.pushChanges([pushRecordFixture])).rejects.toMatchObject({
+      code: 'invalid_response',
+      retryable: false,
     });
   });
 

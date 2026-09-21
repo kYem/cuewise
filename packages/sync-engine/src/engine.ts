@@ -1743,7 +1743,7 @@ export class SyncEngine {
     }
   }
 
-  // Only the cursor and the seqs it vouched for: widening this would drop the quarantine list too,
+  // Only the cursor and the per-entity seqs: widening this would drop the quarantine list too,
   // and the device would re-quarantine the same records on its next pull, re-toasting the user.
   private async resetPullCursor(): Promise<void> {
     await this.meta.update((meta) => {
