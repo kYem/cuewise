@@ -1,4 +1,5 @@
 import {
+  type ConceptCard,
   configurePlatform,
   DEFAULT_SETTINGS,
   type KeyValueStore,
@@ -13,7 +14,12 @@ import {
   toStoredValues,
   UNREADABLE_VALUE,
 } from '@cuewise/shared';
-import { goalFactory, quoteFactory, reminderFactory } from '@cuewise/test-utils/factories';
+import {
+  conceptCardFactory,
+  goalFactory,
+  quoteFactory,
+  reminderFactory,
+} from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getFromStorage, getManyFromStorage, setInStorage } from './chrome-storage';
 import { LocalStorageKeyValueStore } from './local-storage-key-value-store';
@@ -22,6 +28,7 @@ import {
   clearSettings,
   ensureSettingsMigrated,
   getCollections,
+  getConceptCards,
   getCustomBackground,
   getGoals,
   getQuotes,
@@ -37,6 +44,7 @@ import {
   resetSettingsMigration,
   SETTINGS_KEYS,
   setCollections,
+  setConceptCards,
   setCustomBackground,
   setGoals,
   setQuotes,
@@ -46,6 +54,7 @@ import {
   setSettingsPatchRaw,
   settingsStorageKey,
   updateCollections,
+  updateConceptCards,
   updateGoals,
   updateQuotes,
   updateReminders,
@@ -265,6 +274,44 @@ describe('updateCollections', () => {
 
     const stored = await getCollections();
     expect(stored.map((c) => c.id).sort()).toEqual(['c1', 'c2']);
+  });
+});
+
+describe('updateConceptCards', () => {
+  // The service worker saves a captured card while the page reviews one, so without the lock
+  // whoever lands second erases the other's write.
+  it('lets two concurrent writers both land', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const [first, second] = conceptCardFactory.buildList(2);
+    await setConceptCards([]);
+
+    await Promise.all([
+      updateConceptCards((cards) => [...cards, first]),
+      updateConceptCards((cards) => [...cards, second]),
+    ]);
+
+    const stored = await getConceptCards();
+    expect(stored.map((card) => card.id).sort()).toEqual([first.id, second.id].sort());
+  });
+
+  it('mutates the stored list, never one the caller supplied', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    const existing = conceptCardFactory.build();
+    await setConceptCards([existing]);
+
+    const { cards } = await updateConceptCards((current) => current);
+
+    expect(cards.map((card) => card.id)).toEqual([existing.id]);
+  });
+
+  it('calls mutate exactly once, so ids collected inside it are the ids written', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    await setConceptCards([]);
+    const mutate = vi.fn((cards: ConceptCard[]) => [...cards, conceptCardFactory.build()]);
+
+    await updateConceptCards(mutate);
+
+    expect(mutate).toHaveBeenCalledOnce();
   });
 });
 

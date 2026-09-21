@@ -77,6 +77,7 @@ export {
   settingsStorageKey,
   setWeatherState,
   updateCollections,
+  updateConceptCards,
   updateGoals,
   updateQuotes,
   updateReminders,
