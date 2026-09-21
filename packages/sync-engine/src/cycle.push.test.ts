@@ -327,6 +327,7 @@ describe('pushOnce', () => {
   });
 
   it('clears dirty and learns nothing about seqs from a server that predates compare-and-set', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     await setGoals([goalFactory.build({ id: 'g1' })]);
     const metaStore = new SyncMetadataStore(kv);
     await seedDirty(metaStore, 'goals', ['g1']);
@@ -337,6 +338,45 @@ describe('pushOnce', () => {
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toBeUndefined();
     expect(saved.seqs['goals/g1']).toBeUndefined();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('takes the server seq of a refused record when it is below the one held, so the retry can land', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const mine = goalFactory.build({ id: 'g1', text: 'mine' });
+    await setGoals([mine]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 50;
+    });
+    const deps = makeDeps(kv, transport, { meta: metaStore });
+    const stale = goalFactory.build({ id: 'g1', text: 'stale' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: stale, hlc: OLDER_HLC },
+        3
+      )
+    );
+
+    await pushOnce(deps);
+
+    expect(transport.pushedBatches.map((batch) => batch[0].baseSeq)).toEqual([50, 3]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Server seq for a refused record is below the one held; taking the server's",
+      { key: 'goals/g1', held: 50, seq: 3 }
+    );
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs['goals/g1']).toBe(transport.serverRecords.get('goals/g1')?.seq);
+    expect(saved.seqs['goals/g1']).toBeGreaterThan(3);
+    warnSpy.mockRestore();
   });
 
   it('applies the server version and clears dirty when a conflict shows the server is newer', async () => {
@@ -472,6 +512,7 @@ describe('pushOnce', () => {
       meta.seqs['goals/g1'] = 1;
     });
     const onQuarantine = vi.fn();
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const deps = makeDeps(kv, transport, { meta: metaStore, onQuarantine });
     const sealed = await sealServerRecord(
       deps.dk,
@@ -489,9 +530,14 @@ describe('pushOnce', () => {
     expect(transport.pushedBatches).toHaveLength(2);
     expect(transport.pushedBatches[1][0].baseSeq).toBe(2);
     expect(transport.serverRecords.get('goals/g1')?.ciphertext).not.toBe('garbage');
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Re-pushing the local version over a server row this device cannot read',
+      { collection: 'goals', entityId: 'g1', seq: 2 }
+    );
     const saved = await metaStore.load();
     expect(saved.quarantine).toEqual(['goals/g1']);
     expect(saved.dirty.goals).toBeUndefined();
+    warnSpy.mockRestore();
   });
 
   it('rejects, naming the record, when the server version of a conflict cannot be written locally', async () => {

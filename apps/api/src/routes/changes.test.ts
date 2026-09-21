@@ -49,6 +49,28 @@ describe('POST /v1/changes then GET /v1/changes', () => {
     expect(body.conflicts[0]).toMatchObject({ entityId: 'a', seq: 2, ciphertext: 'v2' });
   });
 
+  it('lands a new entity pushed with baseSeq 0 and refuses a second push of it at 0', async () => {
+    const { token } = await signedInToken();
+
+    const first = await postChanges(app, token, {
+      records: [record({ entityId: 'a', ciphertext: 'v1', baseSeq: 0 })],
+    });
+    const second = await postChanges(app, token, {
+      records: [record({ entityId: 'a', ciphertext: 'v2', baseSeq: 0 })],
+    });
+
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      cursor: 1,
+      applied: [{ collection: 'quotes', entityId: 'a', seq: 1 }],
+      conflicts: [],
+    });
+    expect(second.status).toBe(200);
+    const body = await second.json<{ applied: unknown[]; conflicts: Array<{ seq: number }> }>();
+    expect(body.applied).toEqual([]);
+    expect(body.conflicts[0]).toMatchObject({ entityId: 'a', seq: 1, ciphertext: 'v1' });
+  });
+
   it('GET since=0 returns both pushed records with round-tripped fields', async () => {
     const { token } = await signedInToken();
     await postChanges(app, token, {

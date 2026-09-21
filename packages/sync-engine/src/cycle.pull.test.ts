@@ -131,6 +131,21 @@ describe('pullOnce', () => {
     expect(saved.seqs['goals/g1']).toBe(1);
   });
 
+  it('does not list a key twice when the local winner was already dirty', async () => {
+    await setGoals([goalFactory.build({ id: 'g1', text: 'local' })]);
+    await seedLocalHlc(metaStore, 'goals', 'g1', NEWER_HLC);
+    await metaStore.update((meta) => {
+      meta.dirty.goals = ['g1'];
+    });
+    transport.pullRecords = [
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: OLDER_HLC }, 1),
+    ];
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).dirty.goals).toEqual(['g1']);
+  });
+
   it('does not re-dirty an echo of its own push (identical hlc), but records its seq', async () => {
     const local = goalFactory.build({ id: 'g1', text: 'mine' });
     await setGoals([local]);

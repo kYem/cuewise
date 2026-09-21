@@ -49,7 +49,7 @@ interface PullState {
   quarantined: Set<string>;
   /** Highest server seq seen per key: the server's fact about the row, merged by max, unguarded. */
   seqs: Map<string, number>;
-  /** Keys the local version outranked: added to `dirty` (never removed) so the push repairs them. */
+  /** Keys local outranked: added to `dirty` (never removed) so the push repairs them. */
   redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
@@ -73,7 +73,7 @@ function markDirty(meta: SyncMeta, collection: string, entityId: string): void {
   }
 }
 
-// A seq that is not one would ride the next push as its base and have the server refuse the batch.
+// Dropped here, not on the next load: a non-seq winning the max would erase the seq this key had.
 function recordSeq(pull: PullState, key: string, seq: number): void {
   if (!isServerSeq(seq)) {
     logger.warn('Ignoring a server record whose seq is not a seq', { key, seq });
@@ -205,7 +205,7 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     leftover = second.retry;
   }
   if (leftover.size > 0) {
-    logger.debug(`Sync push left ${leftover.size} record(s) for the next cycle: rows moved twice`);
+    logger.debug(`Sync push left ${leftover.size} record(s) still refused for the next cycle`);
   }
   logger.debug(`Sync push sent ${landed.length} record(s)`, {
     byCollection: tallyByCollection(landed.map((item) => item.collection)),
@@ -233,9 +233,11 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
     // After the round trip: the server already holds the applied records, and that has to be said.
     // The ledger write below is skipped outright — the applied seqs it records are not hlc-guarded.
     if (deps.isCancelled()) {
-      logger.error(
-        `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${response.applied.length} records`
-      );
+      if (response.applied.length > 0) {
+        logger.error(
+          `Cloud sync stopped a push for a disconnected account, but its server had already accepted ${response.applied.length} records`
+        );
+      }
       return { kind: 'cancelled' };
     }
     const acked = ackedRecords(batch, response);
@@ -274,7 +276,7 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
   return { kind: 'pushed', landed, retry };
 }
 
-/** The reply narrowed to the batch's own keys; anything else the server named is said and dropped. */
+/** The reply narrowed to the batch's own keys; anything else it named is logged and dropped. */
 function ownResponse(batch: DirtyRecord[], response: PushResponse): PushResponse {
   const sent = new Set(batch.map((item) => item.key));
   const own = (r: { collection: string; entityId: string }): boolean =>
@@ -347,8 +349,8 @@ function recordAcks(fresh: SyncMeta, acked: DirtyRecord[], applied: AppliedRecor
 }
 
 /**
- * What one refused record came to: the server's version now sits locally (`incoming`), it was this
- * device's own version already (`same`), or local still outranks it and pushes again (`retry`).
+ * What one refused record came to: the server's version now sits locally (`incoming`), the server
+ * already holds the local version (`same`), or local still outranks it and pushes again (`retry`).
  */
 type ConflictDecision = 'incoming' | 'same' | 'retry';
 
@@ -390,6 +392,11 @@ async function settleConflicts(
         break;
       case 'quarantined':
         // A version this device can read outranks a row it cannot: the retry lands over it.
+        logger.warn('Re-pushing the local version over a server row this device cannot read', {
+          collection: conflict.collection,
+          entityId: conflict.entityId,
+          seq: conflict.seq,
+        });
         settled.decisions.set(key, 'retry');
         break;
       case 'unknown-collection':
@@ -425,6 +432,19 @@ function recordSettled(
     return decision !== undefined && decision !== 'retry' && fresh.hlcs[item.key] === item.hlc;
   });
   mergePull(fresh, state, wallMs);
+  // A conflict row is read after the batch, so its seq is the server's current fact: a held seq
+  // above it (a restored database) would otherwise be pushed as the base for ever, refused every time.
+  for (const [key, seq] of state.seqs) {
+    const held = fresh.seqs[key];
+    if (held !== undefined && held > seq) {
+      logger.warn("Server seq for a refused record is below the one held; taking the server's", {
+        key,
+        held,
+        seq,
+      });
+      fresh.seqs[key] = seq;
+    }
+  }
   for (const item of clearable) {
     clearDirty(fresh, item.collection, item.entityId);
     // The server already held this exact version, which is an ack in all but name.

@@ -96,6 +96,23 @@ describe('SyncMetadataStore', () => {
     warnSpy.mockRestore();
   });
 
+  it.each([
+    ['a string', 'corrupt'],
+    ['an array', [4]],
+  ])('starts with no seqs, and says so, when the stored map is %s', async (_label, seqs) => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const meta = await store.load();
+    await kv.set(SYNC_META_KEY, { ...meta, seqs }, 'local');
+
+    const loaded = await store.load();
+
+    expect(loaded.seqs).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith('Stored sync seqs were not a map; starting with none');
+    warnSpy.mockRestore();
+  });
+
   describe('update', () => {
     // Every writer does load → mutate → save on one blob, so two that overlap must not both read
     // the same pre-state — the later save would otherwise erase the earlier one's change.

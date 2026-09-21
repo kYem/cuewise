@@ -52,6 +52,34 @@ describe('ApiClient', () => {
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ records: [pushRecordFixture] });
   });
 
+  it('sends baseSeq on the wire as given, including 0', async () => {
+    const body = { cursor: 6, applied: [], conflicts: [] };
+    const { fetchFn, calls } = stubFetch([{ status: 200, body }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await client.pushChanges([
+      { ...pushRecordFixture, baseSeq: 0 },
+      { ...pushRecordFixture, entityId: 'q2', baseSeq: 5 },
+    ]);
+
+    const sent = JSON.parse(calls[0].init.body as string) as {
+      records: Array<{ baseSeq?: number }>;
+    };
+    expect(sent.records.map((r) => r.baseSeq)).toEqual([0, 5]);
+  });
+
+  it('rejects a full push reply whose applied record carries no seq as invalid_response', async () => {
+    const body = { cursor: 5, applied: [{ collection: 'quotes', entityId: 'q1' }], conflicts: [] };
+    const { fetchFn } = stubFetch([{ status: 200, body }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await expect(client.pushChanges([pushRecordFixture])).rejects.toMatchObject({
+      code: 'invalid_response',
+      retryable: false,
+      message: expect.stringContaining('without a seq'),
+    });
+  });
+
   it('treats a bare { cursor } from an older server as every record applied, seqs unknown', async () => {
     const { fetchFn } = stubFetch([{ status: 200, body: { cursor: 5 } }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });

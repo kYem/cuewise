@@ -199,14 +199,26 @@ describe('the push validation error contract', () => {
 describe('validatePushBody baseSeq', () => {
   it('passes a non-negative integer baseSeq through and leaves a record without one alone', () => {
     const result = validatePushBody(
-      { records: [{ ...record(), baseSeq: 7 }, record()] },
+      {
+        records: [
+          { ...record(), baseSeq: 7 },
+          { ...record(), baseSeq: 0 },
+          { ...record(), baseSeq: Number.MAX_SAFE_INTEGER },
+          record(),
+        ],
+      },
       Date.now()
     );
     if ('problemCode' in result) {
       throw new Error(`unexpected problem: ${result.problemCode}`);
     }
-    expect(result.records[0].baseSeq).toBe(7);
-    expect('baseSeq' in result.records[1]).toBe(false);
+    expect(result.records.map((r) => r.baseSeq)).toEqual([
+      7,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      undefined,
+    ]);
+    expect('baseSeq' in result.records[3]).toBe(false);
   });
 
   it.each([

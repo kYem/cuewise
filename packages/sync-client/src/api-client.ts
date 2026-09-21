@@ -89,6 +89,12 @@ export class ApiClient {
       });
     }
     if (Array.isArray(body.applied) && Array.isArray(body.conflicts)) {
+      // Only a bare-cursor reply may leave seqs out; a server that names its lists knows them.
+      if (!body.applied.every((a) => typeof a.seq === 'number')) {
+        throw new ApiError('invalid_response', res.status, {
+          detail: 'push reply listed an applied record without a seq',
+        });
+      }
       return { cursor: body.cursor, applied: body.applied, conflicts: body.conflicts };
     }
     // Half a reply is neither shape; a pre-compare-and-set server answers a bare cursor, meaning
