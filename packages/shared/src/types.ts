@@ -696,10 +696,31 @@ export interface PushRecord {
   ciphertext: string;
   clientUpdatedAt: number;
   deleted: boolean;
+  /** The server seq this device last saw for the entity; omitted when unknown (then the push is unconditional). */
+  baseSeq?: number;
 }
 
-export interface SyncRecord extends PushRecord {
+export interface SyncRecord extends Omit<PushRecord, 'baseSeq'> {
   seq: number;
+}
+
+export interface AppliedRecord {
+  collection: string;
+  entityId: string;
+  seq: number;
+}
+
+/** A refused push: the row moved past `baseSeq`; `current` is what the server holds now. */
+export interface ConflictRecord {
+  collection: string;
+  entityId: string;
+  current: SyncRecord;
+}
+
+export interface PushResponse {
+  cursor: number;
+  applied: AppliedRecord[];
+  conflicts: ConflictRecord[];
 }
 
 export interface KeyEnvelopeRecord {
