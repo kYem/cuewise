@@ -186,6 +186,39 @@ describe('pushOnce', () => {
     expect(saved.dirty.goals).toEqual(ids);
   });
 
+  it('says nothing when a cancelled push had nothing accepted, so the error names real losses only', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    const metaStore = new SyncMetadataStore(kv);
+    await seedDirty(metaStore, 'goals', ['g1']);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 1;
+    });
+    const deps = makeDeps(kv, transport, {
+      meta: metaStore,
+      isCancelled: () => transport.pushedBatches.length > 0,
+    });
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    transport.serverRecords.set(
+      'goals/g1',
+      await sealServerRecord(
+        deps.dk,
+        deps.keyId,
+        'goals',
+        'g1',
+        { entity: theirs, hlc: NEWER_HLC },
+        2
+      )
+    );
+
+    const result = await pushOnce(deps);
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(transport.pushedBatches).toHaveLength(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it('leaves meta.dirty intact when pushChanges rejects', async () => {
     const g1 = goalFactory.build({ id: 'g1' });
     await setGoals([g1]);
@@ -369,7 +402,7 @@ describe('pushOnce', () => {
 
     expect(transport.pushedBatches.map((batch) => batch[0].baseSeq)).toEqual([50, 3]);
     expect(warnSpy).toHaveBeenCalledWith(
-      "Server seq for a refused record is below the one held; taking the server's",
+      'Taking the server seq for a refused record; the held one was higher',
       { key: 'goals/g1', held: 50, seq: 3 }
     );
     const saved = await metaStore.load();

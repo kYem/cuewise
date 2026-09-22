@@ -68,15 +68,20 @@ describe('ApiClient', () => {
     expect(sent.records.map((r) => r.baseSeq)).toEqual([0, 5]);
   });
 
-  it('rejects a full push reply whose applied record carries no seq as invalid_response', async () => {
-    const body = { cursor: 5, applied: [{ collection: 'quotes', entityId: 'q1' }], conflicts: [] };
+  it.each([
+    ['an applied record with no seq', { applied: [{ collection: 'quotes', entityId: 'q1' }] }],
+    ['a null applied entry', { applied: [null] }],
+    ['a conflict with no seq', { conflicts: [{ ...pushRecordFixture, entityId: 'q2' }] }],
+    ['a null conflict entry', { conflicts: [null] }],
+  ])('rejects a full push reply naming %s as invalid_response', async (_label, lists) => {
+    const body = { cursor: 5, applied: [], conflicts: [], ...lists };
     const { fetchFn } = stubFetch([{ status: 200, body }]);
     const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
 
     await expect(client.pushChanges([pushRecordFixture])).rejects.toMatchObject({
       code: 'invalid_response',
       retryable: false,
-      message: expect.stringContaining('without a seq'),
+      message: expect.stringContaining('no seq'),
     });
   });
 

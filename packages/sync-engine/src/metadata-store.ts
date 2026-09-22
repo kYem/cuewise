@@ -61,20 +61,24 @@ export function isServerSeq(value: unknown): value is number {
 // An absent map or entry means "no seq known": the entity pushes as a row the server has not got.
 function withSeqs(meta: StoredSyncMeta): SyncMeta {
   const seqs: Record<string, number> = {};
-  if (meta.seqs !== undefined && (typeof meta.seqs !== 'object' || Array.isArray(meta.seqs))) {
+  if (meta.seqs === undefined) {
+    return { ...meta, seqs };
+  }
+  // One positive test, so no shape (`null` above all) can fall between the branches unreported.
+  if (typeof meta.seqs !== 'object' || meta.seqs === null || Array.isArray(meta.seqs)) {
     logger.warn('Stored sync seqs were not a map; starting with none');
-  } else if (typeof meta.seqs === 'object' && meta.seqs !== null) {
-    let dropped = 0;
-    for (const [key, value] of Object.entries(meta.seqs)) {
-      if (isServerSeq(value)) {
-        seqs[key] = value;
-      } else {
-        dropped += 1;
-      }
+    return { ...meta, seqs };
+  }
+  let dropped = 0;
+  for (const [key, value] of Object.entries(meta.seqs)) {
+    if (isServerSeq(value)) {
+      seqs[key] = value;
+    } else {
+      dropped += 1;
     }
-    if (dropped > 0) {
-      logger.warn(`Dropped ${dropped} stored sync seq(s) that were not seqs`);
-    }
+  }
+  if (dropped > 0) {
+    logger.warn(`Dropped ${dropped} stored sync seq(s) that were not seqs`);
   }
   return { ...meta, seqs };
 }

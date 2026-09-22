@@ -42,7 +42,9 @@ describe('D1SyncStore concurrency', () => {
     expect(landed).toHaveLength(1);
     expect(refused).toHaveLength(1);
     expect(refused[0].conflicts[0].seq).toBe(landed[0].applied[0].seq);
-    expect(['from-A', 'from-B']).toContain(refused[0].conflicts[0].ciphertext);
+    // The winner's row, not the loser's own echo: which one won is knowable from the order.
+    const winner = first.applied.length === 1 ? 'from-A' : 'from-B';
+    expect(refused[0].conflicts[0].ciphertext).toBe(winner);
   });
 
   it('two concurrent consumeAuthCode calls on the same code: exactly one resolves non-null', async () => {

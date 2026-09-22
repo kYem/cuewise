@@ -99,6 +99,7 @@ describe('SyncMetadataStore', () => {
   it.each([
     ['a string', 'corrupt'],
     ['an array', [4]],
+    ['null', null],
   ])('starts with no seqs, and says so, when the stored map is %s', async (_label, seqs) => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const kv = new FakeKvStore();

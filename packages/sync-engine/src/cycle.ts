@@ -391,7 +391,6 @@ async function settleConflicts(
         settled.decisions.set(key, outcome.reason === 'same' ? 'same' : 'retry');
         break;
       case 'quarantined':
-        // A version this device can read outranks a row it cannot: the retry lands over it.
         logger.warn('Re-pushing the local version over a server row this device cannot read', {
           collection: conflict.collection,
           entityId: conflict.entityId,
@@ -400,6 +399,9 @@ async function settleConflicts(
         settled.decisions.set(key, 'retry');
         break;
       case 'unknown-collection':
+        // Unreachable while `ownResponse` keeps only keys this batch sent; a bare skip here would
+        // leave the key dirty under an unchanged base, refused every cycle with nothing to show.
+        logger.error('Refused record names a collection this device does not know', { key });
         break;
       case 'failed': {
         settled.stalled = key;
@@ -432,18 +434,18 @@ function recordSettled(
     return decision !== undefined && decision !== 'retry' && fresh.hlcs[item.key] === item.hlc;
   });
   mergePull(fresh, state, wallMs);
-  // A conflict row is read after the batch, so its seq is the server's current fact: a held seq
-  // above it (a restored database) would otherwise be pushed as the base for ever, refused every time.
   for (const [key, seq] of state.seqs) {
     const held = fresh.seqs[key];
     if (held !== undefined && held > seq) {
-      logger.warn("Server seq for a refused record is below the one held; taking the server's", {
+      logger.warn('Taking the server seq for a refused record; the held one was higher', {
         key,
         held,
         seq,
       });
-      fresh.seqs[key] = seq;
     }
+    // A conflict row is read after the batch, so its seq is the server's fact, not a max: a held
+    // seq above it would ride every later push as a base the server refuses.
+    fresh.seqs[key] = seq;
   }
   for (const item of clearable) {
     clearDirty(fresh, item.collection, item.entityId);

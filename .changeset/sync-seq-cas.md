@@ -2,7 +2,7 @@
 '@cuewise/api': minor
 '@cuewise/sync-client': minor
 '@cuewise/sync-engine': minor
-'@cuewise/shared': patch
+'@cuewise/shared': minor
 '@cuewise/browser-extension': patch
 '@cuewise/macos': patch
 ---

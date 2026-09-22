@@ -34,6 +34,15 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Reads `seq` off whatever the reply held: a null or primitive entry must answer invalid_response,
+// not throw a TypeError the engine would then blame on this device.
+function namesSeq(record: unknown): boolean {
+  if (record === null || typeof record !== 'object') {
+    return false;
+  }
+  return typeof (record as { seq?: unknown }).seq === 'number';
+}
+
 export class ApiClient {
   private readonly opts: ApiClientOptions;
   private readonly fetchFn: typeof fetch;
@@ -89,10 +98,11 @@ export class ApiClient {
       });
     }
     if (Array.isArray(body.applied) && Array.isArray(body.conflicts)) {
-      // Only a bare-cursor reply may leave seqs out; a server that names its lists knows them.
-      if (!body.applied.every((a) => typeof a.seq === 'number')) {
+      // Presence, not validity: a seq that is a number but not a seq degrades in the ledger, while
+      // a missing one would stop the base advancing. Only a bare-cursor reply may leave one out.
+      if (!body.applied.every(namesSeq) || !body.conflicts.every(namesSeq)) {
         throw new ApiError('invalid_response', res.status, {
-          detail: 'push reply listed an applied record without a seq',
+          detail: 'push reply named a record with no seq',
         });
       }
       return { cursor: body.cursor, applied: body.applied, conflicts: body.conflicts };
