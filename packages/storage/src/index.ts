@@ -57,7 +57,6 @@ export {
   setCalendarState,
   setCollections,
   setCollectionsRaw,
-  setConceptCards,
   setCurrentQuote,
   setCustomBackground,
   setCustomYoutubePlaylists,

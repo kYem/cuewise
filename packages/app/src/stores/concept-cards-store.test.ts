@@ -3,6 +3,7 @@ import {
   configurePlatform,
   logger,
   resetPlatform,
+  type StorageResult,
   storageFailure,
 } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
@@ -11,14 +12,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeObservableStore, settleQueuedWork } from './__fixtures__/storage-changes.fixtures';
 import { useConceptCardsStore } from './concept-cards-store';
 
+// setConceptCards is not part of @cuewise/storage's public API (it's updateConceptCards' own
+// writer), so the fake below cannot be typed through the `storage` import like getConceptCards.
+const mockSetConceptCards = vi.hoisted(() =>
+  vi.fn<(cards: ConceptCard[]) => Promise<StorageResult>>()
+);
+
 vi.mock('@cuewise/storage', () => ({
   getConceptCards: vi.fn(),
-  setConceptCards: vi.fn(),
   // A faithful stand-in, not a stub: updateConceptCards' whole point is that it reads inside the
   // write, so a mock that skipped the read would let a stale-snapshot regression pass.
   updateConceptCards: vi.fn(async (mutate: (cards: ConceptCard[]) => ConceptCard[]) => {
-    const cards = mutate((await storage.getConceptCards()) ?? []);
-    return { result: await storage.setConceptCards(cards), cards };
+    const cards = mutate(await storage.getConceptCards());
+    return { result: await mockSetConceptCards(cards), cards };
   }),
 }));
 
@@ -38,7 +44,7 @@ describe('Concept Cards Store', () => {
   beforeEach(() => {
     useConceptCardsStore.setState({ cards: [], isLoading: true, error: null });
     vi.clearAllMocks();
-    vi.mocked(storage.setConceptCards).mockResolvedValue({ success: true });
+    mockSetConceptCards.mockResolvedValue({ success: true });
     // Storage holds what the store holds: the read inside the write sees the seeded deck.
     vi.mocked(storage.getConceptCards).mockImplementation(
       async () => useConceptCardsStore.getState().cards
@@ -78,17 +84,17 @@ describe('Concept Cards Store', () => {
       expect(card.term).toBe('Saga pattern');
       expect(card.tags).toEqual(['microservices']);
       expect(card.schedule.repetitions).toBe(0);
-      expect(storage.setConceptCards).toHaveBeenCalledOnce();
+      expect(mockSetConceptCards).toHaveBeenCalledOnce();
     });
 
     it('rejects a blank term or definition without persisting', async () => {
       expect(await useConceptCardsStore.getState().addCard('', 'def')).toBe(false);
       expect(await useConceptCardsStore.getState().addCard('term', '   ')).toBe(false);
-      expect(storage.setConceptCards).not.toHaveBeenCalled();
+      expect(mockSetConceptCards).not.toHaveBeenCalled();
     });
 
     it('honors a failed persist result', async () => {
-      vi.mocked(storage.setConceptCards).mockResolvedValue(storageFailure('write failed'));
+      mockSetConceptCards.mockResolvedValue(storageFailure('write failed'));
 
       const ok = await useConceptCardsStore.getState().addCard('Term', 'Definition');
 
@@ -98,15 +104,15 @@ describe('Concept Cards Store', () => {
     });
 
     it('keeps a card written elsewhere when it appends its own', async () => {
-      const theirs = conceptCardFactory.build({ id: 'theirs', term: 'Saved from the popup' });
+      const theirs = conceptCardFactory.build({ id: 'theirs', term: 'Saved from another tab' });
       vi.mocked(storage.getConceptCards).mockResolvedValue([theirs]);
 
       await useConceptCardsStore.getState().addCard('Mine', 'Added in this tab.');
 
-      const persisted = vi.mocked(storage.setConceptCards).mock.lastCall?.[0] ?? [];
-      expect(persisted.map((card) => card.term)).toEqual(['Saved from the popup', 'Mine']);
+      const persisted = mockSetConceptCards.mock.lastCall?.[0] ?? [];
+      expect(persisted.map((card) => card.term)).toEqual(['Saved from another tab', 'Mine']);
       expect(useConceptCardsStore.getState().cards.map((card) => card.term)).toEqual([
-        'Saved from the popup',
+        'Saved from another tab',
         'Mine',
       ]);
     });
@@ -127,7 +133,7 @@ describe('Concept Cards Store', () => {
       // Distinct ids: delete/update/review all key on id — a shared one would
       // make deleting one imported card silently delete the whole pack.
       expect(new Set(cards.map((card) => card.id)).size).toBe(cards.length);
-      expect(storage.setConceptCards).toHaveBeenCalledOnce();
+      expect(mockSetConceptCards).toHaveBeenCalledOnce();
     });
 
     it('reviewing one imported card leaves its batch siblings unscheduled', async () => {
@@ -173,7 +179,7 @@ describe('Concept Cards Store', () => {
       const added = await useConceptCardsStore.getState().addCards([{ term: '', definition: '' }]);
 
       expect(added).toBe(0);
-      expect(storage.setConceptCards).not.toHaveBeenCalled();
+      expect(mockSetConceptCards).not.toHaveBeenCalled();
     });
 
     // Regression: a batch that dedups to nothing against the existing deck must not take the
@@ -188,11 +194,11 @@ describe('Concept Cards Store', () => {
         .addCards([{ term: 'caching', definition: 'Dupe of an existing term.' }]);
 
       expect(added).toBe(0);
-      expect(storage.setConceptCards).not.toHaveBeenCalled();
+      expect(mockSetConceptCards).not.toHaveBeenCalled();
     });
 
     it('returns null and reports on a failed persist — distinct from nothing-to-add', async () => {
-      vi.mocked(storage.setConceptCards).mockResolvedValue(storageFailure('write failed'));
+      mockSetConceptCards.mockResolvedValue(storageFailure('write failed'));
 
       const added = await useConceptCardsStore
         .getState()
@@ -288,7 +294,7 @@ describe('Concept Cards Store', () => {
       const ok = await useConceptCardsStore.getState().reviewCard('missing', 'good');
 
       expect(ok).toBe(false);
-      expect(storage.setConceptCards).not.toHaveBeenCalled();
+      expect(mockSetConceptCards).not.toHaveBeenCalled();
     });
 
     // Regression: another realm deleted the card between the pre-lock guard and the locked read.
@@ -313,7 +319,7 @@ describe('Concept Cards Store', () => {
 
       expect(ok).toBe(true);
       expect(useConceptCardsStore.getState().cards[0].isFavorite).toBe(true);
-      expect(storage.setConceptCards).toHaveBeenCalled();
+      expect(mockSetConceptCards).toHaveBeenCalled();
     });
 
     it('returns false for an unknown id', async () => {
@@ -369,7 +375,7 @@ describe('Concept Cards Store', () => {
 
 describe('converging on concept cards written elsewhere', () => {
   const mine = conceptCardFactory.build({ id: 'mine', term: 'mine' });
-  const theirs = conceptCardFactory.build({ id: 'theirs', term: 'saved from the popup' });
+  const theirs = conceptCardFactory.build({ id: 'theirs', term: 'saved from another tab' });
 
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
@@ -382,8 +388,9 @@ describe('converging on concept cards written elsewhere', () => {
   }
 
   beforeEach(() => {
+    useConceptCardsStore.setState({ cards: [], isLoading: true, error: null });
     toastWarning.mockClear();
-    vi.mocked(storage.setConceptCards).mockResolvedValue({ success: true });
+    mockSetConceptCards.mockResolvedValue({ success: true });
   });
 
   // The observer is module-scoped: a fake left registered keeps it subscribed to a dead backend
@@ -392,7 +399,7 @@ describe('converging on concept cards written elsewhere', () => {
     resetPlatform();
   });
 
-  it('adopts a card the service worker wrote straight to storage', async () => {
+  it('adopts a card written from another tab', async () => {
     const fake = await initializeObserving();
     vi.mocked(storage.getConceptCards).mockResolvedValue([mine, theirs]);
 
@@ -401,7 +408,7 @@ describe('converging on concept cards written elsewhere', () => {
     await vi.waitFor(() =>
       expect(useConceptCardsStore.getState().cards.map((card) => card.term)).toEqual([
         'mine',
-        'saved from the popup',
+        'saved from another tab',
       ])
     );
   });
@@ -418,7 +425,9 @@ describe('converging on concept cards written elsewhere', () => {
     expect(useConceptCardsStore.getState().cards).toHaveLength(2);
   });
 
-  it('keeps the card written elsewhere when the next local write rewrites the deck', async () => {
+  // Observer-then-write composition, not the lock's own guard — that's covered by
+  // "keeps a card written elsewhere when it appends its own", above.
+  it('keeps a card the observer already adopted when a local write persists next', async () => {
     const fake = await initializeObserving();
     vi.mocked(storage.getConceptCards).mockResolvedValue([mine, theirs]);
     fake.emit(['conceptCards']);
@@ -428,10 +437,10 @@ describe('converging on concept cards written elsewhere', () => {
       useConceptCardsStore.getState().addCard('added here afterwards', 'A definition.')
     ).resolves.toBe(true);
 
-    const persisted = vi.mocked(storage.setConceptCards).mock.lastCall?.[0] ?? [];
+    const persisted = mockSetConceptCards.mock.lastCall?.[0] ?? [];
     expect(persisted.map((card) => card.term)).toEqual([
       'mine',
-      'saved from the popup',
+      'saved from another tab',
       'added here afterwards',
     ]);
   });
@@ -477,7 +486,12 @@ describe('converging on concept cards written elsewhere', () => {
     vi.mocked(storage.getConceptCards).mockResolvedValue([mine, theirs]);
     fake.emit(['conceptCards']);
 
-    await vi.waitFor(() => expect(useConceptCardsStore.getState().cards).toHaveLength(2));
+    await vi.waitFor(() =>
+      expect(useConceptCardsStore.getState().cards.map((card) => card.term)).toEqual([
+        'mine',
+        'saved from another tab',
+      ])
+    );
   });
 
   it('leaves the in-memory deck alone when its own write is announced back', async () => {

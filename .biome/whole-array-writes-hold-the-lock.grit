@@ -7,6 +7,7 @@ language js(typescript)
 // and reads are not covered at all: getQuotes has many legitimate unlocked callers.
 // setPomodoroSessionsRaw is absent on purpose — sessions are not a synced collection, so no pull
 // can race them.
+// The match is on the callee name, so an aliased import (`setGoals as saveAllGoals`) slips through.
 `$setter($_)` as $write where {
   $setter <: or {
     `setQuotes`,

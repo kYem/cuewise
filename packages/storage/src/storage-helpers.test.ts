@@ -278,8 +278,8 @@ describe('updateCollections', () => {
 });
 
 describe('updateConceptCards', () => {
-  // The service worker saves a captured card while the page reviews one, so without the lock
-  // whoever lands second erases the other's write.
+  // Two tabs write at once — one saves a captured card, the other reviews one — so without the
+  // lock whoever lands second erases the other's write.
   it('lets two concurrent writers both land', async () => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     const [first, second] = conceptCardFactory.buildList(2);

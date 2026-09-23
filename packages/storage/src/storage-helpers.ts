@@ -392,7 +392,7 @@ export const COLLECTION_LOCKS = [
   'quotes',
   'collections',
   'reminders',
-  'concepts',
+  'conceptCards', // not synced — locked for the two realms, not the pull
   'reminderActivity', // device-local, never synced — locked for the two realms, not the pull
 ] as const;
 
@@ -510,7 +510,7 @@ export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResu
 export async function updateConceptCards(
   mutate: (cards: ConceptCard[]) => ConceptCard[]
 ): Promise<{ result: StorageResult; cards: ConceptCard[] }> {
-  return withCollectionLock('concepts', async () => {
+  return withCollectionLock('conceptCards', async () => {
     const cards = mutate(await getConceptCards());
     return { result: await setConceptCards(cards), cards };
   });
