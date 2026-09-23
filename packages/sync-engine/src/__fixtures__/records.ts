@@ -1,9 +1,12 @@
 import type { DataKey } from '@cuewise/crypto';
 import type { KeyValueStore, SyncRecord } from '@cuewise/shared';
+import type { CycleDeps } from '../cycle';
 import { loadPersistedDataKey } from '../key-lifecycle';
+import { SyncMetadataStore } from '../metadata-store';
 import { toPushRecord } from '../record-map';
 import type { RecordBody } from '../strategy';
 import type { FakeSyncServer } from './fake-api-client';
+import type { FakeTransport } from './fake-transport';
 
 /** Seals a body under the given key and stamps it with a seq, as a server row would carry. */
 export async function sealServerRecord(
@@ -16,6 +19,20 @@ export async function sealServerRecord(
 ): Promise<SyncRecord> {
   const pushRecord = await toPushRecord(dk, keyId, collection, entityId, body);
   return { ...pushRecord, seq };
+}
+
+/** Seeds the row the server already holds for an entity, sealed under the cycle's own key. */
+export async function seedServerRow(
+  transport: FakeTransport,
+  deps: Pick<CycleDeps, 'dk' | 'keyId'>,
+  collection: string,
+  entityId: string,
+  body: RecordBody,
+  seq: number
+): Promise<SyncRecord> {
+  const row = await sealServerRecord(deps.dk, deps.keyId, collection, entityId, body, seq);
+  transport.serverRecords.set(SyncMetadataStore.entityKey(collection, entityId), row);
+  return row;
 }
 
 /**
