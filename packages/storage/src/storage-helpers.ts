@@ -392,6 +392,7 @@ export const COLLECTION_LOCKS = [
   'quotes',
   'collections',
   'reminders',
+  'conceptCards', // not synced — locked for the two realms, not the pull
   'reminderActivity', // device-local, never synced — locked for the two realms, not the pull
 ] as const;
 
@@ -493,19 +494,26 @@ export async function setQuickLinks(links: QuickLink[]): Promise<StorageResult> 
 }
 
 // Concept Cards (spaced-repetition learning cards)
+/** Raw-then-validate for the same reason as getGoals. */
 export async function getConceptCards(): Promise<ConceptCard[]> {
   const area = await getStorageArea();
-  const cards = await getValidatedListFromStorage<ConceptCard>(
-    STORAGE_KEYS.CONCEPT_CARDS,
-    conceptCardSchema,
-    area
-  );
-  return cards ?? [];
+  const raw = await getListRaw<unknown>(STORAGE_KEYS.CONCEPT_CARDS, area);
+  return keepValidListItems<ConceptCard>(raw, conceptCardSchema, STORAGE_KEYS.CONCEPT_CARDS, area);
 }
 
 export async function setConceptCards(cards: ConceptCard[]): Promise<StorageResult> {
   const area = await getStorageArea();
   return setValidatedListInStorage(STORAGE_KEYS.CONCEPT_CARDS, cards, conceptCardSchema, area);
+}
+
+/** Changes the concept deck, reading inside the lock. See `updateGoals` for why. */
+export async function updateConceptCards(
+  mutate: (cards: ConceptCard[]) => ConceptCard[]
+): Promise<{ result: StorageResult; cards: ConceptCard[] }> {
+  return withCollectionLock('conceptCards', async () => {
+    const cards = mutate(await getConceptCards());
+    return { result: await setConceptCards(cards), cards };
+  });
 }
 
 // Posture daily rollups (macOS tracking; always local — device-specific data)
