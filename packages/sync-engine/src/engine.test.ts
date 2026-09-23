@@ -5,7 +5,7 @@ import {
   RecoveryCodeError,
   unwrapDataKey,
 } from '@cuewise/crypto';
-import { configurePlatform, logger, storageFailure } from '@cuewise/shared';
+import { configurePlatform, hlcEncode, logger, storageFailure } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import {
   ApiError,
@@ -15,9 +15,11 @@ import {
 } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -166,18 +168,23 @@ async function replayFromScratch(device: Pick<Device, 'kv'>): Promise<void> {
   await setGoals([]);
 }
 
-/** Finds the goals binding or fails loudly — avoids a non-null assertion at call sites. */
-function requireGoalsBinding(bindings: CollectionBinding[]): CollectionBinding {
-  const goals = bindings.find((binding) => binding.name === 'goals');
-  if (goals === undefined) {
-    throw new Error('binding not found: goals');
-  }
-  return goals;
+/** Lands a version of an entity from "another device" that outranks anything this device stamps. */
+function seedServerVersion(
+  device: Device,
+  server: FakeSyncServer,
+  collection: string,
+  entityId: string,
+  entity: unknown
+): Promise<number> {
+  return pushWithoutBase(device.kv, server, collection, entityId, {
+    entity,
+    hlc: hlcEncode({ physical: 9_000_000_000_000, counter: 0, node: 'other' }),
+  });
 }
 
 /** A disable landing mid-pull: it fires once, while the first pulled goal is being written. */
 function disableWhileWritingGoals(bindings: CollectionBinding[], engine: SyncEngine): void {
-  const goals = requireGoalsBinding(bindings);
+  const goals = requireBinding(bindings, 'goals');
   const write = goals.writeOne.bind(goals);
   let disabled = false;
   vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
@@ -343,7 +350,7 @@ describe('SyncEngine.enableSync', () => {
     const device = createDevice(server, { bindings });
     useStorage(device);
     await setGoals([goalFactory.build({ id: 'g1' })]);
-    const goals = requireGoalsBinding(bindings);
+    const goals = requireBinding(bindings, 'goals');
     const readAll = goals.readAll.bind(goals);
     // Returns the real library, so backfillDirty still writes to the ledger the disable cleared.
     vi.spyOn(goals, 'readAll').mockImplementation(async () => {
@@ -1965,6 +1972,60 @@ describe('SyncEngine.syncNow', () => {
   });
 });
 
+describe('SyncEngine.syncNow with a refused push', () => {
+  it('reports failed/device and keeps the id dirty when the server version of a conflict cannot be written', async () => {
+    const server = new FakeSyncServer();
+    const bindings = defaultBindings();
+    const device = createDevice(server, { bindings });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    await seedServerVersion(device, server, 'goals', 'g1', theirs);
+    const meta = new SyncMetadataStore(device.kv);
+    await meta.update((m) => {
+      // Park the cursor so the pull brings nothing and the conflict surfaces on the push.
+      m.cursor = Math.max(...server.rows().map((r) => r.seq));
+    });
+    const goalsBinding = requireBinding(bindings, 'goals');
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
+    await device.engine.markMutated('goals', 'g1');
+    vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toMatchObject({
+      kind: 'failed',
+      reason: 'device',
+      error: expect.objectContaining({ message: expect.stringContaining('sync push stalled') }),
+    });
+    expect((await meta.load()).dirty.goals).toEqual(['g1']);
+  });
+
+  it('never lands a local edit over a newer server version it failed to write during the pull', async () => {
+    const server = new FakeSyncServer();
+    const bindings = defaultBindings();
+    const device = createDevice(server, { bindings });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    const theirs = goalFactory.build({ id: 'g1', text: 'theirs' });
+    const theirSeq = await seedServerVersion(device, server, 'goals', 'g1', theirs);
+    const goalsBinding = requireBinding(bindings, 'goals');
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
+    await device.engine.markMutated('goals', 'g1');
+    vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(server.rows().find((r) => r.entityId === 'g1')?.seq).toBe(theirSeq);
+    expect((await new SyncMetadataStore(device.kv).load()).dirty.goals).toEqual(['g1']);
+  });
+});
+
 describe('SyncEngine.resumeEnrollWithCode', () => {
   it('answers a disable that lands inside it with disabled, not a sign-in expiry', async () => {
     const server = new FakeSyncServer();
@@ -2054,6 +2115,37 @@ describe('SyncEngine.disableSync', () => {
     await cold.disableSync();
 
     expect(cold.getLastCycle()).toEqual({ known: true, cycle: null });
+  });
+
+  it('forgets every per-entity seq along with the rest of the ledger', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 3;
+    });
+
+    await device.engine.disableSync();
+
+    expect((await metaStore.load()).seqs).toEqual({});
+  });
+});
+
+describe('SyncEngine ledger seqs on enable, before the initial sync', () => {
+  it('forgets per-entity seqs with the cursor, so no push carries a base from the last account', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      meta.seqs['goals/g1'] = 3;
+    });
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect((await metaStore.load()).seqs['goals/g1']).toBeUndefined();
   });
 });
 
@@ -2715,7 +2807,7 @@ describe('SyncEngine.start / stop', () => {
     await device.engine.markMutated('goals', 'g1');
     vi.spyOn(device.apiClient, 'pushChanges').mockImplementation(async () => {
       await device.engine.disableSync();
-      return { cursor: 1 };
+      return { cursor: 1, applied: [], conflicts: [] };
     });
 
     const outcome = await device.engine.syncNow();

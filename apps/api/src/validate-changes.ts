@@ -57,6 +57,15 @@ function recordSchema(nowMs: number) {
       })
     ),
     deleted: z.boolean({ error: 'required boolean' }),
+    // The type test and the refine share a message: a value fails one or the other, never both.
+    // (Same shape as clientUpdatedAt above, so each number field reports at most one issue.)
+    baseSeq: z.optional(
+      z.number({ error: 'must be a non-negative safe integer' }).check(
+        z.refine((value: number) => Number.isSafeInteger(value) && value >= 0, {
+          error: 'must be a non-negative safe integer',
+        })
+      )
+    ),
   });
 }
 

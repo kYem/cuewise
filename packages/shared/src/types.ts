@@ -696,10 +696,32 @@ export interface PushRecord {
   ciphertext: string;
   clientUpdatedAt: number;
   deleted: boolean;
+  /**
+   * The server seq this device last saw for the entity, or 0 when it never saw one (matches no
+   * row). Omitted only by clients that predate compare-and-set, whose pushes are unconditional.
+   */
+  baseSeq?: number;
 }
 
-export interface SyncRecord extends PushRecord {
+export interface SyncRecord extends Omit<PushRecord, 'baseSeq'> {
   seq: number;
+}
+
+export interface AppliedRecord {
+  collection: string;
+  entityId: string;
+  /** Absent only when an older server answered a bare cursor: the record landed, seq unknown. */
+  seq?: number;
+}
+
+/**
+ * `applied` landed. `conflicts` were refused because the row moved past their `baseSeq` and carry
+ * the row as the server holds it now.
+ */
+export interface PushResponse {
+  cursor: number;
+  applied: AppliedRecord[];
+  conflicts: SyncRecord[];
 }
 
 export interface KeyEnvelopeRecord {

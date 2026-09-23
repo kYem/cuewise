@@ -17,8 +17,58 @@ describe('POST /v1/changes then GET /v1/changes', () => {
       records: [record({ entityId: 'a' }), record({ entityId: 'b' })],
     });
     expect(res.status).toBe(200);
-    const body = await res.json<{ cursor: number }>();
-    expect(body).toEqual({ cursor: 2 });
+    const body = await res.json<{ cursor: number; applied: unknown[]; conflicts: unknown[] }>();
+    expect(body).toEqual({
+      cursor: 2,
+      applied: [
+        { collection: 'quotes', entityId: 'a', seq: 1 },
+        { collection: 'quotes', entityId: 'b', seq: 2 },
+      ],
+      conflicts: [],
+    });
+  });
+
+  it('answers a stale baseSeq as a conflict carrying the current row, with 200', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a', ciphertext: 'v1' })] });
+    await postChanges(app, token, {
+      records: [record({ entityId: 'a', ciphertext: 'v2', baseSeq: 1 })],
+    });
+
+    const res = await postChanges(app, token, {
+      records: [record({ entityId: 'a', ciphertext: 'stale', baseSeq: 1 })],
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{
+      applied: unknown[];
+      conflicts: Array<{ entityId: string; seq: number; ciphertext: string }>;
+    }>();
+    expect(body.applied).toEqual([]);
+    expect(body.conflicts).toHaveLength(1);
+    expect(body.conflicts[0]).toMatchObject({ entityId: 'a', seq: 2, ciphertext: 'v2' });
+  });
+
+  it('lands a new entity pushed with baseSeq 0 and refuses a second push of it at 0', async () => {
+    const { token } = await signedInToken();
+
+    const first = await postChanges(app, token, {
+      records: [record({ entityId: 'a', ciphertext: 'v1', baseSeq: 0 })],
+    });
+    const second = await postChanges(app, token, {
+      records: [record({ entityId: 'a', ciphertext: 'v2', baseSeq: 0 })],
+    });
+
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      cursor: 1,
+      applied: [{ collection: 'quotes', entityId: 'a', seq: 1 }],
+      conflicts: [],
+    });
+    expect(second.status).toBe(200);
+    const body = await second.json<{ applied: unknown[]; conflicts: Array<{ seq: number }> }>();
+    expect(body.applied).toEqual([]);
+    expect(body.conflicts[0]).toMatchObject({ entityId: 'a', seq: 1, ciphertext: 'v1' });
   });
 
   it('GET since=0 returns both pushed records with round-tripped fields', async () => {

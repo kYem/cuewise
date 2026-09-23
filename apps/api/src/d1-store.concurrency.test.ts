@@ -23,6 +23,30 @@ describe('D1SyncStore concurrency', () => {
     expect(new Set(seqs).size).toBe(20);
   });
 
+  it('two concurrent pushes of one entity from the same base: exactly one lands, the other gets its row', async () => {
+    const store = new D1SyncStore(env.DB);
+    const userId = await store.findOrCreateUser({
+      provider: 'dev',
+      providerSub: 'concurrency-cas',
+    });
+    await store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'v1' })]);
+
+    const [first, second] = await Promise.all([
+      store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'from-A', baseSeq: 1 })]),
+      store.applyChanges(userId, [record({ entityId: 'a', ciphertext: 'from-B', baseSeq: 1 })]),
+    ]);
+
+    const results = [first, second];
+    const landed = results.filter((r) => r.applied.length === 1);
+    const refused = results.filter((r) => r.conflicts.length === 1);
+    expect(landed).toHaveLength(1);
+    expect(refused).toHaveLength(1);
+    expect(refused[0].conflicts[0].seq).toBe(landed[0].applied[0].seq);
+    // The winner's row, not the loser's own echo: which one won is knowable from the order.
+    const winner = first.applied.length === 1 ? 'from-A' : 'from-B';
+    expect(refused[0].conflicts[0].ciphertext).toBe(winner);
+  });
+
   it('two concurrent consumeAuthCode calls on the same code: exactly one resolves non-null', async () => {
     const store = new D1SyncStore(env.DB);
     const code = await store.mintAuthCode(

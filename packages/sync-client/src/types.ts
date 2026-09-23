@@ -5,19 +5,23 @@ import type {
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
 import type {
+  AppliedRecord,
   ExchangeTokenRequest,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
+  PushResponse,
   SyncRecord,
   SyncSession,
 } from '@cuewise/shared';
 
 export type {
+  AppliedRecord,
   ExchangeTokenRequest,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
+  PushResponse,
   SyncRecord,
   SyncSession,
 };

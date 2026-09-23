@@ -4,6 +4,7 @@ import type {
   PairingPublicKeyB64,
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
+import { logger } from '@cuewise/shared';
 import { ApiError } from './api-error';
 import type {
   ExchangeTokenRequest,
@@ -13,6 +14,7 @@ import type {
   PairingForRequester,
   PendingPairing,
   PushRecord,
+  PushResponse,
   SyncRecord,
   SyncSession,
 } from './types';
@@ -32,10 +34,20 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Reads `seq` off whatever the reply held: a null or primitive entry must answer invalid_response,
+// not throw a TypeError the engine would then blame on this device.
+function namesSeq(record: unknown): boolean {
+  if (record === null || typeof record !== 'object') {
+    return false;
+  }
+  return typeof (record as { seq?: unknown }).seq === 'number';
+}
+
 export class ApiClient {
   private readonly opts: ApiClientOptions;
   private readonly fetchFn: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
+  private warnedLegacyPush = false;
 
   constructor(opts: ApiClientOptions) {
     this.opts = opts;
@@ -67,7 +79,7 @@ export class ApiClient {
     return this.parseSuccessBody<{ records: SyncRecord[]; cursor: number }>(res);
   }
 
-  async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
+  async pushChanges(records: PushRecord[]): Promise<PushResponse> {
     const res = await this.request(
       '/v1/changes',
       {
@@ -77,7 +89,40 @@ export class ApiClient {
       },
       { auth: true }
     );
-    return this.parseSuccessBody<{ cursor: number }>(res);
+    const body = await this.parseSuccessBody<Partial<PushResponse> | null>(res);
+    // Anything but a push reply must be refused here: treated as a legacy reply, it would ack
+    // records that never reached the server.
+    if (body === null || typeof body !== 'object' || typeof body.cursor !== 'number') {
+      throw new ApiError('invalid_response', res.status, {
+        detail: 'push reply carried no numeric cursor',
+      });
+    }
+    if (Array.isArray(body.applied) && Array.isArray(body.conflicts)) {
+      // Presence, not validity: a seq that is a number but not a seq degrades in the ledger, while
+      // a missing one would stop the base advancing. Only a bare-cursor reply may leave one out.
+      if (!body.applied.every(namesSeq) || !body.conflicts.every(namesSeq)) {
+        throw new ApiError('invalid_response', res.status, {
+          detail: 'push reply named a record with no seq',
+        });
+      }
+      return { cursor: body.cursor, applied: body.applied, conflicts: body.conflicts };
+    }
+    // Half a reply is neither shape; a pre-compare-and-set server answers a bare cursor, meaning
+    // everything landed with no seqs to report.
+    if (body.applied !== undefined || body.conflicts !== undefined) {
+      throw new ApiError('invalid_response', res.status, {
+        detail: 'push reply did not carry both applied and conflicts arrays',
+      });
+    }
+    if (!this.warnedLegacyPush) {
+      this.warnedLegacyPush = true;
+      logger.warn('Sync server predates compare-and-set; pushes are unconditional');
+    }
+    return {
+      cursor: body.cursor,
+      applied: records.map((r) => ({ collection: r.collection, entityId: r.entityId })),
+      conflicts: [],
+    };
   }
 
   async logout(): Promise<void> {

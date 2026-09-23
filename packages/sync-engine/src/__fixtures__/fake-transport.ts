@@ -1,4 +1,4 @@
-import type { PushRecord, SyncRecord } from '@cuewise/shared';
+import type { PushRecord, PushResponse, SyncRecord } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import { PULL_PAGE, type SyncTransport } from '../cycle';
 
@@ -6,6 +6,13 @@ import { PULL_PAGE, type SyncTransport } from '../cycle';
 export class FakeTransport implements SyncTransport {
   readonly pushedBatches: PushRecord[][] = [];
   rejectPush = false;
+  /**
+   * Server rows the push checks `baseSeq` against and assigns seqs into, keyed
+   * "collection/entityId". Seed one to script a conflict; a push without `baseSeq` overwrites it.
+   */
+  readonly serverRecords = new Map<string, SyncRecord>();
+  /** A pre-compare-and-set server: ignores `baseSeq` and answers as ApiClient normalises it. */
+  legacyPushResponse = false;
   /** Canned server-side records for getChanges to page through, sorted by seq. */
   pullRecords: SyncRecord[] = [];
   /** Thrown by EVERY getChanges call until reset — a persistently failing transport. */
@@ -20,13 +27,41 @@ export class FakeTransport implements SyncTransport {
     this.nextGetChangesError = new ApiError('resync_required', 409);
   }
 
-  async pushChanges(records: PushRecord[]): Promise<{ cursor: number }> {
+  async pushChanges(records: PushRecord[]): Promise<PushResponse> {
     if (this.rejectPush) {
       throw new Error('FakeTransport: simulated pushChanges failure');
     }
     this.pushedBatches.push(records);
-    this.cursor += records.length;
-    return { cursor: this.cursor };
+    // A seeded row carries its own seq; new seqs must stay above it, as the real store's do.
+    for (const row of this.serverRecords.values()) {
+      this.cursor = Math.max(this.cursor, row.seq);
+    }
+    const response: PushResponse = { cursor: this.cursor, applied: [], conflicts: [] };
+    for (const rec of records) {
+      const key = `${rec.collection}/${rec.entityId}`;
+      const current = this.serverRecords.get(key);
+      // Like the real store: every pushed record reserves a seq, used or not.
+      this.cursor += 1;
+      const stale =
+        rec.baseSeq !== undefined && current !== undefined && current.seq !== rec.baseSeq;
+      if (stale && !this.legacyPushResponse) {
+        response.conflicts.push(current);
+        continue;
+      }
+      const { baseSeq: _base, ...wire } = rec;
+      this.serverRecords.set(key, { ...wire, seq: this.cursor });
+      if (this.legacyPushResponse) {
+        response.applied.push({ collection: rec.collection, entityId: rec.entityId });
+      } else {
+        response.applied.push({
+          collection: rec.collection,
+          entityId: rec.entityId,
+          seq: this.cursor,
+        });
+      }
+    }
+    response.cursor = this.cursor;
+    return response;
   }
 
   async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {

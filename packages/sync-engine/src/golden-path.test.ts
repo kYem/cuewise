@@ -1,4 +1,4 @@
-import { configurePlatform } from '@cuewise/shared';
+import { configurePlatform, hlcDecode, hlcEncode } from '@cuewise/shared';
 import {
   getGoals,
   getQuotes,
@@ -10,10 +10,12 @@ import {
 import { SessionManager } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { NoopStrategy } from './__fixtures__/noop-strategy';
+import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
 import { SyncEngine, type SyncEngineDeps } from './engine';
 import { RecoveryCodeRequiredError } from './key-lifecycle';
@@ -81,14 +83,6 @@ function useStorage(device: Pick<Device, 'kv'>): void {
 
 function getBinding(name: string): CollectionBinding {
   return requireBinding(defaultBindings(), name);
-}
-
-function requireBinding(bindings: CollectionBinding[], name: string): CollectionBinding {
-  const binding = bindings.find((b) => b.name === name);
-  if (binding === undefined) {
-    throw new Error(`no binding named ${name}`);
-  }
-  return binding;
 }
 
 describe('golden path: two devices converge through one shared fake server', () => {
@@ -334,6 +328,95 @@ describe('settings: per-key sync round-trips a shared key but excludes device-lo
     expect(bSettingsAfterDeviceLocalSync.logLevel).toBe('error');
     expect(bSettingsAfterDeviceLocalSync.focusedGoalId).toBe(null);
     expect(bSettingsAfterDeviceLocalSync.hasSeenOnboarding).toBe(false);
+  });
+});
+
+describe('compare-and-set: the server never regresses an entity', () => {
+  it('an older edit pushed after a newer one is refused and adopts the newer, with no repair push', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'seed' })]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    // Both edit; B (newer clock) pushes first, A (older) second with the base it saw at enrol time.
+    const goalsBinding = getBinding('goals');
+    useStorage(deviceA);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'A older' }));
+    await deviceA.engine.markMutated('goals', 'g1');
+    useStorage(deviceB);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'B newer' }));
+    await deviceB.engine.markMutated('goals', 'g1');
+    await deviceB.engine.syncNow();
+    const bRow = server.rows().find((r) => r.entityId === 'g1');
+    if (bRow === undefined) {
+      throw new Error('expected B to have pushed g1');
+    }
+
+    // Park A's cursor at the server head so the pull brings nothing and the base does the refusing.
+    await new SyncMetadataStore(deviceA.kv).update((meta) => {
+      meta.cursor = Math.max(...server.rows().map((r) => r.seq));
+    });
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+
+    expect(server.rows().find((r) => r.entityId === 'g1')?.seq).toBe(bRow.seq);
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
+    expect((await new SyncMetadataStore(deviceA.kv).load()).dirty.goals).toBeUndefined();
+
+    const pushSpy = vi.spyOn(server, 'pushChanges');
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    const g1Pushes = pushSpy.mock.calls.flatMap(([records]) =>
+      records.filter((r) => r.entityId === 'g1')
+    );
+    expect(g1Pushes).toEqual([]);
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('B newer');
+  });
+
+  it('a stale write that reached the server unconditionally is repaired by the device holding the newer edit', async () => {
+    const server = new FakeSyncServer();
+    // A's clock is ahead here: A's edits outrank B's.
+    const deviceA = createDevice(server, makeClock(9_000_000));
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'g1', text: 'seed' })]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    const goalsBinding = getBinding('goals');
+    useStorage(deviceA);
+    await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'A newest' }));
+    await deviceA.engine.markMutated('goals', 'g1');
+    await deviceA.engine.syncNow();
+
+    // A client that predates compare-and-set lands B's older edit over A's, no base asked.
+    const aHlc = hlcDecode((await new SyncMetadataStore(deviceA.kv).load()).hlcs['goals/g1']);
+    const before = await pushWithoutBase(deviceB.kv, server, 'goals', 'g1', {
+      entity: goalFactory.build({ id: 'g1', text: 'B stale' }),
+      hlc: hlcEncode({ ...aHlc, physical: aHlc.physical - 1 }),
+    });
+
+    // A pulls the stale row, keeps its own (strictly newer), re-dirties and repairs in one cycle.
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+    const after = server.rows().find((r) => r.entityId === 'g1')?.seq;
+    expect(after).toBeGreaterThan(before);
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('A newest');
+
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('A newest');
   });
 });
 
