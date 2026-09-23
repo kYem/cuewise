@@ -444,7 +444,8 @@ describe('pushOnce', () => {
 
     await pushOnce(deps);
 
-    expect(onQuarantine).toHaveBeenCalledWith('goals/g1');
+    // Not skipped but replaced, so the host is not told to surface a loss; the warn below is the trace.
+    expect(onQuarantine).not.toHaveBeenCalled();
     expect(transport.pushedBatches).toHaveLength(2);
     expect(transport.pushedBatches[1][0].baseSeq).toBe(2);
     expect(transport.serverRecords.get('goals/g1')?.ciphertext).not.toBe('garbage');

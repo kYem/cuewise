@@ -53,9 +53,11 @@ interface PullState {
   redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
+  /** This path re-pushes over what it could not read, so no host hears an item was skipped. */
+  repairsQuarantined: boolean;
 }
 
-function newPullState(meta: SyncMeta): PullState {
+function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
   return {
     meta,
     applied: new Set(),
@@ -63,6 +65,7 @@ function newPullState(meta: SyncMeta): PullState {
     seqs: new Map(),
     redirtied: new Map(),
     cursorReset: false,
+    repairsQuarantined,
   };
 }
 
@@ -374,7 +377,7 @@ async function settleConflicts(
   if (conflicts.length === 0) {
     return settled;
   }
-  const state = newPullState(await deps.meta.load());
+  const state = newPullState(await deps.meta.load(), true);
   settled.state = state;
   const warnedUnknownCollections = new Set<string>();
   for (const [index, conflict] of conflicts.entries()) {
@@ -645,7 +648,9 @@ async function resolveAndApply(
     if (!meta.quarantine.includes(key)) {
       meta.quarantine.push(key);
       pull.quarantined.add(key);
-      deps.onQuarantine?.(key);
+      if (!pull.repairsQuarantined) {
+        deps.onQuarantine?.(key);
+      }
       // Metadata only — collection/entityId/seq — never the ciphertext or decoded payload.
       logger.warn('Quarantined undecryptable sync record', {
         collection: rec.collection,
