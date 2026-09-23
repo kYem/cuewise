@@ -176,6 +176,21 @@ describe('Concept Cards Store', () => {
       expect(storage.setConceptCards).not.toHaveBeenCalled();
     });
 
+    // Regression: a batch that dedups to nothing against the existing deck must not take the
+    // lock and rewrite the whole array just to report 0.
+    it('does not persist when every term already exists in the deck', async () => {
+      useConceptCardsStore.setState({
+        cards: [conceptCardFactory.build({ id: '1', term: 'Caching' })],
+      });
+
+      const added = await useConceptCardsStore
+        .getState()
+        .addCards([{ term: 'caching', definition: 'Dupe of an existing term.' }]);
+
+      expect(added).toBe(0);
+      expect(storage.setConceptCards).not.toHaveBeenCalled();
+    });
+
     it('returns null and reports on a failed persist — distinct from nothing-to-add', async () => {
       vi.mocked(storage.setConceptCards).mockResolvedValue(storageFailure('write failed'));
 
@@ -217,6 +232,18 @@ describe('Concept Cards Store', () => {
       await useConceptCardsStore.getState().updateCard('1', { source: '' });
 
       expect(useConceptCardsStore.getState().cards[0].source).toBeUndefined();
+    });
+
+    // Regression: another realm deleted the card between the pre-lock guard and the locked read.
+    it('does not report success when the write finds the card already gone', async () => {
+      const card = conceptCardFactory.build({ id: '1', term: 'Original' });
+      useConceptCardsStore.setState({ cards: [card] });
+      vi.mocked(storage.getConceptCards).mockResolvedValue([]);
+
+      const ok = await useConceptCardsStore.getState().updateCard('1', { term: 'Renamed' });
+
+      expect(ok).toBe(false);
+      expect(toastWarning).toHaveBeenCalled();
     });
   });
 
@@ -263,6 +290,18 @@ describe('Concept Cards Store', () => {
       expect(ok).toBe(false);
       expect(storage.setConceptCards).not.toHaveBeenCalled();
     });
+
+    // Regression: another realm deleted the card between the pre-lock guard and the locked read.
+    it('does not report success when the write finds the card already gone', async () => {
+      const card = conceptCardFactory.build({ id: '1' });
+      useConceptCardsStore.setState({ cards: [card] });
+      vi.mocked(storage.getConceptCards).mockResolvedValue([]);
+
+      const ok = await useConceptCardsStore.getState().reviewCard('1', 'good');
+
+      expect(ok).toBe(false);
+      expect(toastWarning).toHaveBeenCalled();
+    });
   });
 
   describe('toggleFavorite', () => {
@@ -281,6 +320,19 @@ describe('Concept Cards Store', () => {
       const ok = await useConceptCardsStore.getState().toggleFavorite('missing');
 
       expect(ok).toBe(false);
+    });
+
+    // Regression: the pre-lock snapshot is stale, so the flip must use the value the locked
+    // read finds, not `!existing.isFavorite` computed before the lock.
+    it('flips the value read inside the lock, not the pre-lock snapshot', async () => {
+      const staleCard = conceptCardFactory.build({ id: '1', isFavorite: false });
+      useConceptCardsStore.setState({ cards: [staleCard] });
+      vi.mocked(storage.getConceptCards).mockResolvedValue([{ ...staleCard, isFavorite: true }]);
+
+      const ok = await useConceptCardsStore.getState().toggleFavorite('1');
+
+      expect(ok).toBe(true);
+      expect(useConceptCardsStore.getState().cards[0].isFavorite).toBe(false);
     });
   });
 
