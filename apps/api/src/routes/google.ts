@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import { randomToken, signState, verifyState } from '../crypto-utils';
 import type { Env } from '../env';
+import { ERROR_CODE_RE } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem, type ValidationIssue } from '../problem-details';
 import { verifyOrProblem } from '../verifiers';
@@ -10,6 +11,8 @@ import {
   CODE_CHALLENGE_RE,
   isAllowedReturnUri,
   requireStateSigningKey,
+  respondWithDeepLink,
+  respondWithDeepLinkError,
   toBounceState,
 } from './bounce-shared';
 
@@ -45,9 +48,7 @@ const CONFIG_FAULT_ERRORS = new Set([
 async function readOAuthErrorCode(res: Response): Promise<string | null> {
   try {
     const body = (await res.json()) as { error?: unknown };
-    // Enum-shaped values only — anything else is not an RFC 6749 error code and never
-    // reaches a log line.
-    if (typeof body.error === 'string' && /^[a-z_]{1,64}$/.test(body.error)) {
+    if (typeof body.error === 'string' && ERROR_CODE_RE.test(body.error)) {
       return body.error;
     }
     return null;
@@ -127,66 +128,17 @@ function sanitizeOAuthError(error: string): SanitizedOAuthError {
   return 'auth_failed';
 }
 
-/** HTML-escapes an embedded value; deep-link URLs are server-built, but escape regardless. */
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-/**
- * Returns to the app via an interstitial page instead of a bare 302 (ENG-66): a cross-scheme
- * redirect can't close or repaint the tab it happens in, which read as "stuck on Google" in
- * live testing. The page fires the deep link (script + meta-refresh fallback) and tells the
- * user the tab is done.
- */
-function respondWithDeepLink(target: URL, message: string): Response {
-  const href = target.toString();
-  // <-escape closes the </script> breakout hole even though href can't contain '<'.
-  const jsHref = JSON.stringify(href).replaceAll('<', '\\u003c');
-  // Per-response nonce so the CSP admits only THIS inline script — a future markup mistake that
-  // echoes a request value can't execute, and can't exfiltrate the ?code= that's in scope here.
-  const nonce = randomToken();
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="refresh" content="0;url=${escapeHtml(href)}">
-<title>Cuewise</title>
-</head>
-<body style="font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 90vh; text-align: center;">
-<p>${escapeHtml(message)} You can close this tab.<br><a href="${escapeHtml(href)}">Open Cuewise</a> if it doesn't happen automatically.</p>
-<script nonce="${nonce}">location.replace(${jsHref});</script>
-</body>
-</html>`;
-  return new Response(html, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      // The page embeds the one-time code — never cache it, never leak it via Referer, and
-      // don't let the browser sniff it into another content type.
-      'Cache-Control': 'no-store',
-      // frame-ancestors/base-uri aren't covered by default-src; pin them so this credential-
-      // bearing page can't be framed for clickjacking or have its <base> rewritten.
-      'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'`,
-      'Referrer-Policy': 'no-referrer',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
-}
-
 /**
  * Failures after the return URI is proven ours (allowlisted at /start, or HMAC-verified at the
  * callback) ride back to the app so its pending flow settles immediately — a problem+json page
  * in the browser would strand the app until its callback timeout.
  */
 function redirectWithError(returnUri: string, error: SanitizedOAuthError): Response {
-  const target = new URL(returnUri);
-  target.searchParams.set('error', error);
-  return respondWithDeepLink(target, "Sign-in didn't complete — return to Cuewise to try again.");
+  return respondWithDeepLinkError(
+    returnUri,
+    error,
+    "Sign-in didn't complete — return to Cuewise to try again."
+  );
 }
 
 /**

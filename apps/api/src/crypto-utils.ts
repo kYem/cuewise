@@ -19,10 +19,14 @@ export function base64UrlEncodeString(value: string): string {
   return base64UrlEncode(encoder.encode(value));
 }
 
+// The buffer parameter is explicit because WebCrypto's BufferSource rejects ArrayBufferLike,
+// which is what a bare `Uint8Array` return annotation widens to.
+export function base64UrlDecodeBytes(value: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(base64UrlDecode(value), (ch) => ch.charCodeAt(0));
+}
+
 export function base64UrlDecodeString(value: string): string {
-  const binary = base64UrlDecode(value);
-  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-  return decoder.decode(bytes);
+  return decoder.decode(base64UrlDecodeBytes(value));
 }
 
 export function randomToken(): string {
@@ -81,34 +85,34 @@ export async function sha256Base64Url(value: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
-let cachedKey: { raw: string; key: Promise<CryptoKey> } | null = null;
-
-// STATE_SIGNING_KEY is effectively constant per isolate; caching avoids re-importing the
-// same HMAC key on every signState/verifyState call (every bounce /start and /callback).
-function importHmacKey(key: string): Promise<CryptoKey> {
-  if (cachedKey !== null && cachedKey.raw === key) {
-    return cachedKey.key;
-  }
-  const entry = {
-    raw: key,
-    key: crypto.subtle.importKey(
-      'raw',
-      encoder.encode(key),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign', 'verify']
-    ),
-  };
-  cachedKey = entry;
-  // Never cache a rejection: a transient import failure must not permanently poison this
-  // slot for the isolate's lifetime. Only clear it if a newer entry hasn't already replaced it.
-  entry.key.catch(() => {
-    if (cachedKey === entry) {
-      cachedKey = null;
+// Each secret is effectively constant per isolate, so one slot per key kind avoids re-importing
+// it on every call. A rejection is never cached: a transient failure must not poison the slot.
+function cachedImport(
+  importKey: (raw: string) => Promise<CryptoKey>
+): (raw: string) => Promise<CryptoKey> {
+  let cached: { raw: string; key: Promise<CryptoKey> } | null = null;
+  return (raw) => {
+    if (cached !== null && cached.raw === raw) {
+      return cached.key;
     }
-  });
-  return entry.key;
+    const entry = { raw, key: importKey(raw) };
+    cached = entry;
+    // Only cleared if a newer entry hasn't already replaced it.
+    entry.key.catch(() => {
+      if (cached === entry) {
+        cached = null;
+      }
+    });
+    return entry.key;
+  };
 }
+
+const importHmacKey = cachedImport((key) =>
+  crypto.subtle.importKey('raw', encoder.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ])
+);
 
 /** Signs `payload` so `verifyState` can detect any tampering with the body or signature. */
 export async function signState(payload: object, key: string): Promise<string> {
@@ -144,7 +148,7 @@ export async function verifyState(state: string, key: string): Promise<VerifySta
     return { ok: false, reason: 'key_unavailable' };
   }
   try {
-    const signatureBytes = Uint8Array.from(base64UrlDecode(signature), (ch) => ch.charCodeAt(0));
+    const signatureBytes = base64UrlDecodeBytes(signature);
     const valid = await crypto.subtle.verify(
       'HMAC',
       cryptoKey,
@@ -162,4 +166,51 @@ export async function verifyState(state: string, key: string): Promise<VerifySta
     logger.warn('verifyState: state could not be decoded');
     return { ok: false, reason: 'undecodable' };
   }
+}
+
+const PROVIDER_KEY_BYTES = 32;
+const IV_BYTES = 12;
+
+/** True when `rawKey` is what encryptSecret/decryptSecret accept: base64url of exactly 32 bytes. */
+export function isSecretKey(rawKey: string): boolean {
+  try {
+    return base64UrlDecodeBytes(rawKey).length === PROVIDER_KEY_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+const importSecretKey = cachedImport(async (rawKey) => {
+  const bytes = base64UrlDecodeBytes(rawKey);
+  if (bytes.length !== PROVIDER_KEY_BYTES) {
+    throw new Error(`provider token key must decode to 32 bytes, got ${bytes.length}`);
+  }
+  return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+});
+
+/** One AES-GCM seal: the ciphertext and the IV it was sealed with, meaningless apart. */
+export interface SealedSecret {
+  readonly ciphertext: string;
+  readonly iv: string;
+}
+
+export async function encryptSecret(plaintext: string, rawKey: string): Promise<SealedSecret> {
+  const key = await importSecretKey(rawKey);
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const sealed = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoder.encode(plaintext)
+  );
+  return { ciphertext: base64UrlEncode(new Uint8Array(sealed)), iv: base64UrlEncode(iv) };
+}
+
+export async function decryptSecret(sealed: SealedSecret, rawKey: string): Promise<string> {
+  const key = await importSecretKey(rawKey);
+  const opened = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64UrlDecodeBytes(sealed.iv) },
+    key,
+    base64UrlDecodeBytes(sealed.ciphertext)
+  );
+  return decoder.decode(opened);
 }

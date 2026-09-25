@@ -6,6 +6,7 @@ import { resolveAllowedOrigin } from './cors';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { ipRateLimit } from './ip-rate-limit';
+import { createNotionClient, type NotionClient } from './notion-client';
 import { problem } from './problem-details';
 import { rateLimit } from './rate-limit';
 import { registerAccountRoutes } from './routes/account';
@@ -18,6 +19,7 @@ import {
   registerGoogleRoutes,
 } from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
+import { registerNotionRoutes } from './routes/notion';
 import { registerPairingsRoutes } from './routes/pairings';
 import { registerSessionsRoutes } from './routes/sessions';
 import { registerWeatherRoutes, type UpstreamFetch } from './routes/weather';
@@ -30,6 +32,7 @@ export type AppDeps = {
   appleVerifier?: IdTokenVerifier;
   googleCodeExchanger?: GoogleCodeExchanger;
   weatherUpstream?: UpstreamFetch;
+  notionClientFactory?: (env: Env) => NotionClient;
 };
 
 export type AppDepsResolved = Required<AppDeps>;
@@ -41,6 +44,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     appleVerifier: deps.appleVerifier ?? verifyAppleIdToken,
     googleCodeExchanger: deps.googleCodeExchanger ?? exchangeGoogleCode,
     weatherUpstream: deps.weatherUpstream ?? ((url, init) => fetch(url, init)),
+    notionClientFactory: deps.notionClientFactory ?? ((env) => createNotionClient(env)),
   };
   const app = new Hono<{ Bindings: Env } & AuthVars>();
 
@@ -73,6 +77,14 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
+  // One by one, not /v1/integrations/*: the callback must stay unauthenticated, and a wildcard
+  // would cover it too.
+  app.use('/v1/integrations/notion', auth);
+  app.use('/v1/integrations/notion/start', auth);
+  app.use('/v1/integrations/notion/tables', auth);
+  app.use('/v1/integrations/notion/selection', auth);
+  app.use('/v1/integrations/notion/claim', auth);
+  app.use('/v1/integrations/notion/items/*', auth);
 
   const perTokenRateLimit = rateLimit((env) => resolved.storeFactory(env.DB), {
     limit: 60,
@@ -84,6 +96,12 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/pairings/*', perTokenRateLimit);
   app.use('/v1/export', perTokenRateLimit);
   app.use('/v1/account', perTokenRateLimit);
+  app.use('/v1/integrations/notion', perTokenRateLimit);
+  app.use('/v1/integrations/notion/start', perTokenRateLimit);
+  app.use('/v1/integrations/notion/tables', perTokenRateLimit);
+  app.use('/v1/integrations/notion/selection', perTokenRateLimit);
+  app.use('/v1/integrations/notion/claim', perTokenRateLimit);
+  app.use('/v1/integrations/notion/items/*', perTokenRateLimit);
 
   // Unauthenticated, so only an IP-keyed limiter applies here.
   const authSurfaceRateLimit = ipRateLimit();
@@ -92,6 +110,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
   app.use('/v1/auth/google/start', authSurfaceRateLimit);
   app.use('/v1/auth/google/callback', authSurfaceRateLimit);
+  app.use('/v1/integrations/notion/callback', authSurfaceRateLimit);
   // Separate instances, because counters are per-middleware and these three surfaces fail
   // differently: sign-in must never be locked out by weather traffic, and a forecast is
   // fetched at most twice an hour per device while a search fires as the user types. One
@@ -108,6 +127,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerPairingsRoutes(app, resolved);
   registerAccountRoutes(app, resolved);
   registerWeatherRoutes(app, resolved);
+  registerNotionRoutes(app, resolved);
 
   app.notFound(() => {
     return problem('not_found');

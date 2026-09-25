@@ -18,13 +18,21 @@ import {
 import {
   type AppliedRecord,
   type AuthCodePayload,
+  type ExpiredParkedGrant,
   type Identity,
   type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
   PAIRING_TTL_MS,
   type PairingForRequester,
+  type ParkedGrantCursor,
   type PendingPairing,
+  type ProviderCodePayload,
+  type ProviderConnection,
   type PushRecord,
+  type RenewalClaim,
+  type ReplacedGrant,
+  type SealedGrant,
+  type SealedTokens,
   type ServerPushResponse,
   type Session,
   StorageQuotaExceededError,
@@ -67,6 +75,31 @@ export const TOMBSTONE_RETENTION_MS = SESSION_TTL_MS;
 export interface D1SyncStoreLimits {
   maxRecordsPerUser?: number;
   changesPageSize?: number;
+}
+
+const PROVIDER_CONNECTION_COLUMNS =
+  'provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id';
+
+interface ProviderConnectionRow {
+  provider: string;
+  ciphertext: string;
+  iv: string;
+  refresh_ciphertext: string | null;
+  refresh_iv: string | null;
+  workspace: string | null;
+  data_source_id: string | null;
+}
+
+function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
+  return {
+    provider: row.provider,
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    refreshCiphertext: row.refresh_ciphertext,
+    refreshIv: row.refresh_iv,
+    workspace: row.workspace,
+    dataSourceId: row.data_source_id,
+  };
 }
 
 export class D1SyncStore implements SyncStore {
@@ -251,10 +284,15 @@ export class D1SyncStore implements SyncStore {
     const code = randomToken();
     const codeHash = await sha256Hex(code);
     const ts = this.now();
-    // Best-effort PII sweep: expired codes are purged on the next mint call, not by a
-    // timer, so an unredeemed row can outlive its 60s TTL until someone else authenticates.
+    // Best-effort PII sweep: expired sign-in codes are purged on the next mint call, not by a
+    // timer. A parked Notion grant is left for the cron, which also revokes it upstream.
     await this.db.batch([
-      this.db.prepare('DELETE FROM auth_codes WHERE expires_at <= ?').bind(ts),
+      this.db
+        .prepare(
+          `DELETE FROM auth_codes
+            WHERE expires_at <= ? AND json_extract(payload, '$.provider') IS NOT 'notion'`
+        )
+        .bind(ts),
       this.db
         .prepare(
           'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
@@ -262,6 +300,42 @@ export class D1SyncStore implements SyncStore {
         .bind(codeHash, JSON.stringify(payload), ts + AUTH_CODE_TTL_MS, codeChallenge),
     ]);
     return code;
+  }
+
+  async purgeExpiredSignInCodes(now: number): Promise<number> {
+    const res = await this.db
+      .prepare(
+        `DELETE FROM auth_codes
+          WHERE expires_at <= ? AND json_extract(payload, '$.provider') IS NOT 'notion'`
+      )
+      .bind(now)
+      .run();
+    return res.meta.changes ?? 0;
+  }
+
+  async listExpiredParkedGrants(
+    now: number,
+    limit: number,
+    after: ParkedGrantCursor | null
+  ): Promise<ExpiredParkedGrant[]> {
+    const res = await this.db
+      .prepare(
+        `SELECT code_hash, expires_at, payload FROM auth_codes
+          WHERE expires_at <= ? AND json_extract(payload, '$.provider') = 'notion'
+            AND (expires_at, code_hash) > (?, ?)
+          ORDER BY expires_at, code_hash LIMIT ?`
+      )
+      .bind(now, after?.expiresAt ?? -1, after?.codeHash ?? '', limit)
+      .all<{ code_hash: string; expires_at: number; payload: string }>();
+    return res.results.map((row) => ({
+      codeHash: row.code_hash,
+      expiresAt: row.expires_at,
+      grant: (JSON.parse(row.payload) as ProviderCodePayload).grant,
+    }));
+  }
+
+  async deleteAuthCode(codeHash: string): Promise<void> {
+    await this.db.prepare('DELETE FROM auth_codes WHERE code_hash = ?').bind(codeHash).run();
   }
 
   async consumeAuthCode(
@@ -481,15 +555,21 @@ export class D1SyncStore implements SyncStore {
     return { records, keyEnvelopes };
   }
 
-  async deleteUser(userId: string): Promise<void> {
-    await this.db.batch([
+  async deleteUser(userId: string): Promise<ProviderConnection[]> {
+    const results = await this.db.batch<ProviderConnectionRow>([
       this.db.prepare('DELETE FROM records WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM pairings WHERE user_id = ?').bind(userId),
+      this.db
+        .prepare(
+          `DELETE FROM provider_tokens WHERE user_id = ? RETURNING ${PROVIDER_CONNECTION_COLUMNS}`
+        )
+        .bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
+    return (results[5]?.results ?? []).map(toProviderConnection);
   }
 
   async purgeTombstones(retentionMs: number): Promise<number> {
@@ -553,6 +633,157 @@ export class D1SyncStore implements SyncStore {
       .bind(userId, kind, envelope, this.now())
       .run();
     return (result.meta.changes ?? 0) > 0;
+  }
+
+  async getProviderConnection(
+    userId: string,
+    provider: string
+  ): Promise<ProviderConnection | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT ${PROVIDER_CONNECTION_COLUMNS} FROM provider_tokens WHERE user_id = ? AND provider = ?`
+      )
+      .bind(userId, provider)
+      .first<ProviderConnectionRow>();
+    return row === null ? null : toProviderConnection(row);
+  }
+
+  async takeProviderConnection(
+    userId: string,
+    provider: string
+  ): Promise<ProviderConnection | null> {
+    const row = await this.db
+      .prepare(
+        `DELETE FROM provider_tokens WHERE user_id = ? AND provider = ?
+         RETURNING ${PROVIDER_CONNECTION_COLUMNS}`
+      )
+      .bind(userId, provider)
+      .first<ProviderConnectionRow>();
+    return row === null ? null : toProviderConnection(row);
+  }
+
+  async claimProviderRenewal(
+    userId: string,
+    provider: string,
+    used: { readonly ciphertext: string },
+    staleAfterMs: number
+  ): Promise<RenewalClaim | null> {
+    const now = this.now();
+    const res = await this.db
+      .prepare(
+        `UPDATE provider_tokens SET renewal_started_at = ?
+          WHERE user_id = ? AND provider = ? AND ciphertext = ?
+            AND (renewal_started_at IS NULL OR renewal_started_at < ?)`
+      )
+      .bind(now, userId, provider, used.ciphertext, now - staleAfterMs)
+      .run();
+    return (res.meta.changes ?? 0) > 0 ? (now as RenewalClaim) : null;
+  }
+
+  async releaseProviderRenewal(
+    userId: string,
+    provider: string,
+    claim: RenewalClaim
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE provider_tokens SET renewal_started_at = NULL
+          WHERE user_id = ? AND provider = ? AND renewal_started_at = ?`
+      )
+      .bind(userId, provider, claim)
+      .run();
+  }
+
+  async updateProviderTokens(
+    userId: string,
+    provider: string,
+    tokens: SealedTokens,
+    used: { readonly ciphertext: string }
+  ): Promise<boolean> {
+    const res = await this.db
+      .prepare(
+        `UPDATE provider_tokens
+            SET ciphertext = ?, iv = ?,
+                refresh_ciphertext = COALESCE(?, refresh_ciphertext),
+                refresh_iv = COALESCE(?, refresh_iv),
+                renewal_started_at = NULL
+          WHERE user_id = ? AND provider = ? AND ciphertext = ?`
+      )
+      .bind(
+        tokens.ciphertext,
+        tokens.iv,
+        tokens.refreshCiphertext,
+        tokens.refreshIv,
+        userId,
+        provider,
+        used.ciphertext
+      )
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async setProviderDataSource(
+    userId: string,
+    provider: string,
+    dataSourceId: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .prepare('UPDATE provider_tokens SET data_source_id = ? WHERE user_id = ? AND provider = ?')
+      .bind(dataSourceId, userId, provider)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async putProviderGrant(
+    userId: string,
+    provider: string,
+    grant: SealedGrant
+  ): Promise<ReplacedGrant | null> {
+    // One batch, so the read sees the row this write is about to replace and no concurrent
+    // (re)connect can slip a grant in between and have it leaked instead.
+    const [displaced] = await this.db.batch<ReplacedGrant>([
+      this.db
+        .prepare(`SELECT ciphertext, iv FROM provider_tokens WHERE user_id = ? AND provider = ?`)
+        .bind(userId, provider),
+      this.db
+        .prepare(
+          `INSERT INTO provider_tokens
+           (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
+            workspace, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+         ON CONFLICT (user_id, provider) DO UPDATE SET
+           ciphertext = excluded.ciphertext,
+           iv = excluded.iv,
+           refresh_ciphertext = excluded.refresh_ciphertext,
+           refresh_iv = excluded.refresh_iv,
+           workspace = excluded.workspace,
+           data_source_id = provider_tokens.data_source_id,
+           renewal_started_at = NULL`
+        )
+        .bind(
+          userId,
+          provider,
+          grant.ciphertext,
+          grant.iv,
+          grant.refreshCiphertext,
+          grant.refreshIv,
+          grant.workspace,
+          this.now()
+        ),
+    ]);
+    return displaced.results[0] ?? null;
+  }
+
+  async deleteProviderConnectionIfUnchanged(
+    userId: string,
+    provider: string,
+    used: { readonly ciphertext: string }
+  ): Promise<boolean> {
+    const res = await this.db
+      .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ? AND ciphertext = ?')
+      .bind(userId, provider, used.ciphertext)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
   }
 
   // Single UPDATE...RETURNING with CASE keeps the reset-or-increment atomic within D1's
