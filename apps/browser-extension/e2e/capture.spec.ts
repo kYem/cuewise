@@ -97,3 +97,29 @@ test('a captured quote is stored as a custom quote with its page', async () => {
 
   await context.close();
 });
+
+test('the toolbar popup sizes to its content', async () => {
+  const session = await launchExtension();
+  const { context, worker } = session;
+  const newTab = await openNewTab(session);
+  await seedDraft(worker, {
+    kind: 'concept',
+    text: 'Idempotence\nSame effect however many times it runs.',
+    pageUrl: PAGE_URL,
+  });
+
+  await newTab.evaluate(() => chrome.action.openPopup());
+
+  await expect(async () => {
+    const size = await newTab.evaluate(() => {
+      const [popup] = chrome.extension.getViews({ type: 'popup' });
+      const content = popup?.document.querySelector('main')?.getBoundingClientRect();
+      return { width: popup?.innerWidth, height: popup?.innerHeight, content: content?.height };
+    });
+    expect(size.width).toBe(360);
+    expect(size.content).toBeGreaterThan(200);
+    expect(size.height).toBe(size.content);
+  }).toPass({ timeout: 5_000 });
+
+  await context.close();
+});
