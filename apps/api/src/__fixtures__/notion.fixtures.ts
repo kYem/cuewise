@@ -5,7 +5,14 @@ import { D1SyncStore } from '../d1-store';
 import type { Env } from '../env';
 import type { NotionClient, NotionGrant } from '../notion-client';
 import type { PropertySchemas } from '../notion-schema';
-import type { AuthCodePayload, RenewalClaim, SealedGrant, SealedTokens, SyncStore } from '../store';
+import type {
+  AuthCodePayload,
+  ProviderConnection,
+  RenewalClaim,
+  SealedGrant,
+  SealedTokens,
+  SyncStore,
+} from '../store';
 import { signedInToken } from './api-test-helpers.fixtures';
 import { TEST_CODE_VERIFIER } from './bounce.fixtures';
 
@@ -99,7 +106,11 @@ export function stubNotionClient(overrides: Partial<NotionClient> = {}): NotionC
       workspace: null,
     })),
     revokeToken: vi.fn(async () => undefined),
-    searchDataSources: vi.fn(async () => [{ id: TEST_DATA_SOURCE_ID, name: 'Tasks' }]),
+    searchDataSources: vi.fn(async () => ({
+      tables: [{ id: TEST_DATA_SOURCE_ID, name: 'Tasks' }],
+      truncated: false,
+    })),
+    getPageDataSource: vi.fn(async () => TEST_DATA_SOURCE_ID),
     getPropertySchemas: vi.fn(async () => checkboxSchema),
     queryRows: vi.fn(async () => ({ items: [], truncated: false })),
     setCompletion: vi.fn(async () => undefined),
@@ -233,7 +244,7 @@ export class FailingWriteStore extends D1SyncStore {
     return super.putProviderGrant(userId, provider, grant);
   }
 
-  override async deleteUser(userId: string): Promise<void> {
+  override async deleteUser(userId: string): Promise<ProviderConnection[]> {
     if (this.failing === 'deleteUser') {
       throw new Error('D1 write failed');
     }
@@ -262,4 +273,16 @@ export class FailingWriteStore extends D1SyncStore {
     }
     return super.releaseProviderRenewal(userId, provider, claim);
   }
+}
+
+/** Parks an access-only grant sealed under the test key, as an unclaimed callback leaves one. */
+export async function mintParkedGrant(store: D1SyncStore): Promise<void> {
+  const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+  await store.mintAuthCode(
+    {
+      provider: 'notion',
+      grant: { ...sealed, refreshCiphertext: null, refreshIv: null, workspace: null },
+    },
+    'c1'
+  );
 }

@@ -15,8 +15,12 @@ const PROBLEM_DEFS = {
   pairing_not_found: { status: 404, title: 'No such pairing request.' },
   pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },
   provider_not_connected: { status: 404, title: 'No connection for that provider.' },
-  // Not `invalid_token`: the session is fine and the provider grant died — reconnect, not sign in.
-  provider_reauth_required: { status: 401, title: 'The provider connection is no longer valid.' },
+  // Never 401: clients read any 401 as a dead session and sign out; the session here is fine.
+  provider_reauth_required: { status: 409, title: 'The provider connection is no longer valid.' },
+  provider_claim_invalid: {
+    status: 400,
+    title: 'That connect link has expired or was already used; connect again.',
+  },
   provider_schema_unusable: {
     status: 422,
     title: 'That table has no status with a Complete group, and no Done checkbox.',

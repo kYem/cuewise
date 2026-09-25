@@ -1,9 +1,8 @@
-import { logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
 import type { AppDepsResolved } from '../index';
-import { revokeNotionGrant } from './notion';
+import { revokeRemovedGrants } from './notion';
 
 export function registerAccountRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
@@ -26,14 +25,8 @@ export function registerAccountRoutes(
   app.delete('/v1/account', async (c) => {
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
-    await revokeNotionGrant(store, deps.notionClientFactory(c.env), c.env, userId);
-    try {
-      await store.deleteUser(userId);
-    } catch (error) {
-      // The grant is already taken and revoked; the account outliving that must be traceable.
-      logger.error('Account deletion failed after the Notion grant was revoked', error, { userId });
-      throw error;
-    }
+    const removed = await store.deleteUser(userId);
+    await revokeRemovedGrants(deps.notionClientFactory(c.env), c.env, userId, removed);
     return c.body(null, 204);
   });
 }

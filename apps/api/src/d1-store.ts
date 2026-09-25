@@ -23,6 +23,7 @@ import {
   type KeyEnvelopeRecord,
   PAIRING_TTL_MS,
   type PairingForRequester,
+  type ParkedGrantCursor,
   type PendingPairing,
   type ProviderCodePayload,
   type ProviderConnection,
@@ -290,14 +291,19 @@ export class D1SyncStore implements SyncStore {
     return res.meta.changes ?? 0;
   }
 
-  async listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]> {
+  async listExpiredParkedGrants(
+    now: number,
+    limit: number,
+    after: ParkedGrantCursor | null
+  ): Promise<ExpiredParkedGrant[]> {
     const res = await this.db
       .prepare(
         `SELECT code_hash, expires_at, payload FROM auth_codes
           WHERE expires_at <= ? AND json_extract(payload, '$.provider') = 'notion'
-          ORDER BY expires_at LIMIT ?`
+            AND (expires_at, code_hash) > (?, ?)
+          ORDER BY expires_at, code_hash LIMIT ?`
       )
-      .bind(now, limit)
+      .bind(now, after?.expiresAt ?? -1, after?.codeHash ?? '', limit)
       .all<{ code_hash: string; expires_at: number; payload: string }>();
     return res.results.map((row) => ({
       codeHash: row.code_hash,
@@ -466,16 +472,21 @@ export class D1SyncStore implements SyncStore {
     return { records, keyEnvelopes };
   }
 
-  async deleteUser(userId: string): Promise<void> {
-    await this.db.batch([
+  async deleteUser(userId: string): Promise<ProviderConnection[]> {
+    const results = await this.db.batch<ProviderConnectionRow>([
       this.db.prepare('DELETE FROM records WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM pairings WHERE user_id = ?').bind(userId),
-      this.db.prepare('DELETE FROM provider_tokens WHERE user_id = ?').bind(userId),
+      this.db
+        .prepare(
+          `DELETE FROM provider_tokens WHERE user_id = ? RETURNING ${PROVIDER_CONNECTION_COLUMNS}`
+        )
+        .bind(userId),
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
     ]);
+    return (results[5]?.results ?? []).map(toProviderConnection);
   }
 
   async purgeTombstones(retentionMs: number): Promise<number> {

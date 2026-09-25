@@ -228,10 +228,12 @@ describe('provider connections', () => {
     await expect(store.claimProviderRenewal(userId, 'notion', CT, 30_000)).resolves.toBeNull();
   });
 
-  it('takes the connection with the account, so a delete leaves no grant behind', async () => {
-    await store.putProviderGrant(userId, 'notion', grant());
-    await store.deleteUser(userId);
+  it('deleteUser takes the connection with the account and returns it for revocation', async () => {
+    await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
+    const removed = await store.deleteUser(userId);
+
+    expect(removed).toEqual([connection(REFRESH_PAIR)]);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 

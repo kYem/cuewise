@@ -40,9 +40,12 @@ export interface ProviderCodePayload {
 
 export type AuthCodePayload = SignInCodePayload | ProviderCodePayload;
 
-export interface ExpiredParkedGrant {
+export interface ParkedGrantCursor {
   codeHash: string;
   expiresAt: number;
+}
+
+export interface ExpiredParkedGrant extends ParkedGrantCursor {
   grant: SealedGrant;
 }
 
@@ -117,7 +120,12 @@ export interface SyncStore {
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
   // Deletes expired sign-in codes; an expired parked grant stays until its revoke succeeds.
   purgeExpiredSignInCodes(now: number): Promise<number>;
-  listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]>;
+  // Ordered by (expiresAt, codeHash); `after` resumes past a row a sweep could not revoke.
+  listExpiredParkedGrants(
+    now: number,
+    limit: number,
+    after: ParkedGrantCursor | null
+  ): Promise<ExpiredParkedGrant[]>;
   deleteAuthCode(codeHash: string): Promise<void>;
   consumeAuthCode(
     rawCode: string
@@ -129,7 +137,8 @@ export interface SyncStore {
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
   // Without the envelopes an export is undecryptable even by a user holding their recovery code.
   exportUser(userId: string): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>;
-  deleteUser(userId: string): Promise<void>;
+  // Returns the provider grants it removed: whoever calls it owes Notion their revocation.
+  deleteUser(userId: string): Promise<ProviderConnection[]>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;
   // Highest seq ever purged for this user (0 if never purged) — the resync-required boundary

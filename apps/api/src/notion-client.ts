@@ -76,6 +76,12 @@ export interface NotionDataSource {
   name: string;
 }
 
+export interface NotionTables {
+  tables: NotionDataSource[];
+  // As NotionRows.truncated: the picker says "and more" rather than hide a table past the bound.
+  truncated: boolean;
+}
+
 export interface NotionGrant {
   accessToken: string;
   // `string | null` because that is exactly how Notion's token response declares it, with no
@@ -88,10 +94,12 @@ export interface NotionClient {
   exchangeCode(code: string): Promise<NotionGrant>;
   /** Trades a refresh token for a fresh grant; Notion issues a new refresh token with it. */
   refreshGrant(refreshToken: string): Promise<NotionGrant>;
-  /** Tells Notion to forget the grant, so disconnecting is not just local. */
-  revokeToken(accessToken: string): Promise<void>;
+  /** Tells Notion to forget one token, access or refresh (RFC 7009 takes either). */
+  revokeToken(token: string): Promise<void>;
   /** The tables shared with the integration; the token response names none, so a second phase. */
-  searchDataSources(accessToken: string): Promise<NotionDataSource[]>;
+  searchDataSources(accessToken: string): Promise<NotionTables>;
+  /** The data source a page's row lives in; null for a page that is not a table row. */
+  getPageDataSource(accessToken: string, pageId: string): Promise<string | null>;
   getPropertySchemas(accessToken: string, dataSourceId: string): Promise<PropertySchemas>;
   queryRows(
     accessToken: string,
@@ -109,7 +117,8 @@ function classify(
   status: number,
   body: unknown,
   retryAfter: number | null,
-  ourCredentials: boolean
+  ourCredentials: boolean,
+  validationRetryable: boolean
 ): Error {
   const record = asRecord(body) ?? {};
   const raw = record.error ?? record.code;
@@ -132,14 +141,14 @@ function classify(
   if (status === 403 || status === 404) {
     return new NotionResourceError(status, `notion resource unreachable (${status}, ${code})`);
   }
-  // 409 is Notion's retryable collision; validation_error is retryable by our policy, since a
-  // property renamed under a write causes it. Any other 4xx is a request only we could malform.
+  // 409 is Notion's retryable collision. validation_error is retryable only on a page write, where
+  // a property renamed under it causes one; anywhere else it is a request only we could malform.
   if (
     status >= 400 &&
     status < 500 &&
     status !== 429 &&
     status !== 409 &&
-    code !== 'validation_error'
+    !(validationRetryable && code === 'validation_error')
   ) {
     return new NotionConfigError(`notion rejected our request (${status}, ${code})`);
   }
@@ -165,7 +174,8 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
   async function call(
     path: string,
     authorization: string,
-    init: RequestInit = {}
+    init: RequestInit = {},
+    validationRetryable = false
   ): Promise<unknown> {
     let response: Response;
     try {
@@ -195,7 +205,8 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
         response.status,
         body,
         retryAfterOf(response),
-        authorization.startsWith('Basic ')
+        authorization.startsWith('Basic '),
+        validationRetryable
       );
     }
     // A 2xx we cannot parse is an outage, not an empty result — reporting it as "no rows" would
@@ -282,11 +293,11 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       );
     },
 
-    async revokeToken(accessToken) {
+    async revokeToken(token) {
       try {
         await callOurs('/oauth/revoke', basicAuth(), {
           method: 'POST',
-          body: JSON.stringify({ token: accessToken }),
+          body: JSON.stringify({ token }),
         });
       } catch (error) {
         // A 2xx is the whole answer here; an unreadable body is not a failed revoke.
@@ -298,31 +309,58 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
     },
 
     async searchDataSources(accessToken) {
-      const body = await callOurs('/search', `Bearer ${accessToken}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          filter: { property: 'object', value: 'data_source' },
-          page_size: PAGE_SIZE,
-        }),
-      });
-      const results = asRecord(body)?.results;
-      if (!Array.isArray(results)) {
-        throw new NotionUnavailableError('notion search answered without a results array', {
+      const tables: NotionDataSource[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < MAX_QUERY_PAGES; page += 1) {
+        const body = await callOurs('/search', `Bearer ${accessToken}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            filter: { property: 'object', value: 'data_source' },
+            page_size: PAGE_SIZE,
+            ...(cursor === null ? {} : { start_cursor: cursor }),
+          }),
+        });
+        const record = asRecord(body) ?? {};
+        const results = record.results;
+        if (!Array.isArray(results)) {
+          throw new NotionUnavailableError('notion search answered without a results array', {
+            status: 200,
+          });
+        }
+        for (const entry of results) {
+          const item = asRecord(entry);
+          // A trashed table is on its way to deletion and must not be offered.
+          if (item === null || typeof item.id !== 'string' || item.in_trash === true) {
+            continue;
+          }
+          const title = plainText(item.title);
+          tables.push({ id: item.id, name: title === '' ? item.id : title });
+        }
+        const hasMore = record.has_more === true;
+        const next = record.next_cursor;
+        if (!hasMore || typeof next !== 'string') {
+          return { tables, truncated: hasMore };
+        }
+        cursor = next;
+      }
+      return { tables, truncated: true };
+    },
+
+    async getPageDataSource(accessToken, pageId) {
+      const page = asRecord(
+        await call(`/pages/${encodeURIComponent(pageId)}`, `Bearer ${accessToken}`)
+      );
+      if (page === null) {
+        throw new NotionUnavailableError('notion page answered with no readable body', {
           status: 200,
         });
       }
-      return results.flatMap((entry) => {
-        const item = asRecord(entry);
-        if (item === null || typeof item.id !== 'string') {
-          return [];
-        }
-        // Defensive: a table on its way to deletion must not be offered.
-        if (item.in_trash === true) {
-          return [];
-        }
-        const title = plainText(item.title);
-        return [{ id: item.id, name: title === '' ? item.id : title }];
-      });
+      if (page.in_trash === true || page.archived === true) {
+        throw new NotionResourceError(404, 'notion page is in the trash');
+      }
+      const parent = asRecord(page.parent);
+      const dataSourceId = parent === null ? null : parent.data_source_id;
+      return typeof dataSourceId === 'string' ? dataSourceId : null;
     },
 
     async getPropertySchemas(accessToken, dataSourceId) {
@@ -391,10 +429,12 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
           : { [write.name]: { status: { id: write.optionId } } };
       const path = `/pages/${encodeURIComponent(pageId)}`;
       try {
-        await call(path, `Bearer ${accessToken}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ properties: value }),
-        });
+        await call(
+          path,
+          `Bearer ${accessToken}`,
+          { method: 'PATCH', body: JSON.stringify({ properties: value }) },
+          true
+        );
       } catch (error) {
         // A write to a trashed page answers 400, not 404. Looking once turns a stale list's toggle
         // into "that page is gone" rather than an outage the client retries.

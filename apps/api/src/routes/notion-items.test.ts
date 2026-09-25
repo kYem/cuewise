@@ -146,7 +146,7 @@ describe('GET /v1/integrations/notion/items', () => {
     const res = await getItems(headers, stubNotionClient({ queryRows }));
     const body = (await res.json()) as { code: string };
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(409);
     expect(body.code).toBe('provider_reauth_required');
     expect(warnSpy).toHaveBeenCalledWith('Notion auth fault', { userId, reason: 'revoked' });
     expect(warnSpy).toHaveBeenCalledWith('Dropped the Notion grant after an auth fault', {
@@ -180,7 +180,7 @@ describe('GET /v1/integrations/notion/items', () => {
     );
     const body = (await res.json()) as { code: string };
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(409);
     expect(body.code).toBe('provider_reauth_required');
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       dataSourceId: TEST_DATA_SOURCE_ID,
@@ -336,7 +336,7 @@ describe('token renewal', () => {
 
     const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(409);
     expect(refreshGrant).not.toHaveBeenCalled();
   });
 
@@ -403,7 +403,7 @@ describe('token renewal', () => {
     const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
     const body = (await res.json()) as { code: string };
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(409);
     expect(body.code).toBe('provider_reauth_required');
     expect(queryRows).toHaveBeenCalledTimes(1);
     expect(refreshGrant).not.toHaveBeenCalled();
@@ -536,7 +536,7 @@ describe('token renewal', () => {
 
     const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(409);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
@@ -549,7 +549,7 @@ describe('token renewal', () => {
     const res = await getItems(headers, stubNotionClient({ queryRows }));
     const body = (await res.json()) as { code: string };
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(409);
     expect(body.code).toBe('provider_reauth_required');
     expect(queryRows).toHaveBeenCalledTimes(2);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
@@ -715,6 +715,40 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     );
 
     expect(res.status).toBe(401);
+  });
+
+  it('refuses a page from another table, writing nothing', async () => {
+    const setCompletion = vi.fn(async () => undefined);
+    const getPageDataSource = vi.fn(async () => 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ getPageDataSource, setCompletion })
+    );
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toMatchObject({
+      detail: 'That task is not in the connected Notion table.',
+    });
+    expect(setCompletion).not.toHaveBeenCalled();
+  });
+
+  it('matches the page to the table whatever the dashes and case of either id', async () => {
+    const setCompletion = vi.fn(async () => undefined);
+    const undashed = TEST_DATA_SOURCE_ID.replaceAll('-', '').toUpperCase();
+    const getPageDataSource = vi.fn(async () => undashed);
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ getPageDataSource, setCompletion })
+    );
+
+    expect(res.status).toBe(204);
+    expect(setCompletion).toHaveBeenCalled();
   });
 
   it('rejects a page id that is not a Notion id, before anything reaches upstream', async () => {

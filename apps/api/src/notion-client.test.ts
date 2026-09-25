@@ -215,10 +215,21 @@ describe('failure classification', () => {
     );
   });
 
-  it('keeps validation_error retryable, since a renamed property causes it mid-write', async () => {
+  it('keeps validation_error retryable on a page write, since a renamed property causes it', async () => {
     const notion = client(() => Response.json({ code: 'validation_error' }, { status: 400 }));
 
-    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionUnavailableError);
+    await expect(notion.setCompletion('tok', 'p1', WRITE)).rejects.toBeInstanceOf(
+      NotionUnavailableError
+    );
+  });
+
+  it('treats validation_error anywhere but a page write as a request we malformed', async () => {
+    const notion = client(() => Response.json({ code: 'validation_error' }, { status: 400 }));
+
+    await expect(notion.queryRows('tok', 'ds1', checkboxProperty)).rejects.toBeInstanceOf(
+      NotionConfigError
+    );
+    await expect(notion.exchangeCode('c')).rejects.toBeInstanceOf(NotionConfigError);
   });
 
   it('logs only an enum-shaped error code, never whatever the body carried', async () => {
@@ -372,9 +383,46 @@ describe('searchDataSources', () => {
       });
     });
 
-    await expect(notion.searchDataSources('tok')).resolves.toEqual([
-      { id: 'ds1', name: 'Current Goals' },
-    ]);
+    await expect(notion.searchDataSources('tok')).resolves.toEqual({
+      tables: [{ id: 'ds1', name: 'Current Goals' }],
+      truncated: false,
+    });
+  });
+
+  it('follows the cursor across pages, sending it back as start_cursor', async () => {
+    const cursors: unknown[] = [];
+    const notion = client((_url, init) => {
+      const body = JSON.parse(String(init.body)) as { start_cursor?: string };
+      cursors.push(body.start_cursor);
+      if (body.start_cursor === undefined) {
+        return Response.json({
+          results: [{ id: 'ds1', title: [{ plain_text: 'One' }] }],
+          has_more: true,
+          next_cursor: 'c2',
+        });
+      }
+      return Response.json({ results: [{ id: 'ds2', title: [{ plain_text: 'Two' }] }] });
+    });
+
+    await expect(notion.searchDataSources('tok')).resolves.toEqual({
+      tables: [
+        { id: 'ds1', name: 'One' },
+        { id: 'ds2', name: 'Two' },
+      ],
+      truncated: false,
+    });
+    expect(cursors).toEqual([undefined, 'c2']);
+  });
+
+  it('reports truncated when the page bound stops the search before Notion ran out', async () => {
+    const notion = client(() =>
+      Response.json({ results: [{ id: 'ds1' }], has_more: true, next_cursor: 'more' })
+    );
+
+    const found = await notion.searchDataSources('tok');
+
+    expect(found.truncated).toBe(true);
+    expect(found.tables).toHaveLength(MAX_QUERY_PAGES);
   });
 
   it('treats a forbidden search as our configuration, since search names nothing the user could un-share', async () => {
@@ -399,7 +447,10 @@ describe('searchDataSources', () => {
       })
     );
 
-    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'Live' }]);
+    await expect(notion.searchDataSources('tok')).resolves.toEqual({
+      tables: [{ id: 'ds1', name: 'Live' }],
+      truncated: false,
+    });
   });
 
   it('skips a result with no string id rather than offering an undefined table', async () => {
@@ -407,19 +458,28 @@ describe('searchDataSources', () => {
       Response.json({ results: [{ title: [{ plain_text: 'orphan' }] }, { id: 'ds1', title: [] }] })
     );
 
-    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'ds1' }]);
+    await expect(notion.searchDataSources('tok')).resolves.toEqual({
+      tables: [{ id: 'ds1', name: 'ds1' }],
+      truncated: false,
+    });
   });
 
   it('falls back to the id when a result carries no title at all', async () => {
     const notion = client(() => Response.json({ results: [{ id: 'ds1' }] }));
 
-    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'ds1' }]);
+    await expect(notion.searchDataSources('tok')).resolves.toEqual({
+      tables: [{ id: 'ds1', name: 'ds1' }],
+      truncated: false,
+    });
   });
 
   it('falls back to the id for an untitled table', async () => {
     const notion = client(() => Response.json({ results: [{ id: 'ds1', title: [] }] }));
 
-    await expect(notion.searchDataSources('tok')).resolves.toEqual([{ id: 'ds1', name: 'ds1' }]);
+    await expect(notion.searchDataSources('tok')).resolves.toEqual({
+      tables: [{ id: 'ds1', name: 'ds1' }],
+      truncated: false,
+    });
   });
 });
 
@@ -713,5 +773,33 @@ describe('setCompletion', () => {
     });
 
     await notion.setCompletion('tok', 'pg1', WRITE);
+  });
+});
+
+describe('getPageDataSource', () => {
+  it("reads the data source a row's page lives in", async () => {
+    const notion = client((url) => {
+      expect(url).toBe('https://api.notion.com/v1/pages/p1');
+      return Response.json({ parent: { type: 'data_source_id', data_source_id: 'ds1' } });
+    });
+
+    await expect(notion.getPageDataSource('tok', 'p1')).resolves.toBe('ds1');
+  });
+
+  it('answers null for a page that is not a table row', async () => {
+    const notion = client(() => Response.json({ parent: { type: 'page_id', page_id: 'p0' } }));
+
+    await expect(notion.getPageDataSource('tok', 'p1')).resolves.toBeNull();
+  });
+
+  it('treats a trashed page as gone', async () => {
+    const notion = client(() =>
+      Response.json({ in_trash: true, parent: { type: 'data_source_id', data_source_id: 'ds1' } })
+    );
+
+    await expect(notion.getPageDataSource('tok', 'p1')).rejects.toMatchObject({
+      name: 'NotionResourceError',
+      status: 404,
+    });
   });
 });
