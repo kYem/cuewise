@@ -1,5 +1,5 @@
 import { DAY_IN_MS, logger } from '@cuewise/shared';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import {
   decryptSecret,
@@ -28,6 +28,7 @@ import type {
   ParkedGrantCursor,
   ProviderConnection,
   RenewalClaim,
+  ReplacedGrant,
   SealedGrant,
   SyncStore,
 } from '../store';
@@ -123,6 +124,36 @@ async function revokeUpstream(
     // Our config, or our bug: fails for every user, so it must be loud.
     logger.error('Notion revocation failed on our side', error, { userId });
     return false;
+  }
+}
+
+/**
+ * A (re)connect leaves the grant it replaced live at Notion, so it has to be revoked. Returns the
+ * work instead of doing it, so the response need not wait; null when there is nothing to revoke.
+ */
+export function revokeDisplacedGrant(
+  client: NotionClient,
+  replaced: ReplacedGrant | null,
+  stored: SealedGrant,
+  env: Env,
+  userId: string
+): Promise<boolean> | null {
+  if (replaced === null || replaced.ciphertext === stored.ciphertext) {
+    return null;
+  }
+  return revokeSealed(client, replaced, env, userId);
+}
+
+// Cleanup the caller must not wait for. Without an ExecutionContext — a test driving `app.request`
+// with no ctx — it is awaited instead, because a dropped promise can be cancelled mid-flight.
+async function detach(
+  c: Context<{ Bindings: Env } & AuthVars>,
+  work: Promise<unknown>
+): Promise<void> {
+  try {
+    c.executionCtx.waitUntil(work);
+  } catch {
+    await work;
   }
 }
 
@@ -668,16 +699,21 @@ export function registerNotionRoutes(
       await revokeSealed(client(c.env), grant, c.env, userId);
       return problem('provider_claim_invalid');
     }
+    let replaced: ReplacedGrant | null;
     try {
-      // A previous grant is overwritten, not revoked: a revoke reaches a whole grant, and whether
-      // that is this bot's only grant is unmeasured — per bot it would kill the one being claimed.
-      await store.putProviderGrant(userId, PROVIDER, grant);
+      replaced = await store.putProviderGrant(userId, PROVIDER, grant);
     } catch (error) {
       // The code is already burned, so this grant can never be claimed again. Revoke it rather
       // than leave a live token nobody holds, and say so: a retry only sees provider_claim_invalid.
       logger.error('Notion grant lost after its claim code was consumed', error, { userId });
       await revokeSealed(client(c.env), grant, c.env, userId);
       return problem('internal', { detail: 'The connection was not saved; please connect again.' });
+    }
+    // After the store, never before: a revoke that fails must not cost the user the connection
+    // they just made, and the response does not wait for it either.
+    const displaced = revokeDisplacedGrant(client(c.env), replaced, grant, c.env, userId);
+    if (displaced !== null) {
+      await detach(c, displaced);
     }
     return c.json({ workspace: grant.workspace });
   });

@@ -9,6 +9,7 @@ import type {
   AuthCodePayload,
   ProviderConnection,
   RenewalClaim,
+  ReplacedGrant,
   SealedGrant,
   SealedTokens,
   SyncStore,
@@ -237,7 +238,7 @@ export class FailingWriteStore extends D1SyncStore {
     userId: string,
     provider: string,
     grant: SealedGrant
-  ): Promise<void> {
+  ): Promise<ReplacedGrant | null> {
     if (this.failing === 'putProviderGrant') {
       throw new Error('D1 write failed');
     }

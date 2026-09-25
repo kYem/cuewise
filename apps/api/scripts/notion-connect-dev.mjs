@@ -83,8 +83,9 @@ async function start() {
   console.log('\nThen: node scripts/notion-connect-dev.mjs claim <code>');
 }
 
-// The one-time code dies in 60s, so nothing here waits on a human for long.
-const CATCH_TIMEOUT_MS = 120_000;
+// Generous: the code's 60s TTL only starts at Notion's redirect, so this window is a human
+// reading a consent screen. It exists to free the port when nobody ever authorises.
+const CATCH_TIMEOUT_MS = 10 * 60_000;
 
 /** Listens on CATCH_URI so the redirect itself delivers the code, inside its 60s life. */
 async function catchCode() {

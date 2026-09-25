@@ -1,3 +1,4 @@
+import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { DAY_IN_MS } from '@cuewise/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { clockedStore } from '../__fixtures__/api-test-helpers.fixtures';
@@ -20,6 +21,7 @@ import {
   TEST_ACCESS_TOKEN,
   TEST_DATA_SOURCE_ID,
   TEST_FOREIGN_PROVIDER_KEY,
+  TEST_PROVIDER_KEY,
   TEST_REFRESH_TOKEN,
   TEST_REFRESHED_TOKEN,
   TEST_ROTATED_REFRESH_TOKEN,
@@ -27,7 +29,7 @@ import {
   testCodeChallenge,
   titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
-import { signState } from '../crypto-utils';
+import { encryptSecret, signState } from '../crypto-utils';
 import type { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
 import {
@@ -36,7 +38,7 @@ import {
   NotionResourceError,
   NotionUnavailableError,
 } from '../notion-client';
-import { revokeExpiredParkedGrants } from './notion';
+import { revokeDisplacedGrant, revokeExpiredParkedGrants } from './notion';
 
 async function parkGrant(store: D1SyncStore): Promise<void> {
   const res = await createApp({
@@ -617,6 +619,94 @@ describe('POST /v1/integrations/notion/claim', () => {
     expect(body.detail).toContain('connect again');
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
+  });
+
+  it('revokes the grant a reconnect displaced, which notion still honours', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const { headers, store, userId } = await connectedNotionUser();
+    const displaced = await store.getProviderConnection(userId, 'notion');
+    const exchangeCode = vi.fn(async () => ({
+      accessToken: 'notion-access-token-reconnected',
+      refreshToken: TEST_REFRESH_TOKEN,
+      workspace: 'Acme',
+    }));
+    const client = stubNotionClient({ exchangeCode, revokeToken });
+    const code = await parkedCode(client);
+
+    const res = await app(client).request(
+      '/v1/integrations/notion/claim',
+      { method: 'POST', headers, body: JSON.stringify({ code, codeVerifier: TEST_CODE_VERIFIER }) },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(200);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: 'notion-access-token-reconnected',
+    });
+    expect(displaced?.ciphertext).not.toBe(
+      (await store.getProviderConnection(userId, 'notion'))?.ciphertext
+    );
+  });
+
+  it('hands the revoke to waitUntil, so the response does not wait for notion', async () => {
+    let released = () => {};
+    const revokeToken = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          released = resolve;
+        })
+    );
+    const { headers, store, userId } = await connectedNotionUser();
+    const exchangeCode = vi.fn(async () => ({
+      accessToken: 'notion-access-token-reconnected',
+      refreshToken: TEST_REFRESH_TOKEN,
+      workspace: 'Acme',
+    }));
+    const client = stubNotionClient({ exchangeCode, revokeToken });
+    const code = await parkedCode(client);
+    const ctx = createExecutionContext();
+
+    // The revoke is still hanging here; the claim must answer anyway.
+    const res = await app(client).request(
+      '/v1/integrations/notion/claim',
+      { method: 'POST', headers, body: JSON.stringify({ code, codeVerifier: TEST_CODE_VERIFIER }) },
+      notionEnv(),
+      ctx
+    );
+
+    expect(res.status).toBe(200);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: 'notion-access-token-reconnected',
+    });
+    released();
+    await waitOnExecutionContext(ctx);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('connects even when revoking the displaced grant fails', async () => {
+    const revokeToken = vi.fn(async () => {
+      throw new NotionUnavailableError('notion unreachable');
+    });
+    const { headers, store, userId } = await connectedNotionUser();
+    const exchangeCode = vi.fn(async () => ({
+      accessToken: 'notion-access-token-reconnected',
+      refreshToken: TEST_REFRESH_TOKEN,
+      workspace: 'Acme',
+    }));
+    const client = stubNotionClient({ exchangeCode, revokeToken });
+    const code = await parkedCode(client);
+
+    const res = await app(client).request(
+      '/v1/integrations/notion/claim',
+      { method: 'POST', headers, body: JSON.stringify({ code, codeVerifier: TEST_CODE_VERIFIER }) },
+      notionEnv()
+    );
+
+    expect(res.status).toBe(200);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: 'notion-access-token-reconnected',
+    });
   });
 
   it('stores both tokens encrypted, and the refresh token really is there', async () => {
@@ -1508,5 +1598,62 @@ describe('per-token rate limiting', () => {
     ]);
 
     expect(blocked.map((res) => res.status)).toEqual([429, 429, 429, 429, 429, 429, 429]);
+  });
+});
+
+describe('revokeDisplacedGrant', () => {
+  const stored = {
+    ciphertext: 'ct-new',
+    iv: 'iv-new',
+    refreshCiphertext: null,
+    refreshIv: null,
+    workspace: 'Acme',
+  };
+
+  it('has nothing to revoke on a first connect', () => {
+    const revokeToken = vi.fn(async () => undefined);
+
+    const work = revokeDisplacedGrant(
+      stubNotionClient({ revokeToken }),
+      null,
+      stored,
+      notionEnv(),
+      'user-1'
+    );
+
+    expect(work).toBeNull();
+    expect(revokeToken).not.toHaveBeenCalled();
+  });
+
+  it('does not revoke the token it just stored', () => {
+    const revokeToken = vi.fn(async () => undefined);
+
+    const work = revokeDisplacedGrant(
+      stubNotionClient({ revokeToken }),
+      { ciphertext: stored.ciphertext, iv: stored.iv },
+      stored,
+      notionEnv(),
+      'user-1'
+    );
+
+    expect(work).toBeNull();
+    expect(revokeToken).not.toHaveBeenCalled();
+  });
+
+  it('returns the revoke of a genuinely displaced grant, rather than running it', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const displaced = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+
+    const work = revokeDisplacedGrant(
+      stubNotionClient({ revokeToken }),
+      displaced,
+      stored,
+      notionEnv(),
+      'user-1'
+    );
+
+    expect(revokeToken).not.toHaveBeenCalled();
+    await expect(work).resolves.toBe(true);
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
   });
 });

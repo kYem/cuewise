@@ -73,6 +73,9 @@ export interface SealedGrant {
   workspace: string | null;
 }
 
+/** The access pair a (re)connect displaced: enough to revoke it, nothing more. */
+export type ReplacedGrant = Pick<SealedGrant, 'ciphertext' | 'iv'>;
+
 /** The stamp a renewal claim was taken at; branded so a timeout or Date.now() cannot release it. */
 export type RenewalClaim = number & { readonly __brand: 'RenewalClaim' };
 
@@ -190,8 +193,14 @@ export interface SyncStore {
   // Keyed on the stamp, so a crashed renewal's late release cannot free the claim that took over.
   releaseProviderRenewal(userId: string, provider: string, claim: RenewalClaim): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
-  // read-then-write window can revert a selection that lands in between.
-  putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void>;
+  // read-then-write window can revert a selection that lands in between. Answers the access pair
+  // it displaced, read in the same transaction, so the caller can revoke a grant Notion still
+  // honours — re-authorising does not invalidate the previous one.
+  putProviderGrant(
+    userId: string,
+    provider: string,
+    grant: SealedGrant
+  ): Promise<ReplacedGrant | null>;
   // Writes only while the row still holds the ciphertext the renewal started from, and releases
   // the claim with it; a null refresh keeps the stored pair. False when nothing matched.
   updateProviderTokens(

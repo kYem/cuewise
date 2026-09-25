@@ -30,6 +30,7 @@ import {
   type ProviderConnection,
   type PushRecord,
   type RenewalClaim,
+  type ReplacedGrant,
   type SealedGrant,
   type SealedTokens,
   type ServerPushResponse,
@@ -733,10 +734,20 @@ export class D1SyncStore implements SyncStore {
     return (res.meta.changes ?? 0) > 0;
   }
 
-  async putProviderGrant(userId: string, provider: string, grant: SealedGrant): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO provider_tokens
+  async putProviderGrant(
+    userId: string,
+    provider: string,
+    grant: SealedGrant
+  ): Promise<ReplacedGrant | null> {
+    // One batch, so the read sees the row this write is about to replace and no concurrent
+    // (re)connect can slip a grant in between and have it leaked instead.
+    const [displaced] = await this.db.batch<ReplacedGrant>([
+      this.db
+        .prepare(`SELECT ciphertext, iv FROM provider_tokens WHERE user_id = ? AND provider = ?`)
+        .bind(userId, provider),
+      this.db
+        .prepare(
+          `INSERT INTO provider_tokens
            (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
             workspace, data_source_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
@@ -748,18 +759,19 @@ export class D1SyncStore implements SyncStore {
            workspace = excluded.workspace,
            data_source_id = provider_tokens.data_source_id,
            renewal_started_at = NULL`
-      )
-      .bind(
-        userId,
-        provider,
-        grant.ciphertext,
-        grant.iv,
-        grant.refreshCiphertext,
-        grant.refreshIv,
-        grant.workspace,
-        this.now()
-      )
-      .run();
+        )
+        .bind(
+          userId,
+          provider,
+          grant.ciphertext,
+          grant.iv,
+          grant.refreshCiphertext,
+          grant.refreshIv,
+          grant.workspace,
+          this.now()
+        ),
+    ]);
+    return displaced.results[0] ?? null;
   }
 
   async deleteProviderConnectionIfUnchanged(
