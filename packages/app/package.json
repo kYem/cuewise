@@ -9,6 +9,8 @@
     ".": "./src/index.ts",
     "./reminder-activity": "./src/services/reminder-activity.ts",
     "./reminder-notifications": "./src/services/reminder-notifications.ts",
+    "./setting-controls": "./src/components/settings/SettingControls.tsx",
+    "./settings-store": "./src/stores/settings-store.ts",
     "./styles.css": "./src/index.css"
   },
   "scripts": {

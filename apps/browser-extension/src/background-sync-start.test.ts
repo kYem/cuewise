@@ -40,6 +40,7 @@ const chromeMock = {
     onInstalled: { addListener: vi.fn() },
     onStartup: { addListener: vi.fn() },
   },
+  contextMenus: { onClicked: { addListener: vi.fn() } },
 };
 
 // Typed, not cast through unknown: a cast hides a missing method from tsc, and any caller that
