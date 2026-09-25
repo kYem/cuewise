@@ -37,6 +37,83 @@ describe('SyncMetadataStore', () => {
     await expect(store.save(meta)).rejects.toThrow();
   });
 
+  it('starts with no seqs and round-trips them', async () => {
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const meta = await store.load();
+    expect(meta.seqs).toEqual({});
+    meta.seqs['goals/g1'] = 4;
+    await store.save(meta);
+    expect((await store.load()).seqs).toEqual({ 'goals/g1': 4 });
+  });
+
+  it('fills in seqs for a ledger stored before they existed, without disturbing the rest', async () => {
+    const kv = new FakeKvStore();
+    const legacy = {
+      deviceNode: 'node-1',
+      clock: 'legacy-clock',
+      cursor: 9,
+      dirty: { goals: ['g1'] },
+      hlcs: { 'goals/g1': 'legacy-hlc' },
+      tombstones: [],
+      quarantine: [],
+    };
+    await kv.set(SYNC_META_KEY, legacy, 'local');
+
+    const meta = await new SyncMetadataStore(kv).load();
+
+    expect(meta.seqs).toEqual({});
+    expect(meta.cursor).toBe(9);
+    expect(meta.dirty).toEqual({ goals: ['g1'] });
+    expect(await kv.get(SYNC_META_QUARANTINE_KEY, 'local')).toBeNull();
+  });
+
+  it('drops stored seqs that are not seqs, so none can ride a push as its base', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const meta = await store.load();
+    await kv.set(
+      SYNC_META_KEY,
+      {
+        ...meta,
+        seqs: {
+          'goals/g1': 4,
+          'goals/g2': null,
+          'goals/g3': -1,
+          'goals/g4': '5',
+          'goals/g5': 1.5,
+          'goals/g6': Number.MAX_SAFE_INTEGER + 1,
+        },
+      },
+      'local'
+    );
+
+    const loaded = await store.load();
+
+    expect(loaded.seqs).toEqual({ 'goals/g1': 4 });
+    expect(warnSpy).toHaveBeenCalledWith('Dropped 5 stored sync seq(s) that were not seqs');
+    warnSpy.mockRestore();
+  });
+
+  it.each([
+    ['a string', 'corrupt'],
+    ['an array', [4]],
+    ['null', null],
+  ])('starts with no seqs, and says so, when the stored map is %s', async (_label, seqs) => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const kv = new FakeKvStore();
+    const store = new SyncMetadataStore(kv);
+    const meta = await store.load();
+    await kv.set(SYNC_META_KEY, { ...meta, seqs }, 'local');
+
+    const loaded = await store.load();
+
+    expect(loaded.seqs).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith('Stored sync seqs were not a map; starting with none');
+    warnSpy.mockRestore();
+  });
+
   describe('update', () => {
     // Every writer does load → mutate → save on one blob, so two that overlap must not both read
     // the same pre-state — the later save would otherwise erase the earlier one's change.

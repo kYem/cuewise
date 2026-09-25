@@ -5,15 +5,30 @@ import type {
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
 import type {
+  AppliedRecord,
   KeyEnvelopeExport,
   KeyEnvelopeRecord,
   PushRecord,
+  PushResponse,
   SyncRecord,
   SyncSession,
 } from '@cuewise/shared';
 import type { RawSessionToken, SessionId, SessionTokenHash } from './crypto-utils';
 
-export type { KeyEnvelopeExport, KeyEnvelopeRecord, PushRecord, SyncRecord, SyncSession };
+export type {
+  AppliedRecord,
+  KeyEnvelopeExport,
+  KeyEnvelopeRecord,
+  PushRecord,
+  PushResponse,
+  SyncRecord,
+  SyncSession,
+};
+
+/** The wire type leaves `seq` optional for older servers; this server always knows it. */
+export interface ServerPushResponse extends PushResponse {
+  applied: Required<AppliedRecord>[];
+}
 
 export interface Identity {
   provider: 'google' | 'apple' | 'dev';
@@ -130,8 +145,9 @@ export interface SyncStore {
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
-  // Throws StorageQuotaExceededError when the push would exceed the per-user record cap.
-  applyChanges(userId: string, changes: PushRecord[]): Promise<number>;
+  // A row whose `baseSeq` is stale is refused and answered under `conflicts` as the current row;
+  // the rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
+  applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse>;
   // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
   // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
   listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;

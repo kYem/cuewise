@@ -57,6 +57,7 @@ import {
 import { quoteIntervalToSeconds } from './settings-interval';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
+import { TestNotificationRow } from './TestNotificationRow';
 import { ThumbPicker } from './ThumbPicker';
 import { pomodoroWorkStep } from './timer-presets';
 import { WeatherLocationPicker } from './WeatherLocationPicker';
@@ -741,6 +742,7 @@ function GoalsSection({ s, set, filter }: SettingsSectionProps) {
           onChange={(v) => set({ enableNotifications: v })}
         />
       </SettingRow>
+      <TestNotificationRow enabled={s.enableNotifications} filter={filter} />
       <SettingRow
         label="Reminders layout"
         filter={filter}
@@ -993,7 +995,7 @@ export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] =
     icon: Bell,
     component: GoalsSection,
     terms:
-      'goals alerts notifications celebrate completions carry transfer tomorrow end of day reminders layout composed agenda timeline panel',
+      'goals alerts notifications test notification send test celebrate completions carry transfer tomorrow end of day reminders layout composed agenda timeline panel',
   },
   {
     id: 'advanced',

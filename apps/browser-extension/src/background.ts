@@ -4,10 +4,13 @@
  */
 
 import type { SyncUiStatus } from '@cuewise/app';
-import { handleReminderFire } from '@cuewise/app/reminder-notifications';
+import { activitySubject, recordReminderActivity } from '@cuewise/app/reminder-activity';
+import { armMissingReminderAlarms, handleReminderFire } from '@cuewise/app/reminder-notifications';
 import {
+  describeThrown,
   getStorage,
   logger,
+  type Reminder,
   reminderAlarmId,
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
@@ -23,9 +26,45 @@ import { QUARANTINE_KEY, STATUS_KEY } from './sync/sync-storage-keys';
 
 const { scheduler, notifier } = configureChromePlatform();
 
-// The lookup + deliver + recurring re-arm logic is shared with the macOS app, so both
-// platforms behave identically.
-scheduler.onFire(handleReminderFire);
+// Chrome drops a one-shot alarm before dispatching it, so a fire in flight is absent from
+// chrome.alarms.getAll(); the reconcile below must see it as armed.
+const firing = new Set<string>();
+scheduler.onFire(async (id) => {
+  firing.add(id);
+  try {
+    await handleReminderFire(id);
+  } finally {
+    firing.delete(id);
+  }
+});
+
+// Chrome clears alarms on every extension update and does not guarantee them across a browser
+// restart. Only the missing ones: re-creating a listed wake that fires meanwhile fires it twice.
+async function reconcileReminderAlarms(): Promise<void> {
+  try {
+    const alarms = await chrome.alarms.getAll();
+    const armed = new Set([...alarms.map((alarm) => alarm.name), ...firing]);
+    await armMissingReminderAlarms(await getReminders(), armed);
+  } catch (error) {
+    logger.error('Could not reconcile reminder alarms on start', error);
+    await recordReminderActivity({
+      event: 'failed',
+      detail: `reconcile: ${describeThrown(error)}`,
+    });
+  }
+}
+// An update applied at launch fires both events; two reconciles would each re-arm the same wake.
+let reconciling: Promise<void> | null = null;
+function reconcileOnce(): Promise<void> {
+  if (reconciling === null) {
+    reconciling = reconcileReminderAlarms().finally(() => {
+      reconciling = null;
+    });
+  }
+  return reconciling;
+}
+chrome.runtime.onInstalled.addListener(reconcileOnce);
+chrome.runtime.onStartup.addListener(reconcileOnce);
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
 // extension version rides the URL — no user data.
@@ -177,13 +216,14 @@ notifier.onClick(async (notificationId) => {
 
 // Notification action buttons (Done / Snooze 5 min).
 notifier.onAction(async (notificationId, buttonIndex) => {
+  const reminderId = reminderIdFromAlarm(notificationId);
+  if (reminderId === null) {
+    return;
+  }
+  let reminder: Reminder | undefined;
   try {
-    const reminderId = reminderIdFromAlarm(notificationId);
-    if (reminderId === null) {
-      return;
-    }
     const reminders = await getReminders();
-    const reminder = reminders.find((r) => r.id === reminderId);
+    reminder = reminders.find((r) => r.id === reminderId);
     const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
 
     if (action.type === 'complete') {
@@ -194,6 +234,13 @@ notifier.onAction(async (notificationId, buttonIndex) => {
       // silently failed to persist would otherwise leave no trace at all.
       if (result?.success === false) {
         logger.error('Could not persist the completed reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'done: not persisted',
+        });
+      } else if (reminder) {
+        await recordReminderActivity({ event: 'done', ...activitySubject(reminder) });
       }
     } else if (action.type === 'snooze') {
       const { result } = await updateReminders((current) =>
@@ -207,13 +254,34 @@ notifier.onAction(async (notificationId, buttonIndex) => {
       // against its still-overdue stored copy, which notifies all over again.
       if (result?.success === false) {
         logger.error('Could not persist the snoozed reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'snooze: not persisted',
+        });
       } else {
         await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+        if (reminder) {
+          await recordReminderActivity({
+            event: 'snoozed',
+            ...activitySubject(reminder),
+            detail: `until ${action.dueDate}`,
+          });
+        }
       }
     }
 
     await notifier.clear(notificationId);
   } catch (error) {
     logger.error('Error handling reminder notification button click', error);
+    await recordReminderActivity({
+      event: 'failed',
+      ...subjectOf(reminder, reminderId),
+      detail: `button ${buttonIndex}: ${describeThrown(error)}`,
+    });
   }
 });
+
+function subjectOf(reminder: Reminder | undefined, reminderId: string) {
+  return reminder ? activitySubject(reminder) : { reminderId };
+}

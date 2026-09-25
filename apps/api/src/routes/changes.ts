@@ -49,8 +49,8 @@ export function registerChangesRoutes(
     }
     const store = deps.storeFactory(c.env.DB);
     try {
-      const cursor = await store.applyChanges(c.get('userId'), parsed.records);
-      return c.json({ cursor });
+      const result = await store.applyChanges(c.get('userId'), parsed.records);
+      return c.json(result);
     } catch (err) {
       if (err instanceof StorageQuotaExceededError) {
         return problem('storage_quota_exceeded', {

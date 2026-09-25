@@ -4,12 +4,14 @@ vi.mock('@cuewise/storage', () => ({
   getDailyBackground: vi.fn(),
   setDailyBackground: vi.fn(),
 }));
-vi.mock('./unsplash', () => ({
+vi.mock('./unsplash', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./unsplash')>()),
   getRandomImageUrl: vi.fn(() => 'https://img/random'),
   loadImageWithFallback: vi.fn(),
   preloadImage: vi.fn(),
 }));
 
+import { logger } from '@cuewise/shared';
 import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
 import {
   clearPreloadCache,
@@ -18,7 +20,7 @@ import {
   refreshBackground,
   setCustomBackgroundOverride,
 } from './image-preload-cache';
-import { loadImageWithFallback, preloadImage } from './unsplash';
+import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
 const mockGetDaily = getDailyBackground as unknown as Mock;
 const mockSetDaily = setDailyBackground as unknown as Mock;
@@ -54,6 +56,17 @@ describe('preloadImages daily background', () => {
     expect(mockSetDaily).toHaveBeenCalledWith('https://img/fresh', 'nature');
   });
 
+  it('keeps a stored background that is merely slow, without picking a rival', async () => {
+    mockGetDaily.mockResolvedValue({ url: 'https://img/slow', category: 'nature', date: 'today' });
+    mockPreload.mockRejectedValueOnce(new ImageLoadTimeoutError());
+
+    await preloadImages('nature');
+
+    expect(getPreloadedCurrentUrl('nature')).toBe('https://img/slow');
+    expect(mockLoadFallback).not.toHaveBeenCalled();
+    expect(mockSetDaily).not.toHaveBeenCalled();
+  });
+
   it('keeps a valid stored daily background without re-persisting it', async () => {
     mockGetDaily.mockResolvedValue({ url: 'https://img/good', category: 'nature', date: 'today' });
     mockPreload.mockResolvedValue('https://img/good');
@@ -86,6 +99,19 @@ describe('preloadImages daily background', () => {
 
     expect(getPreloadedCurrentUrl('nature')).toBeNull();
     expect(mockSetDaily).not.toHaveBeenCalled();
+  });
+
+  it('reports a total failure at the shipped log level, since warn is never seen', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    mockGetDaily.mockResolvedValue(null);
+    mockLoadFallback.mockRejectedValue(new Error('all failed'));
+
+    await preloadImages('nature');
+
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('No background image could be loaded'),
+      expect.anything()
+    );
   });
 });
 

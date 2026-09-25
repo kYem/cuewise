@@ -19,9 +19,8 @@ export interface Scheduler {
    */
   readonly deliversInBackground: boolean;
   /**
-   * Whether armed wakes survive a full app/process restart (chrome.alarms does;
-   * in-memory native timers don't). When false, a resident host must re-arm its
-   * pending wakes from storage on startup.
+   * Whether armed wakes outlive a restart without the page re-arming them — the platform keeps
+   * them, or the resident host reconciles them itself. False: the page re-arms from storage.
    */
   readonly persistsAcrossRestarts: boolean;
   scheduleAt(id: string, when: Date): Promise<void>;
@@ -48,10 +47,17 @@ export interface NotifyOptions {
   requireInteraction?: boolean;
 }
 
+/**
+ * Not `NotificationPermission`: lib.dom owns that name with a different member set. `unknown` is
+ * "the host cannot tell, or has not asked"; whether a notify then prompts is up to the adapter.
+ */
+export type NotifierPermission = 'granted' | 'denied' | 'unknown';
+
 /** Command surface: deliver/clear an OS notification, keyed by id. */
 export interface Notifier {
   notify(opts: NotifyOptions): Promise<void>;
   clear(id: string): Promise<void>;
+  permission(): Promise<NotifierPermission>;
 }
 
 /** A resident context that also routes notification clicks/actions back to handlers. */

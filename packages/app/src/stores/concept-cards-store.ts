@@ -6,12 +6,12 @@ import {
   logger,
   newConceptSchedule,
   reviewConceptCard,
+  STORAGE_KEYS,
+  type StorageResult,
 } from '@cuewise/shared';
-import {
-  getConceptCards as loadConceptCards,
-  setConceptCards as saveConceptCards,
-} from '@cuewise/storage';
+import { getConceptCards as loadConceptCards, updateConceptCards } from '@cuewise/storage';
 import { create } from 'zustand';
+import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
 const SAVE_ERROR_MESSAGE = 'Failed to save concept. Please try again.';
@@ -84,12 +84,51 @@ function applyCardUpdates(card: ConceptCard, updates: ConceptCardUpdates): Conce
   return next;
 }
 
+/**
+ * updateConceptCards for a write aimed at one card. `matched` is false when the read inside the
+ * lock no longer holds it — another realm deleted it while this tab still showed it.
+ */
+async function persistOneCard(
+  id: string,
+  mutate: (card: ConceptCard) => ConceptCard
+): Promise<{ cards: ConceptCard[]; result: StorageResult; matched: boolean }> {
+  const hit = { matched: false };
+  const { result, cards } = await updateConceptCards((current) =>
+    current.map((card) => {
+      if (card.id !== id) {
+        return card;
+      }
+      hit.matched = true;
+      return mutate(card);
+    })
+  );
+  return { cards, result, matched: hit.matched };
+}
+
+const STALE_CONCEPTS_MESSAGE =
+  "Cuewise couldn't re-read your concepts just now, so what you see may be out of date.";
+
+const conceptCardsObserver = createStorageObserver(
+  'concept cards',
+  [STORAGE_KEYS.CONCEPT_CARDS],
+  async () => {
+    const cards = await loadConceptCards();
+    if (sameEntities(useConceptCardsStore.getState().cards, cards)) {
+      return;
+    }
+    useConceptCardsStore.setState({ cards });
+  },
+  createStaleLatch((message) => useToastStore.getState().warning(message), STALE_CONCEPTS_MESSAGE)
+);
+
 export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   cards: [],
   isLoading: true,
   error: null,
 
   initialize: async () => {
+    // Before the read: a write landing during it is otherwise announced to nobody.
+    conceptCardsObserver.subscribe();
     try {
       set({ isLoading: true, error: null });
       const cards = await loadConceptCards();
@@ -99,6 +138,8 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       set({ isLoading: false });
       reportError(set, 'Failed to load concepts. Please refresh the page.');
     }
+    // Awaited, last, and outside the try so a failed load still reconciles.
+    await conceptCardsObserver.reconcile();
   },
 
   addCard: async (term: string, definition: string, extras: ConceptCardExtras = {}) => {
@@ -121,13 +162,12 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
         schedule: newConceptSchedule(now),
       };
 
-      const updatedCards = [...get().cards, newCard];
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const { result, cards } = await updateConceptCards((current) => [...current, newCard]);
+      if (result.success === false) {
         return reportError(set, SAVE_ERROR_MESSAGE);
       }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error adding concept card', error);
@@ -136,13 +176,12 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   addCards: async (inputs: ConceptCardInput[]) => {
-    const existing = get().cards;
-    // Case-insensitive dedup against the deck and within the incoming batch.
-    const seen = new Set(existing.map((card) => card.term.trim().toLowerCase()));
     const now = new Date();
     const createdAt = now.toISOString();
-
-    const newCards: ConceptCard[] = [];
+    // Seeded from the in-memory deck too, so an all-duplicate batch never takes the lock —
+    // the common case (a re-added template pack) must not cost a write.
+    const seenInBatch = new Set(get().cards.map((card) => card.term.trim().toLowerCase()));
+    const batch: ConceptCard[] = [];
     for (const input of inputs) {
       const term = input.term.trim();
       const definition = input.definition.trim();
@@ -150,11 +189,11 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
         continue;
       }
       const key = term.toLowerCase();
-      if (seen.has(key)) {
+      if (seenInBatch.has(key)) {
         continue;
       }
-      seen.add(key);
-      newCards.push({
+      seenInBatch.add(key);
+      batch.push({
         id: generateId(),
         term,
         definition,
@@ -168,20 +207,25 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       });
     }
 
-    if (newCards.length === 0) {
+    if (batch.length === 0) {
       return 0;
     }
 
     try {
-      const updatedCards = [...existing, ...newCards];
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const batchIds = new Set(batch.map((card) => card.id));
+      const { result, cards } = await updateConceptCards((current) => {
+        // Re-checked against the fresh read: a deck another realm changed since the
+        // pre-lock snapshot may already hold a term this batch still thinks is new.
+        const inDeck = new Set(current.map((card) => card.term.trim().toLowerCase()));
+        return [...current, ...batch.filter((card) => !inDeck.has(card.term.toLowerCase()))];
+      });
+      if (result.success === false) {
         reportError(set, SAVE_ERROR_MESSAGE);
         return null;
       }
 
-      set({ cards: updatedCards, error: null });
-      return newCards.length;
+      set({ cards, error: null });
+      return cards.filter((card) => batchIds.has(card.id)).length;
     } catch (error) {
       logger.error('Error adding concept cards', error);
       reportError(set, SAVE_ERROR_MESSAGE);
@@ -190,9 +234,7 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   updateCard: async (id: string, updates: ConceptCardUpdates) => {
-    const { cards } = get();
-    const existing = cards.find((card) => card.id === id);
-    if (!existing) {
+    if (!get().cards.some((card) => card.id === id)) {
       return false;
     }
     if (updates.term !== undefined && !updates.term.trim()) {
@@ -203,15 +245,20 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     }
 
     try {
-      const updatedCards = cards.map((card) =>
-        card.id === id ? applyCardUpdates(card, updates) : card
+      const { result, cards, matched } = await persistOneCard(id, (card) =>
+        applyCardUpdates(card, updates)
       );
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      if (result.success === false) {
         return reportError(set, SAVE_ERROR_MESSAGE);
       }
+      // ConceptForm closes on true, so reporting success for a write that found nothing loses the edit.
+      if (!matched) {
+        logger.warn(`updateCard: concept ${id} was gone before the write`);
+        useToastStore.getState().warning('This concept no longer exists');
+        return false;
+      }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error updating concept card', error);
@@ -221,13 +268,14 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
 
   deleteCard: async (id: string) => {
     try {
-      const updatedCards = get().cards.filter((card) => card.id !== id);
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const { result, cards } = await updateConceptCards((current) =>
+        current.filter((card) => card.id !== id)
+      );
+      if (result.success === false) {
         return reportError(set, DELETE_ERROR_MESSAGE);
       }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error deleting concept card', error);
@@ -236,21 +284,25 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   reviewCard: async (id: string, grade: ConceptGrade) => {
-    const { cards } = get();
-    const existing = cards.find((card) => card.id === id);
-    if (!existing) {
+    if (!get().cards.some((card) => card.id === id)) {
       return false;
     }
 
     try {
-      const reviewed = reviewConceptCard(existing, grade, new Date());
-      const updatedCards = cards.map((card) => (card.id === id ? reviewed : card));
-      const result = await saveConceptCards(updatedCards);
-      if (result?.success === false) {
+      const now = new Date();
+      const { result, cards, matched } = await persistOneCard(id, (card) =>
+        reviewConceptCard(card, grade, now)
+      );
+      if (result.success === false) {
         return reportError(set, REVIEW_ERROR_MESSAGE);
       }
+      if (!matched) {
+        logger.warn(`reviewCard: concept ${id} was gone before the write`);
+        useToastStore.getState().warning('This concept no longer exists');
+        return false;
+      }
 
-      set({ cards: updatedCards, error: null });
+      set({ cards, error: null });
       return true;
     } catch (error) {
       logger.error('Error reviewing concept card', error);
@@ -258,14 +310,31 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
     }
   },
 
-  // A favorite toggle is just an update of the isFavorite field — route through
-  // updateCard so the persist-or-rollback path lives in one place.
   toggleFavorite: async (id: string) => {
-    const existing = get().cards.find((card) => card.id === id);
-    if (!existing) {
+    if (!get().cards.some((card) => card.id === id)) {
       return false;
     }
-    return get().updateCard(id, { isFavorite: !existing.isFavorite });
+
+    try {
+      const { result, cards, matched } = await persistOneCard(id, (card) => ({
+        ...card,
+        isFavorite: !card.isFavorite,
+      }));
+      if (result.success === false) {
+        return reportError(set, SAVE_ERROR_MESSAGE);
+      }
+      if (!matched) {
+        logger.warn(`toggleFavorite: concept ${id} was gone before the write`);
+        useToastStore.getState().warning('This concept no longer exists');
+        return false;
+      }
+
+      set({ cards, error: null });
+      return true;
+    } catch (error) {
+      logger.error('Error toggling concept favorite', error);
+      return reportError(set, SAVE_ERROR_MESSAGE);
+    }
   },
 
   getDueCards: () => getDueConceptCards(get().cards, new Date()),

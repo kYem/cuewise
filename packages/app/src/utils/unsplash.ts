@@ -99,7 +99,7 @@ export function getUnsplashUrl(category: FocusImageCategory): string {
  * Uses random selection but avoids immediate repeats.
  * @param category - The image category
  * @param index - Optional index for specific image (default: random)
- * @returns Direct Unsplash CDN image URL with cache-busting
+ * @returns Direct Unsplash CDN image URL
  */
 export function getRandomImageUrl(category: FocusImageCategory, index?: number): string {
   const images = CURATED_PHOTOS[category];
@@ -118,23 +118,29 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
   }
 
   const imageId = images[selectedIndex].id;
-  // Add timestamp for cache-busting to ensure fresh requests
-  const timestamp = Date.now();
-  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format&t=${timestamp}`;
+  // No cache-buster: the photo behind an id never changes, and a URL nobody has requested
+  // before misses the CDN edge and forces an origin transform.
+  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
 }
 
-/**
- * Preload an image and return a promise that resolves when loaded.
- * @param url - The image URL to preload
- * @param timeout - Timeout in milliseconds (default 10000)
- * @returns Promise that resolves with the URL when loaded, or rejects on error/timeout
- */
+/** Masks a custom background for logging — it is a data URL of the user's own picture. */
+export function describeBackgroundSource(url: string): string {
+  return isUnsplashUrl(url) ? url : 'custom-background';
+}
+
+export class ImageLoadTimeoutError extends Error {
+  constructor() {
+    super('Image load timeout');
+    this.name = 'ImageLoadTimeoutError';
+  }
+}
+
+/** A timeout rejects but leaves the request running, so a slow image still lands in the cache. */
 export function preloadImage(url: string, timeout = 10000): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const timeoutId = setTimeout(() => {
-      img.src = ''; // Cancel loading
-      reject(new Error('Image load timeout'));
+      reject(new ImageLoadTimeoutError());
     }, timeout);
 
     img.onload = () => {
@@ -151,24 +157,32 @@ export function preloadImage(url: string, timeout = 10000): Promise<string> {
   });
 }
 
-/**
- * Load an image from our curated collection with retry support.
- * Tries multiple images if one fails to load.
- * @param category - The image category
- * @returns Promise that resolves with a working image URL
- */
-export async function loadImageWithFallback(category: FocusImageCategory): Promise<string> {
-  const images = CURATED_PHOTOS[category];
+// Shorter than the page's own wait because two callers show a spinner for the duration; long
+// enough to outlast a slow link, since a second download beside a slow one would only slow both.
+const FRESH_PICK_TIMEOUT_MS = 30_000;
+const MAX_PICKS = 3;
 
-  // Try up to 3 different images if loading fails
-  for (let attempt = 0; attempt < Math.min(3, images.length); attempt++) {
+/** Load an image from our curated collection, moving on to another only when one is dead. */
+export async function loadImageWithFallback(category: FocusImageCategory): Promise<string> {
+  const tried: string[] = [];
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < MAX_PICKS; attempt++) {
+    const imageUrl = getRandomImageUrl(category);
+    tried.push(imageUrl);
     try {
-      const imageUrl = getRandomImageUrl(category);
-      return await preloadImage(imageUrl, 8000);
-    } catch {
-      // Continue to next image
+      return await preloadImage(imageUrl, FRESH_PICK_TIMEOUT_MS);
+    } catch (error) {
+      if (error instanceof ImageLoadTimeoutError) {
+        throw new Error(
+          `Abandoned a ${category} pick still loading after ${FRESH_PICK_TIMEOUT_MS}ms: ${imageUrl}`,
+          { cause: error }
+        );
+      }
+      lastError = error;
     }
   }
-  // All attempts failed - component should show solid color
-  throw new Error('All image sources failed');
+  throw new Error(`Every ${category} pick failed to load: ${tried.join(', ')}`, {
+    cause: lastError,
+  });
 }

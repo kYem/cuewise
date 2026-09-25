@@ -1,6 +1,8 @@
-import type { Goal } from '@cuewise/shared';
+import { type Goal, getYesterdayDateString } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
+import { goalFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
+import type { CompletionFilter } from '../../stores/goal-store';
 
 // Re-exported so existing GoalsList test imports keep resolving from this file.
 export { createSettingsStoreMock };
@@ -20,6 +22,7 @@ export interface MockGoalStore {
   deleteTask: Mock;
   transferTaskToNextDay: Mock;
   moveTaskToToday: Mock;
+  moveTasksToToday: Mock;
   getActiveGoals: Mock;
   getGoalProgress: Mock;
   linkTaskToGoal: Mock;
@@ -43,6 +46,7 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
     deleteTask: vi.fn(async () => true),
     transferTaskToNextDay: vi.fn(async () => true),
     moveTaskToToday: vi.fn(async () => true),
+    moveTasksToToday: vi.fn(async () => true),
     getActiveGoals: vi.fn(() => []),
     getGoalProgress: vi.fn(() => null),
     linkTaskToGoal: vi.fn(async () => true),
@@ -64,4 +68,40 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
  */
 export function createGoalStoreMock(store: MockGoalStore) {
   return createSelectorMock(store);
+}
+
+/** Incomplete tasks dated yesterday — what the Unfinished group surfaces. */
+export function buildUnfinishedTasks(count: number): Goal[] {
+  return goalFactory.buildList(count, { date: getYesterdayDateString(), completed: false });
+}
+
+/** One incomplete task per date, in the order given. */
+export function buildUnfinishedTasksOn(dates: string[]): Goal[] {
+  return dates.map((date) => goalFactory.build({ date, completed: false }));
+}
+
+/** Nothing for today, so the empty state renders with any Unfinished group beneath it. */
+export function createNoTodayTasksStore(goals: Goal[]): MockGoalStore {
+  return createMockGoalStore({ todayTasks: [], goals });
+}
+
+export type MockGoalsPageStore = MockGoalStore & {
+  initialize: Mock;
+  addTask: Mock;
+  completionFilter: CompletionFilter;
+  setCompletionFilter: Mock;
+};
+
+/** GoalsPage's own reads on top of the GoalsList mock, which already covers UnfinishedBanner. */
+export function createGoalsPageStore(
+  goals: Goal[],
+  completionFilter: CompletionFilter = 'all'
+): MockGoalsPageStore {
+  return {
+    ...createMockGoalStore({ goals }),
+    initialize: vi.fn(),
+    addTask: vi.fn(async () => true),
+    completionFilter,
+    setCompletionFilter: vi.fn(),
+  };
 }

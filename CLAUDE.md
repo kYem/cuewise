@@ -40,7 +40,7 @@ apps/
 // Host variants so a command-only context can't accidentally subscribe.
 interface Scheduler { scheduleAt(id, when): Promise<void>; cancel(id): Promise<void>; }
 interface SchedulerHost extends Scheduler { onFire(handler): () => void; }
-interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; }
+interface Notifier { notify(opts): Promise<void>; clear(id): Promise<void>; permission(): Promise<NotifierPermission>; }
 interface NotifierHost extends Notifier { onClick(handler): () => void; onAction(handler): () => void; }
 interface KeyValueStore { get(key, area); set(key, value, area); remove(key, area); getUsage(area); }
 
@@ -61,11 +61,12 @@ await setReminders(remindersArray);
 const reminders = await getReminders();
 ```
 
-**Whole-array writes take the collection lock.** Quotes, goals, collections and reminders are each
-stored as one array, so a read-modify-write in the page realm and a sync pull in the service worker
-lose whichever landed first. Prefer the `update*` helpers (`updateQuotes`, `updateGoals`, ...), which
-read and write inside the lock for you; a bare `setQuotes`/`setGoals`/... must sit inside
-`withCollectionLock`. `.biome/whole-array-writes-hold-the-lock.grit` fails the build otherwise.
+**Whole-array writes take the collection lock.** Quotes, goals, collections, reminders and concept
+cards are each stored as one array, so a read-modify-write in the page realm and a sync pull in the
+service worker lose whichever landed first. Prefer the `update*` helpers (`updateQuotes`,
+`updateGoals`, `updateConceptCards`, ...), which read and write inside the lock for you; a bare
+`setQuotes`/`setGoals`/... must sit inside `withCollectionLock`.
+`.biome/whole-array-writes-hold-the-lock.grit` fails the build otherwise.
 
 **Location**: ports + registry in `packages/shared/src/platform/`; storage adapter + typed helpers in `packages/storage/src/`.
 
@@ -501,6 +502,11 @@ pnpm --filter @cuewise/browser-extension dev
 **Key pages to test**: Home (`/`), Pomodoro (`#pomodoro`), Insights (`#insights`), Quotes (`#quotes`), Goals (`#goals`). Test density modes, color themes (4), light/dark mode, and focus mode.
 
 **Note**: Dev server uses Vite HMR. For production testing, load `apps/browser-extension/dist` as unpacked extension in Chrome.
+
+**Real-extension e2e** (`apps/browser-extension/e2e/`): Playwright drives the built extension's service
+worker in headed Chromium. `pnpm --filter @cuewise/browser-extension e2e e2e/reminder-lifecycle.spec.ts`
+runs one reminder through add → fire → snooze → update → done and prints the `reminderActivity` trace
+(also in `chrome.storage.local`, last 20 events, on any install).
 
 ## Package Naming Convention
 

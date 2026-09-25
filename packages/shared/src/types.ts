@@ -463,7 +463,7 @@ export interface Settings {
   newTabCalendarPosition: NewTabCalendarPosition; // Calendar order vs goals when shown (default 'below')
   focusedGoalId: string | null; // Selected goal ID for focus mode (default null)
   showCompletedGoals: boolean; // Show completed tasks in Today's Focus list (default true)
-  showIncompleteGoals: boolean; // Reveal the recent-incomplete backlog in the widget (default false)
+  showIncompleteGoals: boolean; // Unfinished tasks from previous days in the widget (default true)
   showUpcomingGoals: boolean; // Reveal the upcoming (due-soon) section in the widget (default false)
   // Quote Display
   quoteDisplayMode: QuoteDisplayMode; // How quotes are displayed on home page (default 'bottom')
@@ -696,10 +696,32 @@ export interface PushRecord {
   ciphertext: string;
   clientUpdatedAt: number;
   deleted: boolean;
+  /**
+   * The server seq this device last saw for the entity, or 0 when it never saw one (matches no
+   * row). Omitted only by clients that predate compare-and-set, whose pushes are unconditional.
+   */
+  baseSeq?: number;
 }
 
-export interface SyncRecord extends PushRecord {
+export interface SyncRecord extends Omit<PushRecord, 'baseSeq'> {
   seq: number;
+}
+
+export interface AppliedRecord {
+  collection: string;
+  entityId: string;
+  /** Absent only when an older server answered a bare cursor: the record landed, seq unknown. */
+  seq?: number;
+}
+
+/**
+ * `applied` landed. `conflicts` were refused because the row moved past their `baseSeq` and carry
+ * the row as the server holds it now.
+ */
+export interface PushResponse {
+  cursor: number;
+  applied: AppliedRecord[];
+  conflicts: SyncRecord[];
 }
 
 export interface KeyEnvelopeRecord {

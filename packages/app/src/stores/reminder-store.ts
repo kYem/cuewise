@@ -1,4 +1,5 @@
 import {
+  describeThrown,
   generateId,
   getNotifier,
   getScheduler,
@@ -22,6 +23,12 @@ import {
   withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
+import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
+import {
+  armMissingReminderAlarms,
+  notificationsEnabled,
+  reminderNotification,
+} from '../services/reminder-notifications';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
@@ -55,17 +62,33 @@ interface ReminderStore {
 async function clearReminderAlarm(reminderId: string): Promise<void> {
   try {
     await getScheduler().cancel(reminderAlarmId(reminderId));
+    await recordReminderActivity({ event: 'cancelled', reminderId });
   } catch (error) {
     logger.error(`Failed to clear alarm for reminder ${reminderId}`, error);
+    await recordReminderActivity({
+      event: 'failed',
+      reminderId,
+      detail: `cancel: ${describeThrown(error)}`,
+    });
   }
 }
 
 async function armReminderAlarm(reminderId: string, whenMs: number): Promise<void> {
   try {
     await getScheduler().scheduleAt(reminderAlarmId(reminderId), new Date(whenMs));
+    await recordReminderActivity({
+      event: 'armed',
+      reminderId,
+      detail: `due ${new Date(whenMs).toISOString()}`,
+    });
   } catch (error) {
     logger.error(`Failed to schedule alarm for reminder ${reminderId}`, error);
     useToastStore.getState().warning("Reminder saved, but we couldn't schedule its alert.");
+    await recordReminderActivity({
+      event: 'failed',
+      reminderId,
+      detail: `arm: ${describeThrown(error)}`,
+    });
   }
 }
 
@@ -166,11 +189,14 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         !reminder.paused &&
         !reminder.completed &&
         new Date(reminder.dueDate) < now;
+      // Filled inside the lock: the pre-lock snapshot cannot say what a pull changed meanwhile.
+      const advancedIds = new Set<string>();
       const advance = (list: Reminder[]): Reminder[] =>
         list.map((reminder) => {
           if (!isOverdueRecurring(reminder)) {
             return reminder;
           }
+          advancedIds.add(reminder.id);
           const nextDueDate = nextReminderDueDate(reminder, now);
           const advanced: Reminder = {
             ...reminder,
@@ -182,38 +208,39 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           return advanced;
         });
 
-      // Re-runs against a fresh read inside the lock, so a pull landing during the read survives.
       if (reminders.some(isOverdueRecurring)) {
         const { result, reminders: advancedReminders } = await updateReminders(advance);
         if (result?.success === false) {
           logger.error('Failed to persist auto-advanced reminders on init', result.error);
+          await recordReminderActivity({ event: 'failed', detail: 'advance: not persisted' });
         } else {
           reminders = advancedReminders;
 
-          // Reschedule alarms for advanced reminders
+          // Only the advanced ones move their wake; touching the rest could re-create one mid-fire.
           for (const reminder of reminders) {
-            if (reminder.recurring && !reminder.paused) {
-              await clearReminderAlarm(reminder.id);
-              await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
+            if (!advancedIds.has(reminder.id)) {
+              continue;
             }
+            await recordReminderActivity({
+              event: 'advanced',
+              ...activitySubject(reminder),
+              detail: `to ${reminder.dueDate}`,
+            });
+            await clearReminderAlarm(reminder.id);
+            await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
           }
         }
       }
 
       commitReminders(set, reminders, { isLoading: false });
 
-      // Rust-backed schedulers lose their armed wakes on restart, unlike chrome.alarms, so re-arm
-      // from storage. Overdue one-offs fire on arm; skip delivered ones so they don't re-notify.
+      // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the
+      // extension's service worker reconciles its own, so its page does not.
       const scheduler = getScheduler();
       if (scheduler.deliversInBackground && !scheduler.persistsAcrossRestarts) {
-        for (const reminder of reminders) {
-          if (reminder.completed || reminder.paused) {
-            continue;
-          }
-          if (!reminder.recurring && reminder.notified) {
-            continue;
-          }
-          await armReminderAlarm(reminder.id, new Date(reminder.dueDate).getTime());
+        const reconcile = await armMissingReminderAlarms(reminders, new Set());
+        if (reconcile.failed.length > 0) {
+          useToastStore.getState().warning("Some reminders couldn't be re-armed after launch.");
         }
       }
     } catch (error) {
@@ -624,19 +651,19 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // reminder that fired but never reached the user would otherwise leave no trace.
       logger.error('Fired due reminders', { count: dueNow.length });
 
+      // Toasts first: `notified` is already persisted, so nothing fallible may sit between that
+      // write and the one delivery a page without a background host is guaranteed to make.
       for (const r of dueNow) {
         useToastStore.getState().warning(`Reminder: ${r.text}`);
-        // No background worker to raise the OS notification, so deliver it here via the port.
-        // Where a resident host owns delivery, it notifies instead.
-        if (!getScheduler().deliversInBackground) {
+        await recordReminderActivity({ event: 'toasted', ...activitySubject(r) });
+      }
+
+      // No background worker to raise the OS notification, so deliver it here via the port.
+      // Where a resident host owns delivery, it notifies instead.
+      if (!getScheduler().deliversInBackground && (await notificationsEnabled())) {
+        for (const r of dueNow) {
           getNotifier()
-            .notify({
-              id: reminderAlarmId(r.id),
-              title: '🔔 Reminder',
-              body: r.text,
-              actions: ['Done', 'Snooze 5 min'],
-              requireInteraction: true,
-            })
+            .notify(reminderNotification(reminderAlarmId(r.id), r.text))
             .catch((error) => logger.error('Failed to deliver reminder notification', error));
         }
       }

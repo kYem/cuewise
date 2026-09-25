@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "catalog:",
-    "@playwright/test": "^1",
+    "@playwright/test": "catalog:",
     "sharp": "catalog:",
     "typescript": "catalog:astro-ts6",
     "vitest": "catalog:"

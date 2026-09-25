@@ -617,6 +617,7 @@ describe.each([
   ['goals', getGoals],
   ['reminders', getReminders],
   ['collections', getCollections],
+  ['conceptCards', getConceptCards],
 ] as const)('%s, read through its store', (key, read) => {
   it('refuses a read that failed rather than reporting an empty list', async () => {
     const { store } = capturingStore();

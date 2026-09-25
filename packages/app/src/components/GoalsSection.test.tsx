@@ -81,27 +81,27 @@ describe('GoalsSection - options menu', () => {
     expect(updateSettings).toHaveBeenCalledWith({ showCompletedGoals: false });
   });
 
-  it('hides the Show-incomplete and Upcoming entries when their counts are zero', async () => {
+  it('hides the Show-unfinished and Upcoming entries when their counts are zero', async () => {
     const user = userEvent.setup();
     mockStores(); // goals = only today's task → no backlog, no upcoming
 
     render(<GoalsSection />);
     await user.click(screen.getByRole('button', { name: 'View options' }));
 
-    expect(screen.queryByRole('button', { name: /Show incomplete/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Show unfinished/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Upcoming/ })).not.toBeInTheDocument();
   });
 
-  it('shows and toggles the Show-incomplete entry when there is recent backlog', async () => {
+  it('turns the on-by-default Show-unfinished entry off when there is recent backlog', async () => {
     const user = userEvent.setup();
     const backlog = goalFactory.build({ text: 'Old', completed: false, date: twoDaysAgo });
     const { updateSettings } = mockStores({ goals: [backlog] });
 
     render(<GoalsSection />);
     await user.click(screen.getByRole('button', { name: 'View options' }));
-    await user.click(screen.getByRole('button', { name: /Show incomplete/ }));
+    await user.click(screen.getByRole('button', { name: /Show unfinished/ }));
 
-    expect(updateSettings).toHaveBeenCalledWith({ showIncompleteGoals: true });
+    expect(updateSettings).toHaveBeenCalledWith({ showIncompleteGoals: false });
   });
 
   it('shows and toggles the Upcoming entry when there are due-soon tasks', async () => {
