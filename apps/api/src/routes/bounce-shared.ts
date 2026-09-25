@@ -124,3 +124,14 @@ export function respondWithDeepLink(target: URL, message: string): Response {
     },
   });
 }
+
+/** The interstitial carrying `?error=` back to an already-allowlisted return URI. */
+export function respondWithDeepLinkError(
+  returnUri: string,
+  error: string,
+  message: string
+): Response {
+  const target = new URL(returnUri);
+  target.searchParams.set('error', error);
+  return respondWithDeepLink(target, message);
+}

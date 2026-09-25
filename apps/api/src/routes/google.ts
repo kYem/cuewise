@@ -12,6 +12,7 @@ import {
   isAllowedReturnUri,
   requireStateSigningKey,
   respondWithDeepLink,
+  respondWithDeepLinkError,
   toBounceState,
 } from './bounce-shared';
 
@@ -133,9 +134,11 @@ function sanitizeOAuthError(error: string): SanitizedOAuthError {
  * in the browser would strand the app until its callback timeout.
  */
 function redirectWithError(returnUri: string, error: SanitizedOAuthError): Response {
-  const target = new URL(returnUri);
-  target.searchParams.set('error', error);
-  return respondWithDeepLink(target, "Sign-in didn't complete — return to Cuewise to try again.");
+  return respondWithDeepLinkError(
+    returnUri,
+    error,
+    "Sign-in didn't complete — return to Cuewise to try again."
+  );
 }
 
 /**

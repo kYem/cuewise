@@ -3,6 +3,7 @@ import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixture
 import { TEST_FOREIGN_PROVIDER_KEY, TEST_PROVIDER_KEY } from './__fixtures__/notion.fixtures';
 import {
   base64UrlDecodeString,
+  base64UrlEncode,
   base64UrlEncodeString,
   bearerToken,
   decryptSecret,
@@ -209,6 +210,17 @@ describe('encryptSecret / decryptSecret', () => {
   it('round-trips a token carrying non-ascii', async () => {
     const { ciphertext, iv } = await encryptSecret('naïve—token', KEY);
     await expect(decryptSecret({ ciphertext, iv }, KEY)).resolves.toBe('naïve—token');
+  });
+
+  it('imports the key once and reuses it across repeated seals and opens', async () => {
+    const importSpy = vi.spyOn(crypto.subtle, 'importKey');
+    const freshKey = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+
+    const sealed = await encryptSecret('a', freshKey);
+    await encryptSecret('b', freshKey);
+    await decryptSecret(sealed, freshKey);
+
+    expect(importSpy).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a key that does not decode to 32 bytes', async () => {

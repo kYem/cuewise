@@ -85,34 +85,34 @@ export async function sha256Base64Url(value: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
-let cachedKey: { raw: string; key: Promise<CryptoKey> } | null = null;
-
-// STATE_SIGNING_KEY is effectively constant per isolate; caching avoids re-importing the
-// same HMAC key on every signState/verifyState call (every bounce /start and /callback).
-function importHmacKey(key: string): Promise<CryptoKey> {
-  if (cachedKey !== null && cachedKey.raw === key) {
-    return cachedKey.key;
-  }
-  const entry = {
-    raw: key,
-    key: crypto.subtle.importKey(
-      'raw',
-      encoder.encode(key),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign', 'verify']
-    ),
-  };
-  cachedKey = entry;
-  // Never cache a rejection: a transient import failure must not permanently poison this
-  // slot for the isolate's lifetime. Only clear it if a newer entry hasn't already replaced it.
-  entry.key.catch(() => {
-    if (cachedKey === entry) {
-      cachedKey = null;
+// Each secret is effectively constant per isolate, so one slot per key kind avoids re-importing
+// it on every call. A rejection is never cached: a transient failure must not poison the slot.
+function cachedImport(
+  importKey: (raw: string) => Promise<CryptoKey>
+): (raw: string) => Promise<CryptoKey> {
+  let cached: { raw: string; key: Promise<CryptoKey> } | null = null;
+  return (raw) => {
+    if (cached !== null && cached.raw === raw) {
+      return cached.key;
     }
-  });
-  return entry.key;
+    const entry = { raw, key: importKey(raw) };
+    cached = entry;
+    // Only cleared if a newer entry hasn't already replaced it.
+    entry.key.catch(() => {
+      if (cached === entry) {
+        cached = null;
+      }
+    });
+    return entry.key;
+  };
 }
+
+const importHmacKey = cachedImport((key) =>
+  crypto.subtle.importKey('raw', encoder.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ])
+);
 
 /** Signs `payload` so `verifyState` can detect any tampering with the body or signature. */
 export async function signState(payload: object, key: string): Promise<string> {
@@ -180,13 +180,13 @@ export function isSecretKey(rawKey: string): boolean {
   }
 }
 
-async function importSecretKey(rawKey: string): Promise<CryptoKey> {
+const importSecretKey = cachedImport(async (rawKey) => {
   const bytes = base64UrlDecodeBytes(rawKey);
   if (bytes.length !== PROVIDER_KEY_BYTES) {
     throw new Error(`provider token key must decode to 32 bytes, got ${bytes.length}`);
   }
   return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-}
+});
 
 /** One AES-GCM seal: the ciphertext and the IV it was sealed with, meaningless apart. */
 export interface SealedSecret {

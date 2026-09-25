@@ -39,6 +39,7 @@ import {
   MAX_ONE_TIME_CODE_LENGTH,
   requireStateSigningKey,
   respondWithDeepLink,
+  respondWithDeepLinkError,
   toBounceState,
 } from './bounce-shared';
 
@@ -67,9 +68,11 @@ function returnWithCode(returnUri: string, code: string): Response {
 }
 
 function returnWithError(returnUri: string, outcome: ConnectOutcome): Response {
-  const target = new URL(returnUri);
-  target.searchParams.set('error', outcome);
-  return respondWithDeepLink(target, "Connecting Notion didn't complete — return to Cuewise.");
+  return respondWithDeepLinkError(
+    returnUri,
+    outcome,
+    "Connecting Notion didn't complete — return to Cuewise."
+  );
 }
 
 function reasonOf(error: unknown): string {
