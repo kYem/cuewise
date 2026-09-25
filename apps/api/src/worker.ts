@@ -14,34 +14,41 @@ export default {
     env: Env,
     _ctx: ExecutionContext
   ): Promise<void> {
-    try {
-      const purged = await new D1SyncStore(env.DB).purgeTombstones(TOMBSTONE_RETENTION_MS);
-      logger.info(`scheduled purge removed ${purged} tombstones past the retention window`);
-    } catch (err) {
-      // Annotate for a searchable log, then rethrow so Cloudflare still marks the cron failed.
-      logger.error('scheduled tombstone purge failed', err);
-      throw err;
+    const store = new D1SyncStore(env.DB);
+    const failures: unknown[] = [];
+    async function run(name: string, job: () => Promise<string>): Promise<void> {
+      try {
+        logger.info(await job());
+      } catch (err) {
+        logger.error(`scheduled ${name} failed`, err);
+        failures.push(err);
+      }
     }
-    try {
-      const purged = await new D1SyncStore(env.DB).purgeExpiredPairings(Date.now());
-      logger.info(`scheduled purge removed ${purged} expired pairing requests`);
-    } catch (err) {
-      logger.error('scheduled pairing purge failed', err);
-      throw err;
-    }
-    try {
+    await run('tombstone purge', async () => {
+      const purged = await store.purgeTombstones(TOMBSTONE_RETENTION_MS);
+      return `scheduled purge removed ${purged} tombstones past the retention window`;
+    });
+    await run('pairing purge', async () => {
+      const purged = await store.purgeExpiredPairings(Date.now());
+      return `scheduled purge removed ${purged} expired pairing requests`;
+    });
+    await run('sign-in code purge', async () => {
+      const purged = await store.purgeExpiredSignInCodes(Date.now());
+      return `scheduled purge removed ${purged} expired sign-in codes`;
+    });
+    await run('parked-grant purge', async () => {
       const sweep = await revokeExpiredParkedGrants(
-        new D1SyncStore(env.DB),
+        store,
         createNotionClient(env),
         env,
         Date.now()
       );
-      logger.info(
-        `scheduled purge swept ${sweep.swept} unclaimed notion grants: ${sweep.revoked} revoked, ${sweep.failed} not`
-      );
-    } catch (err) {
-      logger.error('scheduled parked-grant purge failed', err);
-      throw err;
+      return `scheduled purge swept ${sweep.swept} unclaimed notion grants: ${sweep.revoked} revoked, ${sweep.failed} left to retry, ${sweep.abandoned} abandoned`;
+    });
+    // After every job has run, so one failing purge cannot starve the others; the throw still
+    // marks the cron failed in Cloudflare.
+    if (failures.length > 0) {
+      throw new AggregateError(failures, `${failures.length} scheduled purge(s) failed`);
     }
   },
 } satisfies ExportedHandler<Env>;

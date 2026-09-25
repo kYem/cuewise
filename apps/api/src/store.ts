@@ -40,6 +40,12 @@ export interface ProviderCodePayload {
 
 export type AuthCodePayload = SignInCodePayload | ProviderCodePayload;
 
+export interface ExpiredParkedGrant {
+  codeHash: string;
+  expiresAt: number;
+  grant: SealedGrant;
+}
+
 /** Access and refresh tokens as stored (AES-GCM under PROVIDER_TOKEN_KEY), plus the workspace. */
 export interface SealedGrant {
   ciphertext: string;
@@ -109,9 +115,10 @@ export interface SyncStore {
   renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean>;
   revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;
   mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
-  // Deletes every expired code and returns what they parked, so a Notion grant nobody claimed
-  // can be revoked upstream rather than left live.
-  purgeExpiredAuthCodes(now: number): Promise<AuthCodePayload[]>;
+  // Deletes expired sign-in codes; an expired parked grant stays until its revoke succeeds.
+  purgeExpiredSignInCodes(now: number): Promise<number>;
+  listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]>;
+  deleteAuthCode(codeHash: string): Promise<void>;
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;

@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { DAY_IN_MS, logger } from '@cuewise/shared';
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import {
@@ -107,7 +107,8 @@ async function revokeUpstream(
   } catch (error) {
     if (error instanceof NotionAuthError || error instanceof NotionUnavailableError) {
       logger.warn('Could not revoke a Notion grant upstream', { userId, reason: reasonOf(error) });
-      return false;
+      // A token Notion already refuses is as forgotten as a revoke would make it.
+      return error instanceof NotionAuthError;
     }
     // Our config, or our bug: fails for every user, so it must be loud.
     logger.error('Notion revocation failed on our side', error, { userId });
@@ -377,10 +378,16 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   return { accessToken: grant.accessToken, ciphertext };
 }
 
+// Bounded so a backlog cannot spend the cron's subrequest budget; the rest wait a day.
+const PARKED_GRANT_BATCH = 25;
+// A grant still unrevokable this long after expiry is dropped rather than retried forever.
+const PARKED_GRANT_RETRY_MS = 7 * DAY_IN_MS;
+
 export interface ParkedGrantSweep {
   swept: number;
   revoked: number;
   failed: number;
+  abandoned: number;
 }
 
 /** For the daily cron: expired parked grants were never claimed, so Notion must forget them. */
@@ -390,14 +397,16 @@ export async function revokeExpiredParkedGrants(
   env: Env,
   now: number
 ): Promise<ParkedGrantSweep> {
-  const sweep: ParkedGrantSweep = { swept: 0, revoked: 0, failed: 0 };
-  for (const payload of await store.purgeExpiredAuthCodes(now)) {
-    if (payload.provider !== PROVIDER) {
-      continue;
-    }
+  const sweep: ParkedGrantSweep = { swept: 0, revoked: 0, failed: 0, abandoned: 0 };
+  for (const parked of await store.listExpiredParkedGrants(now, PARKED_GRANT_BATCH)) {
     sweep.swept += 1;
-    if (await revokeSealed(client, payload.grant, env, null)) {
+    if (await revokeSealed(client, parked.grant, env, null)) {
+      await store.deleteAuthCode(parked.codeHash);
       sweep.revoked += 1;
+    } else if (now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
+      logger.error('Gave up revoking an unclaimed Notion grant; it may still be live at Notion');
+      await store.deleteAuthCode(parked.codeHash);
+      sweep.abandoned += 1;
     } else {
       sweep.failed += 1;
     }

@@ -17,12 +17,14 @@ import {
 } from './crypto-utils';
 import {
   type AuthCodePayload,
+  type ExpiredParkedGrant,
   type Identity,
   type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
   PAIRING_TTL_MS,
   type PairingForRequester,
   type PendingPairing,
+  type ProviderCodePayload,
   type ProviderConnection,
   type PushRecord,
   type RenewalClaim,
@@ -277,12 +279,35 @@ export class D1SyncStore implements SyncStore {
     return code;
   }
 
-  async purgeExpiredAuthCodes(now: number): Promise<AuthCodePayload[]> {
+  async purgeExpiredSignInCodes(now: number): Promise<number> {
     const res = await this.db
-      .prepare('DELETE FROM auth_codes WHERE expires_at <= ? RETURNING payload')
+      .prepare(
+        `DELETE FROM auth_codes
+          WHERE expires_at <= ? AND json_extract(payload, '$.provider') IS NOT 'notion'`
+      )
       .bind(now)
-      .all<{ payload: string }>();
-    return res.results.map((row) => JSON.parse(row.payload) as AuthCodePayload);
+      .run();
+    return res.meta.changes ?? 0;
+  }
+
+  async listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]> {
+    const res = await this.db
+      .prepare(
+        `SELECT code_hash, expires_at, payload FROM auth_codes
+          WHERE expires_at <= ? AND json_extract(payload, '$.provider') = 'notion'
+          ORDER BY expires_at LIMIT ?`
+      )
+      .bind(now, limit)
+      .all<{ code_hash: string; expires_at: number; payload: string }>();
+    return res.results.map((row) => ({
+      codeHash: row.code_hash,
+      expiresAt: row.expires_at,
+      grant: (JSON.parse(row.payload) as ProviderCodePayload).grant,
+    }));
+  }
+
+  async deleteAuthCode(codeHash: string): Promise<void> {
+    await this.db.prepare('DELETE FROM auth_codes WHERE code_hash = ?').bind(codeHash).run();
   }
 
   async consumeAuthCode(

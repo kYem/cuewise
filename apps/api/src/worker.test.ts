@@ -6,6 +6,7 @@ import {
 } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clockedStore, record } from './__fixtures__/api-test-helpers.fixtures';
+import { spyOnLoggerError } from './__fixtures__/logger.fixtures';
 import { notionEnv, TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY } from './__fixtures__/notion.fixtures';
 import { encryptSecret } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
@@ -13,6 +14,7 @@ import worker from './worker';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('worker scheduled parked-grant purge', () => {
@@ -44,6 +46,38 @@ describe('worker scheduled parked-grant purge', () => {
       count: number;
     }>();
     expect(remaining?.count).toBe(0);
+  });
+});
+
+describe('worker scheduled job isolation', () => {
+  it('a failing tombstone purge still lets the parked-grant sweep run, then fails the cron', async () => {
+    spyOnLoggerError();
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        calls.push(String(input));
+        return Response.json({});
+      })
+    );
+    vi.spyOn(D1SyncStore.prototype, 'purgeTombstones').mockRejectedValue(new Error('D1 timeout'));
+    const { store: clocked } = clockedStore(1_000);
+    const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+    await clocked.mintAuthCode(
+      {
+        provider: 'notion',
+        grant: { ...sealed, refreshCiphertext: null, refreshIv: null, workspace: null },
+      },
+      'c1'
+    );
+
+    const ctx = createExecutionContext();
+    await expect(
+      worker.scheduled(createScheduledController(), notionEnv(), ctx)
+    ).rejects.toBeInstanceOf(AggregateError);
+    await waitOnExecutionContext(ctx);
+
+    expect(calls).toEqual(['https://api.notion.com/v1/oauth/revoke']);
   });
 });
 

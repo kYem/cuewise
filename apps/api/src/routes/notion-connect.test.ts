@@ -1,3 +1,4 @@
+import { DAY_IN_MS } from '@cuewise/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { clockedStore } from '../__fixtures__/api-test-helpers.fixtures';
 import {
@@ -26,6 +27,7 @@ import {
   titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
 import { signState } from '../crypto-utils';
+import type { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
 import {
   NotionAuthError,
@@ -34,6 +36,14 @@ import {
   NotionUnavailableError,
 } from '../notion-client';
 import { revokeExpiredParkedGrants } from './notion';
+
+async function parkGrant(store: D1SyncStore): Promise<void> {
+  const res = await createApp({
+    notionClientFactory: () => stubNotionClient(),
+    storeFactory: () => store,
+  }).request(callbackUrl(await signedState()), {}, notionEnv());
+  expect(await res.text()).toContain('code=');
+}
 
 function app(client = stubNotionClient()) {
   return createApp({ notionClientFactory: () => client });
@@ -721,7 +731,7 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0 });
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
   });
 
@@ -744,7 +754,7 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1 });
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1, abandoned: 0 });
   });
 
   it('skips an expired sign-in code: only the parked grant is revoked and counted', async () => {
@@ -769,9 +779,97 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0 });
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
     expect(revokeToken).toHaveBeenCalledTimes(1);
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps a grant whose revoke failed, so the next sweep revokes it', async () => {
+    const { store: clocked, tick } = clockedStore(1_000);
+    await parkGrant(clocked);
+    tick(61_000);
+    const unreachable = vi.fn(async () => {
+      throw new NotionUnavailableError('notion unreachable');
+    });
+    await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken: unreachable }),
+      notionEnv(),
+      62_000
+    );
+    const revokeToken = vi.fn(async () => undefined);
+
+    const retry = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      62_000 + DAY_IN_MS
+    );
+
+    expect(retry).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
+    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+    expect(await clocked.listExpiredParkedGrants(62_000 + DAY_IN_MS, 10)).toEqual([]);
+  });
+
+  it('counts a token Notion already refuses as revoked and drops it', async () => {
+    const revokeToken = vi.fn(async () => {
+      throw new NotionAuthError('invalid_grant');
+    });
+    const { store: clocked, tick } = clockedStore(1_000);
+    await parkGrant(clocked);
+    tick(61_000);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      62_000
+    );
+
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
+    expect(await clocked.listExpiredParkedGrants(62_000, 10)).toEqual([]);
+  });
+
+  it('abandons a grant still unrevokable a week after it expired, loudly', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => {
+      throw new NotionUnavailableError('notion unreachable');
+    });
+    const { store: clocked, tick } = clockedStore(1_000);
+    await parkGrant(clocked);
+    const now = 61_000 + 7 * DAY_IN_MS;
+    tick(now);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      now
+    );
+
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 0, abandoned: 1 });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Gave up revoking an unclaimed Notion grant; it may still be live at Notion'
+    );
+    expect(await clocked.listExpiredParkedGrants(now, 10)).toEqual([]);
+  });
+
+  it('still retries a grant one tick short of the give-up window', async () => {
+    const revokeToken = vi.fn(async () => {
+      throw new NotionUnavailableError('notion unreachable');
+    });
+    const { store: clocked } = clockedStore(1_000);
+    await parkGrant(clocked);
+    const now = 61_000 + 7 * DAY_IN_MS - 1;
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      now
+    );
+
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1, abandoned: 0 });
   });
 
   it('leaves an unexpired parked grant alone', async () => {
@@ -790,7 +888,7 @@ describe('unclaimed parked grants', () => {
       30_000
     );
 
-    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0 });
+    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0 });
     expect(revokeToken).not.toHaveBeenCalled();
   });
 });
