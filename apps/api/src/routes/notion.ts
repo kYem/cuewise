@@ -103,19 +103,16 @@ function credentialsConfigured(env: Env): boolean {
   return requireProviderTokenKey(env) !== null;
 }
 
-interface PlainTokens {
-  readonly accessToken: string;
-  readonly refreshToken: string | null;
-}
-
+// The access token alone: measured 2026-09-25, /oauth/revoke ignores a refresh token (200, nothing
+// revoked) and an access-token revoke ends the paired refresh token with it.
 // Best-effort and never throws, so no cleanup path can be trapped by Notion being down.
-async function revokeOne(
+async function revokeUpstream(
   client: NotionClient,
-  token: string,
+  accessToken: string,
   userId: string | null
 ): Promise<boolean> {
   try {
-    await client.revokeToken(token);
+    await client.revokeToken(accessToken);
     return true;
   } catch (error) {
     if (error instanceof NotionAuthError || error instanceof NotionUnavailableError) {
@@ -127,22 +124,6 @@ async function revokeOne(
     logger.error('Notion revocation failed on our side', error, { userId });
     return false;
   }
-}
-
-// Both tokens, refresh first: Notion does not say that revoking one ends the other, and a live
-// refresh token alone keeps the integration authorised. True only when Notion holds neither.
-async function revokeUpstream(
-  client: NotionClient,
-  tokens: PlainTokens,
-  userId: string | null
-): Promise<boolean> {
-  let forgotten = true;
-  for (const token of [tokens.refreshToken, tokens.accessToken]) {
-    if (token !== null && !(await revokeOne(client, token, userId))) {
-      forgotten = false;
-    }
-  }
-  return forgotten;
 }
 
 /** `revokeUpstream` for a sealed grant; one that cannot be opened is logged and skipped. */
@@ -159,16 +140,9 @@ async function revokeSealed(
     });
     return false;
   }
-  let tokens: PlainTokens;
+  let accessToken: string;
   try {
-    const refresh =
-      sealed.refreshCiphertext === null || sealed.refreshIv === null
-        ? null
-        : { ciphertext: sealed.refreshCiphertext, iv: sealed.refreshIv };
-    tokens = {
-      accessToken: await decryptSecret(sealed, key),
-      refreshToken: refresh === null ? null : await decryptSecret(refresh, key),
-    };
+    accessToken = await decryptSecret(sealed, key);
   } catch (error) {
     // A rotated key is systemic, and the tokens this row held stay live at Notion.
     logger.error('Could not decrypt a Notion grant to revoke it upstream', {
@@ -177,7 +151,7 @@ async function revokeSealed(
     });
     return false;
   }
-  return revokeUpstream(client, tokens, userId);
+  return revokeUpstream(client, accessToken, userId);
 }
 
 /** For account deletion: the grants `deleteUser` removed, so Notion forgets them too. */
@@ -380,7 +354,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
       userId,
       reason: errorName(error),
     });
-    await revokeUpstream(client, grant, userId);
+    await revokeUpstream(client, grant.accessToken, userId);
     await releaseClaim(store, userId, claimedAt);
     return problem('internal');
   }
@@ -395,13 +369,13 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
     );
   } catch (error) {
     logger.error('Notion renewal could not be stored; revoking the new token', error, { userId });
-    await revokeUpstream(client, grant, userId);
+    await revokeUpstream(client, grant.accessToken, userId);
     await releaseClaim(store, userId, claimedAt);
     throw error;
   }
   if (!stored) {
     // The row was disconnected or replaced by a reconnect while this renewal ran.
-    await revokeUpstream(client, grant, userId);
+    await revokeUpstream(client, grant.accessToken, userId);
     if ((await store.getProviderConnection(userId, PROVIDER)) === null) {
       logger.warn('Notion grant was disconnected during renewal; revoked the new token', {
         userId,
@@ -415,8 +389,8 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
 }
 
 const PARKED_GRANT_BATCH = 25;
-// Notion calls per sweep, at one or two revokes a grant: under the 50 subrequests the Workers
-// free plan allows one invocation. A backlog past it waits for the next day's run.
+// Grants per sweep, one revoke each: under the 50 subrequests the Workers free plan allows one
+// invocation. A backlog past it waits for the next day's run.
 const SWEEP_REVOKE_BUDGET = 40;
 // A grant still unrevokable this long after expiry is dropped rather than retried forever.
 const PARKED_GRANT_RETRY_MS = 7 * DAY_IN_MS;
@@ -445,11 +419,10 @@ export async function revokeExpiredParkedGrants(
       return sweep;
     }
     for (const parked of batch) {
-      const cost = parked.grant.refreshCiphertext === null ? 1 : 2;
-      if (cost > budget) {
+      if (budget === 0) {
         return sweep;
       }
-      budget -= cost;
+      budget -= 1;
       after = parked;
       sweep.swept += 1;
       if (await revokeSealed(client, parked.grant, env, null)) {
@@ -639,7 +612,7 @@ export function registerNotionRoutes(
       sealed = await sealGrant(grant, c.env.PROVIDER_TOKEN_KEY);
     } catch (error) {
       logger.error('Notion grant could not be sealed; revoking it', { reason: errorName(error) });
-      await revokeUpstream(client(c.env), grant, null);
+      await revokeUpstream(client(c.env), grant.accessToken, null);
       return returnWithError(state.returnUri, 'server_error');
     }
     try {
@@ -649,7 +622,7 @@ export function registerNotionRoutes(
       return returnWithCode(state.returnUri, oneTime);
     } catch (error) {
       logger.error('Notion grant could not be parked; revoking it', error);
-      await revokeUpstream(client(c.env), grant, null);
+      await revokeUpstream(client(c.env), grant.accessToken, null);
       return returnWithError(state.returnUri, 'server_error');
     }
   });

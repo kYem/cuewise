@@ -811,7 +811,7 @@ describe('unclaimed parked grants', () => {
     );
 
     expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
-    expect(revokeToken.mock.calls).toEqual([[TEST_REFRESH_TOKEN], [TEST_ACCESS_TOKEN]]);
+    expect(revokeToken.mock.calls).toEqual([[TEST_ACCESS_TOKEN]]);
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
@@ -1238,14 +1238,14 @@ describe('DELETE /v1/integrations/notion', () => {
     expect(res.status).toBe(401);
   });
 
-  it('revokes the refresh token too, before the access token', async () => {
+  it('spends one revoke on a grant holding a refresh token, not two', async () => {
     const revokeToken = vi.fn(async () => undefined);
     const { headers } = await connectedNotionUser({ withRefreshToken: true });
 
     const res = await disconnect(headers, stubNotionClient({ revokeToken }));
 
     expect(res.status).toBe(204);
-    expect(revokeToken.mock.calls).toEqual([[TEST_REFRESH_TOKEN], [TEST_ACCESS_TOKEN]]);
+    expect(revokeToken.mock.calls).toEqual([[TEST_ACCESS_TOKEN]]);
   });
 
   it('404s when nothing is connected', async () => {
