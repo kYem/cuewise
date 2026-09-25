@@ -1,10 +1,9 @@
 import {
+  buildConceptCard,
   type ConceptCard,
   type ConceptGrade,
-  generateId,
   getDueConceptCards,
   logger,
-  newConceptSchedule,
   reviewConceptCard,
   STORAGE_KEYS,
   type StorageResult,
@@ -143,24 +142,12 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
   },
 
   addCard: async (term: string, definition: string, extras: ConceptCardExtras = {}) => {
-    const trimmedTerm = term.trim();
-    const trimmedDefinition = definition.trim();
-    if (!trimmedTerm || !trimmedDefinition) {
+    if (!term.trim() || !definition.trim()) {
       return false;
     }
 
     try {
-      const now = new Date();
-      const newCard: ConceptCard = {
-        id: generateId(),
-        term: trimmedTerm,
-        definition: trimmedDefinition,
-        details: extras.details?.trim() || undefined,
-        tags: extras.tags,
-        source: extras.source?.trim() || undefined,
-        createdAt: now.toISOString(),
-        schedule: newConceptSchedule(now),
-      };
+      const newCard = buildConceptCard({ ...extras, term, definition }, new Date());
 
       const { result, cards } = await updateConceptCards((current) => [...current, newCard]);
       if (result.success === false) {
@@ -177,7 +164,6 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
 
   addCards: async (inputs: ConceptCardInput[]) => {
     const now = new Date();
-    const createdAt = now.toISOString();
     // Seeded from the in-memory deck too, so an all-duplicate batch never takes the lock —
     // the common case (a re-added template pack) must not cost a write.
     const seenInBatch = new Set(get().cards.map((card) => card.term.trim().toLowerCase()));
@@ -193,18 +179,7 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
         continue;
       }
       seenInBatch.add(key);
-      batch.push({
-        id: generateId(),
-        term,
-        definition,
-        details: input.extras?.details?.trim() || undefined,
-        tags: input.extras?.tags,
-        source: input.extras?.source?.trim() || undefined,
-        createdAt,
-        // Fresh per card (like addCard) — a shared reference would advance every
-        // sibling's review schedule at once if anything ever mutated in place.
-        schedule: newConceptSchedule(now),
-      });
+      batch.push(buildConceptCard({ ...input.extras, term, definition }, now));
     }
 
     if (batch.length === 0) {

@@ -1,4 +1,5 @@
 import { createSelectorMock } from '@cuewise/test-utils';
+import { quoteFactory } from '@cuewise/test-utils/factories';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -312,6 +313,31 @@ describe('QuoteDisplay - Navigation', () => {
 
       expect(screen.queryByTitle('Previous quote')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Next quote')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Captured source', () => {
+    it('links the quote to the page it was captured from', () => {
+      const quote = quoteFactory.build({
+        source: 'The Essays',
+        sourceUrl: 'https://example.com/essays',
+      });
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadedMockStore(quote)));
+
+      render(<QuoteDisplay />);
+
+      const link = screen.getByRole('link', { name: 'The Essays' });
+      expect(link).toHaveAttribute('href', 'https://example.com/essays');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('offers no link for a quote without a captured page', () => {
+      const quote = quoteFactory.build({ source: 'The Essays' });
+      vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadedMockStore(quote)));
+
+      render(<QuoteDisplay />);
+
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
     });
   });
 });

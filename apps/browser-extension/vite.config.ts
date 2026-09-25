@@ -35,6 +35,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         newtab: 'index.html',
+        popup: 'popup.html',
       },
     },
     // Use esbuild for fast minification (default, ~100x faster than terser)

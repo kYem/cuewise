@@ -1,6 +1,14 @@
-import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS, deriveQuickLinkTitle } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { ChevronLeft, ChevronRight, EyeOff, Filter, Heart, RefreshCw } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  EyeOff,
+  Filter,
+  Heart,
+  RefreshCw,
+} from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -303,6 +311,19 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
                   `— ${currentQuote.author}`
                 )}
               </cite>
+
+              {currentQuote.sourceUrl && (
+                <a
+                  href={currentQuote.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary/70 underline-offset-2 hover:text-primary-600 hover:underline"
+                  style={{ textShadow: '0 1px 4px rgba(0,0,0,0.3)' }}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  {currentQuote.source ?? deriveQuickLinkTitle(currentQuote.sourceUrl)}
+                </a>
+              )}
 
               {/* Inline category badge for bottom position */}
               {isBottom && (

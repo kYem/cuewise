@@ -18,6 +18,12 @@ import {
 import { ensureSettingsMigrated, getReminders, updateReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
+import {
+  handleCaptureMenuClick,
+  registerCaptureMenus,
+  saveCapture,
+} from './capture/capture-handler';
+import { isCaptureSaveMessage } from './capture/capture-messages';
 import { configureChromePlatform } from './platform';
 import { handleSyncControlMessage } from './sync/handle-sync-control-message';
 import { handleSyncMessage } from './sync/handle-sync-message';
@@ -65,6 +71,17 @@ function reconcileOnce(): Promise<void> {
 }
 chrome.runtime.onInstalled.addListener(reconcileOnce);
 chrome.runtime.onStartup.addListener(reconcileOnce);
+
+chrome.runtime.onInstalled.addListener(registerCaptureMenus);
+chrome.contextMenus.onClicked.addListener(handleCaptureMenuClick);
+// Unconditional, unlike the sync listeners below: capture works whether or not sync is configured.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!isCaptureSaveMessage(msg)) {
+    return false;
+  }
+  saveCapture(msg.draft).then(sendResponse);
+  return true;
+});
 
 // Uninstall feedback (spec 2026-07-17): ask departing users why. Only the
 // extension version rides the URL — no user data.

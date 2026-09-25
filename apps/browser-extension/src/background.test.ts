@@ -58,7 +58,9 @@ const chromeMock = {
     setUninstallURL: vi.fn().mockResolvedValue(undefined),
     onInstalled: { addListener: vi.fn(), removeListener: vi.fn() },
     onStartup: { addListener: vi.fn(), removeListener: vi.fn() },
+    onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
   },
+  contextMenus: { onClicked: { addListener: vi.fn(), removeListener: vi.fn() } },
 };
 
 let fireAlarm: AlarmListener;

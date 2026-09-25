@@ -23,6 +23,7 @@ export interface Quote {
   viewCount: number;
   lastViewed?: string; // ISO date string
   source?: string; // Book, URL, or other reference
+  sourceUrl?: string; // absolute http(s) page the quote was captured from
   notes?: string; // Personal notes about the quote
   collectionIds?: string[]; // Collections this quote belongs to
 }
@@ -230,6 +231,7 @@ export interface ConceptCard {
   details?: string; // optional "how it works" / example
   tags?: string[]; // optional learning-topic grouping
   source?: string; // optional reference
+  sourceUrl?: string; // absolute http(s) page the card was captured from
   isFavorite?: boolean; // starred from the recall toolbar
   createdAt: string; // ISO
   schedule: ConceptSchedule;
