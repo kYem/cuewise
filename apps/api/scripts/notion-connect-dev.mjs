@@ -23,11 +23,11 @@ import { fileURLToPath } from 'node:url';
 
 const API_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STATE_FILE = join(API_ROOT, '.wrangler/notion-connect-state.json');
-const BASE = process.env.API_BASE ?? 'http://localhost:8787';
+const BASE = process.env.API_URL ?? 'http://localhost:8787';
 const RETURN_URI = 'cuewise://auth';
 const CATCH_PORT = 8788;
 const CATCH_URI = `http://localhost:${CATCH_PORT}/done`;
-// The account the 2026-09-12 verification run used; reusing it keeps one grant, not a pile.
+// One fixed account, so repeated runs replace one grant instead of piling up dev users.
 const DEV_CREDENTIAL = 'notion-verify';
 const DEVICE_NAME = 'verify-box';
 
@@ -83,28 +83,43 @@ async function start() {
   console.log('\nThen: node scripts/notion-connect-dev.mjs claim <code>');
 }
 
+// The one-time code dies in 60s, so nothing here waits on a human for long.
+const CATCH_TIMEOUT_MS = 120_000;
+
 /** Listens on CATCH_URI so the redirect itself delivers the code, inside its 60s life. */
 async function catchCode() {
   const url = await authorizeUrl(CATCH_URI);
-  const done = new Promise((resolve) => {
+  const code = await new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
-      const code = new URL(req.url, CATCH_URI).searchParams.get('code');
-      const error = new URL(req.url, CATCH_URI).searchParams.get('error');
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(
-        `<p>${code === null ? `Connect failed: ${error}` : 'Claimed. Back to the terminal.'}`
-      );
+      const target = new URL(req.url, CATCH_URI);
+      const relayed = target.searchParams.get('code');
+      const error = target.searchParams.get('error');
+      // Anything else is a favicon, a probe, or the interstitial's second hop: answering it must
+      // neither end the flow nor echo its query back, which would be a reflected-XSS sink.
+      if (target.pathname !== '/done' || (relayed === null && error === null)) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(error === null ? 'Claimed. Back to the terminal.' : 'Failed. See the terminal.');
       server.close();
-      resolve({ code, error });
+      if (error === null) {
+        resolve(relayed);
+      } else {
+        reject(new Error(`the callback relayed an error instead of a code: ${error}`));
+      }
     });
-    server.listen(CATCH_PORT);
+    server.on('error', reject);
+    server.listen(CATCH_PORT, () => {
+      console.log(`Listening on ${CATCH_URI}. Open this, choose a workspace, click Allow:\n`);
+      console.log(`${url}\n`);
+    });
+    setTimeout(() => {
+      server.close();
+      reject(new Error('nothing arrived on the listener; the code has expired by now'));
+    }, CATCH_TIMEOUT_MS).unref();
   });
-  console.log(`Listening on ${CATCH_URI}. Open this, choose a workspace, click Allow:\n`);
-  console.log(`${url}\n`);
-  const { code, error } = await done;
-  if (code === null) {
-    throw new Error(`the callback relayed an error instead of a code: ${error}`);
-  }
   await claim(code);
 }
 
@@ -122,7 +137,7 @@ async function claim(code) {
     throw new Error(`/claim answered ${status} ${JSON.stringify(body)}`);
   }
   console.log(`Connected: ${body?.workspace ?? '(no workspace name)'}`);
-  console.log('The grant is in the local D1; the revoke probe can read it now.');
+  console.log('The grant is sealed in the local D1, ready for the routes to use.');
 }
 
 const [command, argument] = process.argv.slice(2);

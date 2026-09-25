@@ -946,6 +946,26 @@ describe('unclaimed parked grants', () => {
     expect(await clocked.listExpiredParkedGrants(62_000, 50, null)).toHaveLength(5);
   });
 
+  it('sweeps nothing on a malformed key, rather than reporting grants it never tried', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
+    const { store: clocked, tick } = clockedStore(1_000);
+    await mintParkedGrant(clocked);
+    tick(61_000);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv({ PROVIDER_TOKEN_KEY: 'too-short' }),
+      62_000
+    );
+
+    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0 });
+    expect(revokeToken).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(await clocked.listExpiredParkedGrants(62_000, 50, null)).toHaveLength(1);
+  });
+
   it('leaves an unexpired parked grant alone', async () => {
     const revokeToken = vi.fn(async () => undefined);
     const { store: clocked } = clockedStore(1_000);

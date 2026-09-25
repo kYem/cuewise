@@ -6,6 +6,7 @@ import {
   encryptSecret,
   isSecretKey,
   randomToken,
+  type SealedSecret,
   sha256Base64Url,
   signState,
   verifyState,
@@ -28,7 +29,6 @@ import type {
   ProviderConnection,
   RenewalClaim,
   SealedGrant,
-  SealedTokens,
   SyncStore,
 } from '../store';
 import {
@@ -103,8 +103,7 @@ function credentialsConfigured(env: Env): boolean {
   return requireProviderTokenKey(env) !== null;
 }
 
-// The access token alone: measured 2026-09-25, /oauth/revoke ignores a refresh token (200, nothing
-// revoked) and an access-token revoke ends the paired refresh token with it.
+// One call ends the grant, because the revoke reaches the paired refresh token (see `revokeToken`).
 // Best-effort and never throws, so no cleanup path can be trapped by Notion being down.
 async function revokeUpstream(
   client: NotionClient,
@@ -117,7 +116,8 @@ async function revokeUpstream(
   } catch (error) {
     if (error instanceof NotionAuthError || error instanceof NotionUnavailableError) {
       logger.warn('Could not revoke a Notion token upstream', { userId, reason: reasonOf(error) });
-      // A token Notion already refuses is as forgotten as a revoke would make it.
+      // Unreachable through Notion, which never reports a token fault on a revoke; kept for the
+      // port, where a provider that does report one has already forgotten the token.
       return error instanceof NotionAuthError;
     }
     // Our config, or our bug: fails for every user, so it must be loud.
@@ -129,7 +129,7 @@ async function revokeUpstream(
 /** `revokeUpstream` for a sealed grant; one that cannot be opened is logged and skipped. */
 async function revokeSealed(
   client: NotionClient,
-  sealed: SealedTokens,
+  sealed: SealedSecret,
   env: Env,
   userId: string | null
 ): Promise<boolean> {
@@ -410,11 +410,15 @@ export async function revokeExpiredParkedGrants(
   now: number
 ): Promise<ParkedGrantSweep> {
   const sweep: ParkedGrantSweep = { swept: 0, revoked: 0, failed: 0, abandoned: 0 };
+  if (requireProviderTokenKey(env) === null) {
+    return sweep;
+  }
   let budget = SWEEP_REVOKE_BUDGET;
   // Past every row already tried this run, so one that keeps failing cannot hold up the rest.
   let after: ParkedGrantCursor | null = null;
   for (;;) {
-    const batch = await store.listExpiredParkedGrants(now, PARKED_GRANT_BATCH, after);
+    const page = Math.min(PARKED_GRANT_BATCH, budget);
+    const batch = await store.listExpiredParkedGrants(now, page, after);
     if (batch.length === 0) {
       return sweep;
     }
@@ -665,8 +669,8 @@ export function registerNotionRoutes(
       return problem('provider_claim_invalid');
     }
     try {
-      // A previous grant is overwritten, not revoked: Notion does not say whether revoke acts per
-      // token or per bot, and per bot it would kill the grant being claimed on every reconnect.
+      // A previous grant is overwritten, not revoked: a revoke reaches a whole grant, and whether
+      // that is this bot's only grant is unmeasured — per bot it would kill the one being claimed.
       await store.putProviderGrant(userId, PROVIDER, grant);
     } catch (error) {
       // The code is already burned, so this grant can never be claimed again. Revoke it rather

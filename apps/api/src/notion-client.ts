@@ -94,8 +94,11 @@ export interface NotionClient {
   exchangeCode(code: string): Promise<NotionGrant>;
   /** Trades a refresh token for a fresh grant; Notion issues a new refresh token with it. */
   refreshGrant(refreshToken: string): Promise<NotionGrant>;
-  /** Tells Notion to forget one token, access or refresh (RFC 7009 takes either). */
-  revokeToken(token: string): Promise<void>;
+  /**
+   * Pass the access token, never a refresh token: measured 2026-09-25, a refresh token answers 200
+   * and revokes nothing, while an access-token revoke ends the paired refresh token with it.
+   */
+  revokeToken(accessToken: string): Promise<void>;
   /** The tables shared with the integration; the token response names none, so a second phase. */
   searchDataSources(accessToken: string): Promise<NotionTables>;
   /** The data source a page's row lives in; null for a page that is not a table row. */
