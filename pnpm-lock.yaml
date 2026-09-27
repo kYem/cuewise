@@ -433,6 +433,12 @@ importers:
       '@astrojs/check':
         specifier: 'catalog:'
         version: 0.9.9(prettier@3.8.3)(typescript@6.0.3)
+      '@fontsource/inter':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/poppins':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.63.0

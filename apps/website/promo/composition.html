@@ -1,0 +1,1309 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cuewise Promo</title>
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/700.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/700.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/800.css" />
+    <style>
+      :root {
+        --violet-300: #c4b5fd;
+        --violet-400: #a78bfa;
+        --violet-500: #8b5cf6;
+        --violet-600: #7c3aed;
+        --ink: #0d0819;
+        --text: #ffffff;
+        --text-2: rgba(255, 255, 255, 0.74);
+        --text-3: rgba(255, 255, 255, 0.5);
+        --glass: rgba(20, 12, 40, 0.42);
+        --hairline: rgba(255, 255, 255, 0.14);
+        --display: 'Poppins', system-ui, sans-serif;
+        --body: 'Inter', system-ui, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--ink);
+        color: var(--text);
+        font-family: var(--body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #stage {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+
+      .backdrop {
+        position: absolute;
+        inset: -80px;
+        background: url('../src/assets/bg-aurora.png') center / cover no-repeat;
+        filter: saturate(1.15);
+      }
+
+      .backdrop-glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(900px 600px at 20% 15%, rgba(139, 92, 246, 0.28), transparent 70%),
+          radial-gradient(800px 600px at 85% 90%, rgba(236, 72, 153, 0.14), transparent 70%),
+          linear-gradient(180deg, rgba(13, 8, 25, 0.1), rgba(13, 8, 25, 0.55));
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        opacity: 0.05;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      [data-fx] {
+        opacity: 0;
+        will-change: transform, opacity;
+      }
+
+      .accent {
+        background: linear-gradient(100deg, #c4b5fd 0%, #a78bfa 40%, #f0abfc 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .center-col {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+
+      /* ---------- Intro / outro ---------- */
+      .logo-mark {
+        width: 200px;
+        height: 200px;
+        overflow: visible;
+      }
+
+      .logo-mark .ring {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+      }
+
+      .wordmark {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 128px;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        margin-top: 36px;
+      }
+
+      .tagline {
+        font-family: var(--display);
+        font-weight: 500;
+        font-size: 44px;
+        color: var(--text-2);
+        margin-top: 28px;
+        letter-spacing: -0.01em;
+      }
+
+      /* ---------- Hook ---------- */
+      .tabstrip {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 80px;
+      }
+
+      .tab {
+        width: 150px;
+        height: 44px;
+        border-radius: 12px 12px 4px 4px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--hairline);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+      }
+
+      .tab i {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.28);
+        flex: none;
+      }
+
+      .tab b {
+        height: 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.22);
+        flex: 1;
+      }
+
+      .tab.cue {
+        background: rgba(139, 92, 246, 0.35);
+        border-color: rgba(196, 181, 253, 0.6);
+        box-shadow: 0 0 40px rgba(139, 92, 246, 0.55);
+      }
+
+      .tab.cue i {
+        background: #fff;
+      }
+
+      .hook-line {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 84px;
+        letter-spacing: -0.025em;
+        line-height: 1.12;
+      }
+
+      .hook-line.soft {
+        font-weight: 600;
+        font-size: 60px;
+        color: var(--text-2);
+        margin-bottom: 26px;
+      }
+
+      .word {
+        display: inline-block;
+        margin-right: 0.24em;
+      }
+
+      .word:last-child {
+        margin-right: 0;
+      }
+
+      /* ---------- Feature layout ---------- */
+      .feature {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        gap: 90px;
+        padding: 0 110px 0 130px;
+      }
+
+      .feature.flip {
+        flex-direction: row-reverse;
+        padding: 0 130px 0 110px;
+      }
+
+      .caption {
+        width: 520px;
+        flex: none;
+      }
+
+      .kicker {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--violet-300);
+      }
+
+      .icon-chip {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        box-shadow:
+          0 12px 30px rgba(0, 0, 0, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+
+      .icon-chip svg {
+        width: 32px;
+        height: 32px;
+        stroke: #fff;
+      }
+
+      .title {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 72px;
+        line-height: 1.04;
+        letter-spacing: -0.03em;
+        margin-top: 30px;
+      }
+
+      .body {
+        font-size: 28px;
+        line-height: 1.5;
+        color: var(--text-2);
+        margin-top: 26px;
+      }
+
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 34px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-size: 20px;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--hairline);
+        color: #fff;
+      }
+
+      .pill svg {
+        width: 20px;
+        height: 20px;
+        stroke: var(--violet-300);
+      }
+
+      .pill.cat {
+        border: none;
+        color: #fff;
+        font-size: 18px;
+        padding: 8px 16px;
+      }
+
+      /* ---------- Browser frame ---------- */
+      .shot-wrap {
+        position: relative;
+        flex: 1;
+      }
+
+      .browser {
+        position: relative;
+        border-radius: 18px;
+        overflow: hidden;
+        background: #17112a;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow:
+          0 50px 120px rgba(0, 0, 0, 0.55),
+          0 0 0 1px rgba(0, 0, 0, 0.3),
+          0 0 120px rgba(139, 92, 246, 0.22);
+      }
+
+      .browser-bar {
+        height: 46px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 0 18px;
+        background: rgba(30, 22, 52, 0.96);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .dots {
+        display: flex;
+        gap: 8px;
+      }
+
+      .dots span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+
+      .url {
+        flex: 1;
+        max-width: 420px;
+        height: 28px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.07);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        font-size: 15px;
+        color: var(--text-3);
+      }
+
+      .url svg {
+        width: 14px;
+        height: 14px;
+        stroke: var(--text-3);
+      }
+
+      .viewport {
+        position: relative;
+        aspect-ratio: 1826 / 1080;
+        overflow: hidden;
+      }
+
+      .viewport img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform-origin: 50% 50%;
+      }
+
+      .viewport img.layer {
+        opacity: 0;
+      }
+
+      .float-chip {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 24px 16px 18px;
+        border-radius: 20px;
+        background: rgba(22, 14, 44, 0.72);
+        backdrop-filter: blur(18px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        font-size: 22px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .float-chip .dot {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+      }
+
+      .float-chip .dot svg {
+        width: 24px;
+        height: 24px;
+        stroke: #fff;
+      }
+
+      .float-chip small {
+        display: block;
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text-3);
+        margin-top: 2px;
+      }
+
+      .float-chip .num {
+        font-family: var(--display);
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------- Themes ---------- */
+      .themes-head {
+        position: absolute;
+        top: 120px;
+        left: 0;
+        right: 0;
+        text-align: center;
+      }
+
+      .themes-head .title {
+        margin-top: 22px;
+      }
+
+      .theme-row {
+        position: absolute;
+        top: 400px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 36px;
+      }
+
+      .theme-card {
+        width: 380px;
+      }
+
+      .mini {
+        position: relative;
+        height: 238px;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 30px;
+      }
+
+      .mini .clock {
+        font-family: var(--display);
+        font-weight: 800;
+        font-size: 56px;
+        letter-spacing: -0.03em;
+        line-height: 1;
+      }
+
+      .mini .greet {
+        font-size: 15px;
+        font-weight: 500;
+        margin-top: 6px;
+        opacity: 0.75;
+      }
+
+      .mini .card {
+        margin-top: 18px;
+        width: 240px;
+        border-radius: 12px;
+        padding: 12px 14px;
+        display: grid;
+        gap: 9px;
+      }
+
+      .mini .line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .mini .line i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        opacity: 0.7;
+        flex: none;
+      }
+
+      .mini .line b {
+        height: 7px;
+        border-radius: 4px;
+        background: currentColor;
+        opacity: 0.3;
+      }
+
+      .theme-label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 24px;
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 30px;
+      }
+
+      .theme-label span {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+      }
+
+      .theme-foot {
+        position: absolute;
+        top: 800px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+      }
+
+      /* ---------- Privacy ---------- */
+      .privacy {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 120px;
+      }
+
+      .shield {
+        position: relative;
+        width: 360px;
+        height: 360px;
+        display: grid;
+        place-items: center;
+      }
+
+      .shield .halo {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 2px solid rgba(196, 181, 253, 0.35);
+      }
+
+      .shield .core {
+        width: 220px;
+        height: 220px;
+        border-radius: 64px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+        box-shadow:
+          0 40px 90px rgba(109, 40, 217, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+
+      .shield .core svg {
+        width: 110px;
+        height: 110px;
+        stroke: #fff;
+      }
+
+      .privacy-list {
+        width: 760px;
+      }
+
+      .privacy-list .title {
+        margin-top: 22px;
+      }
+
+      .check-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 22px;
+        margin-top: 34px;
+      }
+
+      .check-row .tick {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        flex: none;
+        display: grid;
+        place-items: center;
+        background: rgba(16, 185, 129, 0.18);
+        border: 1px solid rgba(16, 185, 129, 0.5);
+      }
+
+      .check-row .tick svg {
+        width: 24px;
+        height: 24px;
+        stroke: #34d399;
+      }
+
+      .check-row h4 {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 32px;
+        line-height: 1.2;
+      }
+
+      .check-row p {
+        font-size: 22px;
+        color: var(--text-2);
+        margin-top: 6px;
+      }
+
+      /* ---------- Outro ---------- */
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 56px;
+        padding: 24px 44px;
+        border-radius: 999px;
+        font-size: 30px;
+        font-weight: 600;
+        background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+        box-shadow:
+          0 24px 60px rgba(109, 40, 217, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+
+      .cta svg {
+        width: 32px;
+        height: 32px;
+        stroke: #fff;
+      }
+
+      .site {
+        margin-top: 34px;
+        font-size: 28px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--text-2);
+      }
+
+      .trust {
+        display: flex;
+        gap: 14px;
+        margin-top: 40px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div class="backdrop" id="backdrop"></div>
+      <div class="backdrop-glow"></div>
+
+      <section class="scene" id="intro" data-start="0" data-end="5.2">
+        <div class="center-col">
+          <svg aria-hidden="true" class="logo-mark" viewBox="0 0 120 120" fill="none">
+            <path
+              class="ring"
+              pathLength="1"
+              d="M92 88 A 42 42 0 1 1 92 32"
+              stroke="#ffffff"
+              stroke-width="15"
+              stroke-linecap="round"
+            />
+            <circle class="cue-dot" cx="92" cy="60" r="11" fill="#c4b5fd" />
+          </svg>
+          <div class="wordmark" data-fx="up" data-at="1.3" data-dur="1">Cuewise</div>
+          <div class="tagline" data-fx="up" data-at="2.2" data-dur="1">
+            Turn every new tab into a <span class="accent">meaningful moment.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="hook" data-start="4.9" data-end="10.6">
+        <div class="center-col">
+          <div class="tabstrip" id="tabstrip"></div>
+          <div class="hook-line soft" data-words="0.4">You open a new tab dozens of times a day.</div>
+          <div class="hook-line" data-words="2.4">
+            What if every one <span class="accent">helped you focus?</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="reveal" data-start="10.3" data-end="17.2">
+        <div class="feature">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.5">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+              </div>
+              Meet Cuewise
+            </div>
+            <div class="title" data-fx="up" data-at="0.8">A calm new tab.</div>
+            <div class="body" data-fx="up" data-at="1.2">
+              A big friendly clock, your focus for the day, and a hand-picked quote — every time you
+              open a tab.
+            </div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0.1" data-dur="1.4">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab</div>
+              </div>
+              <div class="viewport">
+                <img src="../public/images/newtab.png" alt="" data-kb="1.0,1.07,50,30" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="goals" data-start="16.9" data-end="23.2">
+        <div class="feature flip">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.4">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #10b981, #059669)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              </div>
+              Daily goals
+            </div>
+            <div class="title" data-fx="up" data-at="0.7">Today's Focus</div>
+            <div class="body" data-fx="up" data-at="1.1">
+              Capture what matters most in seconds. Unfinished goals carry over to tomorrow in one
+              click.
+            </div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0" data-dur="1.2">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab</div>
+              </div>
+              <div class="viewport">
+                <img src="../public/images/newtab.png" alt="" data-kb="1.05,1.55,50,55" />
+              </div>
+            </div>
+            <div class="float-chip" style="left: -60px; bottom: 70px" data-fx="pop" data-at="2">
+              <div class="dot" style="background: linear-gradient(135deg, #10b981, #059669)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </div>
+              <div><span class="num" data-count="0,2,2.2,1">0</span> of 4 done<small>Keep your momentum</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="pomodoro" data-start="22.9" data-end="28.7">
+        <div class="feature">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.4">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #f59e0b, #d97706)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4"/><path d="M12 14v-4"/><circle cx="12" cy="14" r="8"/></svg>
+              </div>
+              Deep work
+            </div>
+            <div class="title" data-fx="up" data-at="0.7">Pomodoro Timer</div>
+            <div class="body" data-fx="up" data-at="1.1">
+              Focus for 25 minutes, breathe for 5. Fully adjustable, with ambient soundscapes.
+            </div>
+            <div class="pills">
+              <span class="pill" data-fx="up" data-at="1.6"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Ambient sounds</span>
+              <span class="pill" data-fx="up" data-at="1.75"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Session heatmaps</span>
+            </div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0" data-dur="1.2">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab — Pomodoro</div>
+              </div>
+              <div class="viewport">
+                <img src="../src/assets/pomodoro.png" alt="" data-kb="1.0,1.12,25,50" />
+              </div>
+            </div>
+            <div class="float-chip" style="right: -50px; top: 110px" data-fx="pop" data-at="2.1">
+              <div class="dot" style="background: linear-gradient(135deg, #f59e0b, #d97706)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              </div>
+              <div><span class="num" data-clock="1456,0,1">24:16</span><small>Focus session</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="focusmode" data-start="28.4" data-end="33.8">
+        <div class="feature flip">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.4">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #6366f1, #4338ca)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              </div>
+              Zero distractions
+            </div>
+            <div class="title" data-fx="up" data-at="0.7">Focus Mode</div>
+            <div class="body" data-fx="up" data-at="1.1">
+              A full-screen timer over a beautiful photo, with a quote to keep you grounded.
+            </div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0" data-dur="1.2">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab — Focus</div>
+              </div>
+              <div class="viewport">
+                <img src="../src/assets/focus.png" alt="" data-kb="1.12,1.0,50,50" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="quotes" data-start="33.5" data-end="39.3">
+        <div class="feature">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.4">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></svg>
+              </div>
+              Daily wisdom
+            </div>
+            <div class="title" data-fx="up" data-at="0.7">Quotes that land</div>
+            <div class="body" data-fx="up" data-at="1.1">
+              100 curated quotes across 10 categories — plus your own. Favorite, hide, import from
+              CSV.
+            </div>
+            <div class="pills" id="cat-pills"></div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0" data-dur="1.2">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab — Quotes</div>
+              </div>
+              <div class="viewport">
+                <img src="../src/assets/quotes.png" alt="" data-kb="1.0,1.1,50,85" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="concepts" data-start="39" data-end="44.8">
+        <div class="feature flip">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.4">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #06b6d4, #0891b2)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5"/><path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/><path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/><path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/><path d="M18 18a4 4 0 0 0 2-7.464"/><path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/><path d="M6 18a4 4 0 0 1-2-7.464"/><path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/></svg>
+              </div>
+              Learn as you go
+            </div>
+            <div class="title" data-fx="up" data-at="0.7">Concept Cards</div>
+            <div class="body" data-fx="up" data-at="1.1">
+              Save what you're learning. Your new tab resurfaces each card right when it's due —
+              spaced repetition in the pauses you already take.
+            </div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0" data-dur="1.2">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab</div>
+              </div>
+              <div class="viewport">
+                <img src="../src/assets/concepts.png" alt="" data-kb="1.02,1.4,50,78" />
+              </div>
+            </div>
+            <div class="float-chip" style="right: -40px; top: 90px" data-fx="pop" data-at="2.2">
+              <div class="dot" style="background: linear-gradient(135deg, #06b6d4, #0891b2)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              </div>
+              <div>Next review in 4 days<small>Graded: Easy</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="insights" data-start="44.5" data-end="50.3">
+        <div class="feature">
+          <div class="caption">
+            <div class="kicker" data-fx="up" data-at="0.4">
+              <div class="icon-chip" style="background: linear-gradient(135deg, #3b82f6, #2563eb)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+              </div>
+              See your progress
+            </div>
+            <div class="title" data-fx="up" data-at="0.7">Insights</div>
+            <div class="body" data-fx="up" data-at="1.1">
+              Streaks, trends and focus time — gentle stats that celebrate progress, never shame
+              it. Export anytime.
+            </div>
+          </div>
+          <div class="shot-wrap" data-fx="rise" data-at="0" data-dur="1.2">
+            <div class="browser">
+              <div class="browser-bar">
+                <div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+                <div class="url"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>New Tab — Insights</div>
+              </div>
+              <div class="viewport">
+                <img src="../src/assets/insights.png" alt="" data-kb="1.0,1.1,20,20" />
+              </div>
+            </div>
+            <div class="float-chip" style="left: -60px; bottom: 80px" data-fx="pop" data-at="1.9">
+              <div class="dot" style="background: linear-gradient(135deg, #fb923c, #ea580c)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+              </div>
+              <div><span class="num" data-count="0,17,2.1,1.4">0</span>-day streak<small>Longest: 17 days</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="themes" data-start="50" data-end="55.8">
+        <div class="themes-head">
+          <div class="kicker" style="justify-content: center" data-fx="up" data-at="0.3">Make it yours</div>
+          <div class="title" data-fx="up" data-at="0.5">Four themes. <span class="accent">Your vibe.</span></div>
+        </div>
+        <div class="theme-row">
+          <div class="theme-card" data-fx="rise" data-at="0.8">
+            <div class="mini" style="background: linear-gradient(135deg, #faf5ff, #ede9fe 55%, #ddd6fe); color: #2e1065">
+              <div class="clock">9:41</div>
+              <div class="greet">Good Morning</div>
+              <div class="card" style="background: rgba(255,255,255,.85); color: #6d28d9; box-shadow: 0 8px 20px rgba(109,40,217,.15)">
+                <div class="line"><i></i><b style="width: 70%"></b></div>
+                <div class="line"><i></i><b style="width: 52%"></b></div>
+                <div class="line"><i></i><b style="width: 62%"></b></div>
+              </div>
+            </div>
+            <div class="theme-label"><span style="background:#8b5cf6"></span>Purple</div>
+          </div>
+          <div class="theme-card" data-fx="rise" data-at="0.95">
+            <div class="mini" style="background: linear-gradient(135deg, #f0fdf4, #dcfce7 55%, #bbf7d0); color: #052e16">
+              <div class="clock">9:41</div>
+              <div class="greet">Good Morning</div>
+              <div class="card" style="background: rgba(255,255,255,.85); color: #059669; box-shadow: 0 8px 20px rgba(5,150,105,.15)">
+                <div class="line"><i></i><b style="width: 70%"></b></div>
+                <div class="line"><i></i><b style="width: 52%"></b></div>
+                <div class="line"><i></i><b style="width: 62%"></b></div>
+              </div>
+            </div>
+            <div class="theme-label"><span style="background:#10b981"></span>Forest</div>
+          </div>
+          <div class="theme-card" data-fx="rise" data-at="1.1">
+            <div class="mini" style="background: linear-gradient(135deg, #fff1f2, #ffe4e6 55%, #fecdd3); color: #4c0519">
+              <div class="clock">9:41</div>
+              <div class="greet">Good Morning</div>
+              <div class="card" style="background: rgba(255,255,255,.85); color: #e11d48; box-shadow: 0 8px 20px rgba(225,29,72,.15)">
+                <div class="line"><i></i><b style="width: 70%"></b></div>
+                <div class="line"><i></i><b style="width: 52%"></b></div>
+                <div class="line"><i></i><b style="width: 62%"></b></div>
+              </div>
+            </div>
+            <div class="theme-label"><span style="background:#f43f5e"></span>Rose</div>
+          </div>
+          <div class="theme-card" data-fx="rise" data-at="1.25">
+            <div class="mini" style="background: url('../src/assets/focus.png') 30% 6% / 340%; color: #fff">
+              <div class="clock" style="text-shadow: 0 2px 12px rgba(0,0,0,.4)">9:41</div>
+              <div class="greet">Good Morning</div>
+              <div class="card" style="background: rgba(0,0,0,.28); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.2)">
+                <div class="line"><i></i><b style="width: 70%"></b></div>
+                <div class="line"><i></i><b style="width: 52%"></b></div>
+                <div class="line"><i></i><b style="width: 62%"></b></div>
+              </div>
+            </div>
+            <div class="theme-label"><span style="background: linear-gradient(135deg, #fff, #a5b4fc)"></span>Glass</div>
+          </div>
+        </div>
+        <div class="theme-foot">
+          <span class="pill" data-fx="up" data-at="2"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2"/></svg>Light · Dark · Auto</span>
+          <span class="pill" data-fx="up" data-at="2.15"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 6H3M17 12H7M19 18H5"/></svg>Three density modes</span>
+          <span class="pill" data-fx="up" data-at="2.3"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>Daily photo backgrounds</span>
+        </div>
+      </section>
+
+      <section class="scene" id="privacy" data-start="55.5" data-end="61.3">
+        <div class="privacy">
+          <div class="shield" data-fx="scale" data-at="0.2" data-dur="1.1">
+            <div class="halo" id="halo-a"></div>
+            <div class="halo" id="halo-b"></div>
+            <div class="core">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><rect width="7" height="6" x="8.5" y="11" rx="1"/><path d="M10 11V9.5a2 2 0 0 1 4 0V11"/></svg>
+            </div>
+          </div>
+          <div class="privacy-list">
+            <div class="kicker" data-fx="up" data-at="0.4">Privacy first</div>
+            <div class="title" data-fx="up" data-at="0.6">Your data stays yours.</div>
+            <div class="check-row" data-fx="left" data-at="1.2">
+              <div class="tick"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div><h4>Local-first</h4><p>Goals, quotes and sessions live on your device.</p></div>
+            </div>
+            <div class="check-row" data-fx="left" data-at="1.6">
+              <div class="tick"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div><h4>No analytics. No trackers.</h4><p>Open source — nothing phones home.</p></div>
+            </div>
+            <div class="check-row" data-fx="left" data-at="2">
+              <div class="tick"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+              <div><h4>Optional encrypted sync</h4><p>End-to-end encrypted — the server can't read it.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="outro" data-start="61" data-end="68">
+        <div class="center-col">
+          <svg aria-hidden="true" class="logo-mark" viewBox="0 0 120 120" fill="none" style="width: 150px; height: 150px">
+            <path
+              class="ring"
+              pathLength="1"
+              d="M92 88 A 42 42 0 1 1 92 32"
+              stroke="#ffffff"
+              stroke-width="15"
+              stroke-linecap="round"
+            />
+            <circle class="cue-dot" cx="92" cy="60" r="11" fill="#c4b5fd" />
+          </svg>
+          <div class="wordmark" style="font-size: 104px; margin-top: 28px" data-fx="up" data-at="0.9">Cuewise</div>
+          <div class="tagline" data-fx="up" data-at="1.3">Wisdom, intention and momentum — on every new tab.</div>
+          <div class="cta" data-fx="pop" data-at="1.9">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+            Add to Chrome — It's free
+          </div>
+          <div class="site" data-fx="up" data-at="2.4">cuewise.app</div>
+        </div>
+      </section>
+
+      <div class="grain"></div>
+    </div>
+
+    <script>
+      (() => {
+        const CATEGORIES = [
+          ['Inspiration', '#8B5CF6'],
+          ['Learning', '#3B82F6'],
+          ['Productivity', '#10B981'],
+          ['Mindfulness', '#06B6D4'],
+          ['Success', '#F59E0B'],
+          ['Creativity', '#EC4899'],
+          ['Resilience', '#EF4444'],
+          ['Leadership', '#6366F1'],
+          ['Health', '#14B8A6'],
+          ['Growth', '#84CC16'],
+        ];
+        const TAB_COUNT = 9;
+        const CUE_TAB = 6;
+        const FADE_IN = 0.7;
+        const FADE_OUT = 0.5;
+
+        const clamp01 = (x) => Math.min(1, Math.max(0, x));
+        const outCubic = (x) => 1 - (1 - x) ** 3;
+        const inOutCubic = (x) => (x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2);
+        const outBack = (x) => {
+          const c = 1.4;
+          return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2;
+        };
+        const lerp = (a, b, x) => a + (b - a) * x;
+
+        const tabstrip = document.getElementById('tabstrip');
+        for (let i = 0; i < TAB_COUNT; i++) {
+          const tab = document.createElement('div');
+          tab.className = i === CUE_TAB ? 'tab cue' : 'tab';
+          tab.dataset.fx = 'drop';
+          tab.dataset.at = (0.1 + i * 0.12).toFixed(2);
+          tab.innerHTML = '<i></i><b></b>';
+          tabstrip.appendChild(tab);
+        }
+
+        const catPills = document.getElementById('cat-pills');
+        CATEGORIES.forEach(([name, color], i) => {
+          const pill = document.createElement('span');
+          pill.className = 'pill cat';
+          pill.style.background = color;
+          pill.textContent = name;
+          pill.dataset.fx = 'pop';
+          pill.dataset.at = (1.6 + i * 0.09).toFixed(2);
+          catPills.appendChild(pill);
+        });
+
+        for (const line of document.querySelectorAll('[data-words]')) {
+          const start = Number(line.dataset.words);
+          let index = 0;
+          const wrap = (node) => {
+            for (const child of [...node.childNodes]) {
+              if (child.nodeType === Node.TEXT_NODE) {
+                const frag = document.createDocumentFragment();
+                for (const w of child.textContent.split(/\s+/).filter(Boolean)) {
+                  const span = document.createElement('span');
+                  span.className = 'word';
+                  span.textContent = w;
+                  span.dataset.fx = 'word';
+                  span.dataset.at = (start + index * 0.11).toFixed(2);
+                  span.dataset.dur = '0.7';
+                  index++;
+                  frag.appendChild(span);
+                }
+                child.replaceWith(frag);
+              } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const accent = child.className;
+                for (const w of child.textContent.split(/\s+/).filter(Boolean)) {
+                  const span = document.createElement('span');
+                  span.className = `word ${accent}`;
+                  span.textContent = w;
+                  span.dataset.fx = 'word';
+                  span.dataset.at = (start + index * 0.11).toFixed(2);
+                  span.dataset.dur = '0.7';
+                  index++;
+                  node.insertBefore(span, child);
+                }
+                child.remove();
+              }
+            }
+          };
+          wrap(line);
+        }
+
+        const scenes = [...document.querySelectorAll('.scene')].map((el) => ({
+          el,
+          start: Number(el.dataset.start),
+          end: Number(el.dataset.end),
+          fx: [...el.querySelectorAll('[data-fx]')],
+          kb: [...el.querySelectorAll('[data-kb]')],
+          counts: [...el.querySelectorAll('[data-count]')],
+          clocks: [...el.querySelectorAll('[data-clock]')],
+          rings: [...el.querySelectorAll('.ring')],
+          dots: [...el.querySelectorAll('.cue-dot')],
+        }));
+        const duration = Math.max(...scenes.map((s) => s.end));
+        const isLast = (scene) => scene.end === duration;
+
+        const applyFx = (el, lt) => {
+          const at = Number(el.dataset.at || 0);
+          const dur = Number(el.dataset.dur || 0.8);
+          const p = clamp01((lt - at) / dur);
+          const e = outCubic(p);
+          let transform = '';
+          let filter = '';
+          switch (el.dataset.fx) {
+            case 'up':
+              transform = `translateY(${(1 - e) * 28}px)`;
+              break;
+            case 'rise':
+              transform = `translateY(${(1 - e) * 90}px) scale(${lerp(0.94, 1, e)})`;
+              break;
+            case 'left':
+              transform = `translateX(${(1 - e) * -40}px)`;
+              break;
+            case 'drop':
+              transform = `translateY(${(1 - e) * -30}px)`;
+              break;
+            case 'pop':
+              transform = `scale(${lerp(0.7, 1, outBack(p))})`;
+              break;
+            case 'scale':
+              transform = `scale(${lerp(0.8, 1, outBack(p))})`;
+              break;
+            case 'word':
+              transform = `translateY(${(1 - e) * 22}px)`;
+              filter = `blur(${(1 - e) * 10}px)`;
+              break;
+          }
+          el.style.opacity = String(e);
+          el.style.transform = transform;
+          el.style.filter = filter;
+        };
+
+        const applyKenBurns = (img, lt, span) => {
+          const [from, to, ox, oy] = img.dataset.kb.split(',').map(Number);
+          const s = lerp(from, to, inOutCubic(clamp01(lt / span)));
+          img.style.transformOrigin = `${ox}% ${oy}%`;
+          img.style.transform = `scale(${s})`;
+        };
+
+        const applyCount = (el, lt) => {
+          const [from, to, at, dur] = el.dataset.count.split(',').map(Number);
+          const p = outCubic(clamp01((lt - at) / dur));
+          el.textContent = String(Math.round(lerp(from, to, p)));
+        };
+
+        const applyClock = (el, lt) => {
+          const [startSeconds, at, rate] = el.dataset.clock.split(',').map(Number);
+          const remaining = Math.max(0, Math.floor(startSeconds - Math.max(0, lt - at) * rate));
+          const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+          const s = String(remaining % 60).padStart(2, '0');
+          el.textContent = `${m}:${s}`;
+        };
+
+        const applyLogo = (scene, lt) => {
+          const draw = inOutCubic(clamp01((lt - 0.15) / 1.1));
+          for (const ring of scene.rings) {
+            ring.style.strokeDashoffset = String(1 - draw);
+          }
+          const pop = clamp01((lt - 1.0) / 0.5);
+          for (const dot of scene.dots) {
+            dot.style.transformOrigin = '92px 60px';
+            dot.style.transform = `scale(${pop === 0 ? 0 : outBack(pop)})`;
+          }
+        };
+
+        const applyTabs = (scene, lt) => {
+          const tabs = scene.el.querySelectorAll('.tab');
+          const glow = clamp01((lt - 2.4) / 0.8);
+          tabs.forEach((tab, i) => {
+            if (i === CUE_TAB) {
+              tab.style.transform = `${tab.style.transform} scale(${lerp(1, 1.12, outCubic(glow))})`;
+            } else {
+              tab.style.opacity = String(Number(tab.style.opacity) * lerp(1, 0.45, glow));
+            }
+          });
+        };
+
+        const applyHalos = (lt) => {
+          const halos = [document.getElementById('halo-a'), document.getElementById('halo-b')];
+          halos.forEach((halo, i) => {
+            const phase = ((lt * 0.45 + i * 0.5) % 1 + 1) % 1;
+            halo.style.transform = `scale(${lerp(0.7, 1.35, phase)})`;
+            halo.style.opacity = String((1 - phase) * 0.9);
+          });
+        };
+
+        const seek = (t) => {
+          document.getElementById('backdrop').style.transform =
+            `translate(${Math.sin(t * 0.07) * 40}px, ${Math.cos(t * 0.05) * 30}px) scale(${1.05 + Math.sin(t * 0.04) * 0.03})`;
+
+          for (const scene of scenes) {
+            if (t < scene.start || t > scene.end) {
+              scene.el.style.visibility = 'hidden';
+              continue;
+            }
+            const lt = t - scene.start;
+            const span = scene.end - scene.start;
+            const fadeIn = scene.start === 0 ? 1 : outCubic(clamp01(lt / FADE_IN));
+            const fadeOut = isLast(scene) ? 1 : 1 - clamp01((lt - (span - FADE_OUT)) / FADE_OUT);
+            const exitDrift = isLast(scene) ? 0 : clamp01((lt - (span - FADE_OUT)) / FADE_OUT);
+            scene.el.style.visibility = 'visible';
+            scene.el.style.opacity = String(Math.min(fadeIn, fadeOut));
+            scene.el.style.transform = `scale(${1 + exitDrift * 0.02})`;
+            scene.el.style.filter = exitDrift > 0 ? `blur(${exitDrift * 6}px)` : '';
+
+            for (const el of scene.fx) {
+              applyFx(el, lt);
+            }
+            for (const img of scene.kb) {
+              applyKenBurns(img, lt, span);
+            }
+            for (const el of scene.counts) {
+              applyCount(el, lt);
+            }
+            for (const el of scene.clocks) {
+              applyClock(el, lt);
+            }
+            if (scene.rings.length > 0) {
+              applyLogo(scene, lt);
+            }
+            if (scene.el.id === 'hook') {
+              applyTabs(scene, lt);
+            }
+            if (scene.el.id === 'privacy') {
+              applyHalos(lt);
+            }
+            if (isLast(scene)) {
+              const out = clamp01((lt - (span - 1.2)) / 1.2);
+              document.getElementById('stage').style.opacity = String(1 - out);
+            }
+          }
+        };
+
+        const ready = (async () => {
+          await document.fonts.ready;
+          await Promise.all(
+            [...document.images].map((img) => (img.complete ? null : img.decode().catch(() => null)))
+          );
+          const fontsOk = (
+            await Promise.all([document.fonts.load('700 40px Poppins'), document.fonts.load('400 20px Inter')])
+          ).every((faces) => faces.length > 0);
+          const bg = new Image();
+          bg.src = '../src/assets/bg-aurora.png';
+          await bg.decode();
+          return { fontsOk };
+        })();
+
+        window.promo = { seek, duration, ready, scenes: scenes.map((s) => s.el.id) };
+
+        const params = new URLSearchParams(location.search);
+        if (params.has('t')) {
+          seek(Number(params.get('t')));
+        } else if (!navigator.webdriver) {
+          const t0 = performance.now();
+          const loop = () => {
+            seek(((performance.now() - t0) / 1000) % duration);
+            requestAnimationFrame(loop);
+          };
+          ready.then(loop);
+        }
+      })();
+    </script>
+  </body>
+</html>
