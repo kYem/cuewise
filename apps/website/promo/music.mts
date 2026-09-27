@@ -17,6 +17,8 @@ const PROGRESSION: Chord[] = [
 
 const CHIME_SCALE = [77, 81, 84, 86, 79, 88, 84, 81, 86, 89, 84, 77];
 
+export type Sfx = { t: number; kind: 'click' | 'key' | 'pop' | 'whoosh' };
+
 const midiToHz = (m: number): number => 440 * 2 ** ((m - 69) / 12);
 
 function smoothstep(x: number): number {
@@ -55,6 +57,41 @@ function chime(out: Float32Array, hz: number, at: number, gain: number) {
     const env = Math.min(1, t / 0.01) * Math.exp(-t * 1.6);
     const w = 2 * Math.PI * hz * t;
     out[i] += (Math.sin(w) + 0.3 * Math.sin(2.01 * w) + 0.08 * Math.sin(3.98 * w)) * env * gain;
+  }
+}
+
+function noise(seed: number): () => number {
+  let x = seed;
+  return () => {
+    x = (x * 1664525 + 1013904223) >>> 0;
+    return x / 2147483648 - 1;
+  };
+}
+
+function uiSound(out: Float32Array, { t, kind }: Sfx, rand: () => number) {
+  const i0 = Math.floor(t * SAMPLE_RATE);
+  const span = kind === 'whoosh' ? 0.7 : kind === 'pop' ? 0.35 : 0.06;
+  const i1 = Math.min(out.length, i0 + Math.floor(span * SAMPLE_RATE));
+  let lp = 0;
+  for (let i = i0; i < i1; i++) {
+    const s = (i - i0) / SAMPLE_RATE;
+    let v = 0;
+    if (kind === 'click') {
+      v =
+        rand() * Math.exp(-s * 900) * 0.5 +
+        Math.sin(2 * Math.PI * 1500 * s) * Math.exp(-s * 160) * 0.5;
+    } else if (kind === 'key') {
+      v =
+        rand() * Math.exp(-s * 1400) * 0.35 +
+        Math.sin(2 * Math.PI * 2400 * s) * Math.exp(-s * 260) * 0.2;
+    } else if (kind === 'pop') {
+      const hz = 520 + 420 * Math.min(1, s / 0.08);
+      v = Math.sin(2 * Math.PI * hz * s) * Math.min(1, s / 0.005) * Math.exp(-s * 12) * 0.6;
+    } else {
+      lp += (rand() - lp) * 0.06;
+      v = lp * Math.sin(Math.PI * (s / span)) ** 2 * 2.2;
+    }
+    out[i] += v;
   }
 }
 
@@ -112,8 +149,8 @@ function toWav(left: Float32Array, right: Float32Array): Buffer {
   return buf;
 }
 
-/** Renders a calm ambient pad, with a soft chime on each scene cut, to a 16-bit stereo WAV. */
-export function renderMusic(path: string, duration: number, cues: number[]): void {
+/** Renders a calm ambient pad with a chime on each scene cut and the UI sounds, to a 16-bit stereo WAV. */
+export function renderMusic(path: string, duration: number, cues: number[], sfx: Sfx[] = []): void {
   const length = Math.ceil(duration * SAMPLE_RATE);
   const left = new Float32Array(length);
   const right = new Float32Array(length);
@@ -145,12 +182,17 @@ export function renderMusic(path: string, duration: number, cues: number[]): voi
   for (let i = 0; i < length; i++) {
     peak = Math.max(peak, Math.abs(l[i]), Math.abs(r[i]));
   }
-  const norm = peak > 0 ? 0.6 / peak : 1;
+  const norm = peak > 0 ? 0.55 / peak : 1;
+  const fx = new Float32Array(length);
+  const rand = noise(9);
+  for (const s of sfx) {
+    uiSound(fx, s, rand);
+  }
   for (let i = 0; i < length; i++) {
     const t = i / SAMPLE_RATE;
     const master = smoothstep(t / 1.5) * (1 - smoothstep((t - (duration - 3)) / 3));
-    l[i] *= norm * master;
-    r[i] *= norm * master;
+    l[i] = Math.tanh(l[i] * norm * master + fx[i] * 0.22);
+    r[i] = Math.tanh(r[i] * norm * master + fx[i] * 0.22);
   }
 
   writeFileSync(path, toWav(l, r));

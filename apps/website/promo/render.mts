@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
-import { renderMusic } from './music.mts';
+import { renderMusic, type Sfx } from './music.mts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(here, 'out');
@@ -47,6 +47,7 @@ try {
     throw new Error('Poppins/Inter did not load — run pnpm install to fetch @fontsource');
   }
   const duration = await page.evaluate(() => window.promo.duration);
+  const sfx = await page.evaluate(() => window.promo.sfx);
   const cues = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>('.scene')].map((s) => Number(s.dataset.start))
   );
@@ -63,7 +64,7 @@ try {
     const frames = Math.round((to - from) * fps);
 
     const wav = path.join(outDir, 'music.wav');
-    renderMusic(wav, duration, cues);
+    renderMusic(wav, duration, cues, sfx);
 
     const encoder = spawn(
       ffmpeg,
@@ -143,6 +144,7 @@ declare global {
       seek: (t: number) => void;
       duration: number;
       ready: Promise<{ fontsOk: boolean }>;
+      sfx: Sfx[];
       scenes: string[];
     };
   }
