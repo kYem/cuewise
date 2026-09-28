@@ -42,8 +42,18 @@ describe('splitConceptSelection', () => {
     ['ends in a full stop', SELECTIONS.sentenceFirstLine],
     ['ends in a colon', SELECTIONS.colonFirstLine],
     ['is over 80 characters', SELECTIONS.overLongFirstLine],
+    // Swept-up page chrome: a byline or breadcrumb is short and unpunctuated, so only its
+    // separators tell it apart from a real term.
+    ['is a byline the selection swept up', SELECTIONS.hackerNewsByline],
+    ['is a breadcrumb trail', SELECTIONS.breadcrumbLead],
   ])('infers no term when the first line %s', (_, text) => {
     expect(splitConceptSelection(text).term).toBe('');
+  });
+
+  it('keeps the whole selection as the definition when the first line is page chrome', () => {
+    expect(splitConceptSelection(SELECTIONS.hackerNewsByline).definition).toBe(
+      SELECTIONS.hackerNewsByline
+    );
   });
 
   it('infers no term when nothing follows the first line', () => {

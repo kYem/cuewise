@@ -82,6 +82,10 @@ function nonEmptyLineIndexes(lines: string[]): number[] {
   return lines.flatMap((line, index) => (line.trim() ? [index] : []));
 }
 
+// A selection swept from a page often opens with its furniture — a byline, a breadcrumb,
+// "Title | Site". Those separators are everywhere in page chrome and next to absent from a term.
+const PAGE_FURNITURE = /[|·•]/;
+
 /** A short first line that does not read as a sentence becomes the term; the rest defines it. */
 export function splitConceptSelection(text: string): { term: string; definition: string } {
   const lines = text.split(/\r?\n/);
@@ -94,7 +98,12 @@ export function splitConceptSelection(text: string): { term: string; definition:
     .slice(first + 1)
     .join('\n')
     .trim();
-  if (definition && term.length <= MAX_TERM_LENGTH && !/[.!?:]$/.test(term)) {
+  if (
+    definition &&
+    term.length <= MAX_TERM_LENGTH &&
+    !/[.!?:]$/.test(term) &&
+    !PAGE_FURNITURE.test(term)
+  ) {
     return { term, definition };
   }
   return { term: '', definition: text.trim() };
