@@ -423,6 +423,61 @@ describe('ConceptRotation', () => {
   });
 });
 
+describe('a deck that changes while a card is on screen', () => {
+  const overdue = {
+    dueDate: '2020-01-01',
+    interval: 0,
+    easeFactor: 2.5,
+    repetitions: 0,
+    lapses: 0,
+  };
+  const reading = conceptCardFactory.build({
+    id: 'reading',
+    term: 'Saga pattern',
+    schedule: overdue,
+  });
+  const arriving = conceptCardFactory.build({
+    id: 'arriving',
+    term: 'Idempotence',
+    schedule: overdue,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('keeps the card when another realm adds one ahead of it', () => {
+    setup({ cards: [reading] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+
+    // A capture from a page, or another tab: the new card lands first in the deck.
+    setup({ cards: [arriving, reading] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('keeps the card when another realm removes one ahead of it', () => {
+    const second = conceptCardFactory.build({
+      id: 'second',
+      term: 'Backpressure',
+      schedule: overdue,
+    });
+    setup({ cards: [arriving, second, reading] });
+    const { rerender } = render(<ConceptRotation fallback={<div>QUOTE</div>} />);
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+
+    // Graded on another device: the deck shrinks ahead of the reader, so position 2 would wrap.
+    setup({ cards: [second, reading] });
+    rerender(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+});
+
 describe('selectSurfacedCard', () => {
   const a = conceptCardFactory.build({ id: 'a' });
   const b = conceptCardFactory.build({ id: 'b' });
@@ -445,5 +500,34 @@ describe('selectSurfacedCard', () => {
     const decision = { show: false, knownIds: ['a', 'b'] };
     expect(selectSurfacedCard([a, b, c], decision, 0)).toEqual({ current: c, position: 0 });
     expect(selectSurfacedCard([a, b], decision, 0).current).toBeUndefined();
+  });
+
+  // The deck changes under a reader whenever another realm writes — another tab, a capture from
+  // a page, a sync pull. Picking by position alone would hand them a different card mid-read.
+  describe('anchored to the card on screen', () => {
+    const decision = { show: true, knownIds: ['a'] };
+
+    it('keeps the anchored card when a card arrives from elsewhere', () => {
+      expect(selectSurfacedCard([a], decision, 0, 'a')).toEqual({ current: a, position: 0 });
+      // b lands first in the deck; without the anchor `0 % 2` would now be b.
+      expect(selectSurfacedCard([b, a], decision, 0, 'a')).toEqual({ current: a, position: 1 });
+    });
+
+    it('keeps the anchored card when another card leaves the deck', () => {
+      expect(selectSurfacedCard([a, b, c], decision, 2, 'c')).toEqual({ current: c, position: 2 });
+      expect(selectSurfacedCard([a, c], decision, 2, 'c')).toEqual({ current: c, position: 1 });
+    });
+
+    it('falls back to the browse index once the anchored card has gone', () => {
+      expect(selectSurfacedCard([a, b], decision, 1, 'missing')).toEqual({
+        current: b,
+        position: 1,
+      });
+    });
+
+    it('ignores an anchor the deck hides, so surfacing rules still win', () => {
+      const off = { show: false, knownIds: ['a', 'b'] };
+      expect(selectSurfacedCard([a, b, c], off, 0, 'a')).toEqual({ current: c, position: 0 });
+    });
   });
 });
