@@ -128,20 +128,41 @@ async function revokeUpstream(
 }
 
 /**
- * A (re)connect leaves the grant it replaced live at Notion, so it has to be revoked. Returns the
- * work instead of doing it, so the response need not wait; null when there is nothing to revoke.
+ * A (re)connect leaves the grant it replaced live at Notion, so it has to be revoked — unless
+ * Notion handed back the same token, where revoking it would take the new connection with it.
  */
-export function revokeDisplacedGrant(
+export async function revokeDisplacedGrant(
   client: NotionClient,
-  replaced: ReplacedGrant | null,
-  stored: SealedGrant,
+  replaced: ReplacedGrant,
+  stored: ReplacedGrant,
   env: Env,
   userId: string
-): Promise<boolean> | null {
-  if (replaced === null || replaced.ciphertext === stored.ciphertext) {
-    return null;
+): Promise<boolean> {
+  const key = env.PROVIDER_TOKEN_KEY;
+  if (!isSecretKey(key)) {
+    logger.error('PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation', {
+      userId,
+    });
+    return false;
   }
-  return revokeSealed(client, replaced, env, userId);
+  let displaced: string;
+  let current: string;
+  try {
+    displaced = await decryptSecret(replaced, key);
+    current = await decryptSecret(stored, key);
+  } catch (error) {
+    logger.error('Could not decrypt a Notion grant to revoke it upstream', {
+      userId,
+      reason: errorName(error),
+    });
+    return false;
+  }
+  // Compared as plaintext, because every seal carries a fresh iv: the same token stored twice has
+  // two different ciphertexts, so nothing can be concluded from those.
+  if (displaced === current) {
+    return true;
+  }
+  return revokeUpstream(client, displaced, userId);
 }
 
 // Cleanup the caller must not wait for. Without an ExecutionContext — a test driving `app.request`
@@ -447,16 +468,14 @@ export async function revokeExpiredParkedGrants(
   let budget = SWEEP_REVOKE_BUDGET;
   // Past every row already tried this run, so one that keeps failing cannot hold up the rest.
   let after: ParkedGrantCursor | null = null;
-  for (;;) {
+  while (budget > 0) {
     const page = Math.min(PARKED_GRANT_BATCH, budget);
     const batch = await store.listExpiredParkedGrants(now, page, after);
     if (batch.length === 0) {
       return sweep;
     }
+    // Bounded by `page`, so the budget cannot be overspent inside one batch.
     for (const parked of batch) {
-      if (budget === 0) {
-        return sweep;
-      }
       budget -= 1;
       after = parked;
       sweep.swept += 1;
@@ -472,6 +491,7 @@ export async function revokeExpiredParkedGrants(
       }
     }
   }
+  return sweep;
 }
 
 function refreshPair(connection: ProviderConnection): RefreshPair | null {
@@ -711,9 +731,8 @@ export function registerNotionRoutes(
     }
     // After the store, never before: a revoke that fails must not cost the user the connection
     // they just made, and the response does not wait for it either.
-    const displaced = revokeDisplacedGrant(client(c.env), replaced, grant, c.env, userId);
-    if (displaced !== null) {
-      await detach(c, displaced);
+    if (replaced !== null) {
+      await detach(c, revokeDisplacedGrant(client(c.env), replaced, grant, c.env, userId));
     }
     return c.json({ workspace: grant.workspace });
   });

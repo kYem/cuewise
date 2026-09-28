@@ -296,11 +296,11 @@ export function createNotionClient(env: NotionEnv, fetchImpl: typeof fetch = fet
       );
     },
 
-    async revokeToken(token) {
+    async revokeToken(accessToken) {
       try {
         await callOurs('/oauth/revoke', basicAuth(), {
           method: 'POST',
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({ token: accessToken }),
         });
       } catch (error) {
         // A 2xx is the whole answer here; an unreadable body is not a failed revoke.

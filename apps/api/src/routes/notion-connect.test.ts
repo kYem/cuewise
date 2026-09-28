@@ -1602,52 +1602,34 @@ describe('per-token rate limiting', () => {
 });
 
 describe('revokeDisplacedGrant', () => {
-  const stored = {
-    ciphertext: 'ct-new',
-    iv: 'iv-new',
-    refreshCiphertext: null,
-    refreshIv: null,
-    workspace: 'Acme',
-  };
-
-  it('has nothing to revoke on a first connect', () => {
+  it('leaves the same token alone when notion re-issues it, iv differences aside', async () => {
     const revokeToken = vi.fn(async () => undefined);
+    // Two independent seals of one token: what a re-issued token looks like on disk.
+    const before = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+    const after = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+    expect(before.ciphertext).not.toBe(after.ciphertext);
 
     const work = revokeDisplacedGrant(
       stubNotionClient({ revokeToken }),
-      null,
-      stored,
+      before,
+      after,
       notionEnv(),
       'user-1'
     );
 
-    expect(work).toBeNull();
+    await expect(work).resolves.toBe(true);
     expect(revokeToken).not.toHaveBeenCalled();
   });
 
-  it('does not revoke the token it just stored', () => {
-    const revokeToken = vi.fn(async () => undefined);
-
-    const work = revokeDisplacedGrant(
-      stubNotionClient({ revokeToken }),
-      { ciphertext: stored.ciphertext, iv: stored.iv },
-      stored,
-      notionEnv(),
-      'user-1'
-    );
-
-    expect(work).toBeNull();
-    expect(revokeToken).not.toHaveBeenCalled();
-  });
-
-  it('returns the revoke of a genuinely displaced grant, rather than running it', async () => {
+  it('revokes a genuinely displaced grant, and not before the caller awaits it', async () => {
     const revokeToken = vi.fn(async () => undefined);
     const displaced = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+    const current = await encryptSecret('notion-access-token-reconnected', TEST_PROVIDER_KEY);
 
     const work = revokeDisplacedGrant(
       stubNotionClient({ revokeToken }),
       displaced,
-      stored,
+      current,
       notionEnv(),
       'user-1'
     );
@@ -1655,5 +1637,30 @@ describe('revokeDisplacedGrant', () => {
     expect(revokeToken).not.toHaveBeenCalled();
     await expect(work).resolves.toBe(true);
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
+  });
+
+  it('skips the revoke, loudly, when the displaced grant will not decrypt', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
+    const foreign = await encryptSecret(TEST_ACCESS_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
+    const current = await encryptSecret('notion-access-token-reconnected', TEST_PROVIDER_KEY);
+
+    const work = revokeDisplacedGrant(
+      stubNotionClient({ revokeToken }),
+      foreign,
+      current,
+      notionEnv(),
+      'user-1'
+    );
+
+    await expect(work).resolves.toBe(false);
+    expect(revokeToken).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Could not decrypt a Notion grant to revoke it upstream',
+      {
+        userId: 'user-1',
+        reason: 'OperationError',
+      }
+    );
   });
 });
