@@ -46,20 +46,36 @@ function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolea
  * if the cadence gate kept this tab on quotes. `current` is undefined to fall
  * back to quotes; `index` is a free-running counter wrapped into the deck.
  */
+/** What this tab may browse: the whole due pile, or only cards added since its decision. */
+export function surfacedDeck(
+  due: ConceptCard[],
+  decision: SurfacingDecision | null
+): ConceptCard[] {
+  if (decision === null) {
+    return [];
+  }
+  return decision.show ? due : due.filter((card) => !decision.knownIds.includes(card.id));
+}
+
 export function selectSurfacedCard(
   due: ConceptCard[],
   decision: SurfacingDecision | null,
-  index: number
+  index: number,
+  // The card already on screen. Any realm may change the deck mid-read, and picking by position
+  // alone would hand the reader a different card when the length shifts under them.
+  anchorId?: string | null
 ): { current: ConceptCard | undefined; position: number } {
-  if (decision === null) {
-    return { current: undefined, position: 0 };
-  }
-  const deck = decision.show ? due : due.filter((card) => !decision.knownIds.includes(card.id));
+  const deck = surfacedDeck(due, decision);
   if (deck.length === 0) {
     return { current: undefined, position: 0 };
   }
-  const position = ((index % deck.length) + deck.length) % deck.length;
+  const anchored = anchorId === undefined || anchorId === null ? -1 : indexOfCard(deck, anchorId);
+  const position = anchored >= 0 ? anchored : ((index % deck.length) + deck.length) % deck.length;
   return { current: deck[position], position };
+}
+
+function indexOfCard(deck: ConceptCard[], id: string): number {
+  return deck.findIndex((card) => card.id === id);
 }
 
 // Explicit per-tab choice that outranks the cadence decision. 'quotes' also
@@ -95,7 +111,6 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
 
   const cards = useConceptCardsStore((state) => state.cards);
   const isLoading = useConceptCardsStore((state) => state.isLoading);
-  const initialize = useConceptCardsStore((state) => state.initialize);
   const reviewCard = useConceptCardsStore((state) => state.reviewCard);
   const toggleFavorite = useConceptCardsStore((state) => state.toggleFavorite);
 
@@ -104,11 +119,12 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
   const [grading, setGrading] = useState(false);
   // Browse position for the toolbar's prev/next within the surfaced deck.
   const [index, setIndex] = useState(0);
+  // The card on screen, so a deck change from another realm cannot move the reader off it.
+  const [anchorId, setAnchorId] = useState<string | null>(null);
   const [slot, setSlot] = useState<SlotOverride>('auto');
 
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+  // NewTabPage loads the deck: it is the only host, and it reads the cards itself whether or not
+  // this renders. Initializing here too cost every new tab a second read and reconcile.
 
   // Re-evaluate the once-per-tab decision (and clear the session deck) when the
   // surfacing settings change, so the queue counter and total stay in sync.
@@ -116,6 +132,7 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
     setDecision(null);
     setHandledIds([]);
     setIndex(0);
+    setAnchorId(null);
     setSlot('auto');
   }, [framing, cadence, enabled]);
 
@@ -136,8 +153,20 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
 
   const effectiveDecision: SurfacingDecision | null =
     slot === 'concepts' ? { show: true, knownIds: decision?.knownIds ?? [] } : decision;
-  const { current, position } = selectSurfacedCard(due, effectiveDecision, index);
+  const deck = useMemo(() => surfacedDeck(due, effectiveDecision), [due, effectiveDecision]);
+  const { current, position } = selectSurfacedCard(due, effectiveDecision, index, anchorId);
   const surfaced = slot === 'quotes' ? undefined : current;
+
+  // Pin whatever surfaced, and re-pin once the anchored card leaves the deck — graded here,
+  // graded on another device, or no longer due.
+  useEffect(() => {
+    if (current === undefined) {
+      return;
+    }
+    if (anchorId === null || !deck.some((card) => card.id === anchorId)) {
+      setAnchorId(current.id);
+    }
+  }, [current, anchorId, deck]);
 
   useEffect(() => {
     if (!enabled || isLoading || due.length === 0) {
@@ -174,8 +203,18 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
     onManualRefresh?.();
   };
 
-  const goNext = () => setIndex((i) => i + 1);
-  const goPrev = () => setIndex((i) => i - 1);
+  // Browsing moves the anchor: it is the one thing that should change the card on screen.
+  const moveBy = (delta: number) => {
+    if (deck.length === 0) {
+      return;
+    }
+    const next = (((position + delta) % deck.length) + deck.length) % deck.length;
+    setIndex(next);
+    setAnchorId(deck[next].id);
+  };
+
+  const goNext = () => moveBy(1);
+  const goPrev = () => moveBy(-1);
 
   const handleGrade = async (grade: ConceptGrade) => {
     if (grading) {
