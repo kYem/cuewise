@@ -17,12 +17,37 @@ beforeEach(() => {
 });
 
 describe('chromeCapturePopupApi.loadDraft', () => {
-  it('resumes the pending draft without touching the tab', async () => {
+  it('resumes the pending draft for the tab the user is on', async () => {
     const pending = buildDraft({ kind: 'quote', author: 'Me' });
     seedDraft(chromeMock, pending);
 
     expect(await chromeCapturePopupApi.loadDraft()).toEqual(pending);
-    expect(chromeMock.tabs.query).not.toHaveBeenCalled();
+    expect(chromeMock.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  // Otherwise the icon opens someone's abandoned capture from a page they have left.
+  it('starts fresh when the pending draft belongs to another tab', async () => {
+    seedDraft(
+      chromeMock,
+      buildDraft({ tabId: PAGE.tabId + 1, pageUrl: 'https://example.com/old' })
+    );
+
+    const draft = await chromeCapturePopupApi.loadDraft();
+
+    expect(draft).toMatchObject({ pageUrl: PAGE.url, tabId: PAGE.tabId, text: DOM_SELECTION });
+    expect(storedDraft(chromeMock)).toEqual(draft);
+  });
+
+  // The fallback window's own tab is the active one there, so the draft that opened it is all
+  // there is — comparing tabs would throw away the capture the user just started.
+  it('resumes the pending draft inside the fallback window', async () => {
+    const pending = buildDraft({ term: 'Half typed' });
+    seedDraft(chromeMock, pending);
+    chromeMock.tabs.query.mockResolvedValue([
+      { id: 999, url: 'chrome-extension://cuewise/popup.html' } as chrome.tabs.Tab,
+    ]);
+
+    expect(await chromeCapturePopupApi.loadDraft()).toEqual(pending);
   });
 
   it('drafts a concept from the active tab when nothing is pending', async () => {

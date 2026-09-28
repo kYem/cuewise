@@ -79,7 +79,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!isCaptureSaveMessage(msg)) {
     return false;
   }
-  saveCapture(msg.draft).then(sendResponse);
+  saveCapture(msg.draft)
+    .then(sendResponse)
+    .catch((error: unknown) => {
+      // The popup closes on save and can be dismissed mid-write, so its port is often already
+      // gone by the time the reply lands. The write itself has finished either way.
+      logger.debug('Could not answer a capture save', { error });
+    });
   return true;
 });
 

@@ -75,6 +75,8 @@ describe('splitQuoteSelection', () => {
     ['is the only line', SELECTIONS.onlyAttribution],
     ['is a bare dash', SELECTIONS.bareDash],
     ['is the flattened context-menu text', SELECTIONS.singleLine],
+    ['is the last item of a bullet list', SELECTIONS.bulletList],
+    ['is the last item of a bullet list under a lead-in', SELECTIONS.bulletListWithLead],
   ])('infers no author when the last line %s', (_, text) => {
     expect(splitQuoteSelection(text)).toEqual({ text: text.trim(), author: '' });
   });

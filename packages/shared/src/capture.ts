@@ -100,6 +100,8 @@ export function splitConceptSelection(text: string): { term: string; definition:
   return { term: '', definition: text.trim() };
 }
 
+const DASH_LED = /^[—–-]/;
+
 /** A short last line opening with a dash is the attribution: "…quote.\n— Oscar Wilde". */
 export function splitQuoteSelection(text: string): { text: string; author: string } {
   const lines = text.split(/\r?\n/);
@@ -108,9 +110,16 @@ export function splitQuoteSelection(text: string): { text: string; author: strin
   if (last === undefined || indexes.length < 2) {
     return { text: text.trim(), author: '' };
   }
+  // Several dash-led lines are a bullet list, whose last item is not an attribution.
+  const dashLed = indexes.filter((index) => DASH_LED.test(lines[index].trim()));
   const attribution = lines[last].trim();
   const author = attribution.replace(/^[—–-]+\s*/, '').trim();
-  if (attribution.length <= MAX_AUTHOR_LINE_LENGTH && /^[—–-]/.test(attribution) && author !== '') {
+  if (
+    dashLed.length === 1 &&
+    attribution.length <= MAX_AUTHOR_LINE_LENGTH &&
+    DASH_LED.test(attribution) &&
+    author !== ''
+  ) {
     return { text: lines.slice(0, last).join('\n').trim(), author };
   }
   return { text: text.trim(), author: '' };
