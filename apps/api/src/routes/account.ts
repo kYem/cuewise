@@ -1,7 +1,9 @@
 import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import type { Env } from '../env';
+import { detach } from '../http';
 import type { AppDepsResolved } from '../index';
+import { revokeRemovedGrants } from './notion';
 
 export function registerAccountRoutes(
   app: Hono<{ Bindings: Env } & AuthVars>,
@@ -23,7 +25,11 @@ export function registerAccountRoutes(
 
   app.delete('/v1/account', async (c) => {
     const store = deps.storeFactory(c.env.DB);
-    await store.deleteUser(c.get('userId'));
+    const userId = c.get('userId');
+    const removed = await store.deleteUser(userId);
+    // The rows are already gone, so the revoke has nothing left to retry from — but it must not
+    // hold the 204 either, or a client timeout reads a finished delete as a failure.
+    await detach(c, revokeRemovedGrants(deps.notionClientFactory(c.env), c.env, userId, removed));
     return c.body(null, 204);
   });
 }

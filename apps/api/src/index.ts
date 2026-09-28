@@ -1,4 +1,5 @@
 import { logger } from '@cuewise/shared';
+import type { MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { type AuthVars, requireSession } from './auth-middleware';
@@ -6,6 +7,7 @@ import { resolveAllowedOrigin } from './cors';
 import { D1SyncStore } from './d1-store';
 import type { Env } from './env';
 import { ipRateLimit } from './ip-rate-limit';
+import { createNotionClient, type NotionClient } from './notion-client';
 import { problem } from './problem-details';
 import { rateLimit } from './rate-limit';
 import { registerAccountRoutes } from './routes/account';
@@ -18,6 +20,7 @@ import {
   registerGoogleRoutes,
 } from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
+import { NOTION_CALLBACK_PATH, registerNotionRoutes } from './routes/notion';
 import { registerPairingsRoutes } from './routes/pairings';
 import { registerSessionsRoutes } from './routes/sessions';
 import { registerWeatherRoutes, type UpstreamFetch } from './routes/weather';
@@ -30,9 +33,22 @@ export type AppDeps = {
   appleVerifier?: IdTokenVerifier;
   googleCodeExchanger?: GoogleCodeExchanger;
   weatherUpstream?: UpstreamFetch;
+  notionClientFactory?: (env: Env) => NotionClient;
 };
 
 export type AppDepsResolved = Required<AppDeps>;
+
+type NotionMiddleware = MiddlewareHandler<{ Bindings: Env } & AuthVars>;
+
+/** Applies `inner` to every route under the Notion prefix except the provider's own redirect. */
+function exceptNotionCallback(inner: NotionMiddleware): NotionMiddleware {
+  return (c, next) => {
+    if (c.req.path === NOTION_CALLBACK_PATH) {
+      return next();
+    }
+    return inner(c, next);
+  };
+}
 
 export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars> {
   const resolved: AppDepsResolved = {
@@ -41,6 +57,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
     appleVerifier: deps.appleVerifier ?? verifyAppleIdToken,
     googleCodeExchanger: deps.googleCodeExchanger ?? exchangeGoogleCode,
     weatherUpstream: deps.weatherUpstream ?? ((url, init) => fetch(url, init)),
+    notionClientFactory: deps.notionClientFactory ?? ((env) => createNotionClient(env)),
   };
   const app = new Hono<{ Bindings: Env } & AuthVars>();
 
@@ -73,6 +90,9 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
+  // Every Notion route but the callback, which Notion itself redirects to. Enumerating them was
+  // how a new one silently shipped unauthenticated, since Hono skips middleware added after it.
+  app.use('/v1/integrations/notion/*', exceptNotionCallback(auth));
 
   const perTokenRateLimit = rateLimit((env) => resolved.storeFactory(env.DB), {
     limit: 60,
@@ -84,6 +104,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/pairings/*', perTokenRateLimit);
   app.use('/v1/export', perTokenRateLimit);
   app.use('/v1/account', perTokenRateLimit);
+  app.use('/v1/integrations/notion/*', exceptNotionCallback(perTokenRateLimit));
 
   // Unauthenticated, so only an IP-keyed limiter applies here.
   const authSurfaceRateLimit = ipRateLimit();
@@ -92,6 +113,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/auth/apple/callback', authSurfaceRateLimit);
   app.use('/v1/auth/google/start', authSurfaceRateLimit);
   app.use('/v1/auth/google/callback', authSurfaceRateLimit);
+  app.use('/v1/integrations/notion/callback', authSurfaceRateLimit);
   // Separate instances, because counters are per-middleware and these three surfaces fail
   // differently: sign-in must never be locked out by weather traffic, and a forecast is
   // fetched at most twice an hour per device while a search fires as the user types. One
@@ -108,6 +130,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   registerPairingsRoutes(app, resolved);
   registerAccountRoutes(app, resolved);
   registerWeatherRoutes(app, resolved);
+  registerNotionRoutes(app, resolved);
 
   app.notFound(() => {
     return problem('not_found');

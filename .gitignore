@@ -173,6 +173,13 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules/
 
+# Third-party agent skills from `npx skills add` — local tooling, not vendored into the repo.
+# .claude/skills/ itself stays tracked (cuewise-design lives there), so each installed skill's
+# symlink is named explicitly rather than ignoring the directory and burying a future first-party one.
+.agents/
+skills-lock.json
+.claude/skills/notion-cli
+
 # macOS
 .DS_Store
 **/.DS_Store

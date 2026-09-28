@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { spyOnLoggerError, spyOnLoggerWarn } from './__fixtures__/logger.fixtures';
+import { TEST_FOREIGN_PROVIDER_KEY, TEST_PROVIDER_KEY } from './__fixtures__/notion.fixtures';
 import {
   base64UrlDecodeString,
+  base64UrlEncode,
   base64UrlEncodeString,
   bearerToken,
+  decryptSecret,
+  encryptSecret,
+  isSecretKey,
   sha256Base64Url,
   signState,
   verifyState,
@@ -166,5 +171,69 @@ describe('signState / verifyState', () => {
     await verifyState(stateB, cacheKey);
 
     expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('encryptSecret / decryptSecret', () => {
+  const KEY = TEST_PROVIDER_KEY;
+  const OTHER_KEY = TEST_FOREIGN_PROVIDER_KEY;
+
+  it('round-trips a token', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    await expect(decryptSecret({ ciphertext, iv }, KEY)).resolves.toBe('secret-abc');
+  });
+
+  it('keeps the plaintext out of its own output', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    expect(ciphertext).not.toContain('secret-abc');
+    expect(iv).not.toContain('secret-abc');
+  });
+
+  it('uses a fresh iv per call, so equal plaintexts encrypt differently', async () => {
+    const first = await encryptSecret('same', KEY);
+    const second = await encryptSecret('same', KEY);
+    expect(first.iv).not.toBe(second.iv);
+    expect(first.ciphertext).not.toBe(second.ciphertext);
+  });
+
+  it('rejects a wrong key rather than returning garbage', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    await expect(decryptSecret({ ciphertext, iv }, OTHER_KEY)).rejects.toThrow();
+  });
+
+  it('rejects a tampered ciphertext', async () => {
+    const { ciphertext, iv } = await encryptSecret('secret-abc', KEY);
+    const flipped = `${ciphertext.startsWith('A') ? 'B' : 'A'}${ciphertext.slice(1)}`;
+    await expect(decryptSecret({ ciphertext: flipped, iv }, KEY)).rejects.toThrow();
+  });
+
+  it('round-trips a token carrying non-ascii', async () => {
+    const { ciphertext, iv } = await encryptSecret('naïve—token', KEY);
+    await expect(decryptSecret({ ciphertext, iv }, KEY)).resolves.toBe('naïve—token');
+  });
+
+  it('imports the key once and reuses it across repeated seals and opens', async () => {
+    const importSpy = vi.spyOn(crypto.subtle, 'importKey');
+    const freshKey = base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+
+    const sealed = await encryptSecret('a', freshKey);
+    await encryptSecret('b', freshKey);
+    await decryptSecret(sealed, freshKey);
+
+    expect(importSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a key that does not decode to 32 bytes', async () => {
+    await expect(encryptSecret('x', 'c2hvcnQ')).rejects.toThrow(/32 bytes/);
+  });
+});
+
+describe('isSecretKey', () => {
+  it('accepts exactly 32 bytes of base64url and nothing else', () => {
+    expect(isSecretKey('A'.repeat(43))).toBe(true);
+    expect(isSecretKey('A'.repeat(42))).toBe(false);
+    expect(isSecretKey('A'.repeat(44))).toBe(false);
+    expect(isSecretKey('')).toBe(false);
+    expect(isSecretKey('not base64url!')).toBe(false);
   });
 });

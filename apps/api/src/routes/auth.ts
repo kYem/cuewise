@@ -7,8 +7,10 @@ import type { Env } from '../env';
 import { parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
-import type { Identity, SyncStore } from '../store';
+import type { Identity, SealedGrant, SyncStore } from '../store';
 import { verifyOrProblem } from '../verifiers';
+import { CODE_VERIFIER_RE, codeVerifierIssue } from './bounce-shared';
+import { revokeParkedGrant } from './notion';
 
 /** localhost/loopback hosts, the only places the dev auth bypass may run. */
 function isLocalhostBaseUrl(baseUrl: string): boolean {
@@ -37,31 +39,6 @@ function isDevAuthEnabled(env: Env): boolean {
 export const MAX_DEVICE_NAME_LENGTH = MAX_DEVICE_NAME_BYTES;
 // Real ID tokens run 1-2 KB and the bounce one-time codes are 43 chars; this just caps abuse.
 const MAX_CREDENTIAL_LENGTH = 8192;
-// RFC 7636 §4.1: a PKCE code_verifier is 43-128 characters from the unreserved set
-// [A-Za-z0-9._~-]. ASCII-only, so byte length and character length are provably identical.
-const MIN_CODE_VERIFIER_LENGTH = 43;
-const MAX_CODE_VERIFIER_LENGTH = 128;
-const CODE_VERIFIER_RE = new RegExp(
-  `^[A-Za-z0-9._~-]{${MIN_CODE_VERIFIER_LENGTH},${MAX_CODE_VERIFIER_LENGTH}}$`
-);
-
-/** Picks the most specific violation for a failing `CODE_VERIFIER_RE` test; the regex still decides pass/fail. */
-function codeVerifierIssue(value: unknown): ValidationIssue {
-  const pointer = '/codeVerifier';
-  if (typeof value !== 'string' || value === '') {
-    return { pointer, detail: 'required non-empty string' };
-  }
-  if (value.length < MIN_CODE_VERIFIER_LENGTH) {
-    return { pointer, detail: `must be at least ${MIN_CODE_VERIFIER_LENGTH} characters` };
-  }
-  if (value.length > MAX_CODE_VERIFIER_LENGTH) {
-    return { pointer, detail: `must not exceed ${MAX_CODE_VERIFIER_LENGTH} characters` };
-  }
-  return {
-    pointer,
-    detail: 'must contain only characters from the unreserved set [A-Za-z0-9._~-]',
-  };
-}
 
 function parseTokenRequest(body: unknown): ExchangeTokenRequest | ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -105,13 +82,21 @@ async function redeemBouncedCode(
   store: SyncStore,
   provider: 'apple' | 'google',
   credential: string,
-  codeVerifier: string
+  codeVerifier: string,
+  revokeParked: (grant: SealedGrant) => Promise<void>
 ): Promise<Identity | Response> {
   const consumed = await store.consumeAuthCode(credential);
   if (consumed === null) {
     // Unknown, expired, or ALREADY-BURNED — a replay of a burned code is the interception
     // signal burn-before-verify exists to catch, so it must be visible. Metadata only.
     logger.warn(`${provider} auth-code exchange with an unknown, expired, or already-used code`);
+    return problem('invalid_token');
+  }
+  // A parked third-party grant is redeemed at its own endpoint; presenting it here burns its
+  // code, so the grant can never be claimed and must not stay live at the provider.
+  if (consumed.payload.provider === 'notion') {
+    logger.warn(`auth-code exchange presented a parked notion grant as a ${provider} sign-in`);
+    await revokeParked(consumed.payload.grant);
     return problem('invalid_token');
   }
   // The code is already burned here; a verifier mismatch fails closed rather than
@@ -157,7 +142,8 @@ export function registerAuthRoutes(
         store,
         parsed.provider,
         parsed.credential,
-        parsed.codeVerifier
+        parsed.codeVerifier,
+        (grant) => revokeParkedGrant(deps.notionClientFactory(c.env), grant, c.env)
       );
       if (redeemed instanceof Response) {
         return redeemed;

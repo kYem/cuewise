@@ -3,6 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { clockedStore } from './__fixtures__/api-test-helpers.fixtures';
 import { spyOnLoggerError } from './__fixtures__/logger.fixtures';
 import { SESSION_TTL_MS } from './d1-store';
+import type { SealedGrant } from './store';
+
+const parkedSealedGrant: SealedGrant = {
+  ciphertext: 'ct',
+  iv: 'iv',
+  refreshCiphertext: null,
+  refreshIv: null,
+  workspace: null,
+};
 
 describe('D1SyncStore auth', () => {
   it('findOrCreateUser returns the same user for the same identity', async () => {
@@ -132,6 +141,113 @@ describe('D1SyncStore auth', () => {
       throw new Error('expected a count row');
     }
     expect(row.count).toBe(1);
+  });
+
+  it('mintAuthCode leaves an expired parked notion grant for the purge that revokes it', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await store.mintAuthCode({ provider: 'notion', grant: parkedSealedGrant }, 'c1');
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge3', email: 'p3@e.c' }, 'c2');
+    tick(61_000);
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge4', email: 'p4@e.c' }, 'c3');
+    const row = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    if (row === null) {
+      throw new Error('expected a count row');
+    }
+    expect(row.count).toBe(2);
+
+    const parked = await store.listExpiredParkedGrants(62_000, 10, null);
+
+    expect(parked.map((p) => p.grant)).toEqual([parkedSealedGrant]);
+  });
+
+  it('purgeExpiredSignInCodes leaves an expired parked grant for its revoke', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await store.mintAuthCode({ provider: 'notion', grant: parkedSealedGrant }, 'c1');
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge6', email: 'p6@e.c' }, 'c2');
+    tick(61_000);
+
+    const purged = await store.purgeExpiredSignInCodes(62_000);
+
+    expect(purged).toBe(1);
+    expect(await store.listExpiredParkedGrants(62_000, 10, null)).toHaveLength(1);
+  });
+
+  it('listExpiredParkedGrants skips unexpired grants and honours the limit, oldest first', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await store.mintAuthCode({ provider: 'notion', grant: parkedSealedGrant }, 'c1');
+    tick(1_000);
+    await store.mintAuthCode(
+      { provider: 'notion', grant: { ...parkedSealedGrant, iv: 'iv2' } },
+      'c2'
+    );
+    tick(100_000);
+    await store.mintAuthCode(
+      { provider: 'notion', grant: { ...parkedSealedGrant, iv: 'iv3' } },
+      'c3'
+    );
+
+    const parked = await store.listExpiredParkedGrants(102_000, 1, null);
+
+    expect(parked.map((p) => p.grant.iv)).toEqual(['iv']);
+    expect(parked[0]?.expiresAt).toBe(61_000);
+  });
+
+  it('listExpiredParkedGrants resumes after the cursor it is given', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await store.mintAuthCode({ provider: 'notion', grant: parkedSealedGrant }, 'c1');
+    tick(1_000);
+    await store.mintAuthCode(
+      { provider: 'notion', grant: { ...parkedSealedGrant, iv: 'iv2' } },
+      'c2'
+    );
+    tick(100_000);
+    const [first] = await store.listExpiredParkedGrants(102_000, 1, null);
+    if (first === undefined) {
+      throw new Error('expected a parked grant');
+    }
+
+    const rest = await store.listExpiredParkedGrants(102_000, 10, first);
+
+    expect(rest.map((p) => p.grant.iv)).toEqual(['iv2']);
+  });
+
+  it('deleteAuthCode removes only the named parked grant', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await store.mintAuthCode({ provider: 'notion', grant: parkedSealedGrant }, 'c1');
+    await store.mintAuthCode(
+      { provider: 'notion', grant: { ...parkedSealedGrant, iv: 'iv2' } },
+      'c2'
+    );
+    tick(61_000);
+    const [first] = await store.listExpiredParkedGrants(62_000, 1, null);
+    if (first === undefined) {
+      throw new Error('expected a parked grant');
+    }
+
+    await store.deleteAuthCode(first.codeHash);
+
+    const left = await store.listExpiredParkedGrants(62_000, 10, null);
+    expect(left).toHaveLength(1);
+    expect(left[0]?.codeHash).not.toBe(first.codeHash);
+  });
+
+  it('mintAuthCode still sweeps an expired row whose payload names no provider', async () => {
+    const { store, tick } = clockedStore(1_000);
+    await env.DB.prepare(
+      'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
+    )
+      .bind('legacy-hash', JSON.stringify({ legacy: true }), 2_000, 'c0')
+      .run();
+    tick(61_000);
+
+    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge5', email: 'p5@e.c' }, 'c5');
+
+    const row = await env.DB.prepare('SELECT COUNT(*) as count FROM auth_codes').first<{
+      count: number;
+    }>();
+    expect(row?.count).toBe(1);
   });
 
   it('refreshes identities.email and users.email when a later sign-in has a new email', async () => {

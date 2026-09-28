@@ -1,4 +1,4 @@
-// Shared helpers for the server-bounce route tests (apple-auth.test.ts, google-auth.test.ts).
+// Shared helpers for the server-bounce route tests (Apple and Google sign-in, Notion connect).
 
 // Fixed 43-char base64url verifiers; no randomness needed for PKCE binding tests.
 export const TEST_CODE_VERIFIER = 'a'.repeat(43);

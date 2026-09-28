@@ -10,6 +10,12 @@ export interface Env {
   PUBLIC_BASE_URL: string;
   ALLOWED_RETURN_URIS: string;
   STATE_SIGNING_KEY: string;
+  // Secret (wrangler secret put), 32 bytes base64url; seals third-party provider tokens at rest.
+  PROVIDER_TOKEN_KEY: string;
+  NOTION_CLIENT_ID: string;
+  // Secret (wrangler secret put); a Notion integration is a confidential client, so the code
+  // exchange is server-side.
+  NOTION_CLIENT_SECRET: string;
   DEV_FAKE_AUTH?: string;
   // Comma-separated browser origins allowed CORS access (e.g. the future web app).
   // Empty in production by default; localhost is auto-allowed only under DEV_FAKE_AUTH.
