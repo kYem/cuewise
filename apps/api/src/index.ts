@@ -1,4 +1,5 @@
 import { logger } from '@cuewise/shared';
+import type { MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { type AuthVars, requireSession } from './auth-middleware';
@@ -19,7 +20,7 @@ import {
   registerGoogleRoutes,
 } from './routes/google';
 import { registerKeysRoutes } from './routes/keys';
-import { registerNotionRoutes } from './routes/notion';
+import { NOTION_CALLBACK_PATH, registerNotionRoutes } from './routes/notion';
 import { registerPairingsRoutes } from './routes/pairings';
 import { registerSessionsRoutes } from './routes/sessions';
 import { registerWeatherRoutes, type UpstreamFetch } from './routes/weather';
@@ -36,6 +37,18 @@ export type AppDeps = {
 };
 
 export type AppDepsResolved = Required<AppDeps>;
+
+type NotionMiddleware = MiddlewareHandler<{ Bindings: Env } & AuthVars>;
+
+/** Applies `inner` to every route under the Notion prefix except the provider's own redirect. */
+function exceptNotionCallback(inner: NotionMiddleware): NotionMiddleware {
+  return (c, next) => {
+    if (c.req.path === NOTION_CALLBACK_PATH) {
+      return next();
+    }
+    return inner(c, next);
+  };
+}
 
 export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars> {
   const resolved: AppDepsResolved = {
@@ -77,14 +90,9 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/export', auth);
   app.use('/v1/account', auth);
   app.use('/v1/auth/logout', auth);
-  // One by one, not /v1/integrations/*: the callback must stay unauthenticated, and a wildcard
-  // would cover it too.
-  app.use('/v1/integrations/notion', auth);
-  app.use('/v1/integrations/notion/start', auth);
-  app.use('/v1/integrations/notion/tables', auth);
-  app.use('/v1/integrations/notion/selection', auth);
-  app.use('/v1/integrations/notion/claim', auth);
-  app.use('/v1/integrations/notion/items/*', auth);
+  // Every Notion route but the callback, which Notion itself redirects to. Enumerating them was
+  // how a new one silently shipped unauthenticated, since Hono skips middleware added after it.
+  app.use('/v1/integrations/notion/*', exceptNotionCallback(auth));
 
   const perTokenRateLimit = rateLimit((env) => resolved.storeFactory(env.DB), {
     limit: 60,
@@ -96,12 +104,7 @@ export function createApp(deps: AppDeps = {}): Hono<{ Bindings: Env } & AuthVars
   app.use('/v1/pairings/*', perTokenRateLimit);
   app.use('/v1/export', perTokenRateLimit);
   app.use('/v1/account', perTokenRateLimit);
-  app.use('/v1/integrations/notion', perTokenRateLimit);
-  app.use('/v1/integrations/notion/start', perTokenRateLimit);
-  app.use('/v1/integrations/notion/tables', perTokenRateLimit);
-  app.use('/v1/integrations/notion/selection', perTokenRateLimit);
-  app.use('/v1/integrations/notion/claim', perTokenRateLimit);
-  app.use('/v1/integrations/notion/items/*', perTokenRateLimit);
+  app.use('/v1/integrations/notion/*', exceptNotionCallback(perTokenRateLimit));
 
   // Unauthenticated, so only an IP-keyed limiter applies here.
   const authSurfaceRateLimit = ipRateLimit();

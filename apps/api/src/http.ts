@@ -8,6 +8,23 @@ export const ERROR_CODE_RE = /^[a-z_]{1,64}$/;
 // declared oversized body; a chunked/under-declared one slips past to the platform body limit.
 export const MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
 
+/** Just enough of a Hono context to reach `waitUntil`, without dragging the app's bindings in. */
+interface DetachableContext {
+  executionCtx: { waitUntil: (work: Promise<unknown>) => void };
+}
+
+/**
+ * Cleanup the response must not wait for. Without an ExecutionContext — a test driving
+ * `app.request` with no ctx — it is awaited instead, because a dropped promise can be cancelled.
+ */
+export async function detach(c: DetachableContext, work: Promise<unknown>): Promise<void> {
+  try {
+    c.executionCtx.waitUntil(work);
+  } catch {
+    await work;
+  }
+}
+
 interface JsonRequestContext {
   req: {
     json: () => Promise<unknown>;

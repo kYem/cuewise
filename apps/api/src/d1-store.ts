@@ -556,20 +556,28 @@ export class D1SyncStore implements SyncStore {
   }
 
   async deleteUser(userId: string): Promise<ProviderConnection[]> {
-    const results = await this.db.batch<ProviderConnectionRow>([
+    // Held by reference, so the grants are read back by position without anyone counting
+    // statements: a table added to this batch would otherwise silently return no grants to revoke.
+    const grants = this.db
+      .prepare(
+        `DELETE FROM provider_tokens WHERE user_id = ? RETURNING ${PROVIDER_CONNECTION_COLUMNS}`
+      )
+      .bind(userId);
+    const statements = [
       this.db.prepare('DELETE FROM records WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM tokens WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM identities WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM key_envelopes WHERE user_id = ?').bind(userId),
       this.db.prepare('DELETE FROM pairings WHERE user_id = ?').bind(userId),
-      this.db
-        .prepare(
-          `DELETE FROM provider_tokens WHERE user_id = ? RETURNING ${PROVIDER_CONNECTION_COLUMNS}`
-        )
-        .bind(userId),
+      grants,
       this.db.prepare('DELETE FROM users WHERE id = ?').bind(userId),
-    ]);
-    return (results[5]?.results ?? []).map(toProviderConnection);
+    ];
+    const results = await this.db.batch<ProviderConnectionRow>(statements);
+    const removed = results[statements.indexOf(grants)];
+    if (removed === undefined) {
+      throw new Error('deleteUser: the provider_tokens delete returned no result set');
+    }
+    return removed.results.map(toProviderConnection);
   }
 
   async purgeTombstones(retentionMs: number): Promise<number> {

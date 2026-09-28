@@ -969,8 +969,10 @@ describe('unclaimed parked grants', () => {
     );
 
     expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 0, abandoned: 1 });
+    // The row is deleted here, so the log is all an operator has left to find the live token.
     expect(errorSpy).toHaveBeenCalledWith(
-      'Gave up revoking an unclaimed Notion grant; it may still be live at Notion'
+      'Gave up revoking an unclaimed Notion grant; it may still be live at Notion',
+      { codeHash: expect.any(String), expiresAt: 61_000, workspace: 'Acme' }
     );
     expect(await clocked.listExpiredParkedGrants(now, 10, null)).toEqual([]);
   });

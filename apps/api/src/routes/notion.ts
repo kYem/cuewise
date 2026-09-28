@@ -1,5 +1,5 @@
 import { DAY_IN_MS, logger } from '@cuewise/shared';
-import type { Context, Hono } from 'hono';
+import type { Hono } from 'hono';
 import type { AuthVars } from '../auth-middleware';
 import {
   decryptSecret,
@@ -12,7 +12,7 @@ import {
   verifyState,
 } from '../crypto-utils';
 import type { Env } from '../env';
-import { ERROR_CODE_RE, parseJsonBody } from '../http';
+import { detach, ERROR_CODE_RE, parseJsonBody } from '../http';
 import type { AppDepsResolved } from '../index';
 import {
   NotionAuthError,
@@ -46,6 +46,8 @@ import {
 
 const PROVIDER = 'notion';
 const NOTION_AUTHORIZE_URL = 'https://api.notion.com/v1/oauth/authorize';
+/** Notion redirects here itself, so it is the one route under the prefix that carries no session. */
+export const NOTION_CALLBACK_PATH = '/v1/integrations/notion/callback';
 // Notion ids are UUIDs, dashed or not. Anything else is not an id, and would ride into an
 // upstream URL path otherwise.
 const NOTION_ID_RE =
@@ -163,19 +165,6 @@ export async function revokeDisplacedGrant(
     return true;
   }
   return revokeUpstream(client, displaced, userId);
-}
-
-// Cleanup the caller must not wait for. Without an ExecutionContext — a test driving `app.request`
-// with no ctx — it is awaited instead, because a dropped promise can be cancelled mid-flight.
-async function detach(
-  c: Context<{ Bindings: Env } & AuthVars>,
-  work: Promise<unknown>
-): Promise<void> {
-  try {
-    c.executionCtx.waitUntil(work);
-  } catch {
-    await work;
-  }
 }
 
 /** `revokeUpstream` for a sealed grant; one that cannot be opened is logged and skipped. */
@@ -483,7 +472,13 @@ export async function revokeExpiredParkedGrants(
         await store.deleteAuthCode(parked.codeHash);
         sweep.revoked += 1;
       } else if (now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
-        logger.error('Gave up revoking an unclaimed Notion grant; it may still be live at Notion');
+        // The row is about to go, so name it: the hash of a long-expired single-use code is the
+        // only handle an operator has for the token left live at Notion.
+        logger.error('Gave up revoking an unclaimed Notion grant; it may still be live at Notion', {
+          codeHash: parked.codeHash,
+          expiresAt: parked.expiresAt,
+          workspace: parked.grant.workspace,
+        });
         await store.deleteAuthCode(parked.codeHash);
         sweep.abandoned += 1;
       } else {
@@ -595,7 +590,7 @@ export function registerNotionRoutes(
 
   // Unauthenticated: Notion redirects a browser here. It parks the grant behind a one-time
   // PKCE-bound code on the deep link; /claim binds it to a session.
-  app.get('/v1/integrations/notion/callback', async (c) => {
+  app.get(NOTION_CALLBACK_PATH, async (c) => {
     const signingKey = requireStateSigningKey(c.env);
     if (signingKey === null) {
       return problem('internal');
@@ -906,7 +901,7 @@ export function registerNotionRoutes(
     if (removed === null) {
       return problem('provider_not_connected');
     }
-    await revokeSealed(client(c.env), removed, c.env, userId);
+    await detach(c, revokeSealed(client(c.env), removed, c.env, userId));
     return c.body(null, 204);
   });
 }
