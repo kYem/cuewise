@@ -89,6 +89,7 @@ export const conceptCardSchema = z.object({
   details: z.optional(z.string()),
   tags: z.optional(z.array(z.string())),
   source: z.optional(z.string()),
+  sourceUrl: z.optional(z.string()),
   isFavorite: z.optional(z.boolean()),
   createdAt: z.string(),
   schedule: conceptScheduleSchema,

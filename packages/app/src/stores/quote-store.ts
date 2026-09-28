@@ -2,6 +2,7 @@ import {
   ALL_QUOTE_CATEGORIES,
   assertPersisted,
   type BulkImportResult,
+  buildCustomQuote,
   type CSVQuoteRow,
   DEFAULT_SETTINGS,
   generateId,
@@ -555,18 +556,7 @@ export const useQuoteStore = create<QuoteStore>((set, get) => ({
     notes?: string
   ) => {
     try {
-      const newQuote: Quote = {
-        id: `custom-${Date.now()}`,
-        text,
-        author,
-        category,
-        isCustom: true,
-        isFavorite: false,
-        isHidden: false,
-        viewCount: 0,
-        source,
-        notes,
-      };
+      const newQuote = buildCustomQuote({ text, author, category, source, notes });
 
       const { result, quotes: updatedQuotes } = await updateQuotes((current) => [
         ...current,

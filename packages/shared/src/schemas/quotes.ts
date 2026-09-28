@@ -30,6 +30,7 @@ export const quoteSchema = z.object({
   viewCount: z.number(),
   lastViewed: z.optional(z.string()),
   source: z.optional(z.string()),
+  sourceUrl: z.optional(z.string()),
   notes: z.optional(z.string()),
   collectionIds: z.optional(z.array(z.string())),
 });

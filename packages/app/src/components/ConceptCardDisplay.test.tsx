@@ -188,4 +188,23 @@ describe('ConceptCardDisplay', () => {
 
     expect(onToggleFavorite).toHaveBeenCalled();
   });
+
+  it('links the source to the page the card was captured from', () => {
+    renderCard({
+      activeRecall: false,
+      card: { ...card, source: 'Martin Fowler', sourceUrl: 'https://martinfowler.com/saga' },
+    });
+
+    const link = screen.getByRole('link', { name: 'Martin Fowler' });
+    expect(link).toHaveAttribute('href', 'https://martinfowler.com/saga');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('shows a source without a captured page as plain text', () => {
+    renderCard({ activeRecall: false, card: { ...card, source: 'DDIA, ch. 9' } });
+
+    expect(screen.getByText('DDIA, ch. 9')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
 });

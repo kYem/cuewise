@@ -13,7 +13,7 @@ Cuewise is open source and local-first. Your goals, quotes, sessions, and settin
 - **Nothing leaves your device by default.** Three features can send data, and each is off until you turn it on: end-to-end encrypted Cloud Sync, the Google Calendar agenda, and the Weather widget.
 - **Cloud Sync is end-to-end encrypted.** Your data is encrypted on your device before it is sent. The server stores ciphertext it cannot read.
 - **No analytics, no telemetry, no third-party trackers.** There is no tracking code in this repository.
-- **Three permissions at install:** `storage`, `notifications`, `alarms`. Nothing else. Google access (`identity`) is an *optional* permission requested at runtime only if you connect Calendar or sign in to Sync — install it and never touch those, and you grant nothing Google-related.
+- **Six permissions at install:** `storage`, `notifications`, `alarms`, plus `contextMenus`, `activeTab` and `scripting` for saving a selection from any page: menu items, and reading the URL, title and selected text of the one tab you're on — only at the moment you click Save, never otherwise, and nothing is kept except the item you save. Nothing else. Google access (`identity`) is an *optional* permission requested at runtime only if you connect Calendar or sign in to Sync — install it and never touch those, and you grant nothing Google-related.
 
 Full details in the [privacy policy](https://cuewise.app/privacy).
 

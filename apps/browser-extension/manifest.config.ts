@@ -42,7 +42,16 @@ export default defineManifest(async (env) => {
     hostPermissions.push('http://localhost:5173/*');
   }
 
-  const permissions: string[] = ['storage', 'notifications', 'alarms'];
+  // contextMenus/activeTab/scripting carry no install warning, so an update neither re-prompts nor
+  // disables the extension. activeTab reaches only the tab the user just acted on.
+  const permissions: string[] = [
+    'storage',
+    'notifications',
+    'alarms',
+    'contextMenus',
+    'activeTab',
+    'scripting',
+  ];
 
   // Calendar is opt-in: `identity` + the Google API hosts (Calendar API +
   // oauth2 token revoke) are declared optional and requested at runtime from the
@@ -124,6 +133,13 @@ export default defineManifest(async (env) => {
     },
     action: {
       default_title: 'Cuewise',
+      default_popup: 'popup.html',
+    },
+    commands: {
+      _execute_action: {
+        suggested_key: { default: 'Alt+Shift+C' },
+        description: 'Save selection to Cuewise',
+      },
     },
     background: {
       service_worker: 'src/background.ts',

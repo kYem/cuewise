@@ -457,7 +457,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `apps/browser-extension/src/stores/` | 9 Zustand stores | Adding features with state |
 | `apps/browser-extension/src/components/` | ~60 React components | Adding new UI elements |
 | `apps/browser-extension/src/App.tsx` | Hash routing, theme system | Adding new pages |
-| `apps/browser-extension/manifest.json` | Extension config (Manifest V3) | Changing permissions/behavior |
+| `apps/browser-extension/src/capture/` | Page capture: context menu, session draft, SW-owned save | Changing what a capture saves |
+| `apps/browser-extension/manifest.config.ts` | Extension config (Manifest V3) | Changing permissions/behavior |
 | `turbo.json` | Build pipeline | Optimizing builds |
 | `biome.json` | Linting/formatting | Changing code style rules |
 

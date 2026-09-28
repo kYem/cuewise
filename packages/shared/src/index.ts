@@ -1,5 +1,7 @@
 // Export all types
 
+// Export browser-capture builders and selection inference
+export * from './capture';
 // Export concept-card spaced repetition
 export * from './concept-cards';
 // Export constants

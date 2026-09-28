@@ -4,6 +4,7 @@ import {
   type ConceptCard,
   type ConceptGrade,
   conceptIntervalLabel,
+  deriveQuickLinkTitle,
   projectConceptInterval,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
@@ -58,6 +59,8 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
   const [revealed, setRevealed] = useState(!activeRecall);
 
   const topic = card.tags?.[0];
+  const sourceLabel =
+    card.source ?? (card.sourceUrl ? deriveQuickLinkTitle(card.sourceUrl) : undefined);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -132,7 +135,7 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
             </div>
           )}
 
-          {(card.tags?.length || card.source) && (
+          {(card.tags?.length || sourceLabel) && (
             <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
               {card.tags?.map((tag) => (
                 <span
@@ -142,9 +145,19 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
                   {tag}
                 </span>
               ))}
-              {card.source && (
+              {sourceLabel && card.sourceUrl && (
+                <a
+                  href={card.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 inline-flex items-center gap-1.5 text-[11px] text-tertiary underline-offset-2 hover:text-primary hover:underline"
+                >
+                  <BookOpen className="h-3 w-3" /> {sourceLabel}
+                </a>
+              )}
+              {sourceLabel && !card.sourceUrl && (
                 <span className="ml-1 inline-flex items-center gap-1.5 text-[11px] text-tertiary">
-                  <BookOpen className="h-3 w-3" /> {card.source}
+                  <BookOpen className="h-3 w-3" /> {sourceLabel}
                 </span>
               )}
             </div>
