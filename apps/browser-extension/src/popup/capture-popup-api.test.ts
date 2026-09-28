@@ -39,15 +39,15 @@ describe('chromeCapturePopupApi.loadDraft', () => {
   });
 
   // The fallback window's own tab is the active one there, so the draft that opened it is all
-  // there is — comparing tabs would throw away the capture the user just started.
-  it('resumes the pending draft inside the fallback window', async () => {
-    const pending = buildDraft({ term: 'Half typed' });
+  // there is — comparing tabs would throw away the capture the user just started. `tab.url` cannot
+  // tell us: without the `tabs` permission it is undefined.
+  it('resumes a draft from any tab inside the fallback window', async () => {
+    const pending = buildDraft({ term: 'Half typed', tabId: PAGE.tabId + 1 });
     seedDraft(chromeMock, pending);
-    chromeMock.tabs.query.mockResolvedValue([
-      { id: 999, url: 'chrome-extension://cuewise/popup.html' } as chrome.tabs.Tab,
-    ]);
+    chromeMock.tabs.getCurrent.mockResolvedValue({ id: 999 } as chrome.tabs.Tab);
 
     expect(await chromeCapturePopupApi.loadDraft()).toEqual(pending);
+    expect(chromeMock.tabs.query).not.toHaveBeenCalled();
   });
 
   it('drafts a concept from the active tab when nothing is pending', async () => {

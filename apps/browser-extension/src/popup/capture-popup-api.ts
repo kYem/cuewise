@@ -17,23 +17,25 @@ export interface CapturePopupApi {
 const NO_REPLY = 'Cuewise did not answer. Please try again.';
 
 /**
- * In the fallback window the active tab is the popup itself, so the draft that opened it is all
- * there is to go on. Anywhere else, a draft from another tab is one the user walked away from —
- * resuming it would show them a capture from a page they have left.
+ * A toolbar popup is not a tab, so `getCurrent` answers only in the fallback window — where the
+ * active tab is this page and the draft that opened it is all there is to go on. Not `tab.url`:
+ * without the `tabs` permission that is undefined, so reading it discards every draft.
  */
-function belongsToActiveTab(draft: CaptureDraft, tab: chrome.tabs.Tab | undefined): boolean {
-  if (tab?.url?.startsWith(chrome.runtime.getURL(''))) {
-    return true;
-  }
-  return draft.tabId !== undefined && draft.tabId === tab?.id;
+async function openedOutsideTheToolbar(): Promise<boolean> {
+  return (await chrome.tabs.getCurrent()) !== undefined;
 }
 
 export const chromeCapturePopupApi: CapturePopupApi = {
   loadDraft: async () => {
     const pending = await readCaptureDraft();
+    if (pending !== null && (await openedOutsideTheToolbar())) {
+      return pending;
+    }
     // Opened from the icon or the shortcut: that gesture grants activeTab on the page behind.
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (pending !== null && belongsToActiveTab(pending, tab)) {
+    // A draft from another tab is one the user walked away from; resuming it would show them a
+    // capture from a page they have left.
+    if (pending !== null && pending.tabId !== undefined && pending.tabId === tab?.id) {
       return pending;
     }
     const draft: CaptureDraft = {

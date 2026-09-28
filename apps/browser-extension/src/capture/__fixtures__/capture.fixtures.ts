@@ -49,7 +49,11 @@ export function installCaptureChromeMock() {
     },
     action: { openPopup: vi.fn(async () => undefined) },
     windows: { create: vi.fn(async () => ({})) },
-    tabs: { query: vi.fn(async () => [buildSourceTab()]) },
+    tabs: {
+      query: vi.fn(async () => [buildSourceTab()]),
+      // A toolbar popup is not a tab; the fallback window and a plain tab are.
+      getCurrent: vi.fn(async () => undefined as chrome.tabs.Tab | undefined),
+    },
     contextMenus: { create: vi.fn(), removeAll: vi.fn(async () => undefined) },
     runtime: {
       getURL: (path: string) => `chrome-extension://cuewise/${path}`,
