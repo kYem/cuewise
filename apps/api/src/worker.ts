@@ -43,6 +43,9 @@ export default {
         env,
         Date.now()
       );
+      if (sweep.halted) {
+        throw new Error('parked-grant sweep halted: grants would not decrypt');
+      }
       return `scheduled purge swept ${sweep.swept} unclaimed notion grants: ${sweep.revoked} revoked, ${sweep.failed} left to retry, ${sweep.abandoned} abandoned`;
     });
     // After every job has run, so one failing purge cannot starve the others; the throw still

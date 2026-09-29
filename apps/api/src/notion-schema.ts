@@ -71,39 +71,99 @@ function groupOptionIds(groups: unknown, groupName: string): string[] {
   return [];
 }
 
+function statusCompletion(name: string, value: unknown): CompletionProperty | null {
+  const status = asRecord(asRecord(value)?.status);
+  if (status === null) {
+    return null;
+  }
+  const [first, ...rest] = groupOptionIds(status.groups, COMPLETE_GROUP);
+  if (first === undefined) {
+    return null;
+  }
+  return {
+    kind: 'status',
+    name,
+    completeOptionIds: [first, ...rest],
+    todoOptionIds: groupOptionIds(status.groups, TODO_GROUP),
+  };
+}
+
 // A status property whose groups do not match refuses rather than falling through: a renamed
 // Complete group would otherwise read completion from an unused checkbox, with no prompt.
+// Picks once, at selection; the choice is then stored, so key order never decides it again.
 export function findCompletionProperty(properties: PropertySchemas): CompletionProperty | null {
   let sawStatus = false;
   for (const [name, value] of Object.entries(properties)) {
-    const property = asRecord(value);
-    if (property === null || property.type !== 'status') {
+    if (asRecord(value)?.type !== 'status') {
       continue;
     }
     sawStatus = true;
-    const status = asRecord(property.status);
-    if (status === null) {
-      continue;
+    const found = statusCompletion(name, value);
+    if (found !== null) {
+      return found;
     }
-    const [first, ...rest] = groupOptionIds(status.groups, COMPLETE_GROUP);
-    if (first === undefined) {
-      continue;
-    }
-    return {
-      kind: 'status',
-      name,
-      completeOptionIds: [first, ...rest],
-      todoOptionIds: groupOptionIds(status.groups, TODO_GROUP),
-    };
   }
   if (sawStatus) {
     return null;
   }
-  const checkbox = asRecord(properties[CHECKBOX_NAME]);
-  if (checkbox !== null && checkbox.type === 'checkbox') {
-    return { kind: 'checkbox', name: CHECKBOX_NAME };
+  return completionPropertyNamed(properties, CHECKBOX_NAME);
+}
+
+/** The stored choice, read from a fresh schema: null once that property is gone or unusable. */
+export function completionPropertyNamed(
+  properties: PropertySchemas,
+  name: string
+): CompletionProperty | null {
+  const property = asRecord(properties[name]);
+  if (property === null) {
+    return null;
+  }
+  if (property.type === 'status') {
+    return statusCompletion(name, property);
+  }
+  if (property.type === 'checkbox' && name === CHECKBOX_NAME) {
+    return { kind: 'checkbox', name };
   }
   return null;
+}
+
+/** Null for anything that is not exactly what `JSON.stringify` of a CompletionProperty leaves. */
+export function parseCompletionProperty(stored: string | null): CompletionProperty | null {
+  if (stored === null) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch {
+    return null;
+  }
+  const value = asRecord(parsed);
+  if (value === null || typeof value.name !== 'string') {
+    return null;
+  }
+  if (value.kind === 'checkbox') {
+    return { kind: 'checkbox', name: value.name };
+  }
+  const complete = stringArray(value.completeOptionIds);
+  const todo = stringArray(value.todoOptionIds);
+  const [first, ...rest] = complete ?? [];
+  if (value.kind !== 'status' || first === undefined || todo === null) {
+    return null;
+  }
+  return {
+    kind: 'status',
+    name: value.name,
+    completeOptionIds: [first, ...rest],
+    todoOptionIds: todo,
+  };
+}
+
+function stringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+    return null;
+  }
+  return value;
 }
 
 /** Null when the property cannot express not-done: a status with no To-do group. */

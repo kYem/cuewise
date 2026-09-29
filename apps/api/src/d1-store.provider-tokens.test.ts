@@ -5,9 +5,15 @@ import { D1SyncStore } from './d1-store';
 import type { ProviderConnection, SealedGrant } from './store';
 
 const REFRESH_PAIR = { refreshCiphertext: 'r-ct', refreshIv: 'r-iv' };
-/** The access ciphertext `grant()` stores, as the object the conditional writers take. */
-const CT = { ciphertext: 'ct' };
-const TOKENS_2 = { ciphertext: 'ct-2', iv: 'iv-2', refreshCiphertext: null, refreshIv: null };
+/** The fingerprint `grant()` stores, as the object the conditional writers take. */
+const FP = { tokenFingerprint: 'fp' };
+const TOKENS_2 = {
+  ciphertext: 'ct-2',
+  iv: 'iv-2',
+  refreshCiphertext: null,
+  refreshIv: null,
+  tokenFingerprint: 'fp-2',
+};
 
 function grant(overrides: Partial<SealedGrant> = {}): SealedGrant {
   return {
@@ -16,12 +22,19 @@ function grant(overrides: Partial<SealedGrant> = {}): SealedGrant {
     refreshCiphertext: null,
     refreshIv: null,
     workspace: 'Acme',
+    tokenFingerprint: 'fp',
     ...overrides,
   };
 }
 
 function connection(overrides: Partial<ProviderConnection> = {}): ProviderConnection {
-  return { provider: 'notion', ...grant(), dataSourceId: null, ...overrides };
+  return {
+    provider: 'notion',
+    ...grant(),
+    dataSourceId: null,
+    completionProperty: null,
+    ...overrides,
+  };
 }
 
 describe('provider connections', () => {
@@ -55,16 +68,26 @@ describe('provider connections', () => {
 
   it('putProviderGrant replaces the tokens but keeps the chosen table, in one statement', async () => {
     await store.putProviderGrant(userId, 'notion', grant());
-    await store.setProviderDataSource(userId, 'notion', 'ds-kept');
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: 'ds-kept',
+      completionProperty: 'prop-kept',
+    });
 
     await store.putProviderGrant(
       userId,
       'notion',
-      grant({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed' })
+      grant({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed', tokenFingerprint: 'fp-2' })
     );
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed', dataSourceId: 'ds-kept' })
+      connection({
+        ciphertext: 'ct-2',
+        iv: 'iv-2',
+        workspace: 'Renamed',
+        tokenFingerprint: 'fp-2',
+        dataSourceId: 'ds-kept',
+        completionProperty: 'prop-kept',
+      })
     );
   });
 
@@ -81,15 +104,15 @@ describe('provider connections', () => {
     await expect(store.getProviderConnection(userId, 'outlook')).resolves.toBeNull();
   });
 
-  it('deleteProviderConnectionIfUnchanged drops the row only while it holds that ciphertext', async () => {
-    await store.putProviderGrant(userId, 'notion', grant({ ciphertext: 'ct-1' }));
+  it('deleteProviderConnectionIfUnchanged drops the row only while it holds that token', async () => {
+    await store.putProviderGrant(userId, 'notion', grant({ tokenFingerprint: 'fp-1' }));
 
     await expect(
-      store.deleteProviderConnectionIfUnchanged(userId, 'notion', { ciphertext: 'ct-other' })
+      store.deleteProviderConnectionIfUnchanged(userId, 'notion', { tokenFingerprint: 'fp-other' })
     ).resolves.toBe(false);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
     await expect(
-      store.deleteProviderConnectionIfUnchanged(userId, 'notion', { ciphertext: 'ct-1' })
+      store.deleteProviderConnectionIfUnchanged(userId, 'notion', { tokenFingerprint: 'fp-1' })
     ).resolves.toBe(true);
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
@@ -136,20 +159,20 @@ describe('provider connections', () => {
   it('hands the renewal claim to one caller until that caller releases it', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
-    const claim = await store.claimProviderRenewal(userId, 'notion', CT, 30_000);
+    const claim = await store.claimProviderRenewal(userId, 'notion', FP, 30_000);
     if (claim === null) {
       throw new Error('expected the first claim to be taken');
     }
-    await expect(store.claimProviderRenewal(userId, 'notion', CT, 30_000)).resolves.toBeNull();
+    await expect(store.claimProviderRenewal(userId, 'notion', FP, 30_000)).resolves.toBeNull();
     await store.releaseProviderRenewal(userId, 'notion', claim);
-    await expect(store.claimProviderRenewal(userId, 'notion', CT, 30_000)).resolves.not.toBeNull();
+    await expect(store.claimProviderRenewal(userId, 'notion', FP, 30_000)).resolves.not.toBeNull();
   });
 
   it('refuses a renewal claim from a request that opened a token the row no longer holds', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
     await expect(
-      store.claimProviderRenewal(userId, 'notion', { ciphertext: 'stale' }, 30_000)
+      store.claimProviderRenewal(userId, 'notion', { tokenFingerprint: 'stale' }, 30_000)
     ).resolves.toBeNull();
   });
 
@@ -157,16 +180,16 @@ describe('provider connections', () => {
     const { store: clocked, tick } = clockedStore(1_000_000);
     const clockedUser = await newUser(clocked, 'provider-tokens-renewal');
     await clocked.putProviderGrant(clockedUser, 'notion', grant(REFRESH_PAIR));
-    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000)).resolves.toBe(
+    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', FP, 30_000)).resolves.toBe(
       1_000_000
     );
 
     tick(29_000);
     await expect(
-      clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000)
+      clocked.claimProviderRenewal(clockedUser, 'notion', FP, 30_000)
     ).resolves.toBeNull();
     tick(2_000);
-    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000)).resolves.toBe(
+    await expect(clocked.claimProviderRenewal(clockedUser, 'notion', FP, 30_000)).resolves.toBe(
       1_031_000
     );
   });
@@ -175,29 +198,29 @@ describe('provider connections', () => {
     const { store: clocked, tick } = clockedStore(1_000_000);
     const clockedUser = await newUser(clocked, 'provider-tokens-release');
     await clocked.putProviderGrant(clockedUser, 'notion', grant(REFRESH_PAIR));
-    const first = await clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000);
+    const first = await clocked.claimProviderRenewal(clockedUser, 'notion', FP, 30_000);
     expect(first).toBe(1_000_000);
     if (first === null) {
       throw new Error('expected the first claim to be taken');
     }
     tick(31_000);
-    await clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000);
+    await clocked.claimProviderRenewal(clockedUser, 'notion', FP, 30_000);
 
     await clocked.releaseProviderRenewal(clockedUser, 'notion', first);
 
     await expect(
-      clocked.claimProviderRenewal(clockedUser, 'notion', CT, 30_000)
+      clocked.claimProviderRenewal(clockedUser, 'notion', FP, 30_000)
     ).resolves.toBeNull();
   });
 
   it('updateProviderTokens releases the renewal claim with the tokens it stores', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
-    await store.claimProviderRenewal(userId, 'notion', CT, 30_000);
+    await store.claimProviderRenewal(userId, 'notion', FP, 30_000);
 
-    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, CT)).resolves.toBe(true);
+    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(true);
 
     await expect(
-      store.claimProviderRenewal(userId, 'notion', { ciphertext: 'ct-2' }, 30_000)
+      store.claimProviderRenewal(userId, 'notion', { tokenFingerprint: 'fp-2' }, 30_000)
     ).resolves.not.toBeNull();
   });
 
@@ -205,7 +228,7 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
     await expect(
-      store.updateProviderTokens(userId, 'notion', TOKENS_2, { ciphertext: 'stale' })
+      store.updateProviderTokens(userId, 'notion', TOKENS_2, { tokenFingerprint: 'stale' })
     ).resolves.toBe(false);
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
@@ -215,17 +238,21 @@ describe('provider connections', () => {
 
   it('putProviderGrant clears a held renewal claim, since the claim belonged to the old grant', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
-    await store.claimProviderRenewal(userId, 'notion', CT, 30_000);
+    await store.claimProviderRenewal(userId, 'notion', FP, 30_000);
 
-    await store.putProviderGrant(userId, 'notion', grant({ ciphertext: 'ct-2', iv: 'iv-2' }));
+    await store.putProviderGrant(
+      userId,
+      'notion',
+      grant({ ciphertext: 'ct-2', iv: 'iv-2', tokenFingerprint: 'fp-2' })
+    );
 
     await expect(
-      store.claimProviderRenewal(userId, 'notion', { ciphertext: 'ct-2' }, 30_000)
+      store.claimProviderRenewal(userId, 'notion', { tokenFingerprint: 'fp-2' }, 30_000)
     ).resolves.not.toBeNull();
   });
 
   it('claimProviderRenewal answers null for an account with no grant', async () => {
-    await expect(store.claimProviderRenewal(userId, 'notion', CT, 30_000)).resolves.toBeNull();
+    await expect(store.claimProviderRenewal(userId, 'notion', FP, 30_000)).resolves.toBeNull();
   });
 
   it('deleteUser takes the connection with the account and returns it for revocation', async () => {
@@ -237,14 +264,23 @@ describe('provider connections', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('updateProviderTokens replaces the access pair and keeps a refresh pair the renewal omitted', async () => {
+  it('updateProviderTokens clears a refresh pair the renewal omitted, since Notion has rotated it away', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
-    await store.setProviderDataSource(userId, 'notion', 'ds1');
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: 'ds1',
+      completionProperty: 'prop1',
+    });
 
-    await store.updateProviderTokens(userId, 'notion', TOKENS_2, CT);
+    await store.updateProviderTokens(userId, 'notion', TOKENS_2, FP);
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ ...REFRESH_PAIR, ciphertext: 'ct-2', iv: 'iv-2', dataSourceId: 'ds1' })
+      connection({
+        ciphertext: 'ct-2',
+        iv: 'iv-2',
+        tokenFingerprint: 'fp-2',
+        dataSourceId: 'ds1',
+        completionProperty: 'prop1',
+      })
     );
   });
 
@@ -255,7 +291,7 @@ describe('provider connections', () => {
       userId,
       'notion',
       { ...TOKENS_2, refreshCiphertext: 'r-ct-2', refreshIv: 'r-iv-2' },
-      CT
+      FP
     );
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
@@ -264,19 +300,24 @@ describe('provider connections', () => {
     });
   });
 
-  it('setProviderDataSource touches only the selection, never the tokens', async () => {
+  it('setProviderSelection stores the table and its property together, never touching the tokens', async () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
 
-    await store.setProviderDataSource(userId, 'notion', 'ds9');
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: 'ds9',
+      completionProperty: 'prop9',
+    });
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ ...REFRESH_PAIR, dataSourceId: 'ds9' })
+      connection({ ...REFRESH_PAIR, dataSourceId: 'ds9', completionProperty: 'prop9' })
     );
   });
 
   it('narrow writers answer false for an account with no grant', async () => {
-    await expect(store.setProviderDataSource(userId, 'notion', 'ds1')).resolves.toBe(false);
-    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, CT)).resolves.toBe(false);
+    await expect(
+      store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds1', completionProperty: 'p' })
+    ).resolves.toBe(false);
+    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(false);
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
@@ -284,8 +325,10 @@ describe('provider connections', () => {
   it('narrow writers answer true when a row was touched', async () => {
     await store.putProviderGrant(userId, 'notion', grant());
 
-    await expect(store.setProviderDataSource(userId, 'notion', 'ds9')).resolves.toBe(true);
-    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, CT)).resolves.toBe(true);
+    await expect(
+      store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds9', completionProperty: 'p' })
+    ).resolves.toBe(true);
+    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(true);
   });
 
   it('stamps created_at from the injected clock, not wall time', async () => {

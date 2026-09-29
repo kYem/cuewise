@@ -4,11 +4,15 @@ import { spyOnLoggerError, spyOnLoggerWarn } from '../__fixtures__/logger.fixtur
 import {
   checkboxSchema,
   connectedNotionUser,
+  currentToken,
   FailingWriteStore,
+  noTodoStatusCompletion,
   noTodoStatusSchema,
   notionEnv,
   sealRefreshUnderForeignKey,
+  secondStatusCompletion,
   signedInWithoutNotion,
+  statusCompletion,
   statusSchema,
   storedNotionTokens,
   stubNotionClient,
@@ -21,8 +25,10 @@ import {
   TEST_REFRESHED_TOKEN,
   TEST_ROTATED_REFRESH_TOKEN,
   titleOnlySchema,
+  twoStatusSchema,
+  validationRejection,
 } from '../__fixtures__/notion.fixtures';
-import { encryptSecret } from '../crypto-utils';
+import { encryptSecret, sha256Hex } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
 import {
@@ -71,10 +77,7 @@ function expiringQuery() {
 /** A fresh claim succeeds only once the last one was released; a held one blocks for 30s. */
 async function expectClaimReleased(userId: string): Promise<void> {
   const store = new D1SyncStore(env.DB);
-  const row = await store.getProviderConnection(userId, 'notion');
-  if (row === null) {
-    throw new Error('expected the grant to survive');
-  }
+  const row = await currentToken(store, userId);
   await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
 }
 
@@ -241,6 +244,48 @@ describe('GET /v1/integrations/notion/items', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.not.toBeNull();
   });
 
+  it('reads rows by the stored property, whichever status property the schema lists first', async () => {
+    const queryRows = vi.fn(async () => ({ items: [], truncated: false }));
+    const getPropertySchemas = vi.fn(async () => twoStatusSchema);
+    const { headers } = await connectedNotionUser({ completion: secondStatusCompletion });
+
+    const res = await getItems(headers, stubNotionClient({ queryRows, getPropertySchemas }));
+
+    expect(res.status).toBe(200);
+    expect(queryRows).toHaveBeenCalledWith(TEST_ACCESS_TOKEN, TEST_DATA_SOURCE_ID, {
+      kind: 'status',
+      name: 'Second',
+      completeOptionIds: ['b2'],
+      todoOptionIds: ['b1'],
+    });
+  });
+
+  it('answers unusable when the stored property has been removed from the table', async () => {
+    const getPropertySchemas = vi.fn(async () => statusSchema);
+    const { headers } = await connectedNotionUser({ completion: secondStatusCompletion });
+
+    const res = await getItems(headers, stubNotionClient({ getPropertySchemas }));
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(422);
+    expect(body.code).toBe('provider_schema_unusable');
+  });
+
+  it('asks for the table again when the stored property does not parse', async () => {
+    const { headers, userId } = await connectedNotionUser();
+    await env.DB.prepare(
+      "UPDATE provider_tokens SET completion_property = 'not json' WHERE user_id = ?"
+    )
+      .bind(userId)
+      .run();
+
+    const res = await getItems(headers);
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe('provider_table_unselected');
+  });
+
   it('prompts to re-validate when the completion property has gone', async () => {
     const getPropertySchemas = vi.fn(async () => titleOnlySchema);
     const { headers } = await connectedNotionUser();
@@ -276,7 +321,7 @@ describe('token renewal', () => {
     });
   });
 
-  it('keeps the stored refresh token when the renewal did not rotate it', async () => {
+  it('clears the stored refresh token when the renewal did not rotate it, since Notion has spent it', async () => {
     const { queryRows } = expiringQuery();
     const refreshGrant = vi.fn(async () => ({
       accessToken: TEST_REFRESHED_TOKEN,
@@ -290,8 +335,29 @@ describe('token renewal', () => {
     expect(res.status).toBe(200);
     await expect(storedNotionTokens(store, userId)).resolves.toEqual({
       accessToken: TEST_REFRESHED_TOKEN,
-      refreshToken: TEST_REFRESH_TOKEN,
+      refreshToken: null,
     });
+  });
+
+  it('drops the grant on the next auth fault without a doomed renewal once the refresh token is gone', async () => {
+    const { queryRows } = expiringQuery();
+    const refreshGrant = vi.fn(async () => ({
+      accessToken: TEST_REFRESHED_TOKEN,
+      refreshToken: null,
+      workspace: null,
+    }));
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+    await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
+    refreshGrant.mockClear();
+    const expired = vi.fn(async () => {
+      throw new NotionAuthError('expired');
+    });
+
+    const res = await getItems(headers, stubNotionClient({ queryRows: expired, refreshGrant }));
+
+    expect(res.status).toBe(409);
+    expect(refreshGrant).not.toHaveBeenCalled();
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
   it('keeps the workspace name across a renewal', async () => {
@@ -487,10 +553,7 @@ describe('token renewal', () => {
     });
     const warnSpy = spyOnLoggerWarn();
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
-    const row = await store.getProviderConnection(userId, 'notion');
-    if (row === null) {
-      throw new Error('expected a stored grant');
-    }
+    const row = await currentToken(store, userId);
     await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
 
     const res = await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
@@ -518,10 +581,7 @@ describe('token renewal', () => {
     await getItems(headers, stubNotionClient({ queryRows, refreshGrant }));
 
     expect(refreshGrant).toHaveBeenCalledTimes(1);
-    const row = await store.getProviderConnection(userId, 'notion');
-    if (row === null) {
-      throw new Error('expected the grant to survive');
-    }
+    const row = await currentToken(store, userId);
     await expect(store.claimProviderRenewal(userId, 'notion', row, 30_000)).resolves.not.toBeNull();
   });
 
@@ -589,6 +649,7 @@ describe('token renewal', () => {
         refreshCiphertext: null,
         refreshIv: null,
         workspace: 'Other',
+        tokenFingerprint: await sha256Hex('reconnected-token'),
       });
       return { accessToken: TEST_REFRESHED_TOKEN, refreshToken: null, workspace: null };
     });
@@ -619,10 +680,6 @@ describe('token renewal', () => {
     });
     const renewedElsewhere = await encryptSecret(TEST_REFRESHED_TOKEN, TEST_PROVIDER_KEY);
     const queryRows = vi.fn(async () => {
-      const row = await store.getProviderConnection(userId, 'notion');
-      if (row === null) {
-        throw new Error('expected a stored grant');
-      }
       await store.updateProviderTokens(
         userId,
         'notion',
@@ -631,8 +688,9 @@ describe('token renewal', () => {
           iv: renewedElsewhere.iv,
           refreshCiphertext: null,
           refreshIv: null,
+          tokenFingerprint: await sha256Hex(TEST_REFRESHED_TOKEN),
         },
-        row
+        await currentToken(store, userId)
       );
       throw new NotionAuthError('expired');
     });
@@ -647,10 +705,6 @@ describe('token renewal', () => {
     const { store, userId, headers } = await connectedNotionUser();
     const renewed = await encryptSecret(TEST_REFRESHED_TOKEN, TEST_PROVIDER_KEY);
     const queryRows = vi.fn(async () => {
-      const row = await store.getProviderConnection(userId, 'notion');
-      if (row === null) {
-        throw new Error('expected a stored grant');
-      }
       await store.updateProviderTokens(
         userId,
         'notion',
@@ -659,8 +713,9 @@ describe('token renewal', () => {
           iv: renewed.iv,
           refreshCiphertext: null,
           refreshIv: null,
+          tokenFingerprint: await sha256Hex(TEST_REFRESHED_TOKEN),
         },
-        row
+        await currentToken(store, userId)
       );
       throw new NotionAuthError('expired');
     });
@@ -782,7 +837,7 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
   it('writes the first Complete option when the table uses a status property', async () => {
     const setCompletion = vi.fn(async () => undefined);
     const getPropertySchemas = vi.fn(async () => statusSchema);
-    const { headers } = await connectedNotionUser();
+    const { headers } = await connectedNotionUser({ completion: statusCompletion });
 
     await patchDone(headers, true, stubNotionClient({ setCompletion, getPropertySchemas }));
 
@@ -791,12 +846,27 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
       name: 'Status',
       optionId: 'o3',
     });
+    expect(getPropertySchemas).not.toHaveBeenCalled();
+  });
+
+  it('writes the property the selection stored, whichever status property the schema lists first', async () => {
+    const setCompletion = vi.fn(async () => undefined);
+    const getPropertySchemas = vi.fn(async () => twoStatusSchema);
+    const { headers } = await connectedNotionUser({ completion: secondStatusCompletion });
+
+    await patchDone(headers, true, stubNotionClient({ setCompletion, getPropertySchemas }));
+
+    expect(setCompletion).toHaveBeenCalledWith(TEST_ACCESS_TOKEN, TEST_PAGE_ID, {
+      kind: 'status',
+      name: 'Second',
+      optionId: 'b2',
+    });
   });
 
   it('names the missing To-do group when un-completing, rather than calling the table unusable', async () => {
     const setCompletion = vi.fn(async () => undefined);
     const getPropertySchemas = vi.fn(async () => noTodoStatusSchema);
-    const { headers } = await connectedNotionUser();
+    const { headers } = await connectedNotionUser({ completion: noTodoStatusCompletion });
 
     const res = await patchDone(
       headers,
@@ -807,6 +877,124 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
 
     expect(res.status).toBe(422);
     expect(body.code).toBe('provider_todo_group_missing');
+    expect(setCompletion).not.toHaveBeenCalled();
+  });
+
+  it('un-completes once the user has added the To-do group, without re-picking the table', async () => {
+    const setCompletion = vi.fn(async () => undefined);
+    const getPropertySchemas = vi.fn(async () => statusSchema);
+    const { headers } = await connectedNotionUser({ completion: noTodoStatusCompletion });
+
+    const res = await patchDone(
+      headers,
+      false,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
+
+    expect(res.status).toBe(204);
+    expect(setCompletion).toHaveBeenCalledWith(TEST_ACCESS_TOKEN, TEST_PAGE_ID, {
+      kind: 'status',
+      name: 'Status',
+      optionId: 'o1',
+    });
+  });
+
+  it('re-reads the schema only when Notion rejects the write, and retries with the same property as it now stands', async () => {
+    const setCompletion = vi
+      .fn()
+      .mockRejectedValueOnce(validationRejection())
+      .mockResolvedValueOnce(undefined);
+    const getPropertySchemas = vi.fn(async () => statusSchema);
+    const { headers } = await connectedNotionUser({
+      completion: { ...statusCompletion, completeOptionIds: ['o-deleted'] },
+    });
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
+
+    expect(res.status).toBe(204);
+    expect(getPropertySchemas).toHaveBeenCalledTimes(1);
+    expect(setCompletion).toHaveBeenLastCalledWith(TEST_ACCESS_TOKEN, TEST_PAGE_ID, {
+      kind: 'status',
+      name: 'Status',
+      optionId: 'o3',
+    });
+  });
+
+  it('answers 503 without a second write when a rejected write finds the schema unchanged', async () => {
+    const setCompletion = vi.fn(async () => {
+      throw validationRejection();
+    });
+    const getPropertySchemas = vi.fn(async () => statusSchema);
+    const { headers } = await connectedNotionUser({ completion: statusCompletion });
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
+
+    expect(res.status).toBe(503);
+    expect(setCompletion).toHaveBeenCalledTimes(1);
+    expect(getPropertySchemas).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers unusable when a rejected write finds the stored property gone from the schema', async () => {
+    const setCompletion = vi.fn(async () => {
+      throw validationRejection();
+    });
+    const getPropertySchemas = vi.fn(async () => titleOnlySchema);
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(422);
+    expect(body.code).toBe('provider_schema_unusable');
+    expect(setCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers table_unavailable when the re-read after a rejected write finds the table gone', async () => {
+    const setCompletion = vi.fn(async () => {
+      throw validationRejection();
+    });
+    const getPropertySchemas = vi.fn(async () => {
+      throw new NotionResourceError(404, 'table gone');
+    });
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_table_unavailable');
+  });
+
+  it('asks for the table again when the stored property does not parse', async () => {
+    const setCompletion = vi.fn(async () => undefined);
+    const { headers, userId } = await connectedNotionUser();
+    await env.DB.prepare(
+      "UPDATE provider_tokens SET completion_property = 'not json' WHERE user_id = ?"
+    )
+      .bind(userId)
+      .run();
+
+    const res = await patchDone(headers, true, stubNotionClient({ setCompletion }));
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe('provider_table_unselected');
     expect(setCompletion).not.toHaveBeenCalled();
   });
 
@@ -901,13 +1089,30 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     });
   });
 
-  it('answers table_unavailable when the table itself is gone', async () => {
+  it.each([
+    ['the page lookup 404s', { getPageDataSource: NotionResourceError }],
+    ['the page is no table row', { getPageDataSource: null }],
+    ['the page sits in another table', { getPageDataSource: 'other-table' }],
+    ['the write 404s', { setCompletion: NotionResourceError }],
+  ] as const)('answers table_unavailable when %s and the table itself is gone', async (_label, fault) => {
+    const [method, outcome] = Object.entries(fault)[0] ?? [];
+    const thrown = outcome === NotionResourceError;
+    const stubbed = vi.fn(async () => {
+      if (thrown) {
+        throw new NotionResourceError(404, 'not found');
+      }
+      return outcome;
+    });
     const getPropertySchemas = vi.fn(async () => {
       throw new NotionResourceError(404, 'table gone');
     });
     const { headers } = await connectedNotionUser();
 
-    const res = await patchDone(headers, true, stubNotionClient({ getPropertySchemas }));
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ getPropertySchemas, [method as string]: stubbed })
+    );
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(404);
@@ -942,20 +1147,5 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     const res = await patchDone(headers, true);
 
     expect(res.status).toBe(409);
-  });
-
-  it('refuses to write when the completion property has gone', async () => {
-    const setCompletion = vi.fn(async () => undefined);
-    const getPropertySchemas = vi.fn(async () => titleOnlySchema);
-    const { headers } = await connectedNotionUser();
-
-    const res = await patchDone(
-      headers,
-      true,
-      stubNotionClient({ setCompletion, getPropertySchemas })
-    );
-
-    expect(res.status).toBe(422);
-    expect(setCompletion).not.toHaveBeenCalled();
   });
 });

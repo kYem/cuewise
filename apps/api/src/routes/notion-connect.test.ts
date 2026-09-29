@@ -1,4 +1,4 @@
-import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
+import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { DAY_IN_MS } from '@cuewise/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { clockedStore } from '../__fixtures__/api-test-helpers.fixtures';
@@ -9,12 +9,15 @@ import {
 } from '../__fixtures__/bounce.fixtures';
 import { spyOnLoggerError, spyOnLoggerWarn } from '../__fixtures__/logger.fixtures';
 import {
+  checkboxCompletion,
   connectedNotionUser,
+  currentToken,
   FailingWriteStore,
   GRANT_WITHOUT_REFRESH,
   mintParkedGrant,
   notionEnv,
   signedInWithoutNotion,
+  statusCompletion,
   statusSchema,
   storedNotionTokens,
   stubNotionClient,
@@ -29,7 +32,7 @@ import {
   testCodeChallenge,
   titleOnlySchema,
 } from '../__fixtures__/notion.fixtures';
-import { encryptSecret, signState } from '../crypto-utils';
+import { encryptSecret, sha256Hex, signState } from '../crypto-utils';
 import type { D1SyncStore } from '../d1-store';
 import { createApp } from '../index';
 import {
@@ -803,7 +806,10 @@ describe('POST /v1/integrations/notion/claim', () => {
     const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
     const before = await store.getProviderConnection(userId, 'notion');
     const code = await parkedCode();
-    await store.setProviderDataSource(userId, 'notion', TEST_DATA_SOURCE_ID);
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: TEST_DATA_SOURCE_ID,
+      completionProperty: JSON.stringify(checkboxCompletion),
+    });
 
     const res = await claim(code, headers);
 
@@ -860,7 +866,7 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
   });
 
@@ -879,7 +885,7 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1, abandoned: 0, halted: false });
   });
 
   it('skips an expired sign-in code: only the parked grant is revoked and counted', async () => {
@@ -900,7 +906,7 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken.mock.calls).toEqual([[TEST_ACCESS_TOKEN]]);
     expect(errorSpy).not.toHaveBeenCalled();
   });
@@ -927,9 +933,9 @@ describe('unclaimed parked grants', () => {
       62_000 + DAY_IN_MS
     );
 
-    expect(retry).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
+    expect(retry).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
-    expect(await clocked.listExpiredParkedGrants(62_000 + DAY_IN_MS, 10, null)).toEqual([]);
+    expect(await clocked.listExpiredParkedGrants(62_000 + DAY_IN_MS, 10)).toEqual([]);
   });
 
   it('counts a token Notion already refuses as revoked and drops it', async () => {
@@ -947,8 +953,8 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0 });
-    expect(await clocked.listExpiredParkedGrants(62_000, 10, null)).toEqual([]);
+    expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0, halted: false });
+    expect(await clocked.listExpiredParkedGrants(62_000, 10)).toEqual([]);
   });
 
   it('abandons a grant still unrevokable a week after it expired, loudly', async () => {
@@ -968,13 +974,13 @@ describe('unclaimed parked grants', () => {
       now
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 0, abandoned: 1 });
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 0, abandoned: 1, halted: false });
     // The row is deleted here, so the log is all an operator has left to find the live token.
     expect(errorSpy).toHaveBeenCalledWith(
       'Gave up revoking an unclaimed Notion grant; it may still be live at Notion',
       { codeHash: expect.any(String), expiresAt: 61_000, workspace: 'Acme' }
     );
-    expect(await clocked.listExpiredParkedGrants(now, 10, null)).toEqual([]);
+    expect(await clocked.listExpiredParkedGrants(now, 10)).toEqual([]);
   });
 
   it('still retries a grant one tick short of the give-up window', async () => {
@@ -992,7 +998,7 @@ describe('unclaimed parked grants', () => {
       now
     );
 
-    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 1, revoked: 0, failed: 1, abandoned: 0, halted: false });
   });
 
   it('moves past grants it could not revoke, so they cannot hold up the rest of the backlog', async () => {
@@ -1016,7 +1022,80 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 30, revoked: 5, failed: 25, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 30, revoked: 5, failed: 25, abandoned: 0, halted: false });
+  });
+
+  it('tries a row it has never attempted before one that failed yesterday, so a failing backlog cannot starve newer grants', async () => {
+    const { store: clocked, tick } = clockedStore(1_000);
+    for (let i = 0; i < 45; i += 1) {
+      await mintParkedGrant(clocked);
+    }
+    tick(61_000);
+    const unreachable = vi.fn(async () => {
+      throw new NotionUnavailableError('notion unreachable');
+    });
+    await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken: unreachable }),
+      notionEnv(),
+      62_000
+    );
+
+    await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken: vi.fn(async () => undefined) }),
+      notionEnv(),
+      62_000 + DAY_IN_MS
+    );
+
+    const neverAttempted = await env.DB.prepare(
+      'SELECT COUNT(*) AS count FROM auth_codes WHERE revoke_attempted_at IS NULL'
+    ).first<{ count: number }>();
+    expect(neverAttempted?.count).toBe(0);
+  });
+
+  it('stops early when grants keep failing to decrypt, leaving the rest untouched for when the key is back', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
+    const { store: clocked, tick } = clockedStore(1_000);
+    for (let i = 0; i < 6; i += 1) {
+      await mintParkedGrant(clocked, TEST_FOREIGN_PROVIDER_KEY);
+    }
+    tick(61_000);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      62_000
+    );
+
+    expect(sweep).toEqual({ swept: 3, revoked: 0, failed: 3, abandoned: 0, halted: true });
+    expect(revokeToken).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Stopped the parked-grant sweep: grants keep failing to decrypt',
+      { unreadable: 3 }
+    );
+    expect(await clocked.listExpiredParkedGrants(62_000, 50)).toHaveLength(3);
+  });
+
+  it('does not halt for one unreadable grant among readable ones', async () => {
+    const revokeToken = vi.fn(async () => undefined);
+    const { store: clocked, tick } = clockedStore(1_000);
+    await mintParkedGrant(clocked, TEST_FOREIGN_PROVIDER_KEY);
+    for (let i = 0; i < 4; i += 1) {
+      await mintParkedGrant(clocked);
+    }
+    tick(61_000);
+
+    const sweep = await revokeExpiredParkedGrants(
+      clocked,
+      stubNotionClient({ revokeToken }),
+      notionEnv(),
+      62_000
+    );
+
+    expect(sweep).toEqual({ swept: 5, revoked: 4, failed: 1, abandoned: 0, halted: false });
   });
 
   it('stops at its revoke budget and leaves the rest for the next run', async () => {
@@ -1035,7 +1114,7 @@ describe('unclaimed parked grants', () => {
     );
 
     expect(sweep.revoked).toBe(40);
-    expect(await clocked.listExpiredParkedGrants(62_000, 50, null)).toHaveLength(5);
+    expect(await clocked.listExpiredParkedGrants(62_000, 50)).toHaveLength(5);
   });
 
   it('sweeps nothing on a malformed key, rather than reporting grants it never tried', async () => {
@@ -1052,10 +1131,10 @@ describe('unclaimed parked grants', () => {
       62_000
     );
 
-    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(await clocked.listExpiredParkedGrants(62_000, 50, null)).toHaveLength(1);
+    expect(await clocked.listExpiredParkedGrants(62_000, 50)).toHaveLength(1);
   });
 
   it('leaves an unexpired parked grant alone', async () => {
@@ -1070,7 +1149,7 @@ describe('unclaimed parked grants', () => {
       30_000
     );
 
-    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0 });
+    expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken).not.toHaveBeenCalled();
   });
 });
@@ -1254,6 +1333,7 @@ describe('PUT /v1/integrations/notion/selection', () => {
     });
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
       dataSourceId: TEST_DATA_SOURCE_ID,
+      completionProperty: JSON.stringify(statusCompletion),
     });
   });
 
@@ -1419,16 +1499,19 @@ describe('DELETE /v1/integrations/notion', () => {
 
   it('takes the row before revoking, so a renewal landing during the revoke is not silently lost', async () => {
     const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
-    const before = await store.getProviderConnection(userId, 'notion');
-    if (before === null) {
-      throw new Error('expected a stored grant');
-    }
+    const before = await currentToken(store, userId);
     let lateRenewalStored: boolean | null = null;
     const revokeToken = vi.fn(async () => {
       lateRenewalStored = await store.updateProviderTokens(
         userId,
         'notion',
-        { ciphertext: 'late', iv: 'late', refreshCiphertext: null, refreshIv: null },
+        {
+          ciphertext: 'late',
+          iv: 'late',
+          refreshCiphertext: null,
+          refreshIv: null,
+          tokenFingerprint: 'fp-late',
+        },
         before
       );
     });
@@ -1603,12 +1686,16 @@ describe('per-token rate limiting', () => {
   });
 });
 
+async function sealed(token: string, key = TEST_PROVIDER_KEY) {
+  return { ...(await encryptSecret(token, key)), tokenFingerprint: await sha256Hex(token) };
+}
+
 describe('revokeDisplacedGrant', () => {
   it('leaves the same token alone when notion re-issues it, iv differences aside', async () => {
     const revokeToken = vi.fn(async () => undefined);
     // Two independent seals of one token: what a re-issued token looks like on disk.
-    const before = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
-    const after = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+    const before = await sealed(TEST_ACCESS_TOKEN);
+    const after = await sealed(TEST_ACCESS_TOKEN);
     expect(before.ciphertext).not.toBe(after.ciphertext);
 
     const work = revokeDisplacedGrant(
@@ -1623,10 +1710,29 @@ describe('revokeDisplacedGrant', () => {
     expect(revokeToken).not.toHaveBeenCalled();
   });
 
+  it('recognises the same token by fingerprint without opening either, so a rotated key changes nothing', async () => {
+    const errorSpy = spyOnLoggerError();
+    const revokeToken = vi.fn(async () => undefined);
+    const before = await sealed(TEST_ACCESS_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
+    const after = await sealed(TEST_ACCESS_TOKEN);
+
+    const work = revokeDisplacedGrant(
+      stubNotionClient({ revokeToken }),
+      before,
+      after,
+      notionEnv(),
+      'user-1'
+    );
+
+    await expect(work).resolves.toBe(true);
+    expect(revokeToken).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
   it('revokes a genuinely displaced grant, and not before the caller awaits it', async () => {
     const revokeToken = vi.fn(async () => undefined);
-    const displaced = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
-    const current = await encryptSecret('notion-access-token-reconnected', TEST_PROVIDER_KEY);
+    const displaced = await sealed(TEST_ACCESS_TOKEN);
+    const current = await sealed('notion-access-token-reconnected');
 
     const work = revokeDisplacedGrant(
       stubNotionClient({ revokeToken }),
@@ -1644,8 +1750,8 @@ describe('revokeDisplacedGrant', () => {
   it('skips the revoke, loudly, when the displaced grant will not decrypt', async () => {
     const errorSpy = spyOnLoggerError();
     const revokeToken = vi.fn(async () => undefined);
-    const foreign = await encryptSecret(TEST_ACCESS_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
-    const current = await encryptSecret('notion-access-token-reconnected', TEST_PROVIDER_KEY);
+    const foreign = await sealed(TEST_ACCESS_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
+    const current = await sealed('notion-access-token-reconnected');
 
     const work = revokeDisplacedGrant(
       stubNotionClient({ revokeToken }),

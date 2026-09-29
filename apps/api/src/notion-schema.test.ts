@@ -1,17 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   asSchemas,
+  checkboxCompletion,
   checkboxSchema,
   noTodoStatusSchema,
+  secondStatusCompletion,
+  statusCompletion,
   statusSchema,
+  titleOnlySchema,
+  twoStatusSchema,
 } from './__fixtures__/notion.fixtures';
 import {
   type CompletionProperty,
+  completionPropertyNamed,
   completionWrite,
   findCompletionProperty,
   isRowDone,
   type NotionPage,
   type PropertyValues,
+  parseCompletionProperty,
   rowTitle,
 } from './notion-schema';
 
@@ -264,5 +271,59 @@ describe('rowTitle', () => {
 
   it('answers an empty string when there is no title property at all', () => {
     expect(rowTitle(page({ Done: { checkbox: false } }))).toBe('');
+  });
+});
+
+describe('completionPropertyNamed', () => {
+  it('resolves the named status property, not the first one the schema lists', () => {
+    expect(completionPropertyNamed(twoStatusSchema, 'Second')).toEqual(secondStatusCompletion);
+  });
+
+  it('resolves the Done checkbox by name', () => {
+    expect(completionPropertyNamed(checkboxSchema, 'Done')).toEqual(checkboxCompletion);
+  });
+
+  it('is null once the property is gone, or is no longer a completion property', () => {
+    expect(completionPropertyNamed(titleOnlySchema, 'Status')).toBeNull();
+    expect(completionPropertyNamed(noTodoStatusSchema, 'Name')).toBeNull();
+    expect(
+      completionPropertyNamed(asSchemas({ Status: { type: 'rich_text', rich_text: {} } }), 'Status')
+    ).toBeNull();
+  });
+
+  it('is null for a status property that lost its Complete group', () => {
+    const renamed = asSchemas({
+      Status: {
+        type: 'status',
+        status: { options: [], groups: [{ id: 'g', name: 'Finished', option_ids: [] }] },
+      },
+    });
+
+    expect(completionPropertyNamed(renamed, 'Status')).toBeNull();
+  });
+});
+
+describe('parseCompletionProperty', () => {
+  it('round-trips what selection stores', () => {
+    expect(parseCompletionProperty(JSON.stringify(statusCompletion))).toEqual(statusCompletion);
+    expect(parseCompletionProperty(JSON.stringify(checkboxCompletion))).toEqual(checkboxCompletion);
+  });
+
+  it.each([
+    ['nothing stored', null],
+    ['text that is not json', 'Status'],
+    ['a json value that is not an object', '[]'],
+    ['an unknown kind', JSON.stringify({ kind: 'select', name: 'Status' })],
+    [
+      'a status with no complete option',
+      JSON.stringify({ ...statusCompletion, completeOptionIds: [] }),
+    ],
+    [
+      'a status whose options are not strings',
+      JSON.stringify({ ...statusCompletion, todoOptionIds: [1] }),
+    ],
+    ['a property with no name', JSON.stringify({ kind: 'checkbox' })],
+  ])('is null for %s', (_label, stored) => {
+    expect(parseCompletionProperty(stored)).toBeNull();
   });
 });

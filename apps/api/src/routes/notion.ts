@@ -8,6 +8,7 @@ import {
   randomToken,
   type SealedSecret,
   sha256Base64Url,
+  sha256Hex,
   signState,
   verifyState,
 } from '../crypto-utils';
@@ -22,10 +23,16 @@ import {
   NotionResourceError,
   NotionUnavailableError,
 } from '../notion-client';
-import { completionWrite, findCompletionProperty } from '../notion-schema';
+import {
+  type CompletionProperty,
+  completionPropertyNamed,
+  completionWrite,
+  findCompletionProperty,
+  parseCompletionProperty,
+} from '../notion-schema';
 import { problem, requireNonEmptyString, type ValidationIssue } from '../problem-details';
 import type {
-  ParkedGrantCursor,
+  FingerprintedToken,
   ProviderConnection,
   RenewalClaim,
   ReplacedGrant,
@@ -140,6 +147,9 @@ export async function revokeDisplacedGrant(
   env: Env,
   userId: string
 ): Promise<boolean> {
+  if (replaced.tokenFingerprint === stored.tokenFingerprint) {
+    return true;
+  }
   const key = env.PROVIDER_TOKEN_KEY;
   if (!isSecretKey(key)) {
     logger.error('PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation', {
@@ -148,10 +158,8 @@ export async function revokeDisplacedGrant(
     return false;
   }
   let displaced: string;
-  let current: string;
   try {
     displaced = await decryptSecret(replaced, key);
-    current = await decryptSecret(stored, key);
   } catch (error) {
     logger.error('Could not decrypt a Notion grant to revoke it upstream', {
       userId,
@@ -159,13 +167,11 @@ export async function revokeDisplacedGrant(
     });
     return false;
   }
-  // Compared as plaintext, because every seal carries a fresh iv: the same token stored twice has
-  // two different ciphertexts, so nothing can be concluded from those.
-  if (displaced === current) {
-    return true;
-  }
   return revokeUpstream(client, displaced, userId);
 }
+
+/** `unreadable` is our key, not Notion: it hits every grant alike, and retrying cannot help. */
+type RevokeOutcome = 'revoked' | 'retry' | 'unreadable';
 
 /** `revokeUpstream` for a sealed grant; one that cannot be opened is logged and skipped. */
 async function revokeSealed(
@@ -173,13 +179,13 @@ async function revokeSealed(
   sealed: SealedSecret,
   env: Env,
   userId: string | null
-): Promise<boolean> {
+): Promise<RevokeOutcome> {
   const key = env.PROVIDER_TOKEN_KEY;
   if (!isSecretKey(key)) {
     logger.error('PROVIDER_TOKEN_KEY is malformed; skipping upstream Notion revocation', {
       userId,
     });
-    return false;
+    return 'unreadable';
   }
   let accessToken: string;
   try {
@@ -190,9 +196,9 @@ async function revokeSealed(
       userId,
       reason: errorName(error),
     });
-    return false;
+    return 'unreadable';
   }
-  return revokeUpstream(client, accessToken, userId);
+  return (await revokeUpstream(client, accessToken, userId)) ? 'revoked' : 'retry';
 }
 
 /** For account deletion: the grants `deleteUser` removed, so Notion forgets them too. */
@@ -227,6 +233,7 @@ async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> 
     refreshCiphertext: refresh === null ? null : refresh.ciphertext,
     refreshIv: refresh === null ? null : refresh.iv,
     workspace: grant.workspace,
+    tokenFingerprint: await sha256Hex(grant.accessToken),
   };
 }
 
@@ -273,7 +280,7 @@ async function openGrant(
 async function providerProblem(
   error: unknown,
   open: OpenGrant,
-  used: { readonly ciphertext: string }
+  used: FingerprintedToken
 ): Promise<Response> {
   const { store, userId } = open;
   if (error instanceof NotionAuthError) {
@@ -314,9 +321,8 @@ async function providerProblem(
   throw error;
 }
 
-interface RenewedGrant {
+interface RenewedGrant extends FingerprintedToken {
   readonly accessToken: string;
-  readonly ciphertext: string;
 }
 
 // Named by role so the access pair (bare `ciphertext`/`iv`) cannot be handed in as the refresh one.
@@ -399,13 +405,13 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
     await releaseClaim(store, userId, claimedAt);
     return problem('internal');
   }
-  const { ciphertext, iv, refreshCiphertext, refreshIv } = sealed;
+  const { ciphertext, iv, refreshCiphertext, refreshIv, tokenFingerprint } = sealed;
   let stored: boolean;
   try {
     stored = await store.updateProviderTokens(
       userId,
       PROVIDER,
-      { ciphertext, iv, refreshCiphertext, refreshIv },
+      { ciphertext, iv, refreshCiphertext, refreshIv, tokenFingerprint },
       open.connection
     );
   } catch (error) {
@@ -426,7 +432,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
     logger.warn('Notion grant was replaced during renewal; revoked the new token', { userId });
     return problem('upstream_unavailable', { detail: 'Please retry.' });
   }
-  return { accessToken: grant.accessToken, ciphertext };
+  return { accessToken: grant.accessToken, tokenFingerprint };
 }
 
 const PARKED_GRANT_BATCH = 25;
@@ -441,7 +447,12 @@ export interface ParkedGrantSweep {
   revoked: number;
   failed: number;
   abandoned: number;
+  // Stopped early on consecutive unreadable grants: the key is wrong, and each further row would
+  // only be tried, and eventually abandoned, for nothing.
+  halted: boolean;
 }
+
+const SYSTEMIC_FAULT_STREAK = 3;
 
 /** For the daily cron: expired parked grants were never claimed, so Notion must forget them. */
 export async function revokeExpiredParkedGrants(
@@ -450,28 +461,29 @@ export async function revokeExpiredParkedGrants(
   env: Env,
   now: number
 ): Promise<ParkedGrantSweep> {
-  const sweep: ParkedGrantSweep = { swept: 0, revoked: 0, failed: 0, abandoned: 0 };
+  const sweep: ParkedGrantSweep = { swept: 0, revoked: 0, failed: 0, abandoned: 0, halted: false };
   if (requireProviderTokenKey(env) === null) {
     return sweep;
   }
   let budget = SWEEP_REVOKE_BUDGET;
-  // Past every row already tried this run, so one that keeps failing cannot hold up the rest.
-  let after: ParkedGrantCursor | null = null;
+  let unreadableStreak = 0;
   while (budget > 0) {
     const page = Math.min(PARKED_GRANT_BATCH, budget);
-    const batch = await store.listExpiredParkedGrants(now, page, after);
+    // A row this run has tried is marked or deleted, so the next list cannot return it again.
+    const batch = await store.listExpiredParkedGrants(now, page);
     if (batch.length === 0) {
       return sweep;
     }
     // Bounded by `page`, so the budget cannot be overspent inside one batch.
     for (const parked of batch) {
       budget -= 1;
-      after = parked;
       sweep.swept += 1;
-      if (await revokeSealed(client, parked.grant, env, null)) {
+      const outcome = await revokeSealed(client, parked.grant, env, null);
+      unreadableStreak = outcome === 'unreadable' ? unreadableStreak + 1 : 0;
+      if (outcome === 'revoked') {
         await store.deleteAuthCode(parked.codeHash);
         sweep.revoked += 1;
-      } else if (now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
+      } else if (outcome !== 'unreadable' && now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
         // The row is about to go, so name it: the hash of a long-expired single-use code is the
         // only handle an operator has for the token left live at Notion.
         logger.error('Gave up revoking an unclaimed Notion grant; it may still be live at Notion', {
@@ -482,7 +494,15 @@ export async function revokeExpiredParkedGrants(
         await store.deleteAuthCode(parked.codeHash);
         sweep.abandoned += 1;
       } else {
+        await store.markParkedGrantAttempted(parked.codeHash, now);
         sweep.failed += 1;
+      }
+      if (unreadableStreak >= SYSTEMIC_FAULT_STREAK) {
+        logger.error('Stopped the parked-grant sweep: grants keep failing to decrypt', {
+          unreadable: unreadableStreak,
+        });
+        sweep.halted = true;
+        return sweep;
       }
     }
   }
@@ -521,6 +541,18 @@ async function withFreshToken<T>(
   } catch (error) {
     return providerProblem(error, open, renewed);
   }
+}
+
+// A table picked before the property was persisted has no completion, and a stored value that no
+// longer parses is treated alike: the picker re-runs and stores both again.
+function storedSelection(
+  connection: ProviderConnection
+): { dataSourceId: string; completion: CompletionProperty } | null {
+  const completion = parseCompletionProperty(connection.completionProperty);
+  if (connection.dataSourceId === null || completion === null) {
+    return null;
+  }
+  return { dataSourceId: connection.dataSourceId, completion };
 }
 
 function invalidId(pointer: string): Response {
@@ -772,7 +804,10 @@ export function registerNotionRoutes(
     if (property === null) {
       return problem('provider_schema_unusable');
     }
-    const stored = await grant.store.setProviderDataSource(grant.userId, PROVIDER, dataSourceId);
+    const stored = await grant.store.setProviderSelection(grant.userId, PROVIDER, {
+      dataSourceId,
+      completionProperty: JSON.stringify(property),
+    });
     if (!stored) {
       logger.warn('Notion grant was disconnected while a table was being picked', {
         userId: grant.userId,
@@ -787,14 +822,15 @@ export function registerNotionRoutes(
     if (grant instanceof Response) {
       return grant;
     }
-    const dataSourceId = grant.connection.dataSourceId;
-    if (dataSourceId === null) {
+    const selection = storedSelection(grant.connection);
+    if (selection === null) {
       return problem('provider_table_unselected');
     }
+    const { dataSourceId, completion } = selection;
     // Re-read every time: a renamed property must surface as a prompt, not as an empty list.
     const result = await withFreshToken(grant, async (token) => {
       const schema = await grant.client.getPropertySchemas(token, dataSourceId);
-      const property = findCompletionProperty(schema);
+      const property = completionPropertyNamed(schema, completion.name);
       if (property === null) {
         return null;
       }
@@ -833,29 +869,33 @@ export function registerNotionRoutes(
     if (grant instanceof Response) {
       return grant;
     }
-    const dataSourceId = grant.connection.dataSourceId;
-    if (dataSourceId === null) {
+    const selection = storedSelection(grant.connection);
+    if (selection === null) {
       return problem('provider_table_unselected');
     }
-    const outcome = await withFreshToken(grant, async (token): Promise<WriteOutcome> => {
-      const schema = await grant.client.getPropertySchemas(token, dataSourceId);
-      const property = findCompletionProperty(schema);
-      if (property === null) {
-        return 'unusable';
-      }
+    const { dataSourceId, completion } = selection;
+    const writeCompletionTo = async (
+      token: string,
+      property: CompletionProperty
+    ): Promise<WriteOutcome> => {
       // Refused rather than written as a cleared status: a schema condition the user can fix.
       const write = completionWrite(property, done);
       if (write === null) {
         return 'no_todo_group';
       }
+      // A page 404 can mean its table is gone too: probing lets that read as table_unavailable.
+      const probeTable = (): Promise<unknown> =>
+        grant.client.getPropertySchemas(token, dataSourceId);
+      let notInTable = false;
       try {
         // A list read before the table changed can still name this page, and the completion
         // property is the new table's: written elsewhere it would complete an unmirrored task.
         const parent = await grant.client.getPageDataSource(token, pageId);
         if (parent === null || !isSameNotionId(parent, dataSourceId)) {
-          return 'not_in_table';
+          notInTable = true;
+        } else {
+          await grant.client.setCompletion(token, pageId, write);
         }
-        await grant.client.setCompletion(token, pageId, write);
       } catch (error) {
         // On the PAGE, not the table: a 404 is a row someone deleted, a 403 a write Notion refused
         // for that token (permission or a workspace block limit). Neither un-picks the table.
@@ -864,11 +904,47 @@ export function registerNotionRoutes(
             userId: grant.userId,
             reason: error.message,
           });
-          return error.status === 404 ? 'page_gone' : 'write_forbidden';
+          if (error.status === 404) {
+            await probeTable();
+            return 'page_gone';
+          }
+          return 'write_forbidden';
         }
         throw error;
       }
+      if (notInTable) {
+        await probeTable();
+        return 'not_in_table';
+      }
       return 'written';
+    };
+    // The schema is read only when the stored property looks stale: Notion rejected the write
+    // (400 validation_error) or the stored property has no To-do option to un-complete with.
+    const outcome = await withFreshToken(grant, async (token): Promise<WriteOutcome> => {
+      let rejection: unknown = null;
+      try {
+        const first = await writeCompletionTo(token, completion);
+        if (first !== 'no_todo_group') {
+          return first;
+        }
+      } catch (error) {
+        if (!(error instanceof NotionUnavailableError) || error.status !== 400) {
+          throw error;
+        }
+        rejection = error;
+      }
+      const schema = await grant.client.getPropertySchemas(token, dataSourceId);
+      const fresh = completionPropertyNamed(schema, completion.name);
+      if (fresh === null) {
+        return 'unusable';
+      }
+      if (JSON.stringify(fresh) === JSON.stringify(completion)) {
+        if (rejection !== null) {
+          throw rejection;
+        }
+        return 'no_todo_group';
+      }
+      return writeCompletionTo(token, fresh);
     });
     if (outcome instanceof Response) {
       return outcome;
