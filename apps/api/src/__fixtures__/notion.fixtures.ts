@@ -1,12 +1,13 @@
 import { env } from 'cloudflare:test';
 import { vi } from 'vitest';
-import { decryptSecret, encryptSecret, sha256Base64Url } from '../crypto-utils';
+import { decryptSecret, encryptSecret, sha256Base64Url, sha256Hex } from '../crypto-utils';
 import { D1SyncStore } from '../d1-store';
 import type { Env } from '../env';
-import type { NotionClient, NotionGrant } from '../notion-client';
-import type { PropertySchemas } from '../notion-schema';
+import { type NotionClient, type NotionGrant, NotionUnavailableError } from '../notion-client';
+import type { CompletionProperty, PropertySchemas } from '../notion-schema';
 import type {
   AuthCodePayload,
+  FingerprintedToken,
   ProviderConnection,
   RenewalClaim,
   ReplacedGrant,
@@ -40,6 +41,7 @@ export function asSchemas(value: Record<string, unknown>): PropertySchemas {
 }
 
 export const checkboxSchema = asSchemas({ Done: { id: 'p', type: 'checkbox', checkbox: {} } });
+export const checkboxCompletion: CompletionProperty = { kind: 'checkbox', name: 'Done' };
 
 /** The Complete group holds custom option names, so a name match on options would fail. */
 export const statusSchema = asSchemas({
@@ -63,6 +65,64 @@ export const statusSchema = asSchemas({
 });
 
 /** No completion property at all: what a table looks like after the user removed it. */
+/** `statusSchema` as selection stores it: option ids `o3`/`o4` complete a row, `o1` reopens it. */
+export const statusCompletion: Extract<CompletionProperty, { kind: 'status' }> = {
+  kind: 'status',
+  name: 'Status',
+  completeOptionIds: ['o3', 'o4'],
+  todoOptionIds: ['o1'],
+};
+
+/** Two status properties that both have a Complete group; which one a write hits must not depend on key order. */
+export const twoStatusSchema = asSchemas({
+  First: {
+    type: 'status',
+    status: {
+      options: [
+        { id: 'a1', name: 'Todo' },
+        { id: 'a2', name: 'Done' },
+      ],
+      groups: [
+        { id: 'ga1', name: 'To-do', option_ids: ['a1'] },
+        { id: 'ga2', name: 'Complete', option_ids: ['a2'] },
+      ],
+    },
+  },
+  Second: {
+    type: 'status',
+    status: {
+      options: [
+        { id: 'b1', name: 'Open' },
+        { id: 'b2', name: 'Closed' },
+      ],
+      groups: [
+        { id: 'gb1', name: 'To-do', option_ids: ['b1'] },
+        { id: 'gb2', name: 'Complete', option_ids: ['b2'] },
+      ],
+    },
+  },
+});
+
+export const secondStatusCompletion: CompletionProperty = {
+  kind: 'status',
+  name: 'Second',
+  completeOptionIds: ['b2'],
+  todoOptionIds: ['b1'],
+};
+
+/** A status with a Complete group but no To-do group, as `noTodoStatusSchema` stores it. */
+export const noTodoStatusCompletion: CompletionProperty = {
+  kind: 'status',
+  name: 'Status',
+  completeOptionIds: ['o3'],
+  todoOptionIds: [],
+};
+
+/** What Notion answers a page write when the property or option under it changed. */
+export function validationRejection(): NotionUnavailableError {
+  return new NotionUnavailableError('notion answered 400 (validation_error)', { status: 400 });
+}
+
 export const titleOnlySchema = asSchemas({ Name: { type: 'title', title: [] } });
 
 /** A status property with a Complete group but no To-do group, so "not done" has nowhere to go. */
@@ -138,12 +198,30 @@ export async function signedInWithoutNotion(): Promise<ConnectedUser> {
   };
 }
 
+/** A token's fingerprint as the Worker stores it, for seeding rows the way a claim would. */
+export function fingerprintOf(token: string): Promise<string> {
+  return sha256Hex(token);
+}
+
+/** The compare-and-set handle of whatever access token the account currently holds. */
+export async function currentToken(store: SyncStore, userId: string): Promise<FingerprintedToken> {
+  const row = await store.getProviderConnection(userId, 'notion');
+  if (row === null || row.tokenFingerprint === null) {
+    throw new Error('expected a stored Notion grant with a fingerprint');
+  }
+  return { tokenFingerprint: row.tokenFingerprint };
+}
+
 /**
  * A signed-in account with a stored Notion grant. `dataSourceId: null` models the state between
- * claiming the grant and picking a table.
+ * claiming the grant and picking a table; `completion` is the property that pick stored.
  */
 export async function connectedNotionUser(
-  options: { dataSourceId?: string | null; withRefreshToken?: boolean } = {}
+  options: {
+    dataSourceId?: string | null;
+    withRefreshToken?: boolean;
+    completion?: CompletionProperty;
+  } = {}
 ): Promise<ConnectedUser> {
   const user = await signedInWithoutNotion();
   const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
@@ -157,19 +235,24 @@ export async function connectedNotionUser(
     refreshCiphertext: refresh === null ? null : refresh.ciphertext,
     refreshIv: refresh === null ? null : refresh.iv,
     workspace: 'Acme',
+    tokenFingerprint: await sha256Hex(TEST_ACCESS_TOKEN),
   });
   const dataSourceId =
     options.dataSourceId === undefined ? TEST_DATA_SOURCE_ID : options.dataSourceId;
   if (dataSourceId !== null) {
-    await user.store.setProviderDataSource(user.userId, 'notion', dataSourceId);
+    await user.store.setProviderSelection(user.userId, 'notion', {
+      dataSourceId,
+      completionProperty: JSON.stringify(options.completion ?? checkboxCompletion),
+    });
   }
   return user;
 }
 
 /** Re-encrypts the refresh pair under a foreign key: the access token opens, the refresh cannot. */
 export async function sealRefreshUnderForeignKey(store: SyncStore, userId: string): Promise<void> {
-  const row = await store.getProviderConnection(userId, 'notion');
-  if (row === null) {
+  const row = await currentToken(store, userId);
+  const stored = await store.getProviderConnection(userId, 'notion');
+  if (stored === null) {
     throw new Error('expected a stored Notion grant');
   }
   const foreign = await encryptSecret(TEST_REFRESH_TOKEN, TEST_FOREIGN_PROVIDER_KEY);
@@ -177,10 +260,11 @@ export async function sealRefreshUnderForeignKey(store: SyncStore, userId: strin
     userId,
     'notion',
     {
-      ciphertext: row.ciphertext,
-      iv: row.iv,
+      ciphertext: stored.ciphertext,
+      iv: stored.iv,
       refreshCiphertext: foreign.ciphertext,
       refreshIv: foreign.iv,
+      tokenFingerprint: row.tokenFingerprint,
     },
     row
   );
@@ -256,7 +340,7 @@ export class FailingWriteStore extends D1SyncStore {
     userId: string,
     provider: string,
     tokens: SealedTokens,
-    used: { readonly ciphertext: string }
+    used: FingerprintedToken
   ): Promise<boolean> {
     if (this.failing === 'updateProviderTokens') {
       throw new Error('D1 write failed');
@@ -277,12 +361,21 @@ export class FailingWriteStore extends D1SyncStore {
 }
 
 /** Parks an access-only grant sealed under the test key, as an unclaimed callback leaves one. */
-export async function mintParkedGrant(store: D1SyncStore): Promise<void> {
-  const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
+export async function mintParkedGrant(
+  store: D1SyncStore,
+  key: string = TEST_PROVIDER_KEY
+): Promise<void> {
+  const sealed = await encryptSecret(TEST_ACCESS_TOKEN, key);
   await store.mintAuthCode(
     {
       provider: 'notion',
-      grant: { ...sealed, refreshCiphertext: null, refreshIv: null, workspace: null },
+      grant: {
+        ...sealed,
+        refreshCiphertext: null,
+        refreshIv: null,
+        workspace: null,
+        tokenFingerprint: await sha256Hex(TEST_ACCESS_TOKEN),
+      },
     },
     'c1'
   );

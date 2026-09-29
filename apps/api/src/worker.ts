@@ -43,7 +43,7 @@ export default {
         env,
         Date.now()
       );
-      return `scheduled purge swept ${sweep.swept} unclaimed notion grants: ${sweep.revoked} revoked, ${sweep.failed} left to retry, ${sweep.abandoned} abandoned`;
+      return `scheduled purge swept ${sweep.swept} unclaimed notion grants: ${sweep.revoked} revoked, ${sweep.failed} left to retry, ${sweep.abandoned} abandoned${sweep.halted ? ', stopped early: grants would not decrypt' : ''}`;
     });
     // After every job has run, so one failing purge cannot starve the others; the throw still
     // marks the cron failed in Cloudflare.

@@ -19,12 +19,12 @@ import {
   type AppliedRecord,
   type AuthCodePayload,
   type ExpiredParkedGrant,
+  type FingerprintedToken,
   type Identity,
   type KeyEnvelopeExport,
   type KeyEnvelopeRecord,
   PAIRING_TTL_MS,
   type PairingForRequester,
-  type ParkedGrantCursor,
   type PendingPairing,
   type ProviderCodePayload,
   type ProviderConnection,
@@ -78,7 +78,7 @@ export interface D1SyncStoreLimits {
 }
 
 const PROVIDER_CONNECTION_COLUMNS =
-  'provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id';
+  'provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id, token_fingerprint, completion_property';
 
 interface ProviderConnectionRow {
   provider: string;
@@ -88,6 +88,8 @@ interface ProviderConnectionRow {
   refresh_iv: string | null;
   workspace: string | null;
   data_source_id: string | null;
+  token_fingerprint: string | null;
+  completion_property: string | null;
 }
 
 function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
@@ -99,6 +101,8 @@ function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
     refreshIv: row.refresh_iv,
     workspace: row.workspace,
     dataSourceId: row.data_source_id,
+    tokenFingerprint: row.token_fingerprint,
+    completionProperty: row.completion_property,
   };
 }
 
@@ -313,25 +317,28 @@ export class D1SyncStore implements SyncStore {
     return res.meta.changes ?? 0;
   }
 
-  async listExpiredParkedGrants(
-    now: number,
-    limit: number,
-    after: ParkedGrantCursor | null
-  ): Promise<ExpiredParkedGrant[]> {
+  async listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]> {
     const res = await this.db
       .prepare(
         `SELECT code_hash, expires_at, payload FROM auth_codes
           WHERE expires_at <= ? AND json_extract(payload, '$.provider') = 'notion'
-            AND (expires_at, code_hash) > (?, ?)
-          ORDER BY expires_at, code_hash LIMIT ?`
+            AND (revoke_attempted_at IS NULL OR revoke_attempted_at < ?)
+          ORDER BY COALESCE(revoke_attempted_at, 0), expires_at, code_hash LIMIT ?`
       )
-      .bind(now, after?.expiresAt ?? -1, after?.codeHash ?? '', limit)
+      .bind(now, now, limit)
       .all<{ code_hash: string; expires_at: number; payload: string }>();
     return res.results.map((row) => ({
       codeHash: row.code_hash,
       expiresAt: row.expires_at,
       grant: (JSON.parse(row.payload) as ProviderCodePayload).grant,
     }));
+  }
+
+  async markParkedGrantAttempted(codeHash: string, now: number): Promise<void> {
+    await this.db
+      .prepare('UPDATE auth_codes SET revoke_attempted_at = ? WHERE code_hash = ?')
+      .bind(now, codeHash)
+      .run();
   }
 
   async deleteAuthCode(codeHash: string): Promise<void> {
@@ -673,17 +680,17 @@ export class D1SyncStore implements SyncStore {
   async claimProviderRenewal(
     userId: string,
     provider: string,
-    used: { readonly ciphertext: string },
+    used: FingerprintedToken,
     staleAfterMs: number
   ): Promise<RenewalClaim | null> {
     const now = this.now();
     const res = await this.db
       .prepare(
         `UPDATE provider_tokens SET renewal_started_at = ?
-          WHERE user_id = ? AND provider = ? AND ciphertext = ?
+          WHERE user_id = ? AND provider = ? AND token_fingerprint = ?
             AND (renewal_started_at IS NULL OR renewal_started_at < ?)`
       )
-      .bind(now, userId, provider, used.ciphertext, now - staleAfterMs)
+      .bind(now, userId, provider, used.tokenFingerprint, now - staleAfterMs)
       .run();
     return (res.meta.changes ?? 0) > 0 ? (now as RenewalClaim) : null;
   }
@@ -702,42 +709,60 @@ export class D1SyncStore implements SyncStore {
       .run();
   }
 
+  async recordTokenFingerprint(
+    userId: string,
+    provider: string,
+    ciphertext: string,
+    tokenFingerprint: string
+  ): Promise<boolean> {
+    const res = await this.db
+      .prepare(
+        `UPDATE provider_tokens SET token_fingerprint = ?
+          WHERE user_id = ? AND provider = ? AND ciphertext = ?`
+      )
+      .bind(tokenFingerprint, userId, provider, ciphertext)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
   async updateProviderTokens(
     userId: string,
     provider: string,
     tokens: SealedTokens,
-    used: { readonly ciphertext: string }
+    used: FingerprintedToken
   ): Promise<boolean> {
     const res = await this.db
       .prepare(
         `UPDATE provider_tokens
-            SET ciphertext = ?, iv = ?,
-                refresh_ciphertext = COALESCE(?, refresh_ciphertext),
-                refresh_iv = COALESCE(?, refresh_iv),
-                renewal_started_at = NULL
-          WHERE user_id = ? AND provider = ? AND ciphertext = ?`
+            SET ciphertext = ?, iv = ?, refresh_ciphertext = ?, refresh_iv = ?,
+                token_fingerprint = ?, renewal_started_at = NULL
+          WHERE user_id = ? AND provider = ? AND token_fingerprint = ?`
       )
       .bind(
         tokens.ciphertext,
         tokens.iv,
         tokens.refreshCiphertext,
         tokens.refreshIv,
+        tokens.tokenFingerprint,
         userId,
         provider,
-        used.ciphertext
+        used.tokenFingerprint
       )
       .run();
     return (res.meta.changes ?? 0) > 0;
   }
 
-  async setProviderDataSource(
+  async setProviderSelection(
     userId: string,
     provider: string,
-    dataSourceId: string
+    selection: { dataSourceId: string; completionProperty: string }
   ): Promise<boolean> {
     const res = await this.db
-      .prepare('UPDATE provider_tokens SET data_source_id = ? WHERE user_id = ? AND provider = ?')
-      .bind(dataSourceId, userId, provider)
+      .prepare(
+        `UPDATE provider_tokens SET data_source_id = ?, completion_property = ?
+          WHERE user_id = ? AND provider = ?`
+      )
+      .bind(selection.dataSourceId, selection.completionProperty, userId, provider)
       .run();
     return (res.meta.changes ?? 0) > 0;
   }
@@ -751,21 +776,26 @@ export class D1SyncStore implements SyncStore {
     // (re)connect can slip a grant in between and have it leaked instead.
     const [displaced] = await this.db.batch<ReplacedGrant>([
       this.db
-        .prepare(`SELECT ciphertext, iv FROM provider_tokens WHERE user_id = ? AND provider = ?`)
+        .prepare(
+          `SELECT ciphertext, iv, token_fingerprint AS tokenFingerprint
+             FROM provider_tokens WHERE user_id = ? AND provider = ?`
+        )
         .bind(userId, provider),
       this.db
         .prepare(
           `INSERT INTO provider_tokens
            (user_id, provider, ciphertext, iv, refresh_ciphertext, refresh_iv,
-            workspace, data_source_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+            workspace, token_fingerprint, data_source_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
          ON CONFLICT (user_id, provider) DO UPDATE SET
            ciphertext = excluded.ciphertext,
            iv = excluded.iv,
            refresh_ciphertext = excluded.refresh_ciphertext,
            refresh_iv = excluded.refresh_iv,
            workspace = excluded.workspace,
+           token_fingerprint = excluded.token_fingerprint,
            data_source_id = provider_tokens.data_source_id,
+           completion_property = provider_tokens.completion_property,
            renewal_started_at = NULL`
         )
         .bind(
@@ -776,6 +806,7 @@ export class D1SyncStore implements SyncStore {
           grant.refreshCiphertext,
           grant.refreshIv,
           grant.workspace,
+          grant.tokenFingerprint,
           this.now()
         ),
     ]);
@@ -785,11 +816,13 @@ export class D1SyncStore implements SyncStore {
   async deleteProviderConnectionIfUnchanged(
     userId: string,
     provider: string,
-    used: { readonly ciphertext: string }
+    used: FingerprintedToken
   ): Promise<boolean> {
     const res = await this.db
-      .prepare('DELETE FROM provider_tokens WHERE user_id = ? AND provider = ? AND ciphertext = ?')
-      .bind(userId, provider, used.ciphertext)
+      .prepare(
+        'DELETE FROM provider_tokens WHERE user_id = ? AND provider = ? AND token_fingerprint = ?'
+      )
+      .bind(userId, provider, used.tokenFingerprint)
       .run();
     return (res.meta.changes ?? 0) > 0;
   }
