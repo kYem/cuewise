@@ -9,6 +9,7 @@ import {
   AlarmClock,
   AlertCircle,
   Bell,
+  BellOff,
   BellRing,
   CalendarClock,
   Check,
@@ -394,6 +395,22 @@ export function ReminderHeroCard({
           <ReminderSnoozeRow onSnooze={onSnooze} state={state} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Shown over the panel when the browser or system has denied Cuewise notifications. */
+export function NotificationsBlockedHint() {
+  return (
+    <div
+      role="status"
+      className="mb-2 flex w-[380px] items-start gap-2.5 rounded-2xl border border-orange-500/40 bg-surface-elevated px-3.5 py-2.5 shadow-lg backdrop-blur-xl"
+    >
+      <BellOff className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-500" />
+      <p className="text-xs text-secondary">
+        <span className="font-semibold text-primary">Notifications are blocked for Cuewise.</span>{' '}
+        Reminders won't pop up until you allow them in your browser or system settings.
+      </p>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { cn } from '@cuewise/ui';
 import { AlertCircle, Bell } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNotificationsBlocked } from '../hooks/useNotificationsBlocked';
 import { useReminderStore } from '../stores/reminder-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { AddReminderForm } from './AddReminderForm';
@@ -14,6 +15,7 @@ import {
   AgendaReminderPanel,
   ComposedReminderPanel,
   EmptyReminders,
+  NotificationsBlockedHint,
   type ReminderPanelProps,
 } from './reminders';
 
@@ -45,6 +47,8 @@ export const ReminderWidget: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [showAllModal, setShowAllModal] = useState(false);
+
+  const notificationsBlocked = useNotificationsBlocked(isExpanded);
 
   const widgetRef = useRef<HTMLDivElement>(null);
   const didAutoExpandRef = useRef(false);
@@ -208,6 +212,7 @@ export const ReminderWidget: React.FC = () => {
         {/* Expanded Panel - positioned above the button; layout chosen by setting */}
         {isExpanded && (
           <div className="absolute bottom-full right-0 mb-2 animate-fade-in">
+            {notificationsBlocked && <NotificationsBlockedHint />}
             {error ? (
               <div className="w-[380px] rounded-2xl bg-surface-elevated backdrop-blur-xl border border-border shadow-2xl overflow-hidden p-3">
                 <ErrorFallback

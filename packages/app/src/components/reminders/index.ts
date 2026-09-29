@@ -1,6 +1,7 @@
 export { AgendaReminderPanel } from './AgendaReminderPanel';
 export {
   EmptyReminders,
+  NotificationsBlockedHint,
   RecurrencePauseControl,
   ReminderCategoryCheck,
   ReminderHeroCard,
