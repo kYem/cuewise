@@ -69,8 +69,8 @@ export interface SealedGrant {
   refreshIv: string | null;
   workspace: string | null;
   // SHA-256 of the access token's plaintext: a stable name for the token itself, which the
-  // ciphertext is not (every seal carries a fresh iv). Null on a grant stored before it existed.
-  tokenFingerprint: string | null;
+  // ciphertext is not (every seal carries a fresh iv).
+  tokenFingerprint: string;
 }
 
 /** The access pair a (re)connect displaced: enough to revoke it, nothing more. */
@@ -87,9 +87,8 @@ export type RenewalClaim = number & { readonly __brand: 'RenewalClaim' };
 /** What a renewal may write: the tokens, never the workspace or the chosen table. */
 export type SealedTokens = Pick<
   SealedGrant,
-  'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'
-> &
-  FingerprintedToken;
+  'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv' | 'tokenFingerprint'
+>;
 
 // Device-to-device pairing (ENG-50): a short-lived relay row so a new device can join an
 // account by approving from one already signed in, without typing a code by hand.
@@ -124,7 +123,7 @@ export interface ProviderConnection extends SealedGrant {
   provider: string;
   dataSourceId: string | null;
   // The property completion is written to, chosen with the table and opaque to the store. Null
-  // while no table is picked, and on a table picked before it was persisted.
+  // exactly while no table is picked.
   completionProperty: string | null;
 }
 
@@ -197,13 +196,6 @@ export interface SyncStore {
     used: FingerprintedToken,
     staleAfterMs: number
   ): Promise<RenewalClaim | null>;
-  // Heals a missing or stale fingerprint; keyed on the ciphertext the caller just decrypted.
-  recordTokenFingerprint(
-    userId: string,
-    provider: string,
-    ciphertext: string,
-    tokenFingerprint: string
-  ): Promise<boolean>;
   // Keyed on the stamp, so a crashed renewal's late release cannot free the claim that took over.
   releaseProviderRenewal(userId: string, provider: string, claim: RenewalClaim): Promise<void>;
   // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no

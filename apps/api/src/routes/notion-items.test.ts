@@ -271,9 +271,11 @@ describe('GET /v1/integrations/notion/items', () => {
     expect(body.code).toBe('provider_schema_unusable');
   });
 
-  it('asks for the table again when the stored property is missing', async () => {
+  it('asks for the table again when the stored property does not parse', async () => {
     const { headers, userId } = await connectedNotionUser();
-    await env.DB.prepare('UPDATE provider_tokens SET completion_property = NULL WHERE user_id = ?')
+    await env.DB.prepare(
+      "UPDATE provider_tokens SET completion_property = 'not json' WHERE user_id = ?"
+    )
       .bind(userId)
       .run();
 
@@ -897,21 +899,6 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     });
   });
 
-  it('heals a grant stored without a fingerprint on first use, so renewal still works', async () => {
-    const { queryRows } = expiringQuery();
-    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
-    await env.DB.prepare('UPDATE provider_tokens SET token_fingerprint = NULL WHERE user_id = ?')
-      .bind(userId)
-      .run();
-
-    const res = await getItems(headers, stubNotionClient({ queryRows }));
-
-    expect(res.status).toBe(200);
-    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
-      accessToken: TEST_REFRESHED_TOKEN,
-    });
-  });
-
   it('re-reads the schema only when Notion rejects the write, and retries with the same property as it now stands', async () => {
     const setCompletion = vi
       .fn()
@@ -994,10 +981,12 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     expect(body.code).toBe('provider_table_unavailable');
   });
 
-  it('asks for the table again when the stored property is missing, as on a table picked before it was kept', async () => {
+  it('asks for the table again when the stored property does not parse', async () => {
     const setCompletion = vi.fn(async () => undefined);
     const { headers, userId } = await connectedNotionUser();
-    await env.DB.prepare('UPDATE provider_tokens SET completion_property = NULL WHERE user_id = ?')
+    await env.DB.prepare(
+      "UPDATE provider_tokens SET completion_property = 'not json' WHERE user_id = ?"
+    )
       .bind(userId)
       .run();
 

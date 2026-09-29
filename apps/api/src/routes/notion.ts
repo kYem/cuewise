@@ -147,7 +147,7 @@ export async function revokeDisplacedGrant(
   env: Env,
   userId: string
 ): Promise<boolean> {
-  if (replaced.tokenFingerprint !== null && replaced.tokenFingerprint === stored.tokenFingerprint) {
+  if (replaced.tokenFingerprint === stored.tokenFingerprint) {
     return true;
   }
   const key = env.PROVIDER_TOKEN_KEY;
@@ -158,20 +158,14 @@ export async function revokeDisplacedGrant(
     return false;
   }
   let displaced: string;
-  let current: string;
   try {
     displaced = await decryptSecret(replaced, key);
-    current = stored.tokenFingerprint ?? (await sha256Hex(await decryptSecret(stored, key)));
   } catch (error) {
     logger.error('Could not decrypt a Notion grant to revoke it upstream', {
       userId,
       reason: errorName(error),
     });
     return false;
-  }
-  // Only reached for a grant stored before fingerprints, or one with a stale fingerprint.
-  if ((await sha256Hex(displaced)) === current) {
-    return true;
   }
   return revokeUpstream(client, displaced, userId);
 }
@@ -230,9 +224,7 @@ export async function revokeParkedGrant(
   await revokeSealed(client, grant, env, null);
 }
 
-type FingerprintedGrant = SealedGrant & FingerprintedToken;
-
-async function sealGrant(grant: NotionGrant, key: string): Promise<FingerprintedGrant> {
+async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> {
   const access = await encryptSecret(grant.accessToken, key);
   const refresh = grant.refreshToken === null ? null : await encryptSecret(grant.refreshToken, key);
   return {
@@ -250,7 +242,7 @@ interface OpenGrant {
   readonly client: NotionClient;
   readonly userId: string;
   readonly key: string;
-  readonly connection: ProviderConnection & FingerprintedToken;
+  readonly connection: ProviderConnection;
   readonly accessToken: string;
 }
 
@@ -280,20 +272,7 @@ async function openGrant(
     });
     return problem('provider_reauth_required');
   }
-  // Compared against the plaintext just opened, so a grant stored before fingerprints existed, or
-  // by a Worker that predates them, is healed here rather than never matching its own compare-and-set.
-  const tokenFingerprint = await sha256Hex(accessToken);
-  if (connection.tokenFingerprint !== tokenFingerprint) {
-    await store.recordTokenFingerprint(userId, PROVIDER, connection.ciphertext, tokenFingerprint);
-  }
-  return {
-    store,
-    client,
-    userId,
-    key,
-    connection: { ...connection, tokenFingerprint },
-    accessToken,
-  };
+  return { store, client, userId, key, connection, accessToken };
 }
 
 // Maps a provider failure onto the error contract. An auth fault drops the grant only while the
@@ -413,7 +392,7 @@ async function renewGrant(open: OpenGrant, refresh: RefreshPair): Promise<Renewe
   }
   // From here the new token is minted but unstored: every failure revokes it, so it is not left
   // live with nobody holding it.
-  let sealed: FingerprintedGrant;
+  let sealed: SealedGrant;
   try {
     sealed = await sealGrant(grant, open.key);
   } catch (error) {
@@ -710,7 +689,7 @@ export function registerNotionRoutes(
       return returnWithError(state.returnUri, 'server_error');
     }
     // From here the grant is live but held by nobody: every failure revokes it.
-    let sealed: FingerprintedGrant;
+    let sealed: SealedGrant;
     try {
       sealed = await sealGrant(grant, c.env.PROVIDER_TOKEN_KEY);
     } catch (error) {
@@ -759,11 +738,7 @@ export function registerNotionRoutes(
       logger.warn('Notion claim presented a sign-in code', { userId });
       return problem('provider_claim_invalid');
     }
-    // Parked by a Worker that predates fingerprints, the field is absent, not null.
-    const grant: SealedGrant = {
-      ...consumed.payload.grant,
-      tokenFingerprint: consumed.payload.grant.tokenFingerprint ?? null,
-    };
+    const grant = consumed.payload.grant;
     // Burned before verifying, like the sign-in bounces: a wrong verifier kills the code, and the
     // grant it parked can never be claimed now, so it must not stay live at Notion.
     if ((await sha256Base64Url(codeVerifier)) !== consumed.codeChallenge) {

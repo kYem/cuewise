@@ -88,7 +88,7 @@ interface ProviderConnectionRow {
   refresh_iv: string | null;
   workspace: string | null;
   data_source_id: string | null;
-  token_fingerprint: string | null;
+  token_fingerprint: string;
   completion_property: string | null;
 }
 
@@ -707,22 +707,6 @@ export class D1SyncStore implements SyncStore {
       )
       .bind(userId, provider, claim)
       .run();
-  }
-
-  async recordTokenFingerprint(
-    userId: string,
-    provider: string,
-    ciphertext: string,
-    tokenFingerprint: string
-  ): Promise<boolean> {
-    const res = await this.db
-      .prepare(
-        `UPDATE provider_tokens SET token_fingerprint = ?
-          WHERE user_id = ? AND provider = ? AND ciphertext = ?`
-      )
-      .bind(tokenFingerprint, userId, provider, ciphertext)
-      .run();
-    return (res.meta.changes ?? 0) > 0;
   }
 
   async updateProviderTokens(

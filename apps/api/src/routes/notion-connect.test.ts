@@ -41,7 +41,6 @@ import {
   NotionResourceError,
   NotionUnavailableError,
 } from '../notion-client';
-import type { AuthCodePayload } from '../store';
 import { revokeDisplacedGrant, revokeExpiredParkedGrants } from './notion';
 
 async function parkGrant(store: D1SyncStore): Promise<void> {
@@ -801,25 +800,6 @@ describe('POST /v1/integrations/notion/claim', () => {
     const after = await store.getProviderConnection(userId, 'notion');
     expect(after?.dataSourceId).toBe(TEST_DATA_SOURCE_ID);
     expect(after?.ciphertext).not.toBe(before?.ciphertext);
-  });
-
-  it('claims a grant parked by a Worker that predates fingerprints', async () => {
-    const { headers, store, userId } = await signedInWithoutNotion();
-    const sealed = await encryptSecret(TEST_ACCESS_TOKEN, TEST_PROVIDER_KEY);
-    const code = await store.mintAuthCode(
-      {
-        provider: 'notion',
-        grant: { ...sealed, refreshCiphertext: null, refreshIv: null, workspace: 'Acme' },
-      } as AuthCodePayload,
-      await testCodeChallenge()
-    );
-
-    const res = await claim(code, headers);
-
-    expect(res.status).toBe(200);
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
-      tokenFingerprint: null,
-    });
   });
 
   it('keeps a selection made while the reconnect was in flight', async () => {
@@ -1747,23 +1727,6 @@ describe('revokeDisplacedGrant', () => {
     await expect(work).resolves.toBe(true);
     expect(revokeToken).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
-  });
-
-  it('still recognises the same token on a grant stored before fingerprints, by opening it', async () => {
-    const revokeToken = vi.fn(async () => undefined);
-    const before = { ...(await sealed(TEST_ACCESS_TOKEN)), tokenFingerprint: null };
-    const after = await sealed(TEST_ACCESS_TOKEN);
-
-    const work = revokeDisplacedGrant(
-      stubNotionClient({ revokeToken }),
-      before,
-      after,
-      notionEnv(),
-      'user-1'
-    );
-
-    await expect(work).resolves.toBe(true);
-    expect(revokeToken).not.toHaveBeenCalled();
   });
 
   it('revokes a genuinely displaced grant, and not before the caller awaits it', async () => {

@@ -313,31 +313,6 @@ describe('provider connections', () => {
     );
   });
 
-  it('recordTokenFingerprint heals a missing or stale fingerprint, keyed on the ciphertext', async () => {
-    await store.putProviderGrant(userId, 'notion', grant({ tokenFingerprint: null }));
-
-    await expect(store.recordTokenFingerprint(userId, 'notion', 'other-ct', 'fp-x')).resolves.toBe(
-      false
-    );
-    await expect(store.recordTokenFingerprint(userId, 'notion', 'ct', 'fp-healed')).resolves.toBe(
-      true
-    );
-
-    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
-      tokenFingerprint: 'fp-healed',
-    });
-  });
-
-  it('never matches a compare-and-set against a row with no fingerprint', async () => {
-    await store.putProviderGrant(userId, 'notion', grant({ tokenFingerprint: null }));
-
-    await expect(store.claimProviderRenewal(userId, 'notion', FP, 30_000)).resolves.toBeNull();
-    await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(false);
-    await expect(store.deleteProviderConnectionIfUnchanged(userId, 'notion', FP)).resolves.toBe(
-      false
-    );
-  });
-
   it('narrow writers answer false for an account with no grant', async () => {
     await expect(
       store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds1', completionProperty: 'p' })
