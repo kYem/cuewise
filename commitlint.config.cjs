@@ -23,8 +23,9 @@ module.exports = {
     'subject-empty': [2, 'never'],
     // Type must not be empty
     'type-empty': [2, 'never'],
-    // Subject must be lowercase
-    'subject-case': [2, 'always', 'lower-case'],
+    // Conventional's default: rejects a wholly Sentence/Start/Pascal/UPPER subject, but leaves a
+    // proper noun alone, so a subject can name `onError` or D1 rather than talk around it.
+    'subject-case': [2, 'never', ['sentence-case', 'start-case', 'pascal-case', 'upper-case']],
     // Max header length
     'header-max-length': [2, 'always', 100],
   },
