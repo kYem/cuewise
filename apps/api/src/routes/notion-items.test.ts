@@ -7,6 +7,7 @@ import {
   currentToken,
   FailingWriteStore,
   noTodoStatusCompletion,
+  noTodoStatusSchema,
   notionEnv,
   sealRefreshUnderForeignKey,
   secondStatusCompletion,
@@ -862,14 +863,53 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
 
   it('names the missing To-do group when un-completing, rather than calling the table unusable', async () => {
     const setCompletion = vi.fn(async () => undefined);
+    const getPropertySchemas = vi.fn(async () => noTodoStatusSchema);
     const { headers } = await connectedNotionUser({ completion: noTodoStatusCompletion });
 
-    const res = await patchDone(headers, false, stubNotionClient({ setCompletion }));
+    const res = await patchDone(
+      headers,
+      false,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
     const body = (await res.json()) as { code: string };
 
     expect(res.status).toBe(422);
     expect(body.code).toBe('provider_todo_group_missing');
     expect(setCompletion).not.toHaveBeenCalled();
+  });
+
+  it('un-completes once the user has added the To-do group, without re-picking the table', async () => {
+    const setCompletion = vi.fn(async () => undefined);
+    const getPropertySchemas = vi.fn(async () => statusSchema);
+    const { headers } = await connectedNotionUser({ completion: noTodoStatusCompletion });
+
+    const res = await patchDone(
+      headers,
+      false,
+      stubNotionClient({ setCompletion, getPropertySchemas })
+    );
+
+    expect(res.status).toBe(204);
+    expect(setCompletion).toHaveBeenCalledWith(TEST_ACCESS_TOKEN, TEST_PAGE_ID, {
+      kind: 'status',
+      name: 'Status',
+      optionId: 'o1',
+    });
+  });
+
+  it('heals a grant stored without a fingerprint on first use, so renewal still works', async () => {
+    const { queryRows } = expiringQuery();
+    const { headers, store, userId } = await connectedNotionUser({ withRefreshToken: true });
+    await env.DB.prepare('UPDATE provider_tokens SET token_fingerprint = NULL WHERE user_id = ?')
+      .bind(userId)
+      .run();
+
+    const res = await getItems(headers, stubNotionClient({ queryRows }));
+
+    expect(res.status).toBe(200);
+    await expect(storedNotionTokens(store, userId)).resolves.toMatchObject({
+      accessToken: TEST_REFRESHED_TOKEN,
+    });
   });
 
   it('re-reads the schema only when Notion rejects the write, and retries with the same property as it now stands', async () => {

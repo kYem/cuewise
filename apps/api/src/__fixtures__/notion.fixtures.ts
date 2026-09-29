@@ -64,7 +64,6 @@ export const statusSchema = asSchemas({
   },
 });
 
-/** No completion property at all: what a table looks like after the user removed it. */
 /** `statusSchema` as selection stores it: option ids `o3`/`o4` complete a row, `o1` reopens it. */
 export const statusCompletion: Extract<CompletionProperty, { kind: 'status' }> = {
   kind: 'status',
@@ -123,6 +122,7 @@ export function validationRejection(): NotionUnavailableError {
   return new NotionUnavailableError('notion answered 400 (validation_error)', { status: 400 });
 }
 
+/** No completion property at all: what a table looks like after the user removed it. */
 export const titleOnlySchema = asSchemas({ Name: { type: 'title', title: [] } });
 
 /** A status property with a Complete group but no To-do group, so "not done" has nowhere to go. */
@@ -196,11 +196,6 @@ export async function signedInWithoutNotion(): Promise<ConnectedUser> {
     token,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   };
-}
-
-/** A token's fingerprint as the Worker stores it, for seeding rows the way a claim would. */
-export function fingerprintOf(token: string): Promise<string> {
-  return sha256Hex(token);
 }
 
 /** The compare-and-set handle of whatever access token the account currently holds. */

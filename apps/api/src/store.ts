@@ -87,8 +87,9 @@ export type RenewalClaim = number & { readonly __brand: 'RenewalClaim' };
 /** What a renewal may write: the tokens, never the workspace or the chosen table. */
 export type SealedTokens = Pick<
   SealedGrant,
-  'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv' | 'tokenFingerprint'
->;
+  'ciphertext' | 'iv' | 'refreshCiphertext' | 'refreshIv'
+> &
+  FingerprintedToken;
 
 // Device-to-device pairing (ENG-50): a short-lived relay row so a new device can join an
 // account by approving from one already signed in, without typing a code by hand.
@@ -196,9 +197,7 @@ export interface SyncStore {
     used: FingerprintedToken,
     staleAfterMs: number
   ): Promise<RenewalClaim | null>;
-  // Heals a fingerprint that is missing (a grant stored before the column) or stale (written by
-  // a Worker that predates it). Keyed on the ciphertext, the one moment that is safe: the caller
-  // just decrypted exactly that row.
+  // Heals a missing or stale fingerprint; keyed on the ciphertext the caller just decrypted.
   recordTokenFingerprint(
     userId: string,
     provider: string,
@@ -217,8 +216,7 @@ export interface SyncStore {
     grant: SealedGrant
   ): Promise<ReplacedGrant | null>;
   // Writes only while the row still holds the token the renewal started from, and releases the
-  // claim with it. A null refresh clears the stored pair: Notion rotates it on every renewal, so
-  // the one held is spent and must not look renewable. False when nothing matched.
+  // claim with it. A null refresh clears the stored pair: Notion has spent it. False on no match.
   updateProviderTokens(
     userId: string,
     provider: string,

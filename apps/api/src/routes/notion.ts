@@ -504,7 +504,7 @@ export async function revokeExpiredParkedGrants(
       if (outcome === 'revoked') {
         await store.deleteAuthCode(parked.codeHash);
         sweep.revoked += 1;
-      } else if (now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
+      } else if (outcome !== 'unreadable' && now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
         // The row is about to go, so name it: the hash of a long-expired single-use code is the
         // only handle an operator has for the token left live at Notion.
         logger.error('Gave up revoking an unclaimed Notion grant; it may still be live at Notion', {
@@ -930,25 +930,33 @@ export function registerNotionRoutes(
       }
       return 'written';
     };
-    // The stored property is trusted; the schema is read only when Notion rejects the write (400
-    // validation_error), which is what an option or property changed under it looks like.
+    // The schema is read only when the stored property looks stale: Notion rejected the write
+    // (400 validation_error) or the stored property has no To-do option to un-complete with.
     const outcome = await withFreshToken(grant, async (token): Promise<WriteOutcome> => {
+      let rejection: unknown = null;
       try {
-        return await writeCompletionTo(token, completion);
+        const first = await writeCompletionTo(token, completion);
+        if (first !== 'no_todo_group') {
+          return first;
+        }
       } catch (error) {
         if (!(error instanceof NotionUnavailableError) || error.status !== 400) {
           throw error;
         }
-        const schema = await grant.client.getPropertySchemas(token, dataSourceId);
-        const fresh = completionPropertyNamed(schema, completion.name);
-        if (fresh === null) {
-          return 'unusable';
-        }
-        if (JSON.stringify(fresh) === JSON.stringify(completion)) {
-          throw error;
-        }
-        return writeCompletionTo(token, fresh);
+        rejection = error;
       }
+      const schema = await grant.client.getPropertySchemas(token, dataSourceId);
+      const fresh = completionPropertyNamed(schema, completion.name);
+      if (fresh === null) {
+        return 'unusable';
+      }
+      if (JSON.stringify(fresh) === JSON.stringify(completion)) {
+        if (rejection !== null) {
+          throw rejection;
+        }
+        return 'no_todo_group';
+      }
+      return writeCompletionTo(token, fresh);
     });
     if (outcome instanceof Response) {
       return outcome;
