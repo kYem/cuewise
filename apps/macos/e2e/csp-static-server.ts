@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { extname, resolve, sep } from 'node:path';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -11,6 +11,29 @@ const MIME_TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.ico': 'image/x-icon',
 };
+
+/**
+ * Resolves a request path inside `distDir`, or null if it escapes. Containment is checked against
+ * `distDir + sep`, so a sibling like `<dist>-evil` cannot satisfy a bare prefix match.
+ */
+export function resolveWithinDist(distDir: string, urlPath: string): string | null {
+  const root = resolve(distDir);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(urlPath);
+  } catch {
+    return null;
+  }
+
+  const candidate = resolve(root, decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, ''));
+  if (candidate !== root && !candidate.startsWith(root + sep)) {
+    return null;
+  }
+  if (existsSync(candidate) && statSync(candidate).isDirectory()) {
+    return resolve(candidate, 'index.html');
+  }
+  return candidate;
+}
 
 /**
  * Joins a tauri.conf.json CSP directive map into a header value the way Tauri's
@@ -35,10 +58,9 @@ export function buildCspHeader(directiveMap: Record<string, string>): string {
 export function startCspServer(distDir: string, csp: string, port: number): Promise<Server> {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const urlPath = (req.url ?? '/').split('?')[0] ?? '/';
-    const relative = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '');
-    const filePath = normalize(join(distDir, relative));
+    const filePath = resolveWithinDist(distDir, urlPath);
 
-    if (!filePath.startsWith(distDir) || !existsSync(filePath)) {
+    if (filePath === null || !existsSync(filePath)) {
       res.writeHead(404).end('Not found');
       return;
     }
