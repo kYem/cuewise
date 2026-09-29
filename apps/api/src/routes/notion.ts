@@ -908,14 +908,19 @@ export function registerNotionRoutes(
       if (write === null) {
         return 'no_todo_group';
       }
+      // A page 404 can mean its table is gone too: probing lets that read as table_unavailable.
+      const probeTable = (): Promise<unknown> =>
+        grant.client.getPropertySchemas(token, dataSourceId);
+      let notInTable = false;
       try {
         // A list read before the table changed can still name this page, and the completion
         // property is the new table's: written elsewhere it would complete an unmirrored task.
         const parent = await grant.client.getPageDataSource(token, pageId);
         if (parent === null || !isSameNotionId(parent, dataSourceId)) {
-          return 'not_in_table';
+          notInTable = true;
+        } else {
+          await grant.client.setCompletion(token, pageId, write);
         }
-        await grant.client.setCompletion(token, pageId, write);
       } catch (error) {
         // On the PAGE, not the table: a 404 is a row someone deleted, a 403 a write Notion refused
         // for that token (permission or a workspace block limit). Neither un-picks the table.
@@ -924,9 +929,17 @@ export function registerNotionRoutes(
             userId: grant.userId,
             reason: error.message,
           });
-          return error.status === 404 ? 'page_gone' : 'write_forbidden';
+          if (error.status === 404) {
+            await probeTable();
+            return 'page_gone';
+          }
+          return 'write_forbidden';
         }
         throw error;
+      }
+      if (notInTable) {
+        await probeTable();
+        return 'not_in_table';
       }
       return 'written';
     };

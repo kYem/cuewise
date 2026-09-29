@@ -1100,6 +1100,36 @@ describe('PATCH /v1/integrations/notion/items/:pageId', () => {
     });
   });
 
+  it.each([
+    ['the page lookup 404s', { getPageDataSource: NotionResourceError }],
+    ['the page is no table row', { getPageDataSource: null }],
+    ['the page sits in another table', { getPageDataSource: 'other-table' }],
+    ['the write 404s', { setCompletion: NotionResourceError }],
+  ] as const)('answers table_unavailable when %s and the table itself is gone', async (_label, fault) => {
+    const [method, outcome] = Object.entries(fault)[0] ?? [];
+    const thrown = outcome === NotionResourceError;
+    const stubbed = vi.fn(async () => {
+      if (thrown) {
+        throw new NotionResourceError(404, 'not found');
+      }
+      return outcome;
+    });
+    const getPropertySchemas = vi.fn(async () => {
+      throw new NotionResourceError(404, 'table gone');
+    });
+    const { headers } = await connectedNotionUser();
+
+    const res = await patchDone(
+      headers,
+      true,
+      stubNotionClient({ getPropertySchemas, [method as string]: stubbed })
+    );
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_table_unavailable');
+  });
+
   it('rejects a done that is not a boolean rather than coercing it', async () => {
     const setCompletion = vi.fn(async () => undefined);
     const { headers } = await connectedNotionUser();
