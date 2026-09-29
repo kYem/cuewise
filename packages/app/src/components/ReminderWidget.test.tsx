@@ -1,5 +1,7 @@
+import { configurePlatform } from '@cuewise/shared';
 import { createSettingsStoreMock, reminderFactory } from '@cuewise/test-utils';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fakeNotifier } from '@cuewise/test-utils/mocks';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReminderStore } from '../stores/reminder-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -175,5 +177,50 @@ describe('ReminderWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep reminders open' }));
 
     expect(updateSettings).toHaveBeenCalledWith({ reminderPanelPinned: true });
+  });
+
+  describe('blocked-notifications hint', () => {
+    const notifier = fakeNotifier();
+    const BLOCKED = /Notifications are blocked for Cuewise/;
+
+    beforeEach(() => {
+      configurePlatform({ notifier });
+      mockReminderStore();
+      mockSettings('composed');
+    });
+
+    it('shows when the host has denied notifications', async () => {
+      notifier.permission.mockResolvedValue('denied');
+
+      render(<ReminderWidget />);
+      expandPanel();
+
+      expect(await screen.findByText(BLOCKED)).toBeInTheDocument();
+    });
+
+    it.each([
+      'granted',
+      'unknown',
+    ] as const)('stays hidden when permission is %s', async (state) => {
+      notifier.permission.mockResolvedValue(state);
+
+      render(<ReminderWidget />);
+      expandPanel();
+
+      await waitFor(() => expect(notifier.permission).toHaveBeenCalled());
+      expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument();
+    });
+
+    it('re-checks on every open, so allowing them clears it', async () => {
+      notifier.permission.mockResolvedValueOnce('denied').mockResolvedValue('granted');
+      render(<ReminderWidget />);
+      expandPanel();
+      await screen.findByText(BLOCKED);
+
+      fireEvent.click(screen.getByRole('button', { name: /Click to collapse/ }));
+      expandPanel();
+
+      await waitFor(() => expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument());
+    });
   });
 });
