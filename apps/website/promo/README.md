@@ -1,7 +1,7 @@
 # Cuewise promo video
 
 A ~79-second 1080p promo explaining what Cuewise is. Instead of static screenshots it plays out a
-live, recreated session in the Glass theme: a cursor opens a new tab and uses each core feature.
+recreated session in the Glass theme: a cursor opens a new tab and uses each core feature.
 
 | Time | Scene |
 |---|---|
@@ -10,14 +10,17 @@ live, recreated session in the Glass theme: a cursor opens a new tab and uses ea
 | 0:09 | A browser appears, the cursor opens a new tab and Cuewise loads |
 | 0:13 | Today's Focus: types and adds a goal, checks two off, the progress ring fills |
 | 0:20 | Quotes: refreshes to a new quote, favorites it, refreshes again |
-| 0:26 | Pomodoro: opens the timer, starts it (time-lapsed), turns on rain sounds |
-| 0:34 | Focus Mode: the browser expands into a full-screen night-sky timer |
-| 0:40 | Reminders: a reminder slides in and is marked done |
-| 0:44 | Concept Cards: reveals the answer and grades it "Good" |
-| 0:51 | Insights: stats count up, the weekly chart and focus heatmap fill in |
-| 0:57 | Themes: settings open and the whole app switches Purple → Forest → Rose → Glass |
+| 0:26 | Pomodoro: picks a goal from the card header, turns on Rain from the corner sounds player, starts the timer (time-lapsed) |
+| 0:34 | Focus Mode: the browser expands into the full-screen timer, "Focusing on" the chosen goal |
+| 0:40 | Insights: Overview stats and Category Insights, then Advanced Analytics → Pomodoro Heatmap |
+| 0:48 | Reminders: the browser notification (Done / Snooze 5 min) and the bell panel's "Needs response" card |
+| 0:52 | Concept Cards: "Bring it to mind, then reveal", then graded "Good" |
+| 0:57 | Themes: gear menu → Theme Switcher, the Live Theme Preview panel switches Purple → Forest → Rose → Glass |
 | 1:06 | Privacy: local-first, no trackers, optional end-to-end encrypted sync |
 | 1:11 | Call to action: the cursor clicks "Add to Chrome", then cuewise.app |
+
+Every scene mirrors the current app UI and copy (checked against the running dev server), so the video
+never shows a feature that isn't shipped. When the app's UI changes, update the matching scene.
 
 The video is code. `composition.html` holds the scenes and a hand-built HTML recreation of the app
 (1440×810 design space). `window.promo.seek(t)` sets every element for time `t`: typed text, checked
