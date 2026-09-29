@@ -415,7 +415,7 @@ describe('fireDueReminders', () => {
       });
     });
 
-    it('notifies when the switch is on', async () => {
+    it('notifies a due reminder', async () => {
       await useReminderStore.getState().fireDueReminders();
 
       expect(notifier.notify).toHaveBeenCalledWith(
@@ -423,13 +423,12 @@ describe('fireDueReminders', () => {
       );
     });
 
-    it('still toasts, but does not notify, when the switch is off', async () => {
+    it('notifies whatever the session notification switch says', async () => {
       getSettingsMock.mockResolvedValue({ ...DEFAULT_SETTINGS, enableNotifications: false });
 
       await useReminderStore.getState().fireDueReminders();
 
-      expect(notifier.notify).not.toHaveBeenCalled();
-      expect(toastWarning).toHaveBeenCalledTimes(1);
+      expect(notifier.notify).toHaveBeenCalledTimes(1);
     });
 
     it('leaves delivery to a background host', async () => {

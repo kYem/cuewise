@@ -303,6 +303,18 @@ function SoundSection({ s, set, filter, onOpenSoundsPanel }: SettingsSectionProp
           <PlayButton sound={s.pomodoroCompletionSound} context="completion" />
         </div>
       </SettingRow>
+      <SettingRow
+        label="Session notification"
+        filter={filter}
+        help="A system notification when a session ends. Reminders always notify."
+        keywords="notification notify alert pomodoro session complete popup"
+      >
+        <Switch
+          label="Session notification"
+          checked={s.enableNotifications}
+          onChange={(v) => set({ enableNotifications: v })}
+        />
+      </SettingRow>
       <SettingDivider />
       <SettingRow
         label="Focus music"
@@ -730,19 +742,7 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
 function GoalsSection({ s, set, filter }: SettingsSectionProps) {
   return (
     <div>
-      <SettingRow
-        label="Notifications"
-        filter={filter}
-        help="When sessions complete and reminders are due"
-        keywords="browser notify alerts reminders"
-      >
-        <Switch
-          label="Notifications"
-          checked={s.enableNotifications}
-          onChange={(v) => set({ enableNotifications: v })}
-        />
-      </SettingRow>
-      <TestNotificationRow enabled={s.enableNotifications} filter={filter} />
+      <TestNotificationRow filter={filter} />
       <SettingRow
         label="Reminders layout"
         filter={filter}
@@ -964,7 +964,7 @@ export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] =
     icon: Headphones,
     component: SoundSection,
     terms:
-      'sound music start completion chime bell digital gentle youtube playlist lofi ambient breaks',
+      'sound music start completion chime bell digital gentle youtube playlist lofi ambient breaks session notification',
   },
   {
     id: 'background',

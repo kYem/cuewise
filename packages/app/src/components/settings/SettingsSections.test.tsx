@@ -174,11 +174,11 @@ describe('settings sections', () => {
   });
 
   describe('Goals & alerts', () => {
-    it('offers a test notification, gated by the Notifications switch', () => {
+    it('offers a test notification whatever the session notification switch says', () => {
       renderSection('goals', '', { enableNotifications: false });
 
       expect(screen.getByText('Test notification')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Send test' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
     });
 
     // Every phrase that opens the section must also match the row, or the panel opens empty.

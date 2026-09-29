@@ -1,6 +1,6 @@
-import { configurePlatform, logger } from '@cuewise/shared';
+import { configurePlatform, logger, NotificationBlockedError } from '@cuewise/shared';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
-import { act, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestNotificationRow } from './TestNotificationRow';
@@ -13,33 +13,15 @@ beforeEach(() => {
   configurePlatform({ notifier });
 });
 
-function renderRow(enabled = true, filter = '') {
-  return render(<TestNotificationRow enabled={enabled} filter={filter} />);
+function renderRow(filter = '') {
+  return render(<TestNotificationRow filter={filter} />);
 }
 
 async function clickSend(): Promise<void> {
   await userEvent.click(screen.getByRole('button', { name: 'Send test' }));
 }
 
-/** Holds the next notify open; the returned function settles it. */
-function deferNotify(): () => void {
-  let finish = (): void => {};
-  notifier.notify.mockReturnValueOnce(
-    new Promise<void>((resolve) => {
-      finish = resolve;
-    })
-  );
-  return () => finish();
-}
-
 describe('TestNotificationRow', () => {
-  it('is disabled with a hint while the Notifications switch is off', () => {
-    renderRow(false);
-
-    expect(screen.getByRole('button', { name: 'Send test' })).toBeDisabled();
-    expect(screen.getByText('Turn Notifications on first.')).toBeInTheDocument();
-  });
-
   it('sends a notification shaped exactly like a reminder', async () => {
     renderRow();
 
@@ -76,6 +58,17 @@ describe('TestNotificationRow', () => {
     expect(await screen.findByText(/blocked for Cuewise/)).toBeInTheDocument();
   });
 
+  it('reports blocked when the notify itself is refused for permission', async () => {
+    notifier.permission.mockResolvedValue('unknown');
+    notifier.notify.mockRejectedValueOnce(new NotificationBlockedError());
+    renderRow();
+
+    await clickSend();
+
+    expect(await screen.findByText(/blocked for Cuewise/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Sent\./)).not.toBeInTheDocument();
+  });
+
   it('reports a failed send instead of throwing', async () => {
     notifier.notify.mockRejectedValueOnce(new Error('no notifications API'));
     const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -92,7 +85,7 @@ describe('TestNotificationRow', () => {
 
   // On Tauri, notify awaits a native prompt; a second click meanwhile would prompt twice.
   it('disables the button while a send is in flight', async () => {
-    deferNotify();
+    notifier.notify.mockReturnValueOnce(new Promise<void>(() => {}));
     renderRow();
 
     await clickSend();
@@ -100,62 +93,9 @@ describe('TestNotificationRow', () => {
     expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
   });
 
-  it('stays in flight across a switch toggle', async () => {
-    deferNotify();
-    const { rerender } = renderRow();
-    await clickSend();
-
-    rerender(<TestNotificationRow enabled={false} filter="" />);
-    rerender(<TestNotificationRow enabled={true} filter="" />);
-
-    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled();
-  });
-
-  it('drops the result of a send that finished while the switch was off', async () => {
-    const finish = deferNotify();
-    const { rerender } = renderRow();
-    await clickSend();
-
-    rerender(<TestNotificationRow enabled={false} filter="" />);
-    await act(async () => {
-      finish();
-    });
-    rerender(<TestNotificationRow enabled={true} filter="" />);
-
-    expect(screen.queryByText(/^Sent\./)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
-  });
-
-  it('drops the result of a send that finishes after the switch comes back on', async () => {
-    const finish = deferNotify();
-    const { rerender } = renderRow();
-    await clickSend();
-
-    rerender(<TestNotificationRow enabled={false} filter="" />);
-    rerender(<TestNotificationRow enabled={true} filter="" />);
-    await act(async () => {
-      finish();
-    });
-
-    expect(screen.queryByText(/^Sent\./)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
-  });
-
-  it('forgets the last outcome when the switch is turned off', async () => {
-    const { rerender } = renderRow();
-    await clickSend();
-    await screen.findByText(/^Sent\./);
-
-    rerender(<TestNotificationRow enabled={false} filter="" />);
-    rerender(<TestNotificationRow enabled={true} filter="" />);
-
-    expect(screen.queryByText(/^Sent\./)).not.toBeInTheDocument();
-  });
-
-  it('hides itself, hint included, when the search filter does not match', () => {
-    renderRow(false, 'wallpaper');
+  it('hides itself when the search filter does not match', () => {
+    renderRow('wallpaper');
 
     expect(screen.queryByRole('button', { name: 'Send test' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Turn Notifications on first.')).not.toBeInTheDocument();
   });
 });

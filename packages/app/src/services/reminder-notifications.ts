@@ -14,7 +14,7 @@ import {
   reminderAlarmId,
   reminderIdFromAlarm,
 } from '@cuewise/shared';
-import { getReminders, getSettings, updateReminders } from '@cuewise/storage';
+import { getReminders, updateReminders } from '@cuewise/storage';
 import { activitySubject, recordReminderActivity } from './reminder-activity';
 
 export interface ReminderAlarmReconcile {
@@ -77,23 +77,10 @@ export function reminderNotification(id: string, body: string): NotifyOptions {
 }
 
 /**
- * Read from storage, not the settings store: the service worker has none. getSettings defaults
- * field-wise, so an unreadable switch is on and a readable "off" is honoured; a rejection is on too.
- */
-export async function notificationsEnabled(): Promise<boolean> {
-  try {
-    return (await getSettings()).enableNotifications;
-  } catch (error) {
-    logger.error('Could not read the Notifications switch; notifying anyway', error);
-    return true;
-  }
-}
-
-/**
  * Deliver a reminder's notification when its scheduled wake fires. Looks the reminder up by the
- * alarm id, notifies (with Done/Snooze actions) unless the Notifications switch is off, and in
- * either case marks it notified and re-arms the next occurrence of a recurring one. A no-op for
- * non-reminder alarm ids, or reminders that are gone / completed / paused.
+ * alarm id, notifies (with Done/Snooze actions), marks it notified and re-arms the next occurrence
+ * of a recurring one. A no-op for non-reminder alarm ids, or reminders that are gone / completed /
+ * paused.
  */
 export async function handleReminderFire(alarmId: string): Promise<void> {
   const reminderId = reminderIdFromAlarm(alarmId);
@@ -133,10 +120,13 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       return;
     }
 
-    step = 'notify';
-    const delivered = await notificationsEnabled();
-    if (delivered) {
+    // Not fatal: the alarm is already spent, so stopping here would leave a recurring one unarmed.
+    let notifyFailure: string | null = null;
+    try {
       await getNotifier().notify(reminderNotification(reminderAlarmId(reminderId), reminder.text));
+    } catch (error) {
+      logger.error('Could not deliver the reminder notification', error);
+      notifyFailure = describeThrown(error);
     }
 
     // One locked section reading fresh, not the list from before the notify: that round trip is
@@ -154,7 +144,8 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
           nextDueDate = nextReminderDueDate(r, new Date());
           return { ...r, dueDate: nextDueDate.toISOString(), notified: false, completed: false };
         }
-        return { ...r, notified: true };
+        // An undelivered one-off stays unnotified so the in-page toast still surfaces it.
+        return notifyFailure === null ? { ...r, notified: true } : r;
       })
     );
     // setReminders resolves {success:false} on quota rather than throwing, so the catch below
@@ -174,11 +165,11 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       await getScheduler().scheduleAt(reminderAlarmId(reminderId), nextDueDate);
     }
     const details = [
-      ...(delivered ? [] : ['notifications off']),
+      ...(notifyFailure === null ? [] : [`notify: ${notifyFailure}`]),
       ...(nextDueDate !== null ? [`next ${nextDueDate.toISOString()}`] : []),
     ];
     await recordReminderActivity({
-      event: 'fired',
+      event: notifyFailure === null ? 'fired' : 'failed',
       ...activitySubject(reminder),
       ...(details.length > 0 ? { detail: details.join(', ') } : {}),
     });

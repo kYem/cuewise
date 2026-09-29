@@ -24,11 +24,7 @@ import {
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
-import {
-  armMissingReminderAlarms,
-  notificationsEnabled,
-  reminderNotification,
-} from '../services/reminder-notifications';
+import { armMissingReminderAlarms, reminderNotification } from '../services/reminder-notifications';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
@@ -660,7 +656,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       // No background worker to raise the OS notification, so deliver it here via the port.
       // Where a resident host owns delivery, it notifies instead.
-      if (!getScheduler().deliversInBackground && (await notificationsEnabled())) {
+      if (!getScheduler().deliversInBackground) {
         for (const r of dueNow) {
           getNotifier()
             .notify(reminderNotification(reminderAlarmId(r.id), r.text))

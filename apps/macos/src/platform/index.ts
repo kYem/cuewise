@@ -1,5 +1,6 @@
 import {
   logger,
+  NotificationBlockedError,
   type Notifier,
   type NotifierPermission,
   type NotifyOptions,
@@ -25,10 +26,7 @@ export class WebNotifier implements Notifier {
   async notify(opts: NotifyOptions): Promise<void> {
     // Only when already granted: WebKit rejects a permission request outside a user gesture.
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
-      logger.error('Web notification not delivered: permission not granted', undefined, {
-        id: opts.id,
-      });
-      return;
+      throw new NotificationBlockedError();
     }
     new Notification(opts.title, { body: opts.body, tag: opts.id });
   }
@@ -58,10 +56,7 @@ export class TauriNotifier implements Notifier {
       granted = (await requestPermission()) === 'granted';
     }
     if (!granted) {
-      logger.error('Native notification not delivered: permission refused', undefined, {
-        id: opts.id,
-      });
-      return;
+      throw new NotificationBlockedError();
     }
     sendNotification({ title: opts.title, body: opts.body });
   }

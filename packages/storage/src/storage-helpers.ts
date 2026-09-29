@@ -1472,6 +1472,22 @@ export async function setDailyBackground(
   }
 }
 
+/** Drops the daily background only while it is still `url`, so a newer pick is never wiped. */
+export async function clearDailyBackground(url: string): Promise<void> {
+  try {
+    const background = await getValidatedFromStorage<DailyBackground>(
+      STORAGE_KEYS.DAILY_BACKGROUND,
+      dailyBackgroundSchema,
+      'local'
+    );
+    if (background?.url === url) {
+      await removeFromStorage(STORAGE_KEYS.DAILY_BACKGROUND, 'local');
+    }
+  } catch (error) {
+    logger.error('Error clearing daily background', error);
+  }
+}
+
 /** The user's own background as a data URL; null when unset or unreadable. */
 export async function getCustomBackground(): Promise<string | null> {
   try {

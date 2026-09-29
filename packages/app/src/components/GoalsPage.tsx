@@ -4,6 +4,7 @@ import { Calendar, CheckCircle2, Circle, Flag, ListTodo, Target, TrendingUp } fr
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { type CompletionFilter, useGoalStore } from '../stores/goal-store';
+import { useSettingsStore } from '../stores/settings-store';
 import { AllGoalsList } from './AllGoalsList';
 import { GoalsSection } from './goals';
 import { PageHeader } from './PageHeader';
@@ -17,6 +18,8 @@ export const GoalsPage: React.FC = () => {
   const [newGoalText, setNewGoalText] = useState('');
   const [activeTab, setActiveTab] = useState<ViewTab>('tasks');
   const addTask = useGoalStore((state) => state.addTask);
+  const showIncompleteGoals = useSettingsStore((state) => state.settings.showIncompleteGoals);
+  const showUnfinished = showIncompleteGoals && completionFilter !== 'completed';
 
   // Get tasks and goals counts
   const tasks = useMemo(() => goals.filter(isTask), [goals]);
@@ -225,7 +228,7 @@ export const GoalsPage: React.FC = () => {
               </div>
             </div>
 
-            {completionFilter !== 'completed' && <UnfinishedBanner className="mb-4" />}
+            {showUnfinished && <UnfinishedBanner className="mb-4" />}
 
             {/* Goals List */}
             <div className="bg-surface rounded-xl border-2 border-border p-6">

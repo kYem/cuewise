@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 vi.mock('@cuewise/storage', () => ({
+  clearDailyBackground: vi.fn(),
   getDailyBackground: vi.fn(),
   setDailyBackground: vi.fn(),
 }));
@@ -12,7 +13,7 @@ vi.mock('./unsplash', async (importOriginal) => ({
 }));
 
 import { logger } from '@cuewise/shared';
-import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
+import { clearDailyBackground, getDailyBackground, setDailyBackground } from '@cuewise/storage';
 import {
   clearPreloadCache,
   getPreloadedCurrentUrl,
@@ -24,6 +25,7 @@ import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './un
 
 const mockGetDaily = getDailyBackground as unknown as Mock;
 const mockSetDaily = setDailyBackground as unknown as Mock;
+const mockClearDaily = clearDailyBackground as unknown as Mock;
 const mockLoadFallback = loadImageWithFallback as unknown as Mock;
 const mockPreload = preloadImage as unknown as Mock;
 
@@ -58,13 +60,47 @@ describe('preloadImages daily background', () => {
 
   it('keeps a stored background that is merely slow, without picking a rival', async () => {
     mockGetDaily.mockResolvedValue({ url: 'https://img/slow', category: 'nature', date: 'today' });
-    mockPreload.mockRejectedValueOnce(new ImageLoadTimeoutError());
+    mockPreload
+      .mockRejectedValueOnce(new ImageLoadTimeoutError())
+      .mockResolvedValueOnce('https://img/slow');
 
     await preloadImages('nature');
+    await vi.waitFor(() => expect(mockPreload).toHaveBeenCalledTimes(2));
 
     expect(getPreloadedCurrentUrl('nature')).toBe('https://img/slow');
     expect(mockLoadFallback).not.toHaveBeenCalled();
     expect(mockSetDaily).not.toHaveBeenCalled();
+    expect(mockClearDaily).not.toHaveBeenCalled();
+  });
+
+  describe('a stored background that never finishes loading', () => {
+    beforeEach(async () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+      mockGetDaily.mockResolvedValue({
+        url: 'https://img/hung',
+        category: 'nature',
+        date: 'today',
+      });
+      mockPreload
+        .mockRejectedValueOnce(new ImageLoadTimeoutError())
+        .mockRejectedValueOnce(new ImageLoadTimeoutError());
+
+      await preloadImages('nature');
+      await vi.waitFor(() => expect(mockClearDaily).toHaveBeenCalled());
+    });
+
+    it('is dropped from storage so the next tab re-picks', () => {
+      expect(mockClearDaily).toHaveBeenCalledWith('https://img/hung');
+    });
+
+    it('is re-resolved on the next call instead of served as verified', async () => {
+      mockGetDaily.mockResolvedValue(null);
+      mockLoadFallback.mockResolvedValue('https://img/fresh');
+
+      await preloadImages('nature');
+
+      expect(getPreloadedCurrentUrl('nature')).toBe('https://img/fresh');
+    });
   });
 
   it('keeps a valid stored daily background without re-persisting it', async () => {

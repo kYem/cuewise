@@ -1,6 +1,6 @@
 import type { FocusImageCategory } from '@cuewise/shared';
 import { logger } from '@cuewise/shared';
-import { getDailyBackground, setDailyBackground } from '@cuewise/storage';
+import { clearDailyBackground, getDailyBackground, setDailyBackground } from '@cuewise/storage';
 import { ImageLoadTimeoutError, loadImageWithFallback, preloadImage } from './unsplash';
 
 interface PreloadCache {
@@ -23,10 +23,10 @@ export function getCustomBackgroundOverride(): string | null {
   return customOverride;
 }
 
-let inFlight: { category: FocusImageCategory; promise: Promise<string | null> } | null = null;
+let inFlight: { category: FocusImageCategory; promise: Promise<ResolvedBackground> } | null = null;
 
 /** The newest resolve owns the cache; an older one landing later must not write or unregister. */
-function ownsResolve(promise: Promise<string | null>): boolean {
+function ownsResolve(promise: Promise<ResolvedBackground>): boolean {
   return inFlight?.promise === promise;
 }
 
@@ -36,38 +36,60 @@ const cache: PreloadCache = {
   isInitialized: false,
 };
 
-// Bounds how long callers wait for a stored photo before it is handed back still loading — not
-// how long the photo gets, since a timeout keeps it.
+// Bounds how long callers wait for a stored photo before it is handed back still loading.
 const STORED_HOLD_MS = 8000;
+// How long a photo handed back still loading gets before it counts as hung and is dropped.
+const STORED_GIVE_UP_MS = 60_000;
 
-/** Loads, or is merely slow: the request is still running and it was validated when stored. */
-async function storedStillLoads(url: string): Promise<boolean> {
+/** A photo that never lands is dropped here and from storage, so the next caller re-picks. */
+function forgetIfHung(url: string): void {
+  // Same URL as the running request, so this rides it rather than starting a rival download.
+  preloadImage(url, STORED_GIVE_UP_MS).catch(async (error) => {
+    logger.error(`Stored background never loaded; dropping it: ${url}`, error);
+    if (cache.currentUrl === url) {
+      cache.currentUrl = null;
+      cache.isInitialized = false;
+    }
+    await clearDailyBackground(url);
+  });
+}
+
+/** Slow is kept, not replaced: the request is still running and it was validated when stored. */
+async function storedLoadState(url: string): Promise<'loaded' | 'loading' | 'dead'> {
   try {
     await preloadImage(url, STORED_HOLD_MS);
-    return true;
+    return 'loaded';
   } catch (error) {
-    return error instanceof ImageLoadTimeoutError;
+    return error instanceof ImageLoadTimeoutError ? 'loading' : 'dead';
   }
+}
+
+interface ResolvedBackground {
+  url: string | null;
+  stillLoading: boolean;
 }
 
 /**
  * A stored photo is revalidated rather than trusted — one Unsplash has since removed must not
  * stick for the day. Null when no fresh pick lands either.
  */
-async function resolveDailyBackground(category: FocusImageCategory): Promise<string | null> {
+async function resolveDailyBackground(category: FocusImageCategory): Promise<ResolvedBackground> {
   const stored = await getDailyBackground(category);
-  if (stored && (await storedStillLoads(stored.url))) {
-    return stored.url;
+  if (stored) {
+    const state = await storedLoadState(stored.url);
+    if (state !== 'dead') {
+      return { url: stored.url, stillLoading: state === 'loading' };
+    }
   }
 
   try {
     const url = await loadImageWithFallback(category);
     await setDailyBackground(url, category);
-    return url;
+    return { url, stillLoading: false };
   } catch (error) {
     // error, not warn: at the shipped level this is the only trace a blocked CDN leaves.
     logger.error('No background image could be loaded; showing the solid fallback', error);
-    return null;
+    return { url: null, stillLoading: false };
   }
 }
 
@@ -96,13 +118,17 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
   const promise = resolveDailyBackground(category);
   inFlight = { category, promise };
   try {
-    const url = await promise;
+    const { url, stillLoading } = await promise;
     if (!ownsResolve(promise)) {
       return;
     }
     cache.category = category;
     cache.currentUrl = url;
     cache.isInitialized = true;
+    // After the cache write, so a fast failure cannot be overwritten by the URL it just dropped.
+    if (url !== null && stillLoading) {
+      forgetIfHung(url);
+    }
   } finally {
     if (ownsResolve(promise)) {
       inFlight = null;

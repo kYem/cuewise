@@ -20,6 +20,7 @@ export {
   COLLECTION_LOCKS,
   type CollectionLock,
   clearCustomBackground,
+  clearDailyBackground,
   clearSettings,
   ensureSettingsMigrated,
   formatBytes,

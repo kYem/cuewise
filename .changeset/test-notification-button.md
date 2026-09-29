@@ -5,4 +5,4 @@
 '@cuewise/shared': patch
 ---
 
-A Send test button under Settings → Notifications shows what a reminder looks like, and the Notifications switch now really turns them off.
+A Send test button under Settings → Goals & alerts shows what a reminder looks like, and a Session notification switch under Sound & music silences Pomodoro popups.
