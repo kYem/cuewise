@@ -15,6 +15,7 @@ const port = Number(process.env.E2E_PORT ?? 1420);
 
 export default defineConfig({
   testDir: './e2e',
+  testMatch: '**/*.spec.ts',
   reporter: 'list',
   // Spec files run in parallel workers by default. On a 2-core CI runner that
   // starves csp.spec.ts — which also runs its own vite build and static server —
