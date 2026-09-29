@@ -17,7 +17,6 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
-import { notificationsEnabled } from '../services/reminder-notifications';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useCelebrationStore } from './celebration-store';
 import { useFocusModeStore } from './focus-mode-store';
@@ -33,6 +32,16 @@ const logger = createLogger({
   minLevel: import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.WARN,
   includeTimestamp: false,
 });
+
+/** An unreadable switch counts as on: a storage hiccup must not silence the notification. */
+async function sessionNotificationsEnabled(): Promise<boolean> {
+  try {
+    return (await getSettings()).enableNotifications;
+  } catch (error) {
+    logger.error('Could not read the session notification setting; notifying anyway', error);
+    return true;
+  }
+}
 
 type TimerStatus = 'idle' | 'running' | 'paused';
 type SessionType = 'work' | 'break' | 'longBreak';
@@ -567,7 +576,7 @@ export const usePomodoroStore = create<PomodoroStore>()(
           } else {
             message = 'Break complete! Ready to focus?';
           }
-          if (await notificationsEnabled()) {
+          if (await sessionNotificationsEnabled()) {
             // Fire-and-forget: a notification failure — async rejection OR a
             // synchronous getNotifier() throw — must not fail the already-saved session.
             try {

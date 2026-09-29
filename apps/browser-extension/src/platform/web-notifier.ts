@@ -1,5 +1,5 @@
 import {
-  logger,
+  NotificationBlockedError,
   type NotifierHost,
   type NotifierPermission,
   type NotifyOptions,
@@ -13,10 +13,7 @@ import {
 export class WebNotifier implements NotifierHost {
   async notify(opts: NotifyOptions): Promise<void> {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
-      logger.error('Web notification not delivered: permission not granted', undefined, {
-        id: opts.id,
-      });
-      return;
+      throw new NotificationBlockedError();
     }
     new Notification(opts.title, { body: opts.body });
   }

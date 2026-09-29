@@ -4,15 +4,18 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from '../stores/goal-store';
+import { useSettingsStore } from '../stores/settings-store';
 import {
   buildUnfinishedTasks,
   createGoalStoreMock,
   createGoalsPageStore,
+  createSettingsStoreMock,
   type MockGoalsPageStore,
 } from './__fixtures__/goals-list.fixtures';
 import { GoalsPage } from './GoalsPage';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
+vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 
 // Children are stubbed; this suite only exercises the Unfinished callout.
 vi.mock('./PageHeader', () => ({ PageHeader: () => <div data-testid="page-header" /> }));
@@ -28,6 +31,7 @@ function mountStore(store: MockGoalsPageStore): MockGoalsPageStore {
 describe('GoalsPage - Unfinished callout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSettingsStore).mockImplementation(createSettingsStoreMock());
   });
 
   it('counts unfinished tasks from previous days above the list', () => {
@@ -69,6 +73,17 @@ describe('GoalsPage - Unfinished callout', () => {
 
   it('is absent under the completed filter', () => {
     mountStore(createGoalsPageStore(buildUnfinishedTasks(2), 'completed'));
+
+    render(<GoalsPage />);
+
+    expect(screen.queryByRole('button', { name: 'Move all to today' })).not.toBeInTheDocument();
+  });
+
+  it('is absent when "Show unfinished" is turned off', () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      createSettingsStoreMock({ showIncompleteGoals: false })
+    );
+    mountStore(createGoalsPageStore(buildUnfinishedTasks(2)));
 
     render(<GoalsPage />);
 

@@ -53,8 +53,17 @@ export interface NotifyOptions {
  */
 export type NotifierPermission = 'granted' | 'denied' | 'unknown';
 
+/** A notify the host refused for want of permission, as opposed to one that broke. */
+export class NotificationBlockedError extends Error {
+  constructor() {
+    super('Notification permission not granted');
+    this.name = 'NotificationBlockedError';
+  }
+}
+
 /** Command surface: deliver/clear an OS notification, keyed by id. */
 export interface Notifier {
+  /** Rejects when the host did not hand it to the OS — NotificationBlockedError for permission. */
   notify(opts: NotifyOptions): Promise<void>;
   clear(id: string): Promise<void>;
   permission(): Promise<NotifierPermission>;
