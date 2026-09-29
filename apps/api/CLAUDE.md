@@ -27,6 +27,8 @@ worker entry (src/worker.ts) — fetch + scheduled() daily purges (tombstones, p
 
 This mirrors the repo's ports/adapters pattern (`packages/shared/src/platform/`): `SyncStore` is the port, `D1SyncStore` is the one adapter today. A future non-D1 backend only needs a new adapter — routes and validation stay unaware D1 exists.
 
+**Best-effort upstream work goes through `detach` (`http.ts`)** — not a bare `await`, which makes the response wait on a 15s Notion timeout, and not a dropped promise, which the runtime can cancel when the request ends. It hands the promise to `executionCtx.waitUntil`, and awaits instead when there is none (a 3-arg `app.request` in tests). To cover the `waitUntil` path, pass `createExecutionContext()` as the 4th arg and drain with `waitOnExecutionContext`.
+
 Auth has two shapes. **Session lookup** has no dedicated port: `requireSession()` (`auth-middleware.ts`) resolves `Authorization: Bearer <token>` → `{userId, tokenHash}` context vars, but does so through the `SyncStore` port's `lookupSession` (so tests inject store stubs). **ID-token verification** *is* a function-shaped port: `IdTokenVerifier` (`verifiers.ts`), with `verifyGoogleIdToken`/`verifyAppleIdToken` as adapters and `AppDeps` (`index.ts`) as the DI seam tests use (`createApp({ googleVerifier })`), like `storeFactory` for `SyncStore`. The `changes`/`account` handlers only read `c.get('userId')`, never a `SyncStore` session method — so swapping to Better Auth / a hosted IdP touches the auth surface (`auth-middleware.ts`, `routes/auth.ts`, `routes/apple.ts`, `verifiers.ts`) plus `SyncStore`'s session/auth-code methods (`store.ts`, `d1-store.ts`) and their migrations; the sync handlers don't change.
 
 ## Data Model
@@ -166,7 +168,7 @@ Every error response is `application/problem+json` (RFC 9457), built by `problem
 | `provider_todo_group_missing` | 422 | Un-completing a row on a status property with no `To-do` group — there is no option to write. The table is otherwise fine, so the client keeps it and says so |
 | `provider_table_unselected` | 409 | Connected, but no table picked yet — the client shows the picker |
 | `provider_table_unavailable` | 404 | The chosen table was deleted or un-shared (Notion 403/404). Terminal for that selection; the client sends the user back to the picker |
-| `not_found` | 404 | No route matched, or the Notion page a `PATCH` targeted is gone |
+| `not_found` | 404 | No route matched, or the Notion page a `PATCH` targeted is gone. An unknown path *under* an authenticated wildcard answers 401 before it can 404 — only unguarded prefixes 404 anonymously |
 | `internal` | 500 | Unhandled exception, upstream (JWKS) outage, or a config fault: empty signing key / client-id, a `PROVIDER_TOKEN_KEY` that is not 32 bytes, Notion rejecting our client secret, a 403/404 on an endpoint that names no user resource (`/search`, `/oauth/*` — integration capabilities or our URL), or any other Notion 4xx — a request only we could have malformed (`missing_version`, `invalid_json`). 429 and 409 `conflict_error` are Notion's retryable 4xx and answer 503; so does `validation_error` on a page write only, by our policy, since a property renamed under a write causes it — on any other endpoint it is our request and answers `internal` (a write to a trashed page also answers 400, and is looked up once so it reads as 404 `not_found` instead) |
 | `upstream_unavailable` | 503 | Weather/geocoding/Notion is down, timed out, or answered with something we cannot read — retryable, and distinct from `internal` so a client can tell "they are broken" from "we are". Also answered, with `detail: "Please retry."`, when a Notion auth fault loses a renewal race to a concurrent request |
 
@@ -212,7 +214,12 @@ Tests are **co-located** (`foo.ts` next to `foo.test.ts`) — e.g. `src/crypto-u
 
 `scripts/e2e-roundtrip.mjs` signs in two `dev`-provider devices, pushes one record from device A, pulls it from device B, and asserts the ciphertext round-trips byte-for-byte.
 
-## Deploy (Not Done Yet)
+**A local Notion grant**: `node scripts/notion-connect-dev.mjs catch` drives the real OAuth flow and claims the code itself, so nothing races its 60s TTL — it needs `wrangler dev --var ALLOWED_RETURN_URIS:"cuewise://auth,http://localhost:8788/done"`, since the catcher's URI is matched exactly. `scripts/notion-revoke-probe.mjs --yes` re-measures Notion's revoke semantics and destroys the grant doing it.
+
+## Deploy
+
+**Live since 2026-09-28** at `api.cuewise.app`, D1 on `0009`. Deploy is manual — `pnpm deploy:prod` — and the remote
+migration must precede it, because `deleteUser` reads `provider_tokens`. First-time setup, already done:
 
 ```bash
 npx wrangler d1 create cuewise-sync
@@ -238,3 +245,4 @@ npx wrangler deploy
 4. **The `state` blob is trustworthy only because it's HMAC-signed.** Anything you add to `BounceState` (`routes/bounce-shared.ts`, shared by Apple, Google and Notion) inherits that guarantee automatically; anything you read from an unsigned source (a query param, a header) doesn't, no matter how it's later combined with `state`. **That guarantee is integrity, not identity**: the signature proves *we minted it*, never *who is completing the flow*. Never put an account id in a state, and never let a state decide whose account a result lands in — a leaked `/start` link would land the *opener's* grant in the *minter's* account. The sign-in bounces carry a provider-verified `providerSub` in the *parked payload* (Apple/Google vouched for it); the Notion bounce parks a grant with no identity at all and binds it at `/claim` to the session that redeems the code. A bad claim code answers 400 `provider_claim_invalid`, never 401: the clients read any 401 as a dead session and sign out.
 5. **Never log payloads, credentials, tokens, codes, verifiers, or the signing key.** Metadata only (see `verifyOrProblem`'s `logger.warn` — it logs `err.code`, never the token).
 6. **Schema changes are additive migrations.** A new table/column is a new numbered file in `migrations/` — the test harness and `wrangler d1 migrations apply` both apply every migration in order, so there's no "edit an old migration" path once one has reached production.
+7. **`migrations apply --local` compares names, not schema.** A migration edited or squashed after it was applied locally never re-runs: `apply` reports "No migrations to apply!" while the schema is missing columns and routes 500 on `no such column`. The tell is a `d1_migrations` row naming a file that no longer exists. Fix: `rm -rf .wrangler/state/v3/d1` and re-apply — local data is disposable.
