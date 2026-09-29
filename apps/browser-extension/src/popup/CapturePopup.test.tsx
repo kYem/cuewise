@@ -38,10 +38,11 @@ describe('CapturePopup', () => {
     expect(term.value.slice(term.selectionStart ?? 0, term.selectionEnd ?? 0)).toBe('Idempotence');
   });
 
-  it('names the page the selection came from', async () => {
+  // Host first: the line truncates, and a long title would push the host off the end.
+  it('names the page the selection came from, site before title', async () => {
     await renderPopup(createFakeApi());
 
-    expect(screen.getByText('From: Glossary · example.com')).toBeInTheDocument();
+    expect(screen.getByText('From: example.com · Glossary')).toBeInTheDocument();
   });
 
   it('opens a quote draft on the quote fields, focused on the author', async () => {

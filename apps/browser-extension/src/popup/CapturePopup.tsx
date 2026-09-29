@@ -34,9 +34,11 @@ function blankFieldMessage(kind: CaptureKind, fields: CaptureFields): string | n
   return null;
 }
 
+// Host first: the line truncates, and a long page title would otherwise eat the width and cut
+// off the part that says where this came from.
 function describeOrigin(draft: CaptureDraft): string | null {
   const { host } = describeCapturedPage(draft.pageUrl, draft.pageTitle);
-  const parts = [draft.pageTitle?.trim(), host].filter(Boolean);
+  const parts = [host, draft.pageTitle?.trim()].filter(Boolean);
   return parts.length > 0 ? `From: ${parts.join(' · ')}` : null;
 }
 

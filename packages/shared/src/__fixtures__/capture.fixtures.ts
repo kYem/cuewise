@@ -17,6 +17,9 @@ export const SELECTIONS = {
   quoteWithLongAttribution: `Text\n— ${'y'.repeat(60)}`,
   onlyAttribution: '— Anonymous',
   bareDash: 'Text\n—',
+  hackerNewsByline:
+    'user43928 8 minutes ago | prev | next [-]\nWhat bothers me most is the verbosity.',
+  breadcrumbLead: 'Docs · Guides · Caching\nA cache stores results so later reads are cheap.',
   bulletList: '- Reduce scope\n- Ship weekly',
   bulletListWithLead: 'What worked:\n- Reduce scope\n- Ship weekly',
 } as const;
