@@ -1,0 +1,3922 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cuewise Promo</title>
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/inter/700.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/500.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/600.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/700.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/poppins/800.css" />
+    <style>
+      :root {
+        --violet-300: #c4b5fd;
+        --ink: #0d0819;
+        --text-2: rgba(255, 255, 255, 0.74);
+        --text-3: rgba(255, 255, 255, 0.5);
+        --hairline: rgba(255, 255, 255, 0.14);
+        --display: 'Poppins', system-ui, sans-serif;
+        --body: 'Inter', system-ui, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--ink);
+        color: #fff;
+        font-family: var(--body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #stage {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+
+      .backdrop {
+        position: absolute;
+        inset: -80px;
+        background: url('../src/assets/bg-aurora.png') center / cover no-repeat;
+        filter: saturate(1.15);
+      }
+
+      .backdrop-glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(900px 600px at 20% 15%, rgba(139, 92, 246, 0.28), transparent 70%),
+          radial-gradient(800px 600px at 85% 90%, rgba(236, 72, 153, 0.14), transparent 70%),
+          linear-gradient(180deg, rgba(13, 8, 25, 0.1), rgba(13, 8, 25, 0.55));
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      [data-fx] {
+        opacity: 0;
+      }
+
+      .accent {
+        background: linear-gradient(100deg, #c4b5fd 0%, #a78bfa 40%, #f0abfc 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .center-col {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+
+      .ic {
+        display: inline-flex;
+        flex: none;
+      }
+
+      .ic svg {
+        display: block;
+      }
+
+      /* ---------- Intro / hook / outro ---------- */
+      .logo-mark {
+        width: 200px;
+        height: 200px;
+        overflow: visible;
+      }
+
+      .logo-mark .ring {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+      }
+
+      .wordmark {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 128px;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        margin-top: 36px;
+      }
+
+      .tagline {
+        font-family: var(--display);
+        font-weight: 500;
+        font-size: 44px;
+        color: var(--text-2);
+        margin-top: 28px;
+        letter-spacing: -0.01em;
+      }
+
+      .tabstrip {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 80px;
+      }
+
+      .tab-ghost {
+        width: 150px;
+        height: 44px;
+        border-radius: 12px 12px 4px 4px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid var(--hairline);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+      }
+
+      .tab-ghost i {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.28);
+        flex: none;
+      }
+
+      .tab-ghost b {
+        height: 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.22);
+        flex: 1;
+      }
+
+      .tab-ghost.cue {
+        background: rgba(139, 92, 246, 0.35);
+        border-color: rgba(196, 181, 253, 0.6);
+        box-shadow: 0 0 40px rgba(139, 92, 246, 0.55);
+      }
+
+      .tab-ghost.cue i {
+        background: #fff;
+      }
+
+      .hook-line {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 84px;
+        letter-spacing: -0.025em;
+        line-height: 1.12;
+      }
+
+      .hook-line.soft {
+        font-weight: 600;
+        font-size: 60px;
+        color: var(--text-2);
+        margin-bottom: 26px;
+      }
+
+      .word {
+        display: inline-block;
+        margin-right: 0.24em;
+      }
+
+      .word:last-child {
+        margin-right: 0;
+      }
+
+      .kicker {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--violet-300);
+      }
+
+      .title {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 72px;
+        line-height: 1.04;
+        letter-spacing: -0.03em;
+        margin-top: 30px;
+      }
+
+      /* ---------- Captions ---------- */
+      .cap {
+        position: absolute;
+        left: 110px;
+        top: 0;
+        bottom: 0;
+        width: 430px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-shadow: 0 2px 18px rgba(8, 4, 20, 0.55);
+      }
+
+      .cap .icon-chip {
+        width: 60px;
+        height: 60px;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        box-shadow:
+          0 12px 30px rgba(0, 0, 0, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+
+      .cap .title {
+        font-size: 66px;
+        margin-top: 26px;
+      }
+
+      .cap .body {
+        font-size: 26px;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.78);
+        margin-top: 22px;
+      }
+
+      /* ---------- Browser ---------- */
+      #browser {
+        position: absolute;
+        overflow: hidden;
+        background: #1b1430;
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.16),
+          0 50px 120px rgba(0, 0, 0, 0.55),
+          0 0 140px rgba(139, 92, 246, 0.22);
+      }
+
+      #chrome {
+        overflow: hidden;
+        background: #231a3d;
+      }
+
+      .tabrow {
+        height: 42px;
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        padding: 0 14px;
+      }
+
+      .dots {
+        display: flex;
+        gap: 8px;
+        align-self: center;
+        margin-right: 14px;
+      }
+
+      .dots span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+
+      .btab {
+        height: 34px;
+        width: 200px;
+        border-radius: 10px 10px 0 0;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 12px;
+        font-size: 14px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.6);
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      .btab.active {
+        background: #332858;
+        color: #fff;
+      }
+
+      .btab .fav {
+        width: 16px;
+        height: 16px;
+        border-radius: 5px;
+        flex: none;
+        display: grid;
+        place-items: center;
+      }
+
+      #tab-plus {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        color: rgba(255, 255, 255, 0.7);
+        align-self: center;
+        margin-left: 4px;
+      }
+
+      .toolbar {
+        height: 38px;
+        background: #332858;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 14px;
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      .omni {
+        flex: 1;
+        height: 28px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.78);
+      }
+
+      #viewport {
+        position: relative;
+        overflow: hidden;
+      }
+
+      #docpage {
+        position: absolute;
+        inset: 0;
+        background: #f4f2f8;
+        padding: 60px 0 0 220px;
+      }
+
+      #docpage .doc {
+        width: 760px;
+        height: 100%;
+        background: #fff;
+        border-radius: 10px 10px 0 0;
+        box-shadow: 0 10px 40px rgba(40, 20, 80, 0.1);
+        padding: 56px 64px;
+      }
+
+      #docpage .line {
+        height: 14px;
+        border-radius: 7px;
+        background: #e6e2ef;
+        margin-bottom: 18px;
+      }
+
+      /* ---------- App (1440 x 810 design space) ---------- */
+      #app {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1440px;
+        height: 810px;
+        overflow: hidden;
+        transform-origin: 0 0;
+        color: var(--t-text);
+        font-family: var(--body);
+        --dock: 0px;
+      }
+
+      .bg-layer {
+        position: absolute;
+        inset: 0;
+      }
+
+      .bg-layer svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      #bg-glass::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          180deg,
+          rgba(0, 0, 0, 0.32) 0%,
+          rgba(0, 0, 0, 0.06) 24%,
+          rgba(0, 0, 0, 0.08) 68%,
+          rgba(0, 0, 0, 0.42) 100%
+        );
+      }
+
+      #bg-purple {
+        background: linear-gradient(135deg, #faf5ff, #f1ecfd 55%, #e6defc);
+      }
+
+      #bg-forest {
+        background: linear-gradient(135deg, #f3fdf6, #e3f9e9 55%, #d2f4dc);
+      }
+
+      #bg-rose {
+        background: linear-gradient(135deg, #fff5f6, #ffe9ec 55%, #fddbe0);
+      }
+
+      .page {
+        position: absolute;
+        inset: 0;
+      }
+
+      .glass {
+        background: var(--t-card);
+        border: 1px solid var(--t-border);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 14px 40px rgba(10, 5, 25, 0.2);
+      }
+
+      .gpill {
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 15px;
+      }
+
+      .gcirc {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: inline-grid;
+        place-items: center;
+      }
+
+      .shadowed {
+        text-shadow: 0 2px 10px var(--t-tshadow);
+      }
+
+      .muted {
+        color: var(--t-text2);
+      }
+
+      /* Home */
+      .corner {
+        position: absolute;
+        top: 24px;
+        display: flex;
+        gap: 10px;
+      }
+
+      #home-tr {
+        right: calc(28px + var(--dock));
+      }
+
+      #menu {
+        position: absolute;
+        top: 72px;
+        right: calc(28px + var(--dock));
+        width: 196px;
+        border-radius: 12px;
+        background: var(--t-panel);
+        border: 1px solid var(--t-border);
+        backdrop-filter: blur(20px);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        overflow: hidden;
+        transform-origin: 90% 0;
+        opacity: 0;
+      }
+
+      #menu .mi {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 16px;
+        font-size: 14px;
+        font-weight: 500;
+        border-bottom: 1px solid var(--t-border);
+      }
+
+      #menu .mi:last-child {
+        border-bottom: none;
+      }
+
+      #menu .count {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 700;
+        background: var(--t-item);
+        border-radius: 999px;
+        padding: 1px 7px;
+      }
+
+      #fcard {
+        position: absolute;
+        width: 420px;
+        left: calc((1440px - var(--dock)) / 2 - 210px);
+        top: 150px;
+        padding: 18px;
+        border-radius: 16px;
+      }
+
+      .fhead {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .pring {
+        position: relative;
+        width: 40px;
+        height: 40px;
+        flex: none;
+      }
+
+      .pring svg {
+        position: absolute;
+        inset: 0;
+        transform: rotate(-90deg);
+      }
+
+      .pring span {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .ftitle {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 17px;
+        line-height: 1.2;
+      }
+
+      .fsub {
+        font-size: 12px;
+        color: var(--t-text2);
+        margin-top: 2px;
+      }
+
+      .fsettings {
+        margin-left: auto;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--t-border);
+        background: var(--t-item);
+      }
+
+      .frow-wrap {
+        overflow: hidden;
+        padding-bottom: 8px;
+      }
+
+      .frow {
+        height: 44px;
+        border-radius: 10px;
+        border: 1px solid var(--t-border);
+        background: var(--t-item);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 14px;
+        font-size: 15px;
+        font-weight: 500;
+      }
+
+      .chk {
+        position: relative;
+        width: 19px;
+        height: 19px;
+        border-radius: 50%;
+        border: 1.8px solid var(--t-text2);
+        flex: none;
+      }
+
+      .chk .fill {
+        position: absolute;
+        inset: -1.8px;
+        border-radius: 50%;
+        border: 1.8px solid var(--t-accent);
+        transform: scale(0);
+      }
+
+      .chk svg {
+        position: absolute;
+        inset: 2px;
+        width: 12px;
+        height: 12px;
+        stroke: var(--t-accent);
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+      }
+
+      .ftext {
+        position: relative;
+      }
+
+      .ftext .strike {
+        position: absolute;
+        left: 0;
+        top: 54%;
+        height: 1.5px;
+        width: 0;
+        background: currentColor;
+      }
+
+      .frow-add {
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      #goal-input {
+        flex: 1;
+        height: 38px;
+        border-radius: 10px;
+        border: 1px solid var(--t-border);
+        background: var(--t-item);
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      #goal-input .ph {
+        color: var(--t-text2);
+        opacity: 0.8;
+      }
+
+      #goal-input .caret {
+        width: 1.5px;
+        height: 18px;
+        background: var(--t-text);
+        margin-left: 1px;
+      }
+
+      #goal-add {
+        height: 38px;
+        padding: 0 16px;
+        border-radius: 10px;
+        border: 1px solid var(--t-border);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+        font-size: 14px;
+        color: var(--t-text2);
+      }
+
+      .home-bottom {
+        position: absolute;
+        left: 0;
+        right: var(--dock);
+        text-align: center;
+      }
+
+      #quote {
+        bottom: 36px;
+      }
+
+      .qtext {
+        font-weight: 700;
+        font-size: 19px;
+        padding: 0 120px;
+      }
+
+      .qmeta {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .badge {
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #fff;
+        text-shadow: none;
+      }
+
+      .qactions {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .qa {
+        position: relative;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+      }
+
+      .qa.big {
+        width: 46px;
+        height: 46px;
+        background: var(--t-item);
+        border: 1.5px solid var(--t-border);
+      }
+
+      .qa.fav {
+        color: #ef4444;
+      }
+
+      .qa.fav svg {
+        fill: currentColor;
+      }
+
+      .qa .num {
+        position: absolute;
+        top: 1px;
+        right: 1px;
+        min-width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: var(--t-text);
+        color: var(--t-accent-text);
+        font-size: 9px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+
+      .burst {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 6px;
+        height: 6px;
+        margin: -3px 0 0 -3px;
+        border-radius: 50%;
+        background: #f87171;
+        opacity: 0;
+      }
+
+      .qsep {
+        width: 1px;
+        height: 22px;
+        background: var(--t-border);
+        margin: 0 6px;
+      }
+
+      #concept {
+        bottom: 36px;
+        opacity: 0;
+      }
+
+      .ctag {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .ctag span {
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 12px;
+        color: var(--t-text2);
+      }
+
+      .ctitle {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 44px;
+        letter-spacing: -0.02em;
+        margin-top: 10px;
+      }
+
+      .chint {
+        font-size: 14px;
+        color: var(--t-text2);
+        overflow: hidden;
+        margin-top: 8px;
+      }
+
+      .ccard {
+        width: 576px;
+        margin: 0 auto;
+        overflow: hidden;
+        max-height: 0;
+        border-radius: 14px;
+        text-align: center;
+      }
+
+      .ccard-in {
+        padding: 22px 22px 18px;
+      }
+
+      .cdef {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 20px;
+        line-height: 1.5;
+      }
+
+      .ctagchip {
+        display: inline-block;
+        margin-top: 12px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        border: 1px solid var(--t-border);
+        background: var(--t-item);
+      }
+
+      .cgrade {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 18px;
+        font-size: 12px;
+        color: var(--t-text2);
+      }
+
+      .cbtns {
+        display: flex;
+        gap: 8px;
+      }
+
+      .cg {
+        height: 28px;
+        padding: 0 12px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--t-text);
+        border: 1.2px solid;
+      }
+
+      .cg small {
+        font-size: 10px;
+        font-weight: 500;
+        opacity: 0.6;
+      }
+
+      #bell {
+        position: absolute;
+        right: calc(16px + var(--dock));
+        bottom: 16px;
+        width: 48px;
+        height: 48px;
+      }
+
+      #bell .dot {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+      }
+
+      #rpanel {
+        position: absolute;
+        right: calc(16px + var(--dock));
+        bottom: 76px;
+        width: 380px;
+        border-radius: 16px;
+        background: var(--t-panel);
+        border: 1px solid var(--t-border);
+        backdrop-filter: blur(24px);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+        transform-origin: 90% 100%;
+        opacity: 0;
+        overflow: hidden;
+      }
+
+      .rp-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 16px 10px;
+      }
+
+      .rp-bell {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(248, 113, 113, 0.5);
+        color: #f87171;
+      }
+
+      .rp-title {
+        font-weight: 700;
+        font-size: 16px;
+      }
+
+      .rp-title span {
+        font-weight: 500;
+        color: var(--t-text2);
+        margin-left: 6px;
+      }
+
+      .rp-sub {
+        font-size: 12px;
+        color: #f87171;
+        margin-top: 1px;
+      }
+
+      .rp-tools {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+
+      .rp-tools div {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: var(--t-item);
+        border: 1px solid var(--t-border);
+      }
+
+      .rp-sec {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 16px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      .rp-sec::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--t-border);
+      }
+
+      .rp-hero-wrap {
+        overflow: hidden;
+        padding: 0 16px;
+      }
+
+      .rp-hero {
+        border-radius: 12px;
+        border: 1.5px solid rgba(248, 113, 113, 0.7);
+        background: rgba(127, 29, 29, 0.28);
+        padding: 12px 14px;
+        margin-bottom: 10px;
+      }
+
+      .rp-eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #f87171;
+      }
+
+      .rp-main {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .rp-check {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(248, 113, 113, 0.7);
+        display: grid;
+        place-items: center;
+        color: #fca5a5;
+      }
+
+      .rp-text {
+        font-weight: 600;
+        font-size: 15px;
+      }
+
+      .rp-when {
+        font-size: 13px;
+        color: var(--t-text2);
+        margin-top: 2px;
+      }
+
+      .rp-now {
+        margin-left: auto;
+        text-align: right;
+      }
+
+      .rp-now b {
+        display: block;
+        font-family: var(--display);
+        font-size: 22px;
+        color: #f87171;
+        line-height: 1;
+      }
+
+      .rp-now small {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--t-text2);
+      }
+
+      .rp-snooze {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(248, 113, 113, 0.3);
+        font-size: 12px;
+        color: var(--t-text2);
+      }
+
+      .rp-snooze b {
+        padding: 2px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(248, 113, 113, 0.6);
+        background: rgba(248, 113, 113, 0.2);
+        color: #fca5a5;
+        font-size: 11px;
+      }
+
+      .rp-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px 12px 30px;
+        font-size: 14px;
+      }
+
+      .rp-row small {
+        font-size: 12px;
+        color: var(--t-text2);
+        width: 56px;
+      }
+
+      .rp-foot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px 14px;
+        border-top: 1px solid var(--t-border);
+      }
+
+      .rp-add {
+        flex: 1;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-weight: 600;
+        font-size: 14px;
+        background: var(--t-item);
+      }
+
+      .rp-manage {
+        padding: 0 12px;
+        font-size: 14px;
+        color: var(--t-text2);
+      }
+
+      /* Theme panel */
+      #tpanel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 320px;
+        padding: 24px;
+        background: var(--t-panel);
+        border-left: 1px solid var(--t-border);
+        backdrop-filter: blur(24px);
+        transform: translateX(100%);
+      }
+
+      .tp-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 19px;
+      }
+
+      #tp-close {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+      }
+
+      .tp-label {
+        font-weight: 600;
+        font-size: 14px;
+        margin: 20px 0 10px;
+      }
+
+      .tp-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .tp-opt {
+        height: 64px;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        background: var(--t-item);
+      }
+
+      .tp-opt.on {
+        background: var(--t-btn);
+        color: var(--t-btn-text);
+      }
+
+      .sw {
+        position: relative;
+        height: 48px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--t-border);
+      }
+
+      .sw .top {
+        position: absolute;
+        inset: 0 0 20px 0;
+      }
+
+      .sw .name {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.45);
+      }
+
+      .sw .ringsel {
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        box-shadow: inset 0 0 0 2.5px var(--t-accent);
+        opacity: 0;
+      }
+
+      .tp-toggle {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 10px;
+        background: var(--t-item);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .tp-toggle small {
+        display: block;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--t-text2);
+        margin-top: 2px;
+      }
+
+      #tp-glass {
+        overflow: hidden;
+      }
+
+      .tp-foot {
+        margin-top: 22px;
+        padding-top: 16px;
+        border-top: 1px solid var(--t-border);
+        text-align: center;
+        font-size: 12px;
+        color: var(--t-text2);
+      }
+
+      .tog {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.22);
+      }
+
+      .tog b {
+        position: absolute;
+        left: 3px;
+        top: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+      }
+
+      /* Pomodoro */
+      .pback {
+        position: absolute;
+        left: 110px;
+        top: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 500;
+        font-size: 15px;
+      }
+
+      .pnav {
+        position: absolute;
+        right: 110px;
+        top: 14px;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 10px;
+      }
+
+      .pnav div {
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-weight: 500;
+        font-size: 14px;
+        color: var(--t-text2);
+      }
+
+      .pnav .on {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+      }
+
+      #mini {
+        position: absolute;
+        left: 16px;
+        top: 72px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #mini-tile {
+        position: relative;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      }
+
+      #mini-dot {
+        position: absolute;
+        left: -3px;
+        top: -3px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #fff;
+        opacity: 0;
+      }
+
+      #mini-pause {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.25);
+        opacity: 0;
+      }
+
+      #snd {
+        position: absolute;
+        left: 16px;
+        top: 112px;
+        width: 360px;
+        border-radius: 10px;
+        background: rgba(15, 18, 30, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(24px);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+        transform-origin: 5% 0;
+        opacity: 0;
+        overflow: hidden;
+        color: #fff;
+      }
+
+      .snd-tabs {
+        display: flex;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .snd-tabs div {
+        flex: 1;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.7);
+        border-bottom: 2px solid transparent;
+      }
+
+      .snd-tabs .on {
+        color: #fff;
+        border-bottom-color: #fff;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .snd-body {
+        position: relative;
+        height: 300px;
+      }
+
+      .snd-pane {
+        position: absolute;
+        inset: 0;
+        padding: 12px;
+      }
+
+      .yt-add {
+        height: 36px;
+        border-radius: 8px;
+        border: 1.5px dashed rgba(255, 255, 255, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      .yt-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .yt {
+        height: 112px;
+        border-radius: 8px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .yt span {
+        position: absolute;
+        left: 8px;
+        bottom: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 5px;
+        background: rgba(0, 0, 0, 0.5);
+      }
+
+      .sc-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+
+      .sc {
+        height: 104px;
+        border-radius: 8px;
+        border: 1.5px solid rgba(255, 255, 255, 0.18);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        text-align: center;
+        line-height: 1.25;
+        position: relative;
+      }
+
+      .sc small {
+        position: absolute;
+        bottom: 6px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #6ee7b7;
+        opacity: 0;
+      }
+
+      .sc-hint {
+        text-align: center;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 14px;
+      }
+
+      #pcard {
+        position: absolute;
+        left: 202px;
+        top: 196px;
+        width: 340px;
+        padding: 22px;
+        border-radius: 16px;
+      }
+
+      #phead {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .pchip {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.12);
+        flex: none;
+      }
+
+      .ptitle {
+        font-weight: 600;
+        font-size: 16px;
+        line-height: 1.2;
+      }
+
+      .phint {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: var(--t-text2);
+        overflow: hidden;
+      }
+
+      #gdrop {
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        top: 66px;
+        border-radius: 8px;
+        background: rgba(8, 10, 20, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        padding: 12px 14px;
+        opacity: 0;
+        z-index: 2;
+      }
+
+      #gdrop .gh {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--t-text2);
+      }
+
+      #gpick {
+        margin-top: 10px;
+        font-size: 14px;
+        padding: 6px 0;
+      }
+
+      .pring-big {
+        position: relative;
+        width: 184px;
+        height: 184px;
+        margin: 20px auto 0;
+      }
+
+      .pring-big svg {
+        position: absolute;
+        inset: 0;
+        transform: rotate(-90deg);
+      }
+
+      .ptime {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .ptime b {
+        font-family: 'DejaVu Sans Mono', ui-monospace, monospace;
+        font-weight: 700;
+        font-size: 34px;
+        letter-spacing: 0.02em;
+        line-height: 1;
+      }
+
+      .ptime span {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        margin-top: 10px;
+      }
+
+      .pdash {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 4px;
+        margin-top: 18px;
+        font-size: 12px;
+        color: var(--t-text2);
+      }
+
+      .pdash i {
+        position: relative;
+        width: 20px;
+        height: 5px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.25);
+        overflow: hidden;
+      }
+
+      .pdash i b {
+        position: absolute;
+        inset: 0;
+        width: 0;
+        background: #fff;
+      }
+
+      .pdash span {
+        margin-left: 6px;
+      }
+
+      .pctrl {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .pbtn {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.18);
+        overflow: hidden;
+      }
+
+      #pomo-start {
+        width: 88px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+        background: rgba(0, 0, 0, 0.35);
+      }
+
+      .pchips {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        margin-top: 16px;
+        font-size: 12px;
+        color: var(--t-text2);
+      }
+
+      .pchips span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .pchips b {
+        font-weight: 600;
+        text-decoration: underline dotted;
+        text-underline-offset: 3px;
+      }
+
+      #psound {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        color: var(--t-text2);
+        overflow: hidden;
+      }
+
+      .pquote {
+        position: absolute;
+        left: 590px;
+        right: 60px;
+        top: 230px;
+        text-align: center;
+      }
+
+      .pquote .qtext {
+        font-size: 30px;
+        line-height: 1.5;
+        padding: 0;
+      }
+
+      .pquote .qauthor {
+        font-size: 22px;
+        font-weight: 600;
+        margin-top: 18px;
+      }
+
+      /* Focus */
+      #p-focus {
+        color: #fff;
+      }
+
+      #p-focus .mini-copy {
+        position: absolute;
+        left: 16px;
+        top: 16px;
+      }
+
+      .fcenter {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 290px;
+      }
+
+      #ftime {
+        font-weight: 700;
+        font-size: 96px;
+        line-height: 1;
+        letter-spacing: 0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .flabel {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        color: #22c55e;
+        margin-top: 16px;
+      }
+
+      .fon {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 30px;
+      }
+
+      .fon span {
+        margin-left: 10px;
+        letter-spacing: 0.04em;
+      }
+
+      .fgoal {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 17px;
+        margin-top: 8px;
+      }
+
+      .fgoal i {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1.8px solid rgba(255, 255, 255, 0.75);
+      }
+
+      .fquote {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 600px;
+        text-align: center;
+        font-style: italic;
+        font-size: 19px;
+        color: rgba(255, 255, 255, 0.85);
+      }
+
+      .fquote small {
+        display: block;
+        font-style: normal;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 12px;
+      }
+
+      .fctrl {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 682px;
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .fctrl div {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
+
+      .fctrl .big {
+        width: 62px;
+        height: 62px;
+        background: rgba(255, 255, 255, 0.22);
+      }
+
+      .fctrl .sep {
+        width: 1px;
+        height: 28px;
+        border: none;
+        border-radius: 0;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 0 8px;
+      }
+
+      .fesc {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 760px;
+        text-align: center;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      .fesc kbd {
+        display: inline-block;
+        font-family: var(--body);
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        margin: 0 4px;
+      }
+
+      /* Insights */
+      .ihead {
+        position: absolute;
+        left: 110px;
+        top: 18px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        z-index: 2;
+      }
+
+      #ins-back {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 500;
+        font-size: 15px;
+      }
+
+      .ihead .div {
+        width: 1px;
+        height: 30px;
+        background: var(--t-border);
+      }
+
+      .ititle {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .isub {
+        font-size: 14px;
+        color: var(--t-text2);
+        margin-top: 2px;
+      }
+
+      #p-insights .pnav {
+        top: 20px;
+        z-index: 2;
+      }
+
+      .itabs {
+        position: absolute;
+        left: 110px;
+        top: 104px;
+        display: flex;
+        gap: 8px;
+        z-index: 2;
+      }
+
+      .itabs div {
+        height: 44px;
+        padding: 0 24px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--t-text2);
+        background: rgba(0, 0, 0, 0.18);
+      }
+
+      .itabs .on {
+        color: #fff;
+        background: rgba(0, 0, 0, 0.42);
+      }
+
+      .iscroll {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 168px;
+        bottom: 0;
+        overflow: hidden;
+      }
+
+      .ipane {
+        position: absolute;
+        left: 110px;
+        right: 110px;
+        top: 8px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 22px;
+      }
+
+      .stat {
+        height: 150px;
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .stat .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .stat .sic {
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .stat b {
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 30px;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stat .lbl {
+        margin-top: 20px;
+        font-weight: 500;
+        font-size: 14px;
+      }
+
+      .stat .sub {
+        font-size: 12px;
+        color: var(--t-text2);
+        margin-top: 4px;
+      }
+
+      .ipanel {
+        border-radius: 14px;
+        padding: 26px 30px;
+        margin-top: 24px;
+      }
+
+      .ipanel h3 {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 22px;
+      }
+
+      .ibanner {
+        margin-top: 20px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--t-border);
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 14px;
+      }
+
+      .cats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 16px;
+        row-gap: 16px;
+        margin-top: 22px;
+      }
+
+      .cat {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .cat .nm {
+        width: 128px;
+      }
+
+      .cat .trk {
+        flex: 1;
+        height: 30px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.07);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .cat .trk i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        border-radius: 6px;
+      }
+
+      .cat .trk b {
+        position: absolute;
+        right: 10px;
+        top: 7px;
+        font-size: 12px;
+      }
+
+      .donuts {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 26px;
+      }
+
+      .donut {
+        text-align: center;
+      }
+
+      .donut svg {
+        transform: rotate(-90deg);
+      }
+
+      .donut b {
+        display: block;
+        font-family: var(--display);
+        font-size: 30px;
+        margin-top: 14px;
+      }
+
+      .donut span {
+        font-size: 13px;
+        color: var(--t-text2);
+      }
+
+      .hcharts {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        margin-top: 24px;
+      }
+
+      .hchart h4 {
+        font-weight: 600;
+        font-size: 16px;
+      }
+
+      .hbars {
+        position: relative;
+        height: 190px;
+        margin-top: 18px;
+        border-bottom: 1px solid var(--t-border);
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        padding: 0 4px;
+      }
+
+      .hbars i {
+        flex: 1;
+        border-radius: 3px 3px 0 0;
+        height: 0;
+      }
+
+      .hbars.wk i {
+        margin: 0 5px;
+      }
+
+      .haxis {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--t-text2);
+        margin-top: 6px;
+        padding: 0 4px;
+      }
+
+      /* OS notification (stage space) */
+      #notif {
+        position: absolute;
+        right: 40px;
+        top: 34px;
+        width: 380px;
+        display: flex;
+        gap: 14px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(38, 36, 48, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        backdrop-filter: blur(24px);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+        z-index: 5;
+        opacity: 0;
+      }
+
+      .nt-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 11px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+      }
+
+      .nt-body {
+        flex: 1;
+      }
+
+      .nt-app {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.55);
+      }
+
+      .nt-title {
+        font-weight: 700;
+        font-size: 15px;
+        margin-top: 2px;
+      }
+
+      .nt-text {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.85);
+        margin-top: 2px;
+      }
+
+      .nt-btns {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .nt-btns div {
+        flex: 1;
+        height: 32px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      /* Cursor */
+      #cursor {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 34px;
+        height: 34px;
+        transform-origin: 0 0;
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
+        z-index: 50;
+        opacity: 0;
+      }
+
+      #ripple {
+        position: absolute;
+        left: 0;
+        top: 0;
+        border-radius: 50%;
+        border: 3px solid rgba(255, 255, 255, 0.9);
+        box-shadow: 0 0 18px rgba(196, 181, 253, 0.8);
+        z-index: 49;
+        opacity: 0;
+      }
+
+      /* Privacy + outro */
+      .privacy {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 120px;
+      }
+
+      .shield {
+        position: relative;
+        width: 360px;
+        height: 360px;
+        display: grid;
+        place-items: center;
+      }
+
+      .shield .halo {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 2px solid rgba(196, 181, 253, 0.35);
+      }
+
+      .shield .core {
+        width: 220px;
+        height: 220px;
+        border-radius: 64px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+        box-shadow:
+          0 40px 90px rgba(109, 40, 217, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+
+      .privacy-list {
+        width: 760px;
+      }
+
+      .privacy-list .title {
+        margin-top: 22px;
+      }
+
+      .check-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 22px;
+        margin-top: 34px;
+      }
+
+      .check-row .tick {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        flex: none;
+        display: grid;
+        place-items: center;
+        background: rgba(16, 185, 129, 0.18);
+        border: 1px solid rgba(16, 185, 129, 0.5);
+        color: #34d399;
+      }
+
+      .check-row h4 {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 32px;
+        line-height: 1.2;
+      }
+
+      .check-row p {
+        font-size: 22px;
+        color: var(--text-2);
+        margin-top: 6px;
+      }
+
+      #cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 56px;
+        padding: 24px 44px;
+        border-radius: 999px;
+        font-size: 30px;
+        font-weight: 600;
+        background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+        box-shadow:
+          0 24px 60px rgba(109, 40, 217, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+
+      .site {
+        margin-top: 34px;
+        font-size: 28px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--text-2);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div class="backdrop" id="backdrop"></div>
+      <div class="backdrop-glow"></div>
+
+      <section class="scene" id="intro" data-start="0" data-end="4.6">
+        <div class="center-col">
+          <svg aria-hidden="true" class="logo-mark" viewBox="0 0 120 120" fill="none">
+            <path class="ring" pathLength="1" d="M92 88 A 42 42 0 1 1 92 32" stroke="#ffffff" stroke-width="15" stroke-linecap="round" />
+            <circle class="cue-dot" cx="92" cy="60" r="11" fill="#c4b5fd" />
+          </svg>
+          <div class="wordmark" data-fx="up" data-at="1.3" data-dur="1">Cuewise</div>
+          <div class="tagline" data-fx="up" data-at="2" data-dur="1">
+            Turn every new tab into a <span class="accent">meaningful moment.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="hook" data-start="4.3" data-end="9.7">
+        <div class="center-col">
+          <div class="tabstrip" id="tabstrip"></div>
+          <div class="hook-line soft" data-words="0.4">You open a new tab dozens of times a day.</div>
+          <div class="hook-line" data-words="2.3">
+            What if every one <span class="accent">helped you focus?</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="app-scene" data-start="9.4" data-end="66.8">
+        <div id="browser">
+          <div id="chrome">
+            <div class="tabrow">
+              <div class="dots"><span style="background: #ff5f57"></span><span style="background: #febc2e"></span><span style="background: #28c840"></span></div>
+              <div class="btab"><span class="fav" style="background: #3b82f6"><i class="ic" data-i="Mail" data-s="11"></i></span>Inbox</div>
+              <div class="btab" id="tab-doc"><span class="fav" style="background: #10b981"><i class="ic" data-i="FileText" data-s="11"></i></span>Q3 planning</div>
+              <div class="btab" id="tab-new">
+                <span class="fav" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9)">
+                  <svg aria-hidden="true" viewBox="0 0 120 120" width="12" height="12" fill="none"><path d="M92 88 A 42 42 0 1 1 92 32" stroke="#fff" stroke-width="18" stroke-linecap="round" /><circle cx="92" cy="60" r="13" fill="#fff" /></svg>
+                </span>New Tab
+              </div>
+              <div id="tab-plus"><i class="ic" data-i="Plus" data-s="18"></i></div>
+            </div>
+            <div class="toolbar">
+              <i class="ic" data-i="ArrowLeft" data-s="18"></i>
+              <i class="ic" data-i="ArrowRight" data-s="18"></i>
+              <i class="ic" data-i="RotateCw" data-s="16"></i>
+              <div class="omni"><i class="ic" id="omni-icon" data-i="Lock" data-s="13"></i><span id="omni-text">docs.example.com/q3-planning</span></div>
+            </div>
+          </div>
+          <div id="viewport">
+            <div id="docpage">
+              <div class="doc">
+                <div class="line" style="width: 46%; height: 26px; background: #d9d3e8; margin-bottom: 34px"></div>
+                <div class="line" style="width: 92%"></div>
+                <div class="line" style="width: 86%"></div>
+                <div class="line" style="width: 64%; margin-bottom: 38px"></div>
+                <div class="line" style="width: 90%"></div>
+                <div class="line" style="width: 78%"></div>
+                <div class="line" style="width: 84%"></div>
+                <div class="line" style="width: 40%"></div>
+              </div>
+            </div>
+
+            <div id="app">
+              <div class="bg-layer" id="bg-glass"></div>
+              <div class="bg-layer" id="bg-purple"></div>
+              <div class="bg-layer" id="bg-forest"></div>
+              <div class="bg-layer" id="bg-rose"></div>
+
+              <div class="page" id="p-home">
+                <div class="corner" style="left: 28px" id="home-tl">
+                  <div class="gpill glass"><i class="ic" data-i="Flag" data-s="17"></i>Goals</div>
+                  <div class="gcirc glass"><i class="ic" data-i="Plus" data-s="18"></i></div>
+                  <div class="gcirc glass"><i class="ic" data-i="SquarePen" data-s="17"></i></div>
+                  <div class="gcirc glass"><i class="ic" data-i="Blocks" data-s="17"></i></div>
+                </div>
+                <div class="corner" id="home-tr">
+                  <div class="gpill glass" id="nav-pomo"><i class="ic" data-i="Timer" data-s="17"></i>Pomodoro</div>
+                  <div class="gcirc glass" id="nav-gear"><i class="ic" data-i="Settings" data-s="18"></i></div>
+                </div>
+
+                <div id="fcard" class="glass">
+                  <div class="fhead">
+                    <div class="pring">
+                      <svg aria-hidden="true" viewBox="0 0 40 40" width="40" height="40" fill="none">
+                        <circle cx="20" cy="20" r="17" stroke="var(--t-border)" stroke-width="3" />
+                        <circle id="fring" cx="20" cy="20" r="17" stroke="var(--t-accent)" stroke-width="3" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+                      </svg>
+                      <span id="fring-label">1/3</span>
+                    </div>
+                    <div>
+                      <div class="ftitle">Today's Focus</div>
+                      <div class="fsub" id="fsub"></div>
+                    </div>
+                    <div class="fsettings"><i class="ic" data-i="SlidersHorizontal" data-s="15"></i></div>
+                  </div>
+                  <div id="frows"></div>
+                  <div class="frow-add">
+                    <div id="goal-input"><span id="goal-text"></span><span class="caret" id="goal-caret"></span><span class="ph" id="goal-ph">Add a goal...</span></div>
+                    <div id="goal-add"><i class="ic" data-i="Plus" data-s="15"></i>Add</div>
+                  </div>
+                </div>
+
+                <div id="quote" class="home-bottom shadowed">
+                  <div id="qbody">
+                    <div class="qtext" id="qtext"></div>
+                    <div class="qmeta"><span id="qauthor"></span><span class="badge" id="qbadge"></span></div>
+                  </div>
+                  <div class="qactions">
+                    <div class="qa"><i class="ic" data-i="ChevronLeft" data-s="18"></i></div>
+                    <div class="qa big" id="q-refresh"><i class="ic" id="q-refresh-ic" data-i="RefreshCw" data-s="18"></i></div>
+                    <div class="qa"><i class="ic" data-i="ChevronRight" data-s="18"></i></div>
+                    <div class="qsep"></div>
+                    <div class="qa" id="q-heart"><i class="ic" data-i="Heart" data-s="18"></i></div>
+                    <div class="qa"><i class="ic" data-i="Filter" data-s="17"></i></div>
+                    <div class="qa"><i class="ic" data-i="EyeOff" data-s="17"></i></div>
+                  </div>
+                </div>
+
+                <div id="concept" class="home-bottom shadowed">
+                  <div class="ctag"><i class="ic" data-i="Brain" data-s="13"></i>Recall <span>· psychology</span></div>
+                  <div class="ctitle">Confirmation bias</div>
+                  <div class="chint" id="chint">Bring it to mind, then reveal ↴</div>
+                  <div class="ccard glass" id="ccard">
+                    <div class="ccard-in">
+                      <div class="cdef">The tendency to seek, interpret and remember information in a way that confirms what you already believe.</div>
+                      <div class="ctagchip">psychology</div>
+                      <div class="cgrade">
+                        <span>How well did you recall it?</span>
+                        <div class="cbtns">
+                          <div class="cg" style="border-color: #f87171">Again <small>&lt;10m</small></div>
+                          <div class="cg" id="cc-good" style="border-color: #34d399">Good <small>1d</small></div>
+                          <div class="cg" style="border-color: var(--t-border)">Easy <small>4d</small></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="qactions">
+                    <div class="qa"><i class="ic" data-i="ChevronLeft" data-s="18"></i></div>
+                    <div class="qa big" id="c-reveal"><i class="ic" id="c-reveal-ic" data-i="Eye" data-s="19"></i></div>
+                    <div class="qa"><i class="ic" data-i="ChevronRight" data-s="18"></i></div>
+                    <div class="qsep"></div>
+                    <div class="qa"><i class="ic" data-i="Heart" data-s="18"></i></div>
+                    <div class="qa"><i class="ic" data-i="Filter" data-s="17"></i><span class="num">1</span></div>
+                    <div class="qa"><i class="ic" data-i="Plus" data-s="18"></i></div>
+                  </div>
+                </div>
+
+                <div class="gcirc glass" id="bell"><i class="ic" data-i="Bell" data-s="20"></i><span class="dot" id="bell-dot">2</span></div>
+
+                <div id="rpanel">
+                  <div class="rp-head">
+                    <div class="rp-bell"><i class="ic" data-i="Bell" data-s="16"></i></div>
+                    <div>
+                      <div class="rp-title">Reminders<span id="rp-count">2</span></div>
+                      <div class="rp-sub" id="rp-sub">Awaiting your response</div>
+                    </div>
+                    <div class="rp-tools">
+                      <div><i class="ic" data-i="Pin" data-s="13"></i></div>
+                      <div><i class="ic" data-i="ListChecks" data-s="13"></i></div>
+                    </div>
+                  </div>
+                  <div class="rp-sec">SCHEDULED <span class="muted" id="rp-sec-count">2</span></div>
+                  <div class="rp-hero-wrap" id="rp-hero-wrap">
+                    <div class="rp-hero">
+                      <div class="rp-eyebrow"><i class="ic" data-i="BellRing" data-s="13"></i>NEEDS RESPONSE</div>
+                      <div class="rp-main">
+                        <div class="rp-check"><i class="ic" data-i="Briefcase" data-s="15"></i></div>
+                        <div>
+                          <div class="rp-text">Stand up &amp; stretch</div>
+                          <div class="rp-when">1 min ago</div>
+                        </div>
+                        <div class="rp-now"><b>Now</b><small>UNANSWERED</small></div>
+                      </div>
+                      <div class="rp-snooze"><i class="ic" data-i="AlarmClock" data-s="13"></i>Snooze <b>5m</b><b>15m</b><b>30m</b></div>
+                    </div>
+                  </div>
+                  <div class="rp-row"><small>1:00 PM</small><i class="ic" data-i="Users" data-s="16" style="color: #60a5fa"></i>Team standup</div>
+                  <div class="rp-foot">
+                    <div class="rp-add"><i class="ic" data-i="Plus" data-s="15"></i>Add reminder</div>
+                    <div class="rp-manage">Manage</div>
+                  </div>
+                </div>
+
+                <div id="menu">
+                  <div class="mi"><i class="ic" data-i="Flag" data-s="16"></i>Goals</div>
+                  <div class="mi"><i class="ic" data-i="BookMarked" data-s="16"></i>Manage Quotes</div>
+                  <div class="mi"><i class="ic" data-i="Brain" data-s="16"></i>Concepts<span class="count">1</span></div>
+                  <div class="mi"><i class="ic" data-i="BarChart3" data-s="16"></i>View Insights</div>
+                  <div class="mi" id="menu-theme"><i class="ic" data-i="PanelRight" data-s="16"></i>Theme Switcher</div>
+                  <div class="mi"><i class="ic" data-i="Settings" data-s="16"></i>Settings</div>
+                </div>
+              </div>
+
+              <div class="page" id="p-pomo">
+                <div class="pback shadowed"><i class="ic" data-i="ArrowLeft" data-s="18"></i>Back to Home</div>
+                <div class="pnav glass">
+                  <div><i class="ic" data-i="Flag" data-s="15"></i>Goals</div>
+                  <div><i class="ic" data-i="FileText" data-s="15"></i>Quotes</div>
+                  <div id="pnav-insights"><i class="ic" data-i="BarChart3" data-s="15"></i>Insights</div>
+                  <div class="on"><i class="ic" data-i="Clock" data-s="15"></i>Pomodoro</div>
+                </div>
+                <div id="mini">
+                  <div id="mini-tile"><span id="mini-ic"></span><span id="mini-dot"></span></div>
+                  <div id="mini-pause"><i class="ic" data-i="Pause" data-s="14"></i></div>
+                </div>
+                <div id="pcard" class="glass">
+                  <div id="phead">
+                    <div class="pchip"><i class="ic" data-i="Timer" data-s="20"></i></div>
+                    <div style="flex: 1; min-width: 0">
+                      <div class="ptitle" id="ptitle">Focus Session</div>
+                      <div class="phint" id="phint"><i class="ic" data-i="Target" data-s="11"></i>Select a goal</div>
+                    </div>
+                    <i class="ic muted" id="pchev" data-i="ChevronDown" data-s="16"></i>
+                  </div>
+                  <div id="gdrop">
+                    <div class="gh">WORK ON A GOAL</div>
+                    <div id="gpick">Finish the product demo</div>
+                  </div>
+                  <div class="pring-big">
+                    <svg aria-hidden="true" viewBox="0 0 184 184" width="184" height="184" fill="none">
+                      <circle cx="92" cy="92" r="86" stroke="rgba(255,255,255,0.22)" stroke-width="7" />
+                      <circle id="pring-prog" cx="92" cy="92" r="86" stroke="#fff" stroke-width="7" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" />
+                    </svg>
+                    <div class="ptime"><b id="ptime">25:00</b><span>WORK</span></div>
+                  </div>
+                  <div class="pdash"><i><b id="pdash-fill"></b></i><i></i><i></i><i></i><span>4 until long break</span></div>
+                  <div class="pctrl">
+                    <div class="pbtn" id="pomo-start"><i class="ic" id="pstart-ic" data-i="Play" data-s="16"></i><span id="pstart-label">Start</span></div>
+                    <div class="pbtn" id="p-reset"><i class="ic" data-i="RotateCcw" data-s="16"></i></div>
+                    <div class="pbtn"><i class="ic" data-i="SkipForward" data-s="16"></i></div>
+                    <div class="pbtn" id="p-popout"><i class="ic" data-i="PictureInPicture2" data-s="16"></i></div>
+                    <div class="pbtn" id="pomo-expand"><i class="ic" data-i="Maximize2" data-s="16"></i></div>
+                  </div>
+                  <div class="pchips">
+                    <span><i class="ic" data-i="Timer" data-s="13"></i><b>25m</b></span>
+                    <span><i class="ic" data-i="Coffee" data-s="13"></i><b>5m</b></span>
+                    <span><i class="ic" data-i="Bed" data-s="13"></i><b>15m</b></span>
+                    <span><i class="ic" data-i="Repeat" data-s="13"></i><b>4</b></span>
+                  </div>
+                  <div id="psound"><i class="ic" data-i="Music" data-s="12"></i>Rain</div>
+                </div>
+                <div class="pquote shadowed">
+                  <span class="badge" style="background: #10b981; font-size: 15px; padding: 3px 16px">Productivity</span>
+                  <div class="qtext" style="margin-top: 60px">Amateurs sit and wait for inspiration, the rest of us just get up and go to work.</div>
+                  <div class="qauthor">— Stephen King</div>
+                </div>
+                <div id="snd">
+                  <div class="snd-tabs">
+                    <div id="tab-yt"><i class="ic" data-i="Music" data-s="15"></i>YouTube</div>
+                    <div id="tab-sounds"><i class="ic" data-i="TreePine" data-s="15"></i>Sounds</div>
+                  </div>
+                  <div class="snd-body">
+                    <div class="snd-pane" id="pane-yt">
+                      <div class="yt-add"><i class="ic" data-i="Plus" data-s="14"></i>Add Custom Playlist</div>
+                      <div class="yt-grid">
+                        <div class="yt" style="background: linear-gradient(135deg, #1e3a8a, #0f172a)"><span>Deep Focus</span></div>
+                        <div class="yt" style="background: linear-gradient(135deg, #db2777, #4c1d95)"><span>Synthwave</span></div>
+                        <div class="yt" style="background: linear-gradient(135deg, #d97706, #7c2d12)"><span>Chill Beats</span></div>
+                        <div class="yt" style="background: linear-gradient(135deg, #065f46, #1c1917)"><span>Jazz for Work</span></div>
+                      </div>
+                    </div>
+                    <div class="snd-pane" id="pane-sounds">
+                      <div class="sc-grid">
+                        <div class="sc" id="tile-rain"><i class="ic" data-i="CloudRain" data-s="26"></i>Rain<small>Playing</small></div>
+                        <div class="sc"><i class="ic" data-i="Waves" data-s="26"></i>Ocean</div>
+                        <div class="sc"><i class="ic" data-i="TreePine" data-s="26"></i>Forest</div>
+                        <div class="sc"><i class="ic" data-i="Coffee" data-s="26"></i>Cafe</div>
+                        <div class="sc"><i class="ic" data-i="Radio" data-s="26"></i>White<br />Noise</div>
+                        <div class="sc"><i class="ic" data-i="Wind" data-s="26"></i>Brown<br />Noise</div>
+                      </div>
+                      <div class="sc-hint">Click a soundscape to play. Click again to stop.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="page" id="p-focus">
+                <div class="bg-layer" id="bg-night"></div>
+                <div class="mini-copy" id="mini-focus"></div>
+                <div class="fcenter">
+                  <div id="ftime">25:00</div>
+                  <div class="flabel">FOCUS TIME</div>
+                  <div class="fon">FOCUSING ON<span>4 of 4</span></div>
+                  <div class="fgoal"><i></i>Finish the product demo</div>
+                </div>
+                <div class="fquote">"Amateurs sit and wait for inspiration, the rest of us just get up and go to work."<small>— Stephen King</small></div>
+                <div class="fctrl">
+                  <div><i class="ic" data-i="RotateCcw" data-s="18"></i></div>
+                  <div class="big"><i class="ic" data-i="Pause" data-s="24"></i></div>
+                  <div><i class="ic" data-i="SkipForward" data-s="18"></i></div>
+                  <div class="sep"></div>
+                  <div><i class="ic" data-i="Image" data-s="18"></i></div>
+                  <div><i class="ic" data-i="Minimize2" data-s="18"></i></div>
+                </div>
+                <div class="fesc">Press <kbd id="esc-key">Esc</kbd> to exit</div>
+              </div>
+
+              <div class="page" id="p-insights">
+                <div class="ihead shadowed">
+                  <div id="ins-back"><i class="ic" data-i="ArrowLeft" data-s="18"></i>Back to Home</div>
+                  <div class="div"></div>
+                  <div>
+                    <div class="ititle">Your Insights</div>
+                    <div class="isub">Track your productivity journey and celebrate your progress</div>
+                  </div>
+                </div>
+                <div class="pnav glass">
+                  <div><i class="ic" data-i="Flag" data-s="15"></i>Goals</div>
+                  <div><i class="ic" data-i="FileText" data-s="15"></i>Quotes</div>
+                  <div class="on"><i class="ic" data-i="BarChart3" data-s="15"></i>Insights</div>
+                  <div><i class="ic" data-i="Clock" data-s="15"></i>Pomodoro</div>
+                </div>
+                <div class="itabs">
+                  <div id="itab-over" class="on">Overview</div>
+                  <div id="itab-adv">Advanced Analytics</div>
+                  <div>Concepts</div>
+                  <div>Exports</div>
+                </div>
+                <div class="iscroll">
+                  <div class="ipane" id="pane-over">
+                    <div class="stats" id="stats"></div>
+                    <div class="ipanel glass">
+                      <h3><i class="ic" data-i="Award" data-s="22"></i>Category Insights</h3>
+                      <div class="ibanner">Your most viewed category is <b>Productivity</b> with 30 views</div>
+                      <div class="cats" id="cats"></div>
+                    </div>
+                  </div>
+                  <div class="ipane" id="pane-adv">
+                    <div class="ipanel glass" style="margin-top: 0">
+                      <h3><i class="ic" data-i="Target" data-s="22"></i>Goal Completion Rate</h3>
+                      <div class="donuts" id="donuts"></div>
+                    </div>
+                    <div class="ipanel glass">
+                      <h3><i class="ic" data-i="Clock" data-s="22"></i>Pomodoro Heatmap</h3>
+                      <div class="ibanner"><b>Most productive hours:</b> 10am, 3pm, 2pm</div>
+                      <div class="hcharts">
+                        <div class="hchart">
+                          <h4>By Hour of Day</h4>
+                          <div class="hbars" id="hbars-hour"></div>
+                          <div class="haxis"><span>12am</span><span>3am</span><span>6am</span><span>9am</span><span>12pm</span><span>3pm</span><span>6pm</span><span>9pm</span></div>
+                        </div>
+                        <div class="hchart">
+                          <h4>By Day of Week</h4>
+                          <div class="hbars wk" id="hbars-day"></div>
+                          <div class="haxis" style="padding: 0 18px"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="tpanel">
+                <div class="tp-head">Live Theme Preview<div id="tp-close"><i class="ic" data-i="X" data-s="18"></i></div></div>
+                <div class="tp-label">Mode</div>
+                <div class="tp-grid">
+                  <div class="tp-opt"><i class="ic" data-i="Sun" data-s="17"></i>Light</div>
+                  <div class="tp-opt"><i class="ic" data-i="Moon" data-s="17"></i>Dark</div>
+                  <div class="tp-opt on"><i class="ic" data-i="SunMoon" data-s="17"></i>Auto</div>
+                </div>
+                <div class="tp-label">Color Theme</div>
+                <div class="tp-grid">
+                  <div class="sw" id="sw-purple"><div class="top" style="background: linear-gradient(180deg, #f5f3ff, #ddd6fe)"></div><div class="name" style="background: #8b83a8">Purple</div><div class="ringsel"></div></div>
+                  <div class="sw" id="sw-forest"><div class="top" style="background: linear-gradient(180deg, #f0fdf4, #bbf7d0)"></div><div class="name" style="background: #6f8f78">Forest</div><div class="ringsel"></div></div>
+                  <div class="sw" id="sw-rose"><div class="top" style="background: linear-gradient(180deg, #fff1f2, #fecdd3)"></div><div class="name" style="background: #a8838a">Rose</div><div class="ringsel"></div></div>
+                  <div class="sw" id="sw-glass"><div class="top" style="background: linear-gradient(180deg, #52525b, #27272a)"></div><div class="name">Glass</div><div class="ringsel"></div></div>
+                </div>
+                <div id="tp-glass">
+                  <div class="tp-label">Glass</div>
+                  <div class="tp-toggle"><div>Enhanced glass<small>Saturation, lit edges &amp; legibility scrim</small></div><div class="tog" style="margin-left: auto; flex: none"><b></b></div></div>
+                </div>
+                <div class="tp-label">Density</div>
+                <div class="tp-grid">
+                  <div class="tp-opt"><i class="ic" data-i="Minimize2" data-s="17"></i>Compact</div>
+                  <div class="tp-opt on"><i class="ic" data-i="SunMoon" data-s="17"></i>Comfortable</div>
+                  <div class="tp-opt"><i class="ic" data-i="Maximize2" data-s="17"></i>Spacious</div>
+                </div>
+                <div class="tp-foot">Changes apply instantly and are saved automatically.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="notif">
+          <div class="nt-icon">
+            <svg aria-hidden="true" viewBox="0 0 120 120" width="26" height="26" fill="none"><path d="M92 88 A 42 42 0 1 1 92 32" stroke="#fff" stroke-width="15" stroke-linecap="round" /><circle cx="92" cy="60" r="11" fill="#fff" /></svg>
+          </div>
+          <div class="nt-body">
+            <div class="nt-app">Cuewise<span>now</span></div>
+            <div class="nt-title">🔔 Reminder</div>
+            <div class="nt-text">Stand up &amp; stretch</div>
+            <div class="nt-btns"><div id="notif-done">Done</div><div>Snooze 5 min</div></div>
+          </div>
+        </div>
+        <div id="captions"></div>
+      </section>
+
+      <section class="scene" id="privacy" data-start="66.5" data-end="72">
+        <div class="privacy">
+          <div class="shield" data-fx="scale" data-at="0.2" data-dur="1.1">
+            <div class="halo" id="halo-a"></div>
+            <div class="halo" id="halo-b"></div>
+            <div class="core">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="110" height="110" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><rect width="7" height="6" x="8.5" y="11" rx="1"/><path d="M10 11V9.5a2 2 0 0 1 4 0V11"/></svg>
+            </div>
+          </div>
+          <div class="privacy-list">
+            <div class="kicker" data-fx="up" data-at="0.4">Privacy first</div>
+            <div class="title" data-fx="up" data-at="0.6">Your data stays yours.</div>
+            <div class="check-row" data-fx="left" data-at="1.2">
+              <div class="tick"><i class="ic" data-i="Check" data-s="24" data-w="3"></i></div>
+              <div><h4>Local-first</h4><p>Goals, quotes and sessions live on your device.</p></div>
+            </div>
+            <div class="check-row" data-fx="left" data-at="1.6">
+              <div class="tick"><i class="ic" data-i="Check" data-s="24" data-w="3"></i></div>
+              <div><h4>No analytics. No trackers.</h4><p>Open source — nothing phones home.</p></div>
+            </div>
+            <div class="check-row" data-fx="left" data-at="2">
+              <div class="tick"><i class="ic" data-i="Check" data-s="24" data-w="3"></i></div>
+              <div><h4>Optional encrypted sync</h4><p>End-to-end encrypted — the server can't read it.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene" id="outro" data-start="71.7" data-end="79">
+        <div class="center-col">
+          <svg aria-hidden="true" class="logo-mark" viewBox="0 0 120 120" fill="none" style="width: 150px; height: 150px">
+            <path class="ring" pathLength="1" d="M92 88 A 42 42 0 1 1 92 32" stroke="#ffffff" stroke-width="15" stroke-linecap="round" />
+            <circle class="cue-dot" cx="92" cy="60" r="11" fill="#c4b5fd" />
+          </svg>
+          <div class="wordmark" style="font-size: 104px; margin-top: 28px" data-fx="up" data-at="0.9">Cuewise</div>
+          <div class="tagline" data-fx="up" data-at="1.3">A calm new tab for focused, intentional days.</div>
+          <div data-fx="pop" data-at="1.9">
+            <div id="cta"><i class="ic" data-i="Chrome" data-s="32"></i>Add to Chrome — It's free</div>
+          </div>
+          <div class="site" data-fx="up" data-at="2.4">cuewise.app</div>
+        </div>
+      </section>
+
+      <div id="ripple"></div>
+      <svg aria-hidden="true" id="cursor" viewBox="0 0 34 34">
+        <path d="M5 3 L5 27 L11.5 21 L15.8 30.5 L20 28.6 L15.8 19.4 L24.5 19.2 Z" fill="#fff" stroke="#15102a" stroke-width="2" stroke-linejoin="round" />
+      </svg>
+    </div>
+
+    <script>
+      (() => {
+        const W = 1440;
+        const H = 810;
+
+        const ICONS = {
+          Flag: ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
+          Timer: ['M10 2h4', 'M12 14l3-3', 'c12,14,8'],
+          Settings: ['M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z', 'c12,12,3'],
+          Bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0'],
+          BellRing: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9', 'M10.3 21a1.94 1.94 0 0 0 3.4 0', 'M22 8c0-2.3-.8-4.3-2-6', 'M4 2C2.8 3.7 2 5.7 2 8'],
+          RefreshCw: ['M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8', 'M21 3v5h-5', 'M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16', 'M8 16H3v5'],
+          RotateCw: ['M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8', 'M21 3v5h-5'],
+          Heart: ['M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z'],
+          EyeOff: ['M10.73 5.07a10.7 10.7 0 0 1 11.2 6.58 1 1 0 0 1 0 .7 10.7 10.7 0 0 1-1.44 2.49', 'M14.08 14.16a3 3 0 0 1-4.24-4.24', 'M17.48 17.5a10.75 10.75 0 0 1-15.42-5.15 1 1 0 0 1 0-.7 10.75 10.75 0 0 1 4.45-5.14', 'm2 2 20 20'],
+          Eye: ['M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0', 'c12,12,3'],
+          Filter: ['M22 3H2l8 9.46V19l4 2v-8.54z'],
+          ChevronLeft: ['m15 18-6-6 6-6'],
+          ChevronRight: ['m9 18 6-6-6-6'],
+          ChevronDown: ['m6 9 6 6 6-6'],
+          ChevronUp: ['m18 15-6-6-6 6'],
+          Target: ['c12,12,10', 'c12,12,6', 'c12,12,2'],
+          Plus: ['M5 12h14', 'M12 5v14'],
+          Check: ['M20 6 9 17l-5-5'],
+          Play: ['M6 3v18l14-9z'],
+          Pause: ['r6,4,4,16,1', 'r14,4,4,16,1'],
+          RotateCcw: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+          SkipForward: ['M6 4l10 8-10 8z', 'M20 4v16'],
+          Maximize2: ['M15 3h6v6', 'M9 21H3v-6', 'm21 3-7 7', 'm3 21 7-7'],
+          Minimize2: ['m14 10 7-7', 'M20 10h-6V4', 'm3 21 7-7', 'M4 14h6v6'],
+          Music: ['M9 18V5l12-2v13', 'c6,18,3', 'c18,16,3'],
+          CloudRain: ['M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242', 'M16 14v6', 'M8 14v6', 'M12 16v6'],
+          TreePine: ['m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14h-.3a1 1 0 0 1-.7-1.7L9 9h-.2A1 1 0 0 1 8 7.3L12 3l4 4.3a1 1 0 0 1-.8 1.7H15l3 3.3a1 1 0 0 1-.7 1.7H17Z', 'M12 22v-3'],
+          Coffee: ['M10 2v2', 'M14 2v2', 'M6 2v2', 'M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1'],
+          Waves: ['M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1', 'M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1', 'M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1'],
+          Radio: ['M4.9 19.1C1 15.2 1 8.8 4.9 4.9', 'M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5', 'c12,12,2', 'M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5', 'M19.1 4.9C23 8.8 23 15.1 19.1 19'],
+          Wind: ['M12.8 19.6A2 2 0 1 0 14 16H2', 'M17.5 8a2.5 2.5 0 1 1 2 4H2', 'M9.8 4.4A2 2 0 1 1 11 8H2'],
+          BarChart3: ['M3 3v16a2 2 0 0 0 2 2h16', 'M18 17V9', 'M13 17V5', 'M8 17v-3'],
+          Flame: ['M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z'],
+          TrendingUp: ['M16 7h6v6', 'm22 7-8.5 8.5-5-5L2 17'],
+          Clock: ['c12,12,10', 'M12 6v6l4 2'],
+          Calendar: ['M8 2v4', 'M16 2v4', 'r3,4,18,18,2', 'M3 10h18'],
+          ArrowLeft: ['m12 19-7-7 7-7', 'M19 12H5'],
+          ArrowRight: ['M5 12h14', 'm12 5 7 7-7 7'],
+          X: ['M18 6 6 18', 'M6 6l12 12'],
+          Sun: ['c12,12,4', 'M12 2v2', 'M12 20v2', 'm4.93 4.93 1.41 1.41', 'm17.66 17.66 1.41 1.41', 'M2 12h2', 'M20 12h2', 'm6.34 17.66-1.41 1.41', 'm19.07 4.93-1.41 1.41'],
+          Moon: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
+          SunMoon: ['M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4', 'M12 2v2', 'M12 20v2', 'm4.9 4.9 1.4 1.4', 'm17.7 17.7 1.4 1.4', 'M2 12h2', 'M20 12h2', 'm6.3 17.7-1.4 1.4', 'm19.1 4.9-1.4 1.4'],
+          Monitor: ['r2,3,20,14,2', 'M8 21h8', 'M12 17v4'],
+          Brain: ['M12 18V5', 'M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4', 'M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5', 'M17.997 5.125a4 4 0 0 1 2.526 5.77', 'M18 18a4 4 0 0 0 2-7.464', 'M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517', 'M6 18a4 4 0 0 1-2-7.464', 'M6.003 5.125a4 4 0 0 0-2.526 5.77'],
+          Image: ['r3,3,18,18,2', 'c9,9,2', 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'],
+          Lock: ['r3,11,18,11,2', 'M7 11V7a5 5 0 0 1 10 0v4'],
+          Search: ['c11,11,8', 'm21 21-4.3-4.3'],
+          Mail: ['r2,4,20,16,2', 'm22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7'],
+          FileText: ['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z', 'M14 2v4a2 2 0 0 0 2 2h4', 'M16 13H8', 'M16 17H8'],
+          BookMarked: ['M10 2v8l3-3 3 3V2', 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20'],
+          Chrome: ['c12,12,10', 'c12,12,4', 'M21.17 8H12', 'M3.95 6.06 8.54 14', 'M10.88 21.94 15.46 14'],
+          SquarePen: ['M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7', 'M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z'],
+          Blocks: ['r14,3,7,7,1', 'M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3'],
+          SlidersHorizontal: ['M21 4h-7', 'M10 4H3', 'M21 12h-9', 'M8 12H3', 'M21 20h-5', 'M12 20H3', 'M14 2v4', 'M8 10v4', 'M16 18v4'],
+          Pin: ['M12 17v5', 'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'],
+          ListChecks: ['m3 17 2 2 4-4', 'm3 7 2 2 4-4', 'M13 6h8', 'M13 12h8', 'M13 18h8'],
+          Briefcase: ['M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16', 'r2,6,20,14,2'],
+          AlarmClock: ['c12,13,8', 'M12 9v4l2 2', 'M5 3 2 6', 'm22 6-3-3', 'M6.38 18.7 4 21', 'M17.64 18.67 20 21'],
+          Users: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'c9,7,4', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+          PanelRight: ['r3,3,18,18,2', 'M15 3v18'],
+          PictureInPicture2: ['M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4', 'r12,13,10,7,2'],
+          Bed: ['M2 4v16', 'M2 8h18a2 2 0 0 1 2 2v10', 'M2 17h20', 'M6 8v9'],
+          Repeat: ['m17 2 4 4-4 4', 'M3 11v-1a4 4 0 0 1 4-4h14', 'm7 22-4-4 4-4', 'M21 13v1a4 4 0 0 1-4 4H3'],
+          Award: ['c12,8,6', 'M15.477 12.89 17 22l-5-3-5 3 1.523-9.11'],
+        };
+
+        const iconSvg = (name, size, width) => {
+          const parts = (ICONS[name] || []).map((d) => {
+            if (d.startsWith('c')) {
+              const [cx, cy, r] = d.slice(1).split(',');
+              return `<circle cx="${cx}" cy="${cy}" r="${r}"/>`;
+            }
+            if (d.startsWith('r')) {
+              const [x, y, w, h, rx] = d.slice(1).split(',');
+              return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`;
+            }
+            return `<path d="${d}"/>`;
+          });
+          return `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${parts.join('')}</svg>`;
+        };
+
+        const hydrateIcons = (root) => {
+          for (const node of root.querySelectorAll('i.ic[data-i]')) {
+            node.innerHTML = iconSvg(node.dataset.i, Number(node.dataset.s || 20), node.dataset.w || 2);
+          }
+        };
+
+        const setIcon = (node, name, size) => {
+          if (node.dataset.i !== name) {
+            node.dataset.i = name;
+            node.innerHTML = iconSvg(name, size, 2);
+          }
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const clamp01 = (x) => Math.min(1, Math.max(0, x));
+        const lerp = (a, b, x) => a + (b - a) * x;
+        const outCubic = (x) => 1 - (1 - x) ** 3;
+        const inCubic = (x) => x ** 3;
+        const inOutCubic = (x) => (x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2);
+        const outBack = (x) => {
+          const c = 1.5;
+          return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2;
+        };
+        const ramp = (t, t0, dur = 0.4, ease = outCubic) => ease(clamp01((t - t0) / dur));
+        const window01 = (t, t0, t1, fade = 0.3) => ramp(t, t0, fade) * (1 - ramp(t, t1, fade));
+        const bump = (t, t0, dur) => {
+          const p = (t - t0) / dur;
+          return p <= 0 || p >= 1 ? 0 : Math.sin(Math.PI * p);
+        };
+        const kf = (t, keys, ease = inOutCubic) => {
+          if (t <= keys[0][0]) {
+            return keys[0][1];
+          }
+          for (let i = 1; i < keys.length; i++) {
+            if (t <= keys[i][0]) {
+              const [t0, v0] = keys[i - 1];
+              const [t1, v1] = keys[i];
+              const p = ease(clamp01((t - t0) / (t1 - t0)));
+              return Array.isArray(v0) ? v0.map((a, j) => lerp(a, v1[j], p)) : lerp(v0, v1, p);
+            }
+          }
+          return keys[keys.length - 1][1];
+        };
+        const rng = (seed) => () => {
+          seed = (seed + 0x6d2b79f5) | 0;
+          let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+          x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+          return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+        };
+        const mmss = (s) => {
+          const r = Math.max(0, Math.floor(s));
+          return `${String(Math.floor(r / 60)).padStart(2, '0')}:${String(r % 60).padStart(2, '0')}`;
+        };
+
+        const T = {
+          appStart: 9.4,
+          newTab: 11.0,
+          homeIn: 11.15,
+          zoomGoals: 12.9,
+          inputClick: 14.7,
+          typeStart: 14.95,
+          keyGap: 0.068,
+          addClick: 17.1,
+          check1: 18.3,
+          check2: 19.3,
+          panQuote: 20.3,
+          refresh1: 22.1,
+          heart: 23.6,
+          refresh2: 24.7,
+          zoomOut1: 25.5,
+          pomoClick: 26.9,
+          goalOpen: 28.0,
+          goalPick: 28.8,
+          tileClick: 29.8,
+          soundsTab: 30.6,
+          rainClick: 31.3,
+          sndClose: 32.1,
+          startClick: 32.9,
+          expandClick: 34.6,
+          escPress: 39.4,
+          focusOut: 39.7,
+          insightsNav: 40.8,
+          advClick: 44.2,
+          insBack: 47.9,
+          remFire: 48.9,
+          bellClick: 50.0,
+          notifDone: 51.2,
+          panelClose: 52.2,
+          conceptIn: 52.8,
+          revealClick: 54.4,
+          goodClick: 56.2,
+          conceptOut: 56.9,
+          gearClick: 58.0,
+          themeClick: 58.8,
+          purple: 59.8,
+          forest: 60.8,
+          rose: 61.8,
+          glass: 62.8,
+          tpClose: 63.8,
+          appEnd: 66.8,
+          ctaClick: 74.0,
+        };
+        const TIMER_RATE = 40;
+        const GOAL_TEXT = 'Finish the product demo';
+
+        const CLICKS = [
+          T.newTab, T.inputClick, T.addClick, T.check1, T.check2, T.refresh1, T.heart, T.refresh2,
+          T.pomoClick, T.goalOpen, T.goalPick, T.tileClick, T.soundsTab, T.rainClick, T.sndClose,
+          T.startClick, T.expandClick, T.insightsNav, T.advClick, T.insBack, T.bellClick,
+          T.notifDone, T.panelClose, T.revealClick, T.goodClick, T.gearClick, T.themeClick, T.purple,
+          T.forest, T.rose, T.glass, T.tpClose, T.ctaClick,
+        ];
+
+        const CURSOR_START = { s: [1560, 1180] };
+        const MOVES = [
+          [10.0, 10.85, 'tab-plus'],
+          [11.5, 12.6, { a: [1000, 420] }],
+          [13.7, 14.55, 'goal-input'],
+          [16.55, 17.0, 'goal-add'],
+          [17.5, 18.15, 'chk-1'],
+          [18.7, 19.15, 'chk-2'],
+          [20.4, 21.9, 'q-refresh'],
+          [22.9, 23.45, 'q-heart'],
+          [24.1, 24.55, 'q-refresh'],
+          [25.7, 26.75, 'nav-pomo'],
+          [27.3, 27.85, 'phead'],
+          [28.25, 28.65, 'gpick'],
+          [29.1, 29.65, 'mini-tile'],
+          [30.0, 30.45, 'tab-sounds'],
+          [30.75, 31.15, 'tile-rain'],
+          [31.5, 31.95, { a: [700, 640] }],
+          [32.3, 32.75, 'pomo-start'],
+          [33.7, 34.45, 'pomo-expand'],
+          [35.0, 36.0, { s: [1760, 1000] }],
+          [40.1, 40.65, 'pnav-insights'],
+          [41.3, 42.4, { a: [900, 560] }],
+          [43.5, 44.05, 'itab-adv'],
+          [44.6, 45.6, { a: [1060, 640] }],
+          [47.1, 47.75, 'ins-back'],
+          [48.4, 49.85, 'bell'],
+          [50.35, 51.05, 'notif-done'],
+          [51.5, 52.05, { a: [760, 520] }],
+          [53.3, 54.25, 'c-reveal'],
+          [55.3, 56.05, 'cc-good'],
+          [57.1, 57.85, 'nav-gear'],
+          [58.2, 58.65, 'menu-theme'],
+          [59.2, 59.65, 'sw-purple'],
+          [60.3, 60.65, 'sw-forest'],
+          [61.3, 61.65, 'sw-rose'],
+          [62.3, 62.65, 'sw-glass'],
+          [63.2, 63.65, 'tp-close'],
+          [64.6, 66.0, { s: [1560, 1180] }],
+          [72.9, 73.85, 'cta'],
+          [75.2, 76.6, { s: [1560, 1180] }],
+        ];
+        const CURSOR_OPACITY = [
+          [9.9, 0], [10.2, 1], [35.8, 1], [36.2, 0], [39.9, 0], [40.2, 1], [65.8, 1], [66.2, 0],
+          [72.8, 0], [73.1, 1], [76.2, 1], [76.6, 0],
+        ];
+
+        const CAMERA = [
+          [0, 1, 'center'],
+          [T.zoomGoals, 1, 'center'],
+          [T.zoomGoals + 1.3, 1.5, 'fcard'],
+          [T.panQuote, 1.5, 'fcard'],
+          [T.panQuote + 1.1, 1.45, 'quote'],
+          [T.zoomOut1, 1.45, 'quote'],
+          [T.zoomOut1 + 1.1, 1, 'center'],
+          [T.pomoClick + 0.4, 1, 'center'],
+          [T.goalOpen - 0.2, 1.38, [300, 350]],
+          [T.startClick + 0.6, 1.38, [300, 350]],
+          [T.expandClick - 0.2, 1, 'center'],
+          [T.conceptIn, 1, 'center'],
+          [T.revealClick - 0.4, 1.25, [720, 560]],
+          [T.conceptOut, 1.25, [720, 560]],
+          [T.conceptOut + 0.8, 1, 'center'],
+        ];
+
+        const PAGES = [
+          [0, 'p-home'],
+          [T.pomoClick + 0.1, 'p-pomo'],
+          [T.expandClick + 0.1, 'p-focus'],
+          [T.focusOut, 'p-pomo'],
+          [T.insightsNav + 0.1, 'p-insights'],
+          [T.insBack + 0.1, 'p-home'],
+        ];
+
+        const THEMES = [
+          [0, 'glass'],
+          [T.purple, 'purple'],
+          [T.forest, 'forest'],
+          [T.rose, 'rose'],
+          [T.glass, 'glass'],
+        ];
+        const PALETTES = {
+          glass: {
+            text: [255, 255, 255, 1], text2: [255, 255, 255, 0.72], card: [10, 12, 24, 0.38],
+            border: [255, 255, 255, 0.16], item: [255, 255, 255, 0.07], accent: [255, 255, 255, 1],
+            accentText: [20, 20, 30, 1], btn: [0, 0, 0, 0.5], btnText: [255, 255, 255, 1],
+            panel: [16, 20, 34, 0.94], tshadow: [0, 0, 0, 0.45],
+          },
+          purple: {
+            text: [30, 22, 52, 1], text2: [104, 96, 124, 1], card: [255, 255, 255, 0.92],
+            border: [124, 58, 237, 0.14], item: [250, 248, 255, 1], accent: [124, 58, 237, 1],
+            accentText: [255, 255, 255, 1], btn: [124, 58, 237, 1], btnText: [255, 255, 255, 1],
+            panel: [255, 255, 255, 0.98], tshadow: [0, 0, 0, 0],
+          },
+          forest: {
+            text: [10, 40, 26, 1], text2: [84, 110, 96, 1], card: [255, 255, 255, 0.92],
+            border: [22, 163, 74, 0.16], item: [246, 254, 249, 1], accent: [22, 163, 74, 1],
+            accentText: [255, 255, 255, 1], btn: [21, 128, 61, 1], btnText: [255, 255, 255, 1],
+            panel: [255, 255, 255, 0.98], tshadow: [0, 0, 0, 0],
+          },
+          rose: {
+            text: [60, 14, 32, 1], text2: [128, 92, 104, 1], card: [255, 255, 255, 0.92],
+            border: [219, 39, 119, 0.14], item: [255, 248, 250, 1], accent: [219, 39, 119, 1],
+            accentText: [255, 255, 255, 1], btn: [219, 39, 119, 1], btnText: [255, 255, 255, 1],
+            panel: [255, 255, 255, 0.98], tshadow: [0, 0, 0, 0],
+          },
+        };
+        const PAL_VARS = {
+          text: '--t-text', text2: '--t-text2', card: '--t-card', border: '--t-border',
+          item: '--t-item', accent: '--t-accent', accentText: '--t-accent-text', btn: '--t-btn',
+          btnText: '--t-btn-text', panel: '--t-panel', tshadow: '--t-tshadow',
+        };
+
+        const GOALS = [
+          { text: 'Review pull requests', doneAt: -1 },
+          { text: 'Write project status update', doneAt: T.check1, id: 'chk-1' },
+          { text: '30-minute deep work block', doneAt: T.check2, id: 'chk-2' },
+          { text: GOAL_TEXT, doneAt: Number.POSITIVE_INFINITY, addAt: T.addClick },
+        ];
+
+        const QUOTES = [
+          { text: 'Focus on being productive instead of busy.', author: 'Tim Ferriss', cat: 'Productivity', color: '#10B981' },
+          { text: 'Wherever you are, be all there.', author: 'Jim Elliot', cat: 'Mindfulness', color: '#06B6D4' },
+          { text: "You can't use up creativity. The more you use, the more you have.", author: 'Maya Angelou', cat: 'Creativity', color: '#EC4899' },
+        ];
+        const QUOTE_SWITCHES = [T.refresh1, T.refresh2];
+
+        const STATS = [
+          { icon: 'Flame', value: 17, label: 'Current Streak', sub: 'Longest: 17 days', color: '#f97316', chip: '#ffedd5' },
+          { icon: 'Target', value: 3, label: 'Goals Today', sub: 'This week: 12 | Month: 41' },
+          { icon: 'Flag', value: 1, label: 'Active Goals', sub: '63% avg progress | 38 completed this month', color: '#9333ea', chip: '#f3e8ff' },
+          { icon: 'Calendar', value: 4, label: 'Pomodoros Today', sub: 'Focus sessions completed' },
+          { icon: 'TrendingUp', value: 217, label: 'Quotes Viewed', sub: 'This week: 19' },
+          { icon: 'Clock', value: 100, label: 'Focus Time Today', sub: 'This week: 12h 55m', format: 'hm' },
+        ];
+        const CATS = [
+          ['Inspiration', 17, '#8B5CF6'], ['Learning', 22, '#3B82F6'], ['Productivity', 30, '#10B981'],
+          ['Mindfulness', 23, '#06B6D4'], ['Success', 18, '#F59E0B'], ['Creativity', 23, '#EC4899'],
+          ['Resilience', 22, '#EF4444'], ['Leadership', 21, '#6366F1'],
+        ];
+        const DONUTS = [
+          ['72%', 0.72, 'Overall', '18 of 25 goals'],
+          ['83%', 0.83, 'This Week', '10 of 12 goals'],
+          ['76%', 0.76, 'This Month', '31 of 41 goals'],
+        ];
+        const HOURS = [0, 0, 0, 0, 0, 0, 0, 1, 3, 11, 20, 8, 4, 6, 14, 15, 12, 5, 2, 1, 0, 0, 0, 0];
+        const PEAK_HOURS = [10, 15, 14];
+        const WEEKDAYS = [4, 13, 18, 12, 14, 15, 4];
+
+        const CAPTIONS = [
+          { start: 11.3, end: 14.0, icon: 'Monitor', color: ['#8b5cf6', '#6d28d9'], kicker: 'Meet Cuewise', title: 'A calm new tab.', body: 'Your focus for the day and a quote worth reading, every time you open a tab.' },
+          { start: 14.0, end: 20.4, icon: 'Target', color: ['#10b981', '#059669'], kicker: "Today's Focus", title: 'Set your intention.', body: 'Add what matters and check it off as you go. Unfinished goals carry over in one click.' },
+          { start: 20.4, end: 26.4, icon: 'BookMarked', color: ['#8b5cf6', '#6d28d9'], kicker: 'Daily wisdom', title: 'Quotes that land.', body: '100 hand-picked quotes across 10 categories. Favorite the ones that stick, or add your own.' },
+          { start: 26.4, end: 34.5, icon: 'Timer', color: ['#f59e0b', '#d97706'], kicker: 'Deep work', title: 'Pomodoro Timer', body: 'Pick a goal, put on some rain or a playlist, and start a 25-minute session.' },
+          { start: 34.5, end: 40.0, icon: 'Maximize2', color: ['#6366f1', '#4338ca'], kicker: 'Zero distractions', title: 'Focus Mode', body: 'A full-screen timer and the one goal you picked. Everything else fades away.' },
+          { start: 40.2, end: 48.0, icon: 'BarChart3', color: ['#3b82f6', '#2563eb'], kicker: 'See your progress', title: 'Insights', body: 'Streaks, focus time and your most productive hours. Gentle stats that celebrate progress.' },
+          { start: 48.2, end: 52.6, icon: 'Bell', color: ['#f59e0b', '#d97706'], kicker: 'Reminders', title: 'Nudges, right on time.', body: 'A notification when it’s due, with Done or Snooze right there. Or answer it from the bell.' },
+          { start: 52.7, end: 57.6, icon: 'Brain', color: ['#06b6d4', '#0891b2'], kicker: 'Learn as you go', title: 'Concept Cards', body: 'Save what you’re learning. Bring it to mind, reveal, and it comes back right when it’s due.' },
+          { start: 57.8, end: 66.3, icon: 'Sun', color: ['#ec4899', '#db2777'], kicker: 'Make it yours', title: 'Four themes.', body: 'Purple, Forest, Rose or Glass, in light or dark, with three densities.' },
+        ];
+
+        const buildRidge = (r, base, amp, freq) => {
+          const ph = [r() * 6.28, r() * 6.28, r() * 6.28];
+          let d = `M0 ${H}`;
+          for (let x = 0; x <= W; x += 12) {
+            const y =
+              base -
+              amp *
+                (0.55 * Math.sin(x * freq + ph[0]) +
+                  0.3 * Math.sin(x * freq * 2.3 + ph[1]) +
+                  0.3 * Math.abs(Math.sin(x * freq * 4.7 + ph[2])));
+            d += ` L${x} ${y.toFixed(1)}`;
+          }
+          return `${d} L${W} ${H} Z`;
+        };
+
+        const buildDusk = () => {
+          const r = rng(7);
+          const layers = [
+            [440, 120, 0.0042, '#9b7cc0'],
+            [520, 100, 0.0058, '#71539a'],
+            [600, 80, 0.0081, '#4a3570'],
+            [680, 64, 0.011, '#2d2049'],
+            [760, 44, 0.0155, '#170f29'],
+          ];
+          const ridges = layers
+            .map(([base, amp, freq, fill], i) => {
+              const haze = `<rect x="0" y="${base - 40}" width="${W}" height="140" fill="url(#haze)" opacity="${0.5 - i * 0.08}"/>`;
+              return `<path d="${buildRidge(r, base, amp, freq)}" fill="${fill}"/>${i < 3 ? haze : ''}`;
+            })
+            .join('');
+          return `<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#2a1d55"/><stop offset="0.42" stop-color="#6f4a99"/>
+                <stop offset="0.68" stop-color="#d58f93"/><stop offset="0.86" stop-color="#f7c59b"/>
+              </linearGradient>
+              <radialGradient id="glow" cx="0.66" cy="0.56" r="0.42">
+                <stop offset="0" stop-color="#ffe6bf" stop-opacity="0.85"/><stop offset="1" stop-color="#ffe6bf" stop-opacity="0"/>
+              </radialGradient>
+              <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#f3c7c0" stop-opacity="0"/><stop offset="0.5" stop-color="#f3c7c0" stop-opacity="0.35"/><stop offset="1" stop-color="#f3c7c0" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <rect width="${W}" height="${H}" fill="url(#sky)"/>
+            <rect width="${W}" height="${H}" fill="url(#glow)"/>
+            <circle cx="950" cy="430" r="46" fill="#fff0d6"/>
+            ${ridges}
+          </svg>`;
+        };
+
+        const buildNight = () => {
+          const r = rng(21);
+          let stars = '';
+          for (let i = 0; i < 240; i++) {
+            const x = (r() * W).toFixed(1);
+            const y = (r() * 560).toFixed(1);
+            const s = (0.5 + r() * 1.4).toFixed(2);
+            stars += `<circle class="star" cx="${x}" cy="${y}" r="${s}" fill="#fff" opacity="${(0.35 + r() * 0.6).toFixed(2)}"/>`;
+          }
+          const ridges = [
+            [560, 150, 0.0036, '#1b1b3d'],
+            [650, 90, 0.0062, '#121330'],
+            [740, 60, 0.011, '#090a1c'],
+          ]
+            .map(([base, amp, freq, fill]) => `<path d="${buildRidge(r, base, amp, freq)}" fill="${fill}"/>`)
+            .join('');
+          return `<svg aria-hidden="true" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <linearGradient id="nsky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#050818"/><stop offset="0.55" stop-color="#18163c"/><stop offset="0.8" stop-color="#3a2a62"/>
+              </linearGradient>
+              <filter id="soft"><feGaussianBlur stdDeviation="40"/></filter>
+            </defs>
+            <rect width="${W}" height="${H}" fill="url(#nsky)"/>
+            <ellipse cx="760" cy="260" rx="620" ry="90" fill="#a78bfa" opacity="0.22" filter="url(#soft)" transform="rotate(-24 760 260)"/>
+            <ellipse cx="620" cy="320" rx="300" ry="60" fill="#f0abfc" opacity="0.14" filter="url(#soft)" transform="rotate(-24 620 320)"/>
+            ${stars}
+            ${ridges}
+          </svg>`;
+        };
+
+        const build = () => {
+          $('bg-glass').innerHTML = buildDusk();
+          $('bg-night').innerHTML = buildNight();
+          $('mini-focus').innerHTML =
+            '<div style="position:relative;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:rgba(0,0,0,.4);box-shadow:0 0 0 2px #fff">' +
+            iconSvg('CloudRain', 16, 2) +
+            '<span style="position:absolute;left:-3px;top:-3px;width:9px;height:9px;border-radius:50%;background:#fff"></span></div>';
+
+          const tabstrip = $('tabstrip');
+          for (let i = 0; i < 9; i++) {
+            const tab = document.createElement('div');
+            tab.className = i === 6 ? 'tab-ghost cue' : 'tab-ghost';
+            tab.dataset.fx = 'drop';
+            tab.dataset.at = (0.1 + i * 0.12).toFixed(2);
+            tab.innerHTML = '<i></i><b></b>';
+            tabstrip.appendChild(tab);
+          }
+
+          $('frows').innerHTML = GOALS.map(
+            (g, i) => `<div class="frow-wrap" id="grow-${i}"><div class="frow">
+              <div class="chk" ${g.id ? `id="${g.id}"` : ''}><span class="fill"></span>
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M20 6 9 17l-5-5"/></svg></div>
+              <span class="ftext">${g.text}<span class="strike"></span></span></div></div>`
+          ).join('');
+
+          const heart = $('q-heart');
+          for (let i = 0; i < 8; i++) {
+            const dot = document.createElement('span');
+            dot.className = 'burst';
+            heart.appendChild(dot);
+          }
+
+          $('stats').innerHTML = STATS.map(
+            (s) => `<div class="stat glass"><div class="top"><div class="sic" style="${s.chip ? `background:${s.chip};color:${s.color}` : ''}"><i class="ic" data-i="${s.icon}" data-s="22"></i></div>
+              <b style="${s.color ? `color:${s.color}` : ''}">0</b></div><div class="lbl">${s.label}</div><div class="sub">${s.sub}</div></div>`
+          ).join('');
+
+          $('cats').innerHTML = CATS.map(
+            ([name, v, color]) => `<div class="cat"><span class="nm">${name}</span><div class="trk"><i style="background:${color}" data-v="${v}"></i><b>${v}</b></div></div>`
+          ).join('');
+
+          $('donuts').innerHTML = DONUTS.map(
+            ([label, , title, sub]) => `<div class="donut"><svg viewBox="0 0 180 180" width="170" height="170" fill="none">
+              <circle cx="90" cy="90" r="74" stroke="rgba(255,255,255,0.12)" stroke-width="20"/>
+              <circle class="arc" cx="90" cy="90" r="74" stroke="rgba(255,255,255,0.88)" stroke-width="20" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>
+              <b>${label}</b><span>${title}<br/>${sub}</span></div>`
+          ).join('');
+
+          const maxH = Math.max(...HOURS);
+          $('hbars-hour').innerHTML = HOURS.map((v, h) => {
+            const peak = PEAK_HOURS.includes(h);
+            const shade = 0.22 + (0.66 * v) / maxH;
+            return `<i data-v="${v / maxH}" style="background:rgba(255,255,255,${shade.toFixed(2)});${peak ? 'box-shadow:inset 0 0 0 2px #f59e0b' : ''}"></i>`;
+          }).join('');
+          const maxD = Math.max(...WEEKDAYS);
+          $('hbars-day').innerHTML = WEEKDAYS.map((v) => {
+            const shade = 0.2 + (0.66 * v) / maxD;
+            return `<i data-v="${v / maxD}" style="background:rgba(255,255,255,${shade.toFixed(2)})"></i>`;
+          }).join('');
+
+          $('captions').innerHTML = CAPTIONS.map(
+            (c, i) => `<div class="cap" id="cap-${i}">
+              <div class="kicker" data-fx="up" data-at="0.1"><div class="icon-chip" style="background:linear-gradient(135deg,${c.color[0]},${c.color[1]})"><i class="ic" data-i="${c.icon}" data-s="30"></i></div>${c.kicker}</div>
+              <div class="title" data-fx="up" data-at="0.25">${c.title}</div>
+              <div class="body" data-fx="up" data-at="0.45">${c.body}</div></div>`
+          ).join('');
+
+          for (const line of document.querySelectorAll('[data-words]')) {
+            const start = Number(line.dataset.words);
+            let index = 0;
+            const makeWord = (w, cls) => {
+              const span = document.createElement('span');
+              span.className = cls ? `word ${cls}` : 'word';
+              span.textContent = w;
+              span.dataset.fx = 'word';
+              span.dataset.at = (start + index * 0.11).toFixed(2);
+              span.dataset.dur = '0.7';
+              index++;
+              return span;
+            };
+            for (const child of [...line.childNodes]) {
+              const cls = child.nodeType === Node.ELEMENT_NODE ? child.className : '';
+              for (const w of child.textContent.split(/\s+/).filter(Boolean)) {
+                line.insertBefore(makeWord(w, cls), child);
+              }
+              child.remove();
+            }
+          }
+
+          hydrateIcons(document);
+        };
+
+        build();
+
+        const el = {
+          app: $('app'),
+          browser: $('browser'),
+          chrome: $('chrome'),
+          viewport: $('viewport'),
+          cursor: $('cursor'),
+          ripple: $('ripple'),
+          stage: $('stage'),
+        };
+        const scenes = [...document.querySelectorAll('.scene')].map((s) => ({
+          el: s,
+          start: Number(s.dataset.start),
+          end: Number(s.dataset.end),
+          fx: [...s.querySelectorAll('[data-fx]')].filter((f) => !f.closest('.cap')),
+          rings: [...s.querySelectorAll('.ring')],
+          dots: [...s.querySelectorAll('.cue-dot')],
+        }));
+        const duration = Math.max(...scenes.map((s) => s.end));
+        const caps = CAPTIONS.map((c, i) => ({
+          ...c,
+          el: $(`cap-${i}`),
+          fx: [...$(`cap-${i}`).querySelectorAll('[data-fx]')],
+        }));
+        const pages = ['p-home', 'p-pomo', 'p-focus', 'p-insights'].map((id) => $(id));
+        const stars = [...document.querySelectorAll('#bg-night .star')].slice(0, 60);
+        const statEls = [...document.querySelectorAll('#stats .stat')];
+        const catEls = [...document.querySelectorAll('#cats .trk i')];
+        const donutEls = [...document.querySelectorAll('#donuts .arc')];
+        const hourEls = [...document.querySelectorAll('#hbars-hour i')];
+        const dayEls = [...document.querySelectorAll('#hbars-day i')];
+        const burstEls = [...document.querySelectorAll('#q-heart .burst')];
+        const view = { vx: 0, vy: 0, k: 1, z: 1, tx: 0, ty: 0 };
+
+        const applyFx = (node, lt) => {
+          const at = Number(node.dataset.at || 0);
+          const dur = Number(node.dataset.dur || 0.8);
+          const p = clamp01((lt - at) / dur);
+          const e = outCubic(p);
+          let transform = '';
+          let filter = '';
+          switch (node.dataset.fx) {
+            case 'up':
+              transform = `translateY(${(1 - e) * 28}px)`;
+              break;
+            case 'left':
+              transform = `translateX(${(1 - e) * -40}px)`;
+              break;
+            case 'drop':
+              transform = `translateY(${(1 - e) * -30}px)`;
+              break;
+            case 'pop':
+              transform = `scale(${lerp(0.7, 1, outBack(p))})`;
+              break;
+            case 'scale':
+              transform = `scale(${lerp(0.8, 1, outBack(p))})`;
+              break;
+            case 'word':
+              transform = `translateY(${(1 - e) * 22}px)`;
+              filter = `blur(${(1 - e) * 10}px)`;
+              break;
+          }
+          node.style.opacity = String(e);
+          node.style.transform = transform;
+          node.style.filter = filter;
+        };
+
+        const appRect = (node) => {
+          let x = 0;
+          let y = 0;
+          let n = node;
+          while (n && n !== el.app) {
+            x += n.offsetLeft;
+            y += n.offsetTop;
+            n = n.offsetParent;
+          }
+          return { x: x + node.offsetWidth / 2, y: y + node.offsetHeight / 2 };
+        };
+
+        const appToStage = ([x, y]) => [
+          view.vx + view.k * (view.tx + view.z * x),
+          view.vy + view.k * (view.ty + view.z * y),
+        ];
+
+        const resolveTarget = (target) => {
+          if (typeof target === 'string') {
+            const r = $(target).getBoundingClientRect();
+            return [r.left + r.width / 2, r.top + r.height / 2];
+          }
+          if (target.s) {
+            return target.s;
+          }
+          return appToStage(target.a);
+        };
+
+        const transition = (t, events, dur) => {
+          let i = 0;
+          while (i + 1 < events.length && t >= events[i + 1][0]) {
+            i++;
+          }
+          const cur = events[i][1];
+          const prev = i > 0 ? events[i - 1][1] : cur;
+          const p = i > 0 ? inOutCubic(clamp01((t - events[i][0]) / dur)) : 1;
+          return { cur, prev, p };
+        };
+
+        const weightOf = (name, cur, prev, p) => {
+          if (prev === cur) {
+            return name === cur ? 1 : 0;
+          }
+          let w = 0;
+          if (name === cur) {
+            w += p;
+          }
+          if (name === prev) {
+            w += 1 - p;
+          }
+          return w;
+        };
+
+        const rgba = (c) =>
+          `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${c[3].toFixed(3)})`;
+
+        const setIn = (node, p, dy = 16) => {
+          node.style.opacity = String(p);
+          node.style.transform = `translateY(${(1 - p) * dy}px)`;
+        };
+
+        const applyTheme = (t) => {
+          const { cur, prev, p } = transition(t, THEMES, 0.45);
+          for (const [key, cssVar] of Object.entries(PAL_VARS)) {
+            const a = PALETTES[prev][key];
+            const b = PALETTES[cur][key];
+            el.app.style.setProperty(cssVar, rgba(a.map((v, j) => lerp(v, b[j], p))));
+          }
+          for (const name of ['glass', 'purple', 'forest', 'rose']) {
+            const w = weightOf(name, cur, prev, p);
+            $(`bg-${name}`).style.opacity = String(w);
+            $(`sw-${name}`).querySelector('.ringsel').style.opacity = String(w);
+          }
+          const glassW = weightOf('glass', cur, prev, p);
+          $('tp-glass').style.maxHeight = `${glassW * 120}px`;
+          $('tp-glass').style.opacity = String(glassW);
+        };
+
+        const applyBrowser = (t) => {
+          const full = kf(t, [
+            [T.expandClick + 0.05, 0],
+            [T.expandClick + 1.0, 1],
+            [T.focusOut, 1],
+            [T.focusOut + 0.9, 0],
+          ]);
+          const w = lerp(1250, 1920, full);
+          const barH = lerp(80, 0, full);
+          const vh = (w * H) / W;
+          const x = lerp(590, 0, full);
+          const y = (1080 - barH - vh) / 2;
+          const enter = ramp(t, T.appStart, 1.1);
+          const exit = ramp(t, T.appEnd - 1.0, 0.9, inCubic);
+          const b = el.browser.style;
+          b.left = `${x}px`;
+          b.top = `${y}px`;
+          b.width = `${w}px`;
+          b.height = `${barH + vh}px`;
+          b.borderRadius = `${lerp(16, 0, full)}px`;
+          b.opacity = String(Math.min(enter, 1 - exit));
+          b.transform = `translateY(${(1 - enter) * 90 + exit * 40}px) scale(${lerp(0.94, 1, enter) * lerp(1, 0.95, exit)})`;
+          el.chrome.style.height = `${barH}px`;
+          el.viewport.style.height = `${vh}px`;
+
+          const newTab = ramp(t, T.newTab, 0.35);
+          const tab = $('tab-new');
+          tab.style.width = `${lerp(0, 200, newTab)}px`;
+          tab.style.padding = `0 ${lerp(0, 12, newTab)}px`;
+          const isNew = t >= T.newTab + 0.05;
+          tab.classList.toggle('active', isNew);
+          $('tab-doc').classList.toggle('active', !isNew);
+          $('omni-text').textContent = isNew ? 'Search or type a URL' : 'docs.example.com/q3-planning';
+          $('omni-text').style.color = isNew ? 'rgba(255,255,255,0.45)' : '';
+          setIcon($('omni-icon'), isNew ? 'Search' : 'Lock', 13);
+
+          view.vx = x;
+          view.vy = y + barH;
+          view.k = w / W;
+        };
+
+        const applyCamera = (t) => {
+          const keys = CAMERA.map(([time, z, target]) => {
+            let f;
+            if (target === 'center') {
+              f = { x: W / 2, y: H / 2 };
+            } else if (Array.isArray(target)) {
+              f = { x: target[0], y: target[1] };
+            } else {
+              f = appRect($(target));
+            }
+            return [time, [z, f.x, f.y]];
+          });
+          const [z, fx, fy] = kf(t, keys);
+          view.z = z;
+          view.tx = Math.min(0, Math.max(W - W * z, W / 2 - z * fx));
+          view.ty = Math.min(0, Math.max(H - H * z, H / 2 - z * fy));
+          el.app.style.transform = `scale(${view.k}) translate(${view.tx}px, ${view.ty}px) scale(${z})`;
+        };
+
+        const applyPages = (t) => {
+          const { cur, prev, p } = transition(t, PAGES, 0.6);
+          for (const page of pages) {
+            const w = weightOf(page.id, cur, prev, p);
+            page.style.opacity = String(w);
+            page.style.visibility = w > 0.001 ? 'visible' : 'hidden';
+            page.style.transform = page.id === cur && p < 1 ? `translateY(${(1 - p) * 18}px)` : '';
+          }
+        };
+
+        const applyGoals = (t) => {
+          const added = ramp(t, T.addClick + 0.05, 0.4);
+          const total = 3 + (t >= T.addClick + 0.05 ? 1 : 0);
+          let done = 0;
+          GOALS.forEach((g, i) => {
+            const wrap = $(`grow-${i}`);
+            if (g.addAt !== undefined) {
+              wrap.style.maxHeight = `${lerp(0, 52, added)}px`;
+              wrap.style.opacity = String(added);
+            }
+            const always = g.doneAt < 0;
+            if (t >= g.doneAt) {
+              done++;
+            }
+            const pop = always ? 1 : outBack(clamp01((t - g.doneAt) / 0.35));
+            wrap.querySelector('.fill').style.transform = `scale(${Math.max(0, pop)})`;
+            wrap.querySelector('.chk').style.borderColor = pop > 0.5 ? 'transparent' : '';
+            wrap.querySelector('.chk path').style.strokeDashoffset = String(1 - (always ? 1 : ramp(t, g.doneAt + 0.1, 0.3)));
+            wrap.querySelector('.strike').style.width = `${(always ? 1 : ramp(t, g.doneAt + 0.1, 0.35)) * 100}%`;
+            wrap.querySelector('.ftext').style.opacity = String(lerp(1, 0.5, always ? 1 : ramp(t, g.doneAt, 0.35)));
+          });
+          const frac = kf(t, [
+            [T.addClick, 1 / 3],
+            [T.addClick + 0.4, 1 / 4],
+            [T.check1, 1 / 4],
+            [T.check1 + 0.5, 2 / 4],
+            [T.check2, 2 / 4],
+            [T.check2 + 0.5, 3 / 4],
+          ]);
+          $('fring').style.strokeDashoffset = String(1 - frac);
+          $('fring-label').textContent = `${done}/${total}`;
+          $('fsub').textContent = `${total - done} to go — keep your momentum`;
+
+          const focused = t >= T.inputClick && t < T.addClick + 0.5;
+          const typed =
+            t < T.typeStart ? 0 : Math.min(GOAL_TEXT.length, Math.floor((t - T.typeStart) / T.keyGap) + 1);
+          const text = t >= T.addClick + 0.05 ? '' : GOAL_TEXT.slice(0, typed);
+          $('goal-text').textContent = text;
+          $('goal-ph').style.display = text ? 'none' : '';
+          const typing = t >= T.typeStart && t < T.typeStart + GOAL_TEXT.length * T.keyGap + 0.3;
+          const caretOn = focused && (typing || Math.floor(t * 2.2) % 2 === 0);
+          $('goal-caret').style.opacity = caretOn ? '1' : '0';
+          $('goal-input').style.boxShadow = focused ? '0 0 0 2px rgba(255,255,255,0.35)' : '';
+          $('goal-add').style.transform = `scale(${1 - 0.08 * bump(t, T.addClick - 0.05, 0.2)})`;
+        };
+
+        const applyQuote = (t, conceptMode, qIn) => {
+          let qi = 0;
+          let qo = 1;
+          for (const s of QUOTE_SWITCHES) {
+            if (t >= s + 0.22) {
+              qi++;
+            }
+            if (t >= s && t < s + 0.22) {
+              qo = 1 - (t - s) / 0.22;
+            } else if (t >= s + 0.22 && t < s + 0.6) {
+              qo = outCubic((t - s - 0.22) / 0.38);
+            }
+          }
+          const q = QUOTES[qi];
+          $('qtext').textContent = q.text;
+          $('qauthor').textContent = `— ${q.author}`;
+          $('qbadge').textContent = q.cat;
+          $('qbadge').style.background = q.color;
+          const qb = $('qbody');
+          qb.style.opacity = String(qo);
+          qb.style.transform = `translateY(${(1 - qo) * 8}px)`;
+          qb.style.filter = qo < 1 ? `blur(${(1 - qo) * 6}px)` : '';
+          $('quote').style.opacity = String(qIn * (1 - conceptMode));
+          $('quote').style.transform = `translateY(${(1 - qIn) * 16}px)`;
+          const spin = QUOTE_SWITCHES.reduce((a, s) => a + 360 * outCubic(clamp01((t - s) / 0.6)), 0);
+          $('q-refresh-ic').style.transform = `rotate(${spin}deg)`;
+
+          const heart = $('q-heart');
+          heart.classList.toggle('fav', t >= T.heart && t < T.refresh2 + 0.22);
+          heart.style.transform = `scale(${1 + 0.3 * bump(t, T.heart, 0.35)})`;
+          const bp = clamp01((t - T.heart) / 0.6);
+          burstEls.forEach((dot, i) => {
+            const a = (i / burstEls.length) * Math.PI * 2;
+            const r = lerp(10, 34, outCubic(bp));
+            dot.style.transform = `translate(${Math.cos(a) * r}px, ${Math.sin(a) * r}px) scale(${1 - bp * 0.6})`;
+            dot.style.opacity = t >= T.heart && bp < 1 ? String(1 - bp) : '0';
+          });
+        };
+
+        const applyConcept = (t, conceptMode, reveal) => {
+          const concept = $('concept');
+          concept.style.opacity = String(conceptMode);
+          concept.style.transform = `translateY(${(1 - conceptMode) * 20}px)`;
+          concept.style.visibility = conceptMode > 0.001 ? 'visible' : 'hidden';
+          $('chint').style.maxHeight = `${lerp(24, 0, reveal)}px`;
+          $('chint').style.opacity = String(1 - reveal);
+          $('ccard').style.maxHeight = `${lerp(0, 214, reveal)}px`;
+          $('ccard').style.marginTop = `${lerp(0, 20, reveal)}px`;
+          setIcon($('c-reveal-ic'), t >= T.revealClick ? 'SkipForward' : 'Eye', 19);
+          $('c-reveal').style.transform = `scale(${1 - 0.1 * bump(t, T.revealClick - 0.05, 0.2)})`;
+          $('cc-good').style.background = t >= T.goodClick ? 'rgba(52, 211, 153, 0.3)' : '';
+        };
+
+        const applyReminders = (t) => {
+          const fired = t >= T.remFire;
+          const answered = t >= T.notifDone;
+          const needs = fired && !answered;
+          const bell = $('bell');
+          bell.style.borderColor = needs ? 'rgba(248,113,113,0.8)' : '';
+          bell.style.color = needs ? '#f87171' : '';
+          bell.style.boxShadow = needs ? `0 0 ${12 + 10 * Math.abs(Math.sin(t * 3))}px rgba(248,113,113,0.45)` : '';
+          $('bell-dot').textContent = answered ? '1' : '2';
+
+          const open = window01(t, T.bellClick, T.panelClose, 0.3);
+          const panel = $('rpanel');
+          panel.style.opacity = String(open);
+          panel.style.transform = `translateY(${(1 - open) * 12}px) scale(${lerp(0.96, 1, open)})`;
+          panel.style.visibility = open > 0.001 ? 'visible' : 'hidden';
+          const gone = ramp(t, T.notifDone + 0.15, 0.4, inOutCubic);
+          $('rp-hero-wrap').style.maxHeight = `${lerp(170, 0, gone)}px`;
+          $('rp-hero-wrap').style.opacity = String(1 - gone);
+          $('rp-count').textContent = answered ? '1' : '2';
+          $('rp-sec-count').textContent = answered ? '1' : '2';
+          $('rp-sub').style.opacity = String(1 - gone);
+
+          const n = ramp(t, T.remFire, 0.5, outBack) * (1 - ramp(t, T.notifDone + 0.1, 0.35, inCubic));
+          const notif = $('notif');
+          notif.style.opacity = String(clamp01(n));
+          notif.style.transform = `translateX(${(1 - clamp01(n)) * 60}px)`;
+          $('notif-done').style.background = t >= T.notifDone ? 'rgba(255,255,255,0.3)' : '';
+        };
+
+        const applyHome = (t) => {
+          const intro = (d) => ramp(t, T.homeIn + d, 0.7);
+          setIn($('home-tl'), intro(0.4), -10);
+          setIn($('home-tr'), intro(0.4), -10);
+          setIn($('bell'), intro(0.6), 10);
+
+          const conceptMode = ramp(t, T.conceptIn, 0.5, inOutCubic) * (1 - ramp(t, T.conceptOut, 0.4));
+          const reveal = ramp(t, T.revealClick + 0.05, 0.5, inOutCubic) * (1 - ramp(t, T.conceptOut, 0.4));
+          const fIn = intro(0.1);
+          $('fcard').style.opacity = String(fIn);
+          $('fcard').style.transform = `translateY(${(1 - fIn) * 22 - reveal * 122}px)`;
+
+          applyGoals(t);
+          applyQuote(t, conceptMode, intro(0.3));
+          applyConcept(t, conceptMode, reveal);
+          applyReminders(t);
+
+          const menu = window01(t, T.gearClick, T.themeClick, 0.2);
+          $('menu').style.opacity = String(menu);
+          $('menu').style.transform = `scale(${lerp(0.96, 1, menu)})`;
+          $('menu').style.visibility = menu > 0.001 ? 'visible' : 'hidden';
+
+          const dock = window01(t, T.themeClick + 0.05, T.tpClose + 0.05, 0.5);
+          const d = inOutCubic(dock);
+          $('p-home').style.setProperty('--dock', `${d * 320}px`);
+          $('tpanel').style.transform = `translateX(${(1 - d) * 100}%)`;
+        };
+
+        const applyPomodoro = (t) => {
+          const picked = t >= T.goalPick;
+          $('ptitle').textContent = picked ? GOAL_TEXT : 'Focus Session';
+          $('phint').style.maxHeight = picked ? '0px' : '16px';
+          const drop = window01(t, T.goalOpen, T.goalPick + 0.05, 0.18);
+          $('gdrop').style.opacity = String(drop);
+          $('gdrop').style.visibility = drop > 0.001 ? 'visible' : 'hidden';
+          $('gpick').style.opacity = t >= T.goalPick - 0.2 ? '1' : '0.85';
+          setIcon($('pchev'), drop > 0.5 ? 'ChevronUp' : 'ChevronDown', 16);
+
+          const snd = window01(t, T.tileClick, T.sndClose, 0.22);
+          $('snd').style.opacity = String(snd);
+          $('snd').style.transform = `scale(${lerp(0.96, 1, snd)})`;
+          $('snd').style.visibility = snd > 0.001 ? 'visible' : 'hidden';
+          const onSounds = ramp(t, T.soundsTab, 0.25);
+          $('pane-yt').style.opacity = String(1 - onSounds);
+          $('pane-sounds').style.opacity = String(onSounds);
+          $('tab-yt').classList.toggle('on', t < T.soundsTab);
+          $('tab-sounds').classList.toggle('on', t >= T.soundsTab);
+          const rain = t >= T.rainClick;
+          const rt = $('tile-rain');
+          rt.style.borderColor = rain ? '#fff' : '';
+          rt.style.background = rain ? 'rgba(255,255,255,0.1)' : '';
+          rt.querySelector('small').style.opacity = rain ? '1' : '0';
+          setIcon($('mini-ic'), rain ? 'CloudRain' : 'Music', 16);
+          $('mini-tile').style.boxShadow = rain ? '0 0 0 2px #fff, 0 4px 10px rgba(0,0,0,0.3)' : '';
+          $('mini-dot').style.opacity = rain ? String(0.6 + 0.4 * Math.abs(Math.sin(t * 3))) : '0';
+          $('mini-pause').style.opacity = rain ? '1' : '0';
+
+          const running = t >= T.startClick;
+          const elapsed = running ? (t - T.startClick) * TIMER_RATE : 0;
+          $('ptime').textContent = mmss(1500 - elapsed);
+          $('ftime').textContent = mmss(1500 - elapsed);
+          $('pring-prog').style.strokeDashoffset = String(1 - elapsed / 1500);
+          $('pdash-fill').style.width = `${(elapsed / 1500) * 100}%`;
+          const start = $('pomo-start');
+          start.style.background = running ? '#d97706' : '';
+          start.style.transform = `scale(${1 - 0.08 * bump(t, T.startClick - 0.05, 0.2)})`;
+          $('pstart-label').textContent = running ? 'Pause' : 'Start';
+          setIcon($('pstart-ic'), running ? 'Pause' : 'Play', 16);
+          $('p-reset').style.display = running ? '' : 'none';
+          $('p-popout').style.display = running ? '' : 'none';
+          const soundLine = running && rain ? ramp(t, T.startClick, 0.4) : 0;
+          $('psound').style.maxHeight = `${soundLine * 20}px`;
+          $('psound').style.marginTop = `${soundLine * 10}px`;
+          $('psound').style.opacity = String(soundLine);
+
+          const esc = bump(t, T.escPress, 0.3);
+          $('esc-key').style.background = `rgba(255,255,255,${0.14 + esc * 0.5})`;
+          $('esc-key').style.transform = `scale(${1 - esc * 0.1})`;
+          stars.forEach((s, i) => {
+            s.style.opacity = String(0.4 + 0.5 * Math.abs(Math.sin(t * (0.8 + (i % 5) * 0.3) + i)));
+          });
+        };
+
+        const applyInsights = (t) => {
+          const base = T.insightsNav + 0.4;
+          statEls.forEach((card, i) => {
+            setIn(card, ramp(t, base + i * 0.07, 0.6), 16);
+            const s = STATS[i];
+            const v = Math.round(lerp(0, s.value, ramp(t, base + 0.2 + i * 0.1, 1.3)));
+            card.querySelector('b').textContent = s.format === 'hm' ? `${Math.floor(v / 60)}h ${v % 60}m` : String(v);
+          });
+          catEls.forEach((bar, i) => {
+            const p = ramp(t, base + 0.8 + i * 0.07, 0.8);
+            bar.style.width = `${p * (Number(bar.dataset.v) / 30) * 100}%`;
+          });
+
+          const adv = ramp(t, T.advClick + 0.05, 0.3);
+          $('itab-over').classList.toggle('on', t < T.advClick);
+          $('itab-adv').classList.toggle('on', t >= T.advClick);
+          $('pane-over').style.opacity = String(1 - adv);
+          $('pane-adv').style.opacity = String(adv);
+          $('pane-over').style.visibility = adv < 0.999 ? 'visible' : 'hidden';
+          $('pane-adv').style.visibility = adv > 0.001 ? 'visible' : 'hidden';
+          donutEls.forEach((arc, i) => {
+            arc.style.strokeDashoffset = String(1 - DONUTS[i][1] * ramp(t, T.advClick + 0.2 + i * 0.1, 0.9));
+          });
+          const heat = $('pane-adv').children[1];
+          const scroll = ramp(t, T.advClick + 1.1, 1.0, inOutCubic) * (heat.offsetTop - 4);
+          $('pane-adv').style.transform = `translateY(${-scroll}px)`;
+          hourEls.forEach((bar, i) => {
+            const p = ramp(t, T.advClick + 1.9 + i * 0.03, 0.6, outBack);
+            bar.style.height = `${Math.max(0, p) * Number(bar.dataset.v) * 100}%`;
+          });
+          dayEls.forEach((bar, i) => {
+            const p = ramp(t, T.advClick + 2.2 + i * 0.06, 0.6, outBack);
+            bar.style.height = `${Math.max(0, p) * Number(bar.dataset.v) * 100}%`;
+          });
+        };
+
+        const applyCaptions = (t) => {
+          for (const c of caps) {
+            if (t < c.start || t > c.end) {
+              c.el.style.visibility = 'hidden';
+              continue;
+            }
+            const out = clamp01((t - (c.end - 0.35)) / 0.35);
+            c.el.style.visibility = 'visible';
+            c.el.style.opacity = String(1 - out);
+            c.el.style.transform = `translateY(${-out * 16}px)`;
+            for (const node of c.fx) {
+              applyFx(node, t - c.start);
+            }
+          }
+        };
+
+        const applyCursor = (t) => {
+          let i = -1;
+          while (i + 1 < MOVES.length && t >= MOVES[i + 1][0]) {
+            i++;
+          }
+          let pos;
+          if (i < 0) {
+            pos = resolveTarget(CURSOR_START);
+          } else {
+            const [t0, t1, target] = MOVES[i];
+            const to = resolveTarget(target);
+            if (t >= t1) {
+              pos = to;
+            } else {
+              const from = resolveTarget(i > 0 ? MOVES[i - 1][2] : CURSOR_START);
+              const p = inOutCubic(clamp01((t - t0) / (t1 - t0)));
+              const dx = to[0] - from[0];
+              const dy = to[1] - from[1];
+              const arc = Math.sin(Math.PI * p) * 0.12;
+              pos = [from[0] + dx * p - dy * arc, from[1] + dy * p + dx * arc];
+            }
+          }
+          let press = 0;
+          let ripple = null;
+          for (const c of CLICKS) {
+            press = Math.max(press, bump(t, c - 0.06, 0.18));
+            if (t >= c && t < c + 0.5) {
+              ripple = (t - c) / 0.5;
+            }
+          }
+          const opacity = kf(t, CURSOR_OPACITY, (x) => x);
+          el.cursor.style.opacity = String(opacity);
+          el.cursor.style.transform = `translate(${pos[0] - 5}px, ${pos[1] - 3}px) scale(${1 - press * 0.16})`;
+          if (ripple === null) {
+            el.ripple.style.opacity = '0';
+          } else {
+            const r = lerp(6, 34, outCubic(ripple));
+            el.ripple.style.opacity = String((1 - ripple) * 0.9 * opacity);
+            el.ripple.style.width = `${r * 2}px`;
+            el.ripple.style.height = `${r * 2}px`;
+            el.ripple.style.transform = `translate(${pos[0] - r}px, ${pos[1] - r}px)`;
+          }
+        };
+
+        const applyLogo = (scene, lt) => {
+          const draw = inOutCubic(clamp01((lt - 0.15) / 1.1));
+          for (const ring of scene.rings) {
+            ring.style.strokeDashoffset = String(1 - draw);
+          }
+          const pop = clamp01((lt - 1.0) / 0.5);
+          for (const dot of scene.dots) {
+            dot.style.transformOrigin = '92px 60px';
+            dot.style.transform = `scale(${pop === 0 ? 0 : outBack(pop)})`;
+          }
+        };
+
+        const applyHookTabs = (scene, lt) => {
+          const glow = clamp01((lt - 2.3) / 0.8);
+          scene.el.querySelectorAll('.tab-ghost').forEach((tab, i) => {
+            if (i === 6) {
+              tab.style.transform = `${tab.style.transform} scale(${lerp(1, 1.12, outCubic(glow))})`;
+            } else {
+              tab.style.opacity = String(Number(tab.style.opacity) * lerp(1, 0.45, glow));
+            }
+          });
+        };
+
+        const applyHalos = (lt) => {
+          ['halo-a', 'halo-b'].forEach((id, i) => {
+            const phase = (((lt * 0.45 + i * 0.5) % 1) + 1) % 1;
+            $(id).style.transform = `scale(${lerp(0.7, 1.35, phase)})`;
+            $(id).style.opacity = String((1 - phase) * 0.9);
+          });
+        };
+
+        const applyApp = (t) => {
+          applyTheme(t);
+          applyBrowser(t);
+          applyPages(t);
+          applyHome(t);
+          applyPomodoro(t);
+          applyInsights(t);
+          applyCamera(t);
+          const shown = ramp(t, T.newTab + 0.05, 0.5);
+          $('docpage').style.opacity = String(1 - shown);
+          el.app.style.opacity = String(shown);
+          applyCaptions(t);
+        };
+
+        const seek = (t) => {
+          $('backdrop').style.transform = `translate(${Math.sin(t * 0.07) * 40}px, ${Math.cos(t * 0.05) * 30}px) scale(${1.05 + Math.sin(t * 0.04) * 0.03})`;
+
+          for (const scene of scenes) {
+            if (t < scene.start || t > scene.end) {
+              scene.el.style.visibility = 'hidden';
+              continue;
+            }
+            const lt = t - scene.start;
+            const span = scene.end - scene.start;
+            const last = scene.end === duration;
+            const fadeIn = scene.start === 0 ? 1 : outCubic(clamp01(lt / 0.7));
+            const exitP = last ? 0 : clamp01((lt - (span - 0.5)) / 0.5);
+            scene.el.style.visibility = 'visible';
+            scene.el.style.opacity = String(Math.min(fadeIn, 1 - exitP));
+            for (const node of scene.fx) {
+              applyFx(node, lt);
+            }
+            if (scene.rings.length > 0) {
+              applyLogo(scene, lt);
+            }
+            if (scene.el.id === 'hook') {
+              applyHookTabs(scene, lt);
+            }
+            if (scene.el.id === 'privacy') {
+              applyHalos(lt);
+            }
+            if (scene.el.id === 'app-scene') {
+              applyApp(t);
+            }
+            if (scene.el.id === 'outro') {
+              $('cta').style.transform = `scale(${1 - 0.06 * bump(t, T.ctaClick - 0.05, 0.25)})`;
+              $('cta').style.filter = `brightness(${1 + 0.25 * bump(t, T.ctaClick - 0.05, 0.5)})`;
+            }
+            if (last) {
+              el.stage.style.opacity = String(1 - clamp01((lt - (span - 1.2)) / 1.2));
+            }
+          }
+          applyCursor(t);
+        };
+
+        const sfx = [
+          ...CLICKS.map((t) => ({ t, kind: 'click' })),
+          ...[...GOAL_TEXT].map((_, i) => ({ t: T.typeStart + i * T.keyGap, kind: 'key' })),
+          { t: T.escPress, kind: 'key' },
+          { t: T.heart, kind: 'pop' },
+          { t: T.remFire, kind: 'pop' },
+          { t: T.goodClick + 0.1, kind: 'pop' },
+          ...[T.pomoClick, T.expandClick, T.focusOut, T.insightsNav, T.insBack, T.themeClick].map((t) => ({
+            t: t + 0.05,
+            kind: 'whoosh',
+          })),
+        ];
+
+        const ready = (async () => {
+          await document.fonts.ready;
+          const fontsOk = (
+            await Promise.all([document.fonts.load('700 40px Poppins'), document.fonts.load('400 20px Inter')])
+          ).every((faces) => faces.length > 0);
+          const bg = new Image();
+          bg.src = '../src/assets/bg-aurora.png';
+          await bg.decode();
+          return { fontsOk };
+        })();
+
+        window.promo = { seek, duration, ready, sfx, scenes: scenes.map((s) => s.el.id) };
+
+        const params = new URLSearchParams(location.search);
+        if (params.has('t')) {
+          seek(Number(params.get('t')));
+        } else if (!navigator.webdriver) {
+          const t0 = performance.now();
+          const loop = () => {
+            seek(((performance.now() - t0) / 1000) % duration);
+            requestAnimationFrame(loop);
+          };
+          ready.then(loop);
+        }
+      })();
+    </script>
+  </body>
+</html>
