@@ -6,7 +6,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'node', // No DOM needed; browser globals are stubbed per-test
-      include: ['src-tauri/**/*.test.ts', 'src/**/*.test.ts'],
+      include: ['src-tauri/**/*.test.ts', 'src/**/*.test.ts', 'e2e/**/*.test.ts'],
     },
   })
 );
