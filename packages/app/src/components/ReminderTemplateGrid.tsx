@@ -112,17 +112,7 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-primary text-sm truncate">{template.name}</div>
-                <div className="text-xs text-secondary mt-0.5">
-                  {/* Interval templates fire now+interval, so they have no clock time. */}
-                  {template.frequency === 'interval' ? (
-                    <>Every {template.intervalMinutes} min</>
-                  ) : (
-                    <>
-                      {FREQUENCY_LABELS[template.frequency]} at{' '}
-                      {formatTemplateTime(template.defaultTime)}
-                    </>
-                  )}
-                </div>
+                <div className="text-xs text-secondary mt-0.5">{templateSchedule(template)}</div>
               </div>
             </button>
           );
@@ -135,6 +125,19 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
     </div>
   );
 };
+
+// Interval templates fire now + interval, so they show their window instead of a clock time.
+function templateSchedule(template: ReminderTemplate): string {
+  if (template.frequency !== 'interval') {
+    return `${FREQUENCY_LABELS[template.frequency]} at ${formatTemplateTime(template.defaultTime)}`;
+  }
+  const every = `Every ${template.intervalMinutes} min`;
+  if (template.activeHours === undefined) {
+    return every;
+  }
+  const { start, end } = template.activeHours;
+  return `${every} · ${formatTemplateTime(start)}–${formatTemplateTime(end)}`;
+}
 
 // Helper to format time from HH:MM string to readable format
 function formatTemplateTime(time: string): string {

@@ -52,6 +52,7 @@ import type {
   Quote,
   QuoteCategory,
   Reminder,
+  ReminderActiveHours,
   ReminderFrequency,
   Settings,
   Subtask,
@@ -1958,9 +1959,74 @@ export function formatCompactInterval(minutes: number): string {
   return `${hours}h ${mins}m`;
 }
 
-/** A Date `minutes` from now — the fire-time anchor for interval cadences. */
-export function intervalDueDateFromNow(minutes: number): Date {
-  return new Date(Date.now() + minutes * 60_000);
+/** A Date `minutes` from now — the fire-time anchor for interval cadences — moved into its window. */
+export function intervalDueDateFromNow(minutes: number, activeHours?: ReminderActiveHours): Date {
+  return fitToActiveHours(new Date(Date.now() + minutes * 60_000), activeHours);
+}
+
+function minutesOfDay(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/** Length of the window in minutes; an end at or before the start runs past midnight. */
+function activeSpanMinutes(activeHours: ReminderActiveHours): number {
+  const span = minutesOfDay(activeHours.end) - minutesOfDay(activeHours.start);
+  return span > 0 ? span : span + 24 * 60;
+}
+
+function isActiveDay(day: Date, activeHours: ReminderActiveHours): boolean {
+  const days = activeHours.days;
+  if (days === undefined || days.length === 0) {
+    return true;
+  }
+  return days.includes(day.getDay());
+}
+
+/**
+ * `candidate` if it falls inside an active window (both ends included), else the next window's
+ * opening. A week of windows is searched, starting from the one that opened the day before.
+ */
+export function fitToActiveHours(candidate: Date, activeHours?: ReminderActiveHours): Date {
+  if (activeHours === undefined) {
+    return candidate;
+  }
+  const startMinutes = minutesOfDay(activeHours.start);
+  const span = activeSpanMinutes(activeHours);
+  for (let offset = -1; offset <= 7; offset += 1) {
+    const day = new Date(
+      candidate.getFullYear(),
+      candidate.getMonth(),
+      candidate.getDate() + offset
+    );
+    if (!isActiveDay(day, activeHours)) {
+      continue;
+    }
+    const open = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, startMinutes);
+    const close = new Date(
+      day.getFullYear(),
+      day.getMonth(),
+      day.getDate(),
+      0,
+      startMinutes + span
+    );
+    if (candidate >= open && candidate <= close) {
+      return candidate;
+    }
+    if (open > candidate) {
+      return open;
+    }
+  }
+  // Only a day list naming no real weekday gets here; firing beats never firing.
+  return candidate;
+}
+
+/** How many fires an interval lands inside one window, counting its opening. */
+export function firesPerActiveDay(
+  intervalMinutes: number,
+  activeHours: ReminderActiveHours
+): number {
+  return Math.floor(activeSpanMinutes(activeHours) / clampIntervalMinutes(intervalMinutes)) + 1;
 }
 
 /** Advance a Date by one calendar cadence in place (daily / weekly / monthly). */
@@ -2000,7 +2066,7 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const recurring = reminder.recurring;
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
-    return new Date(now.getTime() + minutes * 60_000);
+    return fitToActiveHours(new Date(now.getTime() + minutes * 60_000), recurring.activeHours);
   }
 
   const frequency = recurring?.frequency;
@@ -2023,7 +2089,7 @@ export function skipReminderOccurrence(reminder: Reminder): Date {
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
     next.setTime(next.getTime() + minutes * 60_000);
-    return next;
+    return fitToActiveHours(next, recurring.activeHours);
   }
   advanceCalendarDate(next, recurring?.frequency);
   return next;
@@ -2050,13 +2116,17 @@ export function isUpcomingRecurringOccurrence(reminder: Reminder, now: Date): bo
 export function buildReminderRecurring(
   isRecurring: boolean,
   frequency: ReminderFrequency,
-  clampedIntervalMinutes: number
+  clampedIntervalMinutes: number,
+  activeHours?: ReminderActiveHours
 ): Reminder['recurring'] {
   if (!isRecurring) {
     return undefined;
   }
   if (frequency === 'interval') {
-    return { frequency, intervalMinutes: clampedIntervalMinutes };
+    if (activeHours === undefined) {
+      return { frequency, intervalMinutes: clampedIntervalMinutes };
+    }
+    return { frequency, intervalMinutes: clampedIntervalMinutes, activeHours };
   }
   return { frequency };
 }

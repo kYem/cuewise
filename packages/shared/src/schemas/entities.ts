@@ -39,7 +39,13 @@ assertNoDrift<z.infer<typeof goalSchema>, Goal>();
 /** The union ties `intervalMinutes` to the interval arm: calendar cadences never carry it. */
 const reminderRecurrenceSchema = z.union([
   z.object({ frequency: z.enum(['daily', 'weekly', 'monthly']) }),
-  z.object({ frequency: z.literal('interval'), intervalMinutes: z.number() }),
+  z.object({
+    frequency: z.literal('interval'),
+    intervalMinutes: z.number(),
+    activeHours: z.optional(
+      z.object({ start: z.string(), end: z.string(), days: z.optional(z.array(z.number())) })
+    ),
+  }),
 ]);
 
 export const reminderSchema = z.object({

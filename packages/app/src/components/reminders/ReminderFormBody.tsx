@@ -2,6 +2,7 @@ import {
   buildReminderRecurring,
   clampIntervalMinutes,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
+  firesPerActiveDay,
   formatCompactInterval,
   formatDateString,
   intervalDueDateFromNow,
@@ -16,6 +17,12 @@ import { useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
 import { IntervalCadencePicker } from '../IntervalCadencePicker';
 import { Segmented, Switch } from '../settings/SettingControls';
+import {
+  ActiveHoursPicker,
+  activeHoursValue,
+  describeActiveDays,
+  toActiveHours,
+} from './ActiveHoursPicker';
 
 export interface ReminderFormBodyProps {
   // Edit pre-fill; absent = blank (Add).
@@ -140,6 +147,13 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       ? initial.recurring.intervalMinutes
       : DEFAULT_REMINDER_INTERVAL_MINUTES
   );
+  // An edited interval reminder keeps what it had; anything else starts on the default window.
+  const [activeHours, setActiveHours] = useState(() =>
+    activeHoursValue(
+      initial?.recurring?.frequency === 'interval' ? initial.recurring.activeHours : undefined,
+      initial?.recurring?.frequency !== 'interval'
+    )
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isInterval = isRecurring && recurringFrequency === 'interval';
@@ -155,7 +169,16 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
     const timeLabel = formatTimeLabel(time) || 'the chosen time';
     if (isInterval) {
       const clamped = clampIntervalMinutes(intervalMinutes);
-      return `Repeats every ${formatCompactInterval(clamped)} · starting now`;
+      const window = toActiveHours(activeHours);
+      if (window === undefined) {
+        return `Repeats every ${formatCompactInterval(clamped)} · starting now`;
+      }
+      const hours = `${formatTimeLabel(window.start)}–${formatTimeLabel(window.end)}`;
+      const days = describeActiveDays(window.days);
+      const perDay = `about ${firesPerActiveDay(clamped, window)} a day`;
+      return [`Repeats every ${formatCompactInterval(clamped)}`, hours, days, perDay]
+        .filter((part) => part !== null)
+        .join(' · ');
     }
     if (isRecurring && recurringFrequency === 'daily') {
       return `Daily at ${timeLabel}`;
@@ -181,9 +204,10 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
     }
 
     const clampedInterval = clampIntervalMinutes(intervalMinutes);
+    const window = toActiveHours(activeHours);
     // Interval reminders fire one interval out, not at the picked date/time.
     const dueDate = isInterval
-      ? intervalDueDateFromNow(clampedInterval)
+      ? intervalDueDateFromNow(clampedInterval, window)
       : new Date(`${date}T${time}`);
 
     // Add rejects past one-time reminders. Interval reminders are exempt: they
@@ -194,7 +218,12 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       return;
     }
 
-    const recurring = buildReminderRecurring(isRecurring, recurringFrequency, clampedInterval);
+    const recurring = buildReminderRecurring(
+      isRecurring,
+      recurringFrequency,
+      clampedInterval,
+      window
+    );
 
     setIsSubmitting(true);
 
@@ -310,7 +339,10 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
           </div>
 
           {isInterval && (
-            <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
+            <>
+              <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
+              <ActiveHoursPicker value={activeHours} onChange={setActiveHours} />
+            </>
           )}
         </div>
       )}
