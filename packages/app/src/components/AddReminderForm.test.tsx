@@ -1,4 +1,8 @@
-import { DEFAULT_REMINDER_ACTIVE_HOURS } from '@cuewise/shared';
+import {
+  DEFAULT_REMINDER_ACTIVE_HOURS,
+  DEFAULT_REMINDER_INTERVAL_MINUTES,
+  firesPerActiveDay,
+} from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -152,7 +156,11 @@ describe('AddReminderForm', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Repeat this reminder' }));
     fireEvent.click(screen.getByRole('button', { name: 'Interval' }));
 
-    expect(screen.getByText(/about 19 a day/)).toBeInTheDocument();
+    const perDay = firesPerActiveDay(
+      DEFAULT_REMINDER_INTERVAL_MINUTES,
+      DEFAULT_REMINDER_ACTIVE_HOURS
+    );
+    expect(screen.getByText(new RegExp(`about ${perDay} a day`))).toBeInTheDocument();
   });
 
   it('lets a custom interval reminder run all day', async () => {

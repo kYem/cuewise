@@ -15,8 +15,8 @@ const WEEKDAYS: ReminderActiveHours = { start: '09:00', end: '18:00', days: [1, 
 const LATE: ReminderActiveHours = { start: '22:00', end: '02:00' };
 
 /** Local time in the week of Monday 5 October 2026 (5 = Mon … 10 = Sat, 11 = Sun). */
-function at(day: number, hours: number, minutes = 0): Date {
-  return new Date(2026, 9, day, hours, minutes, 0, 0);
+function at(day: number, hours: number, minutes = 0, seconds = 0): Date {
+  return new Date(2026, 9, day, hours, minutes, seconds, 0);
 }
 
 afterEach(() => {
@@ -53,10 +53,22 @@ describe('fitToActiveHours', () => {
   });
 
   it('counts the hours after midnight toward the day the window opened', () => {
-    const mondayNights: ReminderActiveHours = { ...LATE, days: [1] };
+    expect(fitToActiveHours(at(6, 1), { ...LATE, days: [1] })).toEqual(at(6, 1));
+  });
 
-    expect(fitToActiveHours(at(6, 1), mondayNights)).toEqual(at(6, 1));
-    expect(fitToActiveHours(at(7, 1), mondayNights)).toEqual(at(12, 22));
+  it('skips the hours after midnight of a day the window did not open on', () => {
+    expect(fitToActiveHours(at(7, 1), { ...LATE, days: [1] })).toEqual(at(12, 22));
+  });
+
+  it('keeps a fire that lands just after the close, as a late alarm leaves it', () => {
+    expect(fitToActiveHours(at(5, 18, 0, 5), WORKDAY)).toEqual(at(5, 18, 0, 5));
+  });
+
+  it('treats a window whose end equals its start as the whole day', () => {
+    const allMonday: ReminderActiveHours = { start: '09:00', end: '09:00', days: [1] };
+
+    expect(fitToActiveHours(at(6, 8, 59), allMonday)).toEqual(at(6, 8, 59));
+    expect(fitToActiveHours(at(6, 10), allMonday)).toEqual(at(12, 9));
   });
 
   it('treats an empty day list as every day', () => {
@@ -74,6 +86,10 @@ describe('interval reminders with active hours', () => {
       dueDate: at(5, 17, 30).toISOString(),
       recurring: { frequency: 'interval', intervalMinutes: 60, activeHours },
     });
+
+  it('still fire at the window close when the previous fire ran a few seconds late', () => {
+    expect(nextReminderDueDate(hourly(WORKDAY), at(5, 17, 0, 5))).toEqual(at(5, 18, 0, 5));
+  });
 
   it('fire next at the following window start once the window has closed', () => {
     expect(nextReminderDueDate(hourly(WORKDAY), at(5, 17, 30))).toEqual(at(6, 9));
@@ -102,6 +118,10 @@ describe('firesPerActiveDay', () => {
 
   it('counts a window that crosses midnight', () => {
     expect(firesPerActiveDay(60, LATE)).toBe(5);
+  });
+
+  it('counts the opening of a whole-day window once', () => {
+    expect(firesPerActiveDay(60, { start: '09:00', end: '09:00' })).toBe(24);
   });
 });
 

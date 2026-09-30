@@ -173,12 +173,14 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       if (window === undefined) {
         return `Repeats every ${formatCompactInterval(clamped)} · starting now`;
       }
+      const every = `Repeats every ${formatCompactInterval(clamped)}`;
+      if (window.start === '' || window.end === '') {
+        return `${every} · set both active hours`;
+      }
       const hours = `${formatTimeLabel(window.start)}–${formatTimeLabel(window.end)}`;
       const days = describeActiveDays(window.days);
       const perDay = `about ${firesPerActiveDay(clamped, window)} a day`;
-      return [`Repeats every ${formatCompactInterval(clamped)}`, hours, days, perDay]
-        .filter((part) => part !== null)
-        .join(' · ');
+      return [every, hours, days, perDay].filter((part) => part !== null).join(' · ');
     }
     if (isRecurring && recurringFrequency === 'daily') {
       return `Daily at ${timeLabel}`;

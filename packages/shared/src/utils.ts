@@ -1983,9 +1983,12 @@ function isActiveDay(day: Date, activeHours: ReminderActiveHours): boolean {
   return days.includes(day.getDay());
 }
 
+// Each fire schedules the next from when it ran, a little late, so the closing fire lands just past.
+const ACTIVE_HOURS_CLOSE_GRACE_MS = 5 * 60_000;
+
 /**
  * `candidate` if it falls inside an active window (both ends included), else the next window's
- * opening. A week of windows is searched, starting from the one that opened the day before.
+ * opening. Nine windows are searched, from the one that opened the day before.
  */
 export function fitToActiveHours(candidate: Date, activeHours?: ReminderActiveHours): Date {
   if (activeHours === undefined) {
@@ -2010,23 +2013,26 @@ export function fitToActiveHours(candidate: Date, activeHours?: ReminderActiveHo
       0,
       startMinutes + span
     );
-    if (candidate >= open && candidate <= close) {
+    if (candidate >= open && candidate.getTime() <= close.getTime() + ACTIVE_HOURS_CLOSE_GRACE_MS) {
       return candidate;
     }
     if (open > candidate) {
       return open;
     }
   }
-  // Only a day list naming no real weekday gets here; firing beats never firing.
+  // Only a day list naming no weekday, or an unparseable time, gets here: firing beats never firing.
   return candidate;
 }
 
-/** How many fires an interval lands inside one window, counting its opening. */
+/** How many fires an interval lands inside one window, counting its opening once. */
 export function firesPerActiveDay(
   intervalMinutes: number,
   activeHours: ReminderActiveHours
 ): number {
-  return Math.floor(activeSpanMinutes(activeHours) / clampIntervalMinutes(intervalMinutes)) + 1;
+  const span = activeSpanMinutes(activeHours);
+  const fits = Math.floor(span / clampIntervalMinutes(intervalMinutes));
+  // A whole-day window's close is the next opening, so it is not a fire of its own.
+  return span === 24 * 60 ? fits : fits + 1;
 }
 
 /** Advance a Date by one calendar cadence in place (daily / weekly / monthly). */
