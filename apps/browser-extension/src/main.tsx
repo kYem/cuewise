@@ -1,5 +1,11 @@
-import type { SyncController } from '@cuewise/app';
-import { App, PomodoroPipProvider, useToastStore } from '@cuewise/app';
+import type { SettingsSection, SyncController } from '@cuewise/app';
+import {
+  App,
+  createNotionSettingsSection,
+  isNotionEnabled,
+  PomodoroPipProvider,
+  useToastStore,
+} from '@cuewise/app';
 import '@fontsource/inter/300.css';
 import '@fontsource/inter/400.css';
 import '@fontsource/inter/500.css';
@@ -13,6 +19,7 @@ import { configurePlatform } from '@cuewise/shared';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { initializeLogger } from './lib/logger-config';
+import { createChromeNotionHost } from './notion/chrome-notion-host';
 import { configureChromePlatform } from './platform';
 import { BridgeSyncController } from './sync/bridge-sync-controller';
 import { ChromeRuntimeSyncSink } from './sync/chrome-runtime-sync-sink';
@@ -36,6 +43,7 @@ const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
 // decisive signal: a plain web page never has it.
 const hasExtensionApis = typeof chrome !== 'undefined' && chrome.storage?.local !== undefined;
 let syncController: SyncController | undefined;
+let extraSections: SettingsSection[] | undefined;
 if (syncApiBaseUrl && hasExtensionApis) {
   configurePlatform({ syncSink: new ChromeRuntimeSyncSink() });
   // Task 11: the enable-sync UI's control seam, relaying to the SW's handleSyncControlMessage.
@@ -43,6 +51,10 @@ if (syncApiBaseUrl && hasExtensionApis) {
     toast: (message) => useToastStore.getState().warning(message),
     googleClientId: import.meta.env.VITE_GOOGLE_SYNC_CLIENT_ID,
   });
+  // Notion rides the same Cuewise session as sync, so it is offered only where sync is.
+  if (isNotionEnabled()) {
+    extraSections = [createNotionSettingsSection(createChromeNotionHost(syncApiBaseUrl))];
+  }
 }
 
 const rootElement = document.getElementById('root');
@@ -53,7 +65,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
-      <App syncController={syncController} />
+      <App syncController={syncController} extraSections={extraSections} />
     </PomodoroPipProvider>
   </React.StrictMode>
 );

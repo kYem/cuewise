@@ -6,7 +6,13 @@ import type {
   SyncDetailsOptions,
   SyncUiStatus,
 } from '@cuewise/app';
-import { AUTH_CANCELLED_DETAIL, buildSyncDetails, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
+import {
+  AUTH_CANCELLED_DETAIL,
+  buildSyncDetails,
+  computeCodeChallenge,
+  generateCodeVerifier,
+  LAST_CYCLE_UNAVAILABLE,
+} from '@cuewise/app';
 import {
   describeThrown,
   type KeyValueStore,
@@ -29,7 +35,6 @@ import {
   type SyncStatus,
 } from '@cuewise/sync-engine';
 import { OAuthCancelledError, type OAuthDriver } from '../platform/oauth-driver';
-import { computeCodeChallenge, generateCodeVerifier } from './pkce';
 
 /** Exported so tests can assert against it without duplicating the literal. */
 export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';

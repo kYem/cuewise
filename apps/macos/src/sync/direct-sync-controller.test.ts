@@ -1,3 +1,4 @@
+import { computeCodeChallenge } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import type {
@@ -26,7 +27,6 @@ import {
   GOOGLE_RETURN_URI,
   LAST_SYNC_CREDS_KEY,
 } from './direct-sync-controller';
-import { computeCodeChallenge } from './pkce';
 
 describe('createDirectSyncController: enable()', () => {
   it('returns the captured one-shot recovery code for a brand-new account', async () => {

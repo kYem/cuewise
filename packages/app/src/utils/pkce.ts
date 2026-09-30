@@ -1,6 +1,5 @@
-// RFC 7636 S256 PKCE pair for the Google server-bounce sign-in. The verifier is generated
-// on-device and never leaves it until the final token exchange; only the challenge (its
-// SHA-256) rides the /start URL.
+// RFC 7636 S256 PKCE pair for the server bounces (Google sign-in, Notion connect). The verifier
+// never leaves the device until the final exchange; only its SHA-256 rides the /start URL.
 
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = '';

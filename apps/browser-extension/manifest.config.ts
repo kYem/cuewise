@@ -20,6 +20,8 @@ export default defineManifest(async (env) => {
   const googleSyncClientId = viteEnv.VITE_GOOGLE_SYNC_CLIENT_ID ?? '';
   const syncEnabled = (viteEnv.VITE_SYNC_API_BASE_URL ?? '') !== '';
   const googleSyncEnabled = googleSyncClientId !== '' && syncEnabled;
+  // Notion connects through launchWebAuthFlow too, and only where sync is (it rides that session).
+  const notionEnabled = (viteEnv.VITE_NOTION_CLIENT_ID ?? '').trim() !== '' && syncEnabled;
 
   // Pinned extension key (base64 public key) for LOCAL unpacked builds only:
   // forces the same extension ID as the Web Store item, so chrome.identity OAuth
@@ -61,7 +63,7 @@ export default defineManifest(async (env) => {
   // per user, but it isn't itself a user-facing grant.
   const optionalPermissions: string[] = [];
   const optionalHostPermissions: string[] = [];
-  const identityNeeded = calendarEnabled || googleSyncEnabled;
+  const identityNeeded = calendarEnabled || googleSyncEnabled || notionEnabled;
   if (identityNeeded) {
     optionalPermissions.push('identity');
   }

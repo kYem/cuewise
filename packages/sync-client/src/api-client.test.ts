@@ -826,4 +826,99 @@ describe('ApiClient', () => {
       expect(calls).toHaveLength(1);
     });
   });
+
+  describe('notion', () => {
+    function notionClient(responses: Parameters<typeof stubFetch>[0]) {
+      const { fetchFn, calls } = stubFetch(responses);
+      const sleep = vi.fn().mockResolvedValue(undefined);
+      return {
+        client: new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn, sleep }),
+        calls,
+      };
+    }
+
+    it('getNotionConnection GETs /v1/integrations/notion and returns the connection', async () => {
+      const body = { workspace: 'Acme', dataSourceId: 'ds1', tableName: 'Tasks' };
+      const { client, calls } = notionClient([{ status: 200, body }]);
+
+      await expect(client.getNotionConnection()).resolves.toEqual(body);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/integrations/notion`);
+      expect(new Headers(calls[0].init.headers).get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('getNotionConnection answers null for provider_not_connected', async () => {
+      const { client } = notionClient([problemResponse('provider_not_connected', 404)]);
+
+      await expect(client.getNotionConnection()).resolves.toBeNull();
+    });
+
+    it('getNotionConnection still throws a 404 that is not provider_not_connected', async () => {
+      const { client } = notionClient([problemResponse('not_found', 404)]);
+
+      await expect(client.getNotionConnection()).rejects.toMatchObject({ code: 'not_found' });
+    });
+
+    it('startNotion sends the return URI and challenge and answers the authorize URL', async () => {
+      const { client, calls } = notionClient([
+        { status: 200, body: { authorizeUrl: 'https://api.notion.com/v1/oauth/authorize?x=1' } },
+      ]);
+
+      await expect(client.startNotion('https://ext.chromiumapp.org/notion', 'chal')).resolves.toBe(
+        'https://api.notion.com/v1/oauth/authorize?x=1'
+      );
+      const url = new URL(calls[0].url);
+      expect(url.pathname).toBe('/v1/integrations/notion/start');
+      expect(url.searchParams.get('return_uri')).toBe('https://ext.chromiumapp.org/notion');
+      expect(url.searchParams.get('code_challenge')).toBe('chal');
+    });
+
+    it('claimNotion POSTs the code and verifier, and never retries', async () => {
+      const { client, calls } = notionClient([problemResponse('upstream_unavailable', 503)]);
+
+      await expect(client.claimNotion('code-1', 'verifier-1')).rejects.toMatchObject({
+        code: 'upstream_unavailable',
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].init.method).toBe('POST');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({
+        code: 'code-1',
+        codeVerifier: 'verifier-1',
+      });
+    });
+
+    it('listNotionTables GETs /tables and returns them', async () => {
+      const body = { workspace: 'Acme', tables: [{ id: 'ds1', name: 'Tasks' }], truncated: false };
+      const { client, calls } = notionClient([{ status: 200, body }]);
+
+      await expect(client.listNotionTables()).resolves.toEqual(body);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/integrations/notion/tables`);
+    });
+
+    it('selectNotionTable PUTs the id and the name the picker showed', async () => {
+      const { client, calls } = notionClient([
+        { status: 200, body: { dataSourceId: 'ds1', completion: 'status' } },
+      ]);
+
+      await client.selectNotionTable('ds1', 'Tasks');
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/integrations/notion/selection`);
+      expect(calls[0].init.method).toBe('PUT');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({
+        dataSourceId: 'ds1',
+        name: 'Tasks',
+      });
+    });
+
+    it('disconnectNotion DELETEs the grant, and treats one already gone as done', async () => {
+      const { client, calls } = notionClient([
+        { status: 204 },
+        problemResponse('provider_not_connected', 404),
+      ]);
+
+      await expect(client.disconnectNotion()).resolves.toBeUndefined();
+      await expect(client.disconnectNotion()).resolves.toBeUndefined();
+      expect(calls[0].init.method).toBe('DELETE');
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/integrations/notion`);
+    });
+  });
 });
