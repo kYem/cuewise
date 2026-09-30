@@ -41,6 +41,7 @@ import {
 import { type CollectionBinding, defaultBindings } from './collections';
 import { type CycleDeps, type PullResult, pullOnce, pushOnce } from './cycle';
 import {
+  bindLegacyDataKey,
   checkForLostDataKey,
   initOrEnrollKey,
   type KeyLifecycleDeps,
@@ -49,6 +50,7 @@ import {
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SYNC_DATA_KEY,
+  SYNC_PARKED_DATA_KEYS,
 } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -568,8 +570,9 @@ export class SyncEngine {
     );
     // Persisted before the activation, not after: a disable landing inside activateWithKey rolls
     // this write back with the rest, where a later write would outlive that rollback.
-    await persistDataKey(this.deps.keyStore, keyId, dk);
-    await this.activateWithKey(dk, keyId, epoch, false);
+    const { userId } = await this.deps.apiClient.getAccount();
+    await persistDataKey(this.deps.keyStore, keyId, dk, userId);
+    await this.activateWithKey(dk, keyId, epoch, false, true);
     if (this.accountEpoch !== epoch) {
       // activateWithKey rolled its own work back rather than adopt a key for a removed account.
       return { kind: 'failed', reason: 'error' };
@@ -838,7 +841,10 @@ export class SyncEngine {
       enrolled.dk,
       enrolled.keyId,
       epoch,
-      enrolled.recoveryCodeToShow !== undefined
+      enrolled.recoveryCodeToShow !== undefined,
+      // A re-auth into the account this device finished enabling: its ledger already tracks every
+      // edit, so a backfill would only re-push the whole library.
+      !(enrolled.resumed && wasEnabled === true)
     );
   }
 
@@ -846,7 +852,8 @@ export class SyncEngine {
     dk: DataKey,
     keyId: string,
     epoch: number,
-    mintedCode: boolean
+    mintedCode: boolean,
+    backfill: boolean
   ): Promise<void> {
     this.dk = dk;
     this.keyId = keyId;
@@ -858,7 +865,9 @@ export class SyncEngine {
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
     // cursor is this account's — a re-auth can land on another at the provider's chooser.
     await this.resetPullCursor();
-    await this.backfillDirty();
+    if (backfill) {
+      await this.backfillDirty();
+    }
     // backfillDirty wrote to the ledger disableSync had just cleared, so a disable landing across
     // it needs that reset repeating before this enroll walks away.
     if (this.enrollSuperseded(epoch)) {
@@ -932,6 +941,8 @@ export class SyncEngine {
     this.dk = null;
     this.keyId = null;
     await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'abandoned an enable');
+    // The enrol may have parked a key after the disable cleared them all.
+    await this.rollbackKey(SYNC_PARKED_DATA_KEYS, 'its parked data keys', 'abandoned an enable');
     // disableSync cleared the session before this enroll's saveToken wrote it, so a live token
     // for the disconnected account survives unless this removes it — and `clear` reports failure
     // by returning false, exactly as `remove` does.
@@ -1001,6 +1012,7 @@ export class SyncEngine {
     }
     for (const key of [
       SYNC_DATA_KEY,
+      SYNC_PARKED_DATA_KEYS,
       CLOUD_SYNC_ENABLED_KEY,
       LAST_SYNCED_AT_KEY,
       LAST_CYCLE_KEY,
@@ -1595,9 +1607,31 @@ export class SyncEngine {
 
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
+    if (persisted.userId === undefined) {
+      await this.bindLegacyKey(epoch);
+      if (this.startSuperseded(epoch)) {
+        return;
+      }
+    }
     this.setStatus('active');
     await this.syncNowLoopSafe();
     await this.armPullLoopUnlessOff();
+  }
+
+  /** See bindLegacyDataKey. A null account (signed out, offline) leaves it for the next start. */
+  private async bindLegacyKey(epoch: number): Promise<void> {
+    const account = await this.getAccount();
+    if (account === null || this.startSuperseded(epoch)) {
+      return;
+    }
+    await this.bestEffort(
+      () => bindLegacyDataKey(this.deps.keyStore, account.userId),
+      'legacy data key binding'
+    );
+    // A disable landing inside the bind's read-then-write would have its key removal undone.
+    if (this.startSuperseded(epoch)) {
+      await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'was disabled while binding its key');
+    }
   }
 
   private enrollSuperseded(epoch: number): boolean {

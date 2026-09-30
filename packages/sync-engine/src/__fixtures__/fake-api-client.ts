@@ -342,8 +342,15 @@ export class FakeApiClient implements EngineApiClient {
   private sessionId: string;
   private deviceName = 'Fake Device';
 
-  constructor(private readonly server: FakeSyncServer) {
+  constructor(private server: FakeSyncServer) {
     this.sessionId = server.newSessionId();
+  }
+
+  /** The provider's account chooser landing elsewhere: every later call reaches that account. */
+  switchAccount(server: FakeSyncServer, userId: string): void {
+    this.server = server;
+    this.sessionId = server.newSessionId();
+    this.accountResult = { userId, email: null };
   }
 
   /** One-shot: fails the next getChanges as the server does on a discarded cursor. */

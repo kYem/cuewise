@@ -442,6 +442,18 @@ describe('SyncEngine.pollPairing', () => {
     expect(restarted.getStatus()).toBe('active');
   });
 
+  it('binds the adopted key to the account it was paired into', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    await flow.requester.engine.pollPairing();
+
+    expect(await loadPersistedDataKey(flow.requester.kv)).toMatchObject({ userId: 'fake-user' });
+  });
+
   it('answers expired_or_denied once the row is gone, and begins a fresh request after it', async () => {
     const flow = await pairingFlow();
     const id = await beginPairing(flow.requester.engine);

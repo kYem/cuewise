@@ -9,9 +9,12 @@ import { logger } from '@cuewise/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeKeyTransport } from './__fixtures__/fake-key-transport';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
+import { unbindPersistedDataKey } from './__fixtures__/legacy-data-key';
 import {
+  bindLegacyDataKey,
   checkForLostDataKey,
   initOrEnrollKey,
+  loadPersistedDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SYNC_DATA_KEY,
@@ -127,6 +130,101 @@ describe('initOrEnrollKey', () => {
     expect(again.dk).toEqual(first.dk);
     expect(getEnvSpy).not.toHaveBeenCalled();
     expect(again.recoveryCodeToShow).toBeUndefined();
+    expect(again.resumed).toBe(true);
+  });
+
+  it('binds a newly minted key to the signed-in account', async () => {
+    const keyStore = new FakeKvStore();
+
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
+  });
+
+  it('does not reuse a key persisted for another account, and asks for its code instead', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    const accountB = new FakeKeyTransport('user-b');
+    await initOrEnrollKey({ transport: accountB, keyStore: new FakeKvStore() });
+
+    await expect(initOrEnrollKey({ transport: accountB, keyStore })).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+    expect(await loadPersistedDataKey(keyStore)).toBeNull();
+  });
+
+  it('honours a recovery code even though another account’s key is persisted', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    const accountB = new FakeKeyTransport('user-b');
+    const deviceB = await initOrEnrollKey({ transport: accountB, keyStore: new FakeKvStore() });
+
+    const switched = await initOrEnrollKey(
+      { transport: accountB, keyStore },
+      deviceB.recoveryCodeToShow
+    );
+
+    expect(switched.dk).toEqual(deviceB.dk);
+    expect(switched.resumed).toBe(false);
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-b' });
+  });
+
+  it('restores an account’s key without a code when the device switches back to it', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    const first = await initOrEnrollKey({ transport: accountA, keyStore });
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-b'), keyStore });
+
+    const back = await initOrEnrollKey({ transport: accountA, keyStore });
+
+    expect(back.dk).toEqual(first.dk);
+    expect(back.recoveryCodeToShow).toBeUndefined();
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
+  });
+
+  it('never reuses a key persisted before keys were bound to an account', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    await initOrEnrollKey({ transport: accountA, keyStore });
+    await unbindPersistedDataKey(keyStore);
+
+    await expect(initOrEnrollKey({ transport: accountA, keyStore })).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+  });
+
+  it('leaves no key in use when the account cannot be identified', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    const first = await initOrEnrollKey({ transport: accountA, keyStore });
+    vi.spyOn(accountA, 'getAccount').mockRejectedValueOnce(new Error('offline'));
+
+    await expect(initOrEnrollKey({ transport: accountA, keyStore })).rejects.toThrow('offline');
+
+    expect(await loadPersistedDataKey(keyStore)).toBeNull();
+    const retried = await initOrEnrollKey({ transport: accountA, keyStore });
+    expect(retried.dk).toEqual(first.dk);
+  });
+});
+
+describe('bindLegacyDataKey', () => {
+  it('binds an unbound key to the given account', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    await unbindPersistedDataKey(keyStore);
+
+    await bindLegacyDataKey(keyStore, 'user-a');
+
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
+  });
+
+  it('leaves a key already bound to another account alone', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+
+    await bindLegacyDataKey(keyStore, 'user-b');
+
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
   });
 });
 

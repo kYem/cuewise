@@ -11,11 +11,14 @@ import { type KeyEnvelopeRecord, type KeyValueStore, logger } from '@cuewise/sha
 import { ApiError } from '@cuewise/sync-client';
 
 export const SYNC_DATA_KEY = 'syncDataKey';
+/** Keys of accounts this device has switched away from, by userId, so switching back needs no code. */
+export const SYNC_PARKED_DATA_KEYS = 'syncParkedDataKeys';
 
 const INITIAL_KEY_ID = 'dk-1';
 
-/** Structural subset of ApiClient — key-lifecycle only needs the recovery-envelope calls. */
+/** Structural subset of ApiClient — the recovery-envelope calls, and the account a key belongs to. */
 export interface KeyTransport {
+  getAccount(): Promise<{ userId: string }>;
   getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null>;
   putRecoveryEnvelope(envelope: string, opts?: { ifAbsent?: boolean }): Promise<void>;
 }
@@ -43,10 +46,17 @@ export class SelfHealNeedsEnrollError extends Error {
   }
 }
 
+/**
+ * `userId` is the account whose envelope this key came from. Keys persisted before ENG-128 have
+ * none: only `bindLegacyDataKey` may add it, and nothing else ever reuses such a key.
+ */
 interface PersistedDataKey {
   keyId: string;
   dkB64: string;
+  userId?: string;
 }
+
+type ParkedDataKeys = Record<string, { keyId: string; dkB64: string }>;
 
 // btoa/atob round trip, kept as its own storage-only encoding, separate from @cuewise/crypto's
 // frozen wire format: re-encoding this persisted blob would orphan already-stored keys.
@@ -71,13 +81,14 @@ function decodeDataKey(b64: string): DataKey {
 export async function persistDataKey(
   keyStore: KeyValueStore,
   keyId: string,
-  dk: DataKey
+  dk: DataKey,
+  userId: string
 ): Promise<void> {
-  const result = await keyStore.set<PersistedDataKey>(
-    SYNC_DATA_KEY,
-    { keyId, dkB64: encodeDataKey(dk) },
-    'local'
-  );
+  await writeDataKey(keyStore, { keyId, dkB64: encodeDataKey(dk), userId });
+}
+
+async function writeDataKey(keyStore: KeyValueStore, persisted: PersistedDataKey): Promise<void> {
+  const result = await keyStore.set<PersistedDataKey>(SYNC_DATA_KEY, persisted, 'local');
   if (!result.success) {
     throw new Error(`failed to persist sync data key: ${result.error.message}`);
   }
@@ -86,38 +97,89 @@ export async function persistDataKey(
 /** Reads back what `initOrEnrollKey` persisted, for callers (e.g. `start()`) that need the DK directly. */
 export async function loadPersistedDataKey(
   keyStore: KeyValueStore
-): Promise<{ dk: DataKey; keyId: string } | null> {
+): Promise<{ dk: DataKey; keyId: string; userId?: string } | null> {
   const persisted = await keyStore.get<PersistedDataKey>(SYNC_DATA_KEY, 'local');
   if (persisted === null) {
     return null;
   }
-  return { dk: decodeDataKey(persisted.dkB64), keyId: persisted.keyId };
+  return { dk: decodeDataKey(persisted.dkB64), keyId: persisted.keyId, userId: persisted.userId };
 }
 
 /**
- * Resolves this device's DataKey: resumes silently from a persisted DK if one exists, else a
- * brand-new account generates+uploads a key (code shown once), else an existing envelope enrolls with the code.
+ * Binds a pre-ENG-128 key to `userId`. Only on an authenticated start, whose live session has been
+ * syncing with this very key; never on a sign-in, which may have landed on a different account.
+ */
+export async function bindLegacyDataKey(keyStore: KeyValueStore, userId: string): Promise<void> {
+  const persisted = await keyStore.get<PersistedDataKey>(SYNC_DATA_KEY, 'local');
+  if (persisted === null || persisted.userId !== undefined) {
+    return;
+  }
+  await writeDataKey(keyStore, { ...persisted, userId });
+}
+
+/**
+ * Resolves this device's DataKey for the signed-in account: its own persisted or parked key if this
+ * device holds one, else a brand-new account generates+uploads a key (code shown once), else an
+ * existing envelope enrolls with the code. `resumed` means the key in use was already this account's.
  */
 export async function initOrEnrollKey(
   deps: KeyLifecycleDeps,
   recoveryCode?: string
-): Promise<{ dk: DataKey; keyId: string; recoveryCodeToShow?: string }> {
-  const persisted = await loadPersistedDataKey(deps.keyStore);
-  if (persisted !== null) {
-    // This device already set up sync (and wasn't disabled — disable clears the DK). Resume silently.
-    return persisted;
+): Promise<{ dk: DataKey; keyId: string; recoveryCodeToShow?: string; resumed: boolean }> {
+  // Set aside before asking whose session this is: should that fail, no key stays in use for an
+  // account nobody checked. An unbound key cannot be parked, and is dropped with its account unknown.
+  const active = await deps.keyStore.get<PersistedDataKey>(SYNC_DATA_KEY, 'local');
+  if (active !== null) {
+    if (active.userId !== undefined) {
+      await parkDataKey(deps.keyStore, active.userId, active);
+    }
+    if (!(await deps.keyStore.remove(SYNC_DATA_KEY, 'local'))) {
+      throw new Error('failed to set aside the sync data key before identifying the account');
+    }
+  }
+
+  const { userId } = await deps.transport.getAccount();
+  const parked = await readParkedDataKeys(deps.keyStore);
+  const own = parked[userId];
+  if (own !== undefined) {
+    await writeDataKey(deps.keyStore, { ...own, userId });
+    return {
+      dk: decodeDataKey(own.dkB64),
+      keyId: own.keyId,
+      resumed: active !== null && active.userId === userId,
+    };
   }
 
   const existing = await deps.transport.getRecoveryEnvelope();
   if (existing !== null) {
-    return enrollFromEnvelope(deps, existing, recoveryCode);
+    const enrolled = await enrollFromEnvelope(deps, existing, recoveryCode, userId);
+    return { ...enrolled, resumed: false };
   }
-  return initNewKey(deps, recoveryCode);
+  const minted = await initNewKey(deps, recoveryCode, userId);
+  return { ...minted, resumed: false };
+}
+
+async function readParkedDataKeys(keyStore: KeyValueStore): Promise<ParkedDataKeys> {
+  return (await keyStore.get<ParkedDataKeys>(SYNC_PARKED_DATA_KEYS, 'local')) ?? {};
+}
+
+async function parkDataKey(
+  keyStore: KeyValueStore,
+  userId: string,
+  persisted: PersistedDataKey
+): Promise<void> {
+  const parked = await readParkedDataKeys(keyStore);
+  parked[userId] = { keyId: persisted.keyId, dkB64: persisted.dkB64 };
+  const result = await keyStore.set(SYNC_PARKED_DATA_KEYS, parked, 'local');
+  if (!result.success) {
+    throw new Error(`failed to park sync data key: ${result.error.message}`);
+  }
 }
 
 async function initNewKey(
   deps: KeyLifecycleDeps,
-  recoveryCode: string | undefined
+  recoveryCode: string | undefined,
+  userId: string
 ): Promise<{ dk: DataKey; keyId: string; recoveryCodeToShow?: string }> {
   const dk = generateDataKey();
   const { code, secret } = await generateRecoveryCode();
@@ -129,7 +191,7 @@ async function initNewKey(
   } catch (err) {
     if (err instanceof ApiError && err.code === 'key_envelope_exists') {
       // Lost the race to another device initializing the same account's key — enroll instead.
-      return enrollFromServer(deps, recoveryCode);
+      return enrollFromServer(deps, recoveryCode, userId);
     }
     throw err;
   }
@@ -139,25 +201,27 @@ async function initNewKey(
     // honoured. Here there was no envelope to unwrap, so a fresh key is minted instead.
     logger.error('Cloud sync ignored a recovery code: this account had no envelope to restore');
   }
-  await persistDataKey(deps.keyStore, INITIAL_KEY_ID, dk);
+  await persistDataKey(deps.keyStore, INITIAL_KEY_ID, dk, userId);
   return { dk, keyId: INITIAL_KEY_ID, recoveryCodeToShow: code };
 }
 
 async function enrollFromServer(
   deps: KeyLifecycleDeps,
-  recoveryCode: string | undefined
+  recoveryCode: string | undefined,
+  userId: string
 ): Promise<{ dk: DataKey; keyId: string }> {
   const envelope = await deps.transport.getRecoveryEnvelope();
   if (envelope === null) {
     throw new Error('recovery envelope unexpectedly missing after a create-only PUT conflict');
   }
-  return enrollFromEnvelope(deps, envelope, recoveryCode);
+  return enrollFromEnvelope(deps, envelope, recoveryCode, userId);
 }
 
 async function enrollFromEnvelope(
   deps: KeyLifecycleDeps,
   envelope: KeyEnvelopeRecord,
-  recoveryCode: string | undefined
+  recoveryCode: string | undefined,
+  userId: string
 ): Promise<{ dk: DataKey; keyId: string }> {
   if (recoveryCode === undefined || recoveryCode.trim() === '') {
     throw new RecoveryCodeRequiredError();
@@ -165,7 +229,7 @@ async function enrollFromEnvelope(
   const secret = await parseRecoveryCode(recoveryCode);
   const mk = await deriveMasterKey(secret);
   const { dk, keyId } = await unwrapDataKey(mk, envelope.envelope);
-  await persistDataKey(deps.keyStore, keyId, dk);
+  await persistDataKey(deps.keyStore, keyId, dk, userId);
   return { dk, keyId };
 }
 
