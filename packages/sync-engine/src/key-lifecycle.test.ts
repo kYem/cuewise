@@ -392,7 +392,7 @@ describe('checkForLostDataKey', () => {
     await initOrEnrollKey({ transport, keyStore });
     const getEnvSpy = vi.spyOn(transport, 'getRecoveryEnvelope');
 
-    await expect(checkForLostDataKey({ transport, keyStore })).resolves.toBeUndefined();
+    await expect(checkForLostDataKey({ transport, keyStore })).resolves.toBe('present');
 
     expect(getEnvSpy).not.toHaveBeenCalled();
     expect(transport.putCalls).toHaveLength(1); // no re-upload attempted
@@ -432,6 +432,16 @@ describe('checkForLostDataKey', () => {
     expect(await loadPersistedDataKey(keyStore)).toBeNull();
   });
 
+  it('answers unkeyed when it holds only keys of accounts other than the signed-in one', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    await setAsideDataKey(keyStore);
+
+    await expect(
+      checkForLostDataKey({ transport: new FakeKeyTransport('user-b'), keyStore })
+    ).resolves.toBe('unkeyed');
+  });
+
   it('does not ask whose session it is when nothing was set aside', async () => {
     const transport = new FakeKeyTransport();
     const getAccount = vi.spyOn(transport, 'getAccount');
@@ -444,6 +454,6 @@ describe('checkForLostDataKey', () => {
   it('no-ops when neither the local dk nor the server envelope exist', async () => {
     await expect(
       checkForLostDataKey({ transport: new FakeKeyTransport(), keyStore: new FakeKvStore() })
-    ).resolves.toBeUndefined();
+    ).resolves.toBe('none');
   });
 });

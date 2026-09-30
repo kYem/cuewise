@@ -46,6 +46,7 @@ import {
   holdsSetAsideKeys,
   initOrEnrollKey,
   type KeyLifecycleDeps,
+  type LostKeyCheck,
   loadPersistedDataKey,
   markEnableCompleted,
   persistDataKey,
@@ -1588,8 +1589,10 @@ export class SyncEngine {
     // Idempotent: a control message answered on a cold worker already triggered this.
     await this.ensureHydrated();
 
+    // Null when the check itself failed.
+    let check: LostKeyCheck | null = null;
     try {
-      await checkForLostDataKey(this.keyDeps());
+      check = await checkForLostDataKey(this.keyDeps());
     } catch (err) {
       // Before the type test, not inside it: disableSync clears the session first, so the envelope
       // fetch usually 401s rather than raising SelfHealNeedsEnrollError — and the rethrow makes
@@ -1621,7 +1624,14 @@ export class SyncEngine {
       await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'was disabled while starting');
       return;
     }
-    if (persisted === null && (await this.holdsAnyKey())) {
+    if (persisted === null && check === 'unkeyed') {
+      logger.error(
+        'Cloud sync has no data key for the signed-in account yet; it will not sync until it reconnects'
+      );
+      this.setStatus('error');
+      return;
+    }
+    if (persisted === null && check === null && (await this.holdsAnyKey())) {
       // A key it set aside may be this account's; only naming the account can tell, so retry later
       // rather than ask for a code the device may not need.
       logger.error(
@@ -1644,6 +1654,16 @@ export class SyncEngine {
 
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
+    if (check === 'restored') {
+      // The ledger may describe the account whose key was set aside in this one's place.
+      await this.resetPullCursor();
+      await this.backfillDirty();
+      if (this.startSuperseded(epoch)) {
+        await this.bestEffort(() => this.resetMeta(), 'abandoned start ledger rollback');
+        await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'was disabled while starting');
+        return;
+      }
+    }
     if (persisted.userId === undefined) {
       await this.bindLegacyKey(epoch);
       if (this.startSuperseded(epoch)) {

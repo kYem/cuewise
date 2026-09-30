@@ -255,7 +255,8 @@ async function restoreHeldKey(
     (await readSetAsideSlot<ParkedDataKeys>(deps.keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
   const own = parked[userId];
   if (own !== undefined) {
-    await writeSlot(deps.keyStore, SYNC_DATA_KEY, { ...own, userId });
+    // Without `enabled`: the ledger is not this account's until this activation finishes again.
+    await writeSlot(deps.keyStore, SYNC_DATA_KEY, { keyId: own.keyId, dkB64: own.dkB64, userId });
     return resolved(own, userId);
   }
 
@@ -360,6 +361,12 @@ async function enrollFromEnvelope(
 }
 
 /**
+ * `restored`: a set-aside key is active again, beside a ledger that may track another account.
+ * `unkeyed`: the device holds only other accounts' keys, and this one has no envelope yet.
+ */
+export type LostKeyCheck = 'present' | 'restored' | 'unkeyed' | 'none';
+
+/**
  * Restores a held key for the signed-in account; else throws `SelfHealNeedsEnrollError` when the
  * server has an envelope the recovery code can unwrap.
  *
@@ -368,22 +375,23 @@ async function enrollFromEnvelope(
  * via `SyncEngine.refreshRecoveryEnvelope` — so a background check here would be a request per
  * worker spawn on behalf of a panel that is usually closed (ENG-98).
  */
-export async function checkForLostDataKey(deps: KeyLifecycleDeps): Promise<void> {
+export async function checkForLostDataKey(deps: KeyLifecycleDeps): Promise<LostKeyCheck> {
   const persisted = await loadPersistedDataKey(deps.keyStore);
   if (persisted !== null) {
-    return;
+    return 'present';
   }
-  if (await holdsSetAsideKeys(deps.keyStore)) {
+  const holdsKeys = await holdsSetAsideKeys(deps.keyStore);
+  if (holdsKeys) {
     const { userId } = await deps.transport.getAccount();
     if ((await restoreHeldKey(deps, userId)) !== null) {
-      return;
+      return 'restored';
     }
   }
   const envelope = await deps.transport.getRecoveryEnvelope();
   if (envelope !== null) {
     throw new SelfHealNeedsEnrollError();
   }
-  // Neither present: sync was never enabled on this device, so there is nothing to recover.
+  return holdsKeys ? 'unkeyed' : 'none';
 }
 
 /** Whether this device keeps any key it set aside, whichever account it belongs to. */

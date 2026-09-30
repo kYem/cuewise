@@ -3148,6 +3148,18 @@ async function enableFailingToNameAccount(device: Device): Promise<void> {
   await expect(device.engine.enableSync('dev', 'cred-a', 'Device A')).rejects.toThrow();
 }
 
+/** Enabled on A, then on a fresh account B where a goal A never saw was pushed; now signed out. */
+async function signedOutAfterGoalOnB(serverA: FakeSyncServer): Promise<Device> {
+  const device = await enabledThenSignedOut(serverA);
+  device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
+  await device.engine.enableSync('dev', 'cred-b', 'Device A');
+  await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'made-on-b' })]);
+  await device.engine.markMutated('goals', 'made-on-b');
+  await device.engine.syncNow();
+  await loseAuth(device);
+  return device;
+}
+
 describe('SyncEngine re-auth after auth loss', () => {
   it('reuses the key for the same account and does not backfill', async () => {
     const device = await enabledThenSignedOut(new FakeSyncServer());
@@ -3194,13 +3206,7 @@ describe('SyncEngine re-auth after auth loss', () => {
 
   it('backfills on returning to an account after the ledger tracked another', async () => {
     const serverA = new FakeSyncServer();
-    const device = await enabledThenSignedOut(serverA);
-    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
-    await device.engine.enableSync('dev', 'cred-b', 'Device A');
-    await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'made-on-b' })]);
-    await device.engine.markMutated('goals', 'made-on-b');
-    await device.engine.syncNow();
-    await loseAuth(device);
+    const device = await signedOutAfterGoalOnB(serverA);
     device.apiClient.switchAccount(serverA, 'fake-user');
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
@@ -3326,6 +3332,49 @@ describe('SyncEngine re-auth after auth loss', () => {
 
     expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
     expect(restarted.getStatus()).not.toBe('active');
+  });
+
+  it('backfills a key restored on start when the ledger last tracked another account', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    await enableFailingToNameAccount(device);
+
+    await restart(device).start();
+
+    expect(serverGoal(serverA, 'made-on-b')).toBeDefined();
+  });
+
+  it('backfills the retry of a return to an account whose first attempt was interrupted', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    vi.spyOn(MutationTracker.prototype, 'markMutatedBulk').mockRejectedValueOnce(
+      new Error('quota exceeded')
+    );
+    await expect(device.engine.enableSync('dev', 'cred-a', 'Device A')).rejects.toThrow();
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(serverGoal(serverA, 'made-on-b')).toBeDefined();
+  });
+
+  it('says reconnect, not retry, when the signed-in account has no key yet', async () => {
+    const device = await enabledThenSignedOut(new FakeSyncServer());
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
+    vi.spyOn(device.apiClient, 'putRecoveryEnvelope').mockRejectedValueOnce(
+      new ApiError('network_error', 0)
+    );
+    await expect(device.engine.enableSync('dev', 'cred-b', 'Device A')).rejects.toThrow();
+    const errorSpy = vi.spyOn(logger, 'error');
+
+    const restarted = restart(device);
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('error');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Cloud sync has no data key for the signed-in account yet; it will not sync until it reconnects'
+    );
   });
 
   it('does not report a minted key as a lost one when switching into a new account', async () => {
