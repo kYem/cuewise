@@ -10,6 +10,9 @@ interface ImportMetaEnv {
   // Points the weather proxy client at a local `wrangler dev` instead of api.cuewise.app.
   // Unset in production, where the default is used.
   readonly VITE_WEATHER_API_BASE_URL?: string;
+  // Notion's public integration client id, the same value as the Worker's NOTION_CLIENT_ID. Unset
+  // hides every Notion surface in the build.
+  readonly VITE_NOTION_CLIENT_ID?: string;
 }
 
 // Compile-time constants each host app injects via its vite `define`.

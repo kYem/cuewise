@@ -91,6 +91,9 @@ jobs:
           # Sign in with Google flow. Both empty -> cloud sync stays hidden in the release.
           VITE_SYNC_API_BASE_URL: ${{ vars.VITE_SYNC_API_BASE_URL }}
           VITE_GOOGLE_SYNC_CLIENT_ID: ${{ vars.VITE_GOOGLE_SYNC_CLIENT_ID }}
+          # Notion's public client id (same value as the Worker's NOTION_CLIENT_ID). Empty ->
+          # every Notion surface stays hidden in the release.
+          VITE_NOTION_CLIENT_ID: ${{ vars.VITE_NOTION_CLIENT_ID }}
 
       - name: Build extension zip
         run: pnpm release:extension
@@ -100,6 +103,7 @@ jobs:
           VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ vars.VITE_GOOGLE_OAUTH_CLIENT_ID }}
           VITE_SYNC_API_BASE_URL: ${{ vars.VITE_SYNC_API_BASE_URL }}
           VITE_GOOGLE_SYNC_CLIENT_ID: ${{ vars.VITE_GOOGLE_SYNC_CLIENT_ID }}
+          VITE_NOTION_CLIENT_ID: ${{ vars.VITE_NOTION_CLIENT_ID }}
 
       - name: Get version from package.json
         id: version
