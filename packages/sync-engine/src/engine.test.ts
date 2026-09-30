@@ -37,6 +37,7 @@ import {
   RecoveryCodeRequiredError,
   SYNC_DATA_KEY,
   SYNC_PARKED_DATA_KEYS,
+  SYNC_UNBOUND_DATA_KEY,
 } from './key-lifecycle';
 import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -200,6 +201,19 @@ function disableWhileWritingGoals(bindings: CollectionBinding[], engine: SyncEng
       await engine.disableSync();
     }
     return result;
+  });
+}
+
+/** A disable landing just before the first write to `key`, which then goes ahead regardless. */
+function disableBeforeWriting(kv: FakeKvStore, key: string, engine: SyncEngine): void {
+  const set = kv.set.bind(kv);
+  let disabled = false;
+  vi.spyOn(kv, 'set').mockImplementation(async (written, value, area) => {
+    if (written === key && !disabled) {
+      disabled = true;
+      await engine.disableSync();
+    }
+    return set(written, value, area);
   });
 }
 
@@ -3098,6 +3112,7 @@ describe('SyncEngine.markMutatedBulk', () => {
 });
 
 describe('SyncEngine re-auth after auth loss', () => {
+  // Local rather than in __fixtures__: both build on this file's createDevice.
   async function enabledThenSignedOut(server: FakeSyncServer): Promise<Device> {
     const device = createDevice(server);
     useStorage(device);
@@ -3118,9 +3133,14 @@ describe('SyncEngine re-auth after auth loss', () => {
     return server;
   }
 
+  function serverGoal(server: FakeSyncServer, entityId: string) {
+    return server.allRecords().find((r) => r.collection === 'goals' && r.entityId === entityId);
+  }
+
   it('reuses the key for the same account and does not backfill', async () => {
     const device = await enabledThenSignedOut(new FakeSyncServer());
     const before = await loadPersistedDataKey(device.kv);
+    expect(before).not.toBeNull();
     const backfill = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
@@ -3128,6 +3148,35 @@ describe('SyncEngine re-auth after auth loss', () => {
     expect(device.engine.getStatus()).toBe('active');
     expect((await loadPersistedDataKey(device.kv))?.dk).toEqual(before?.dk);
     expect(backfill).not.toHaveBeenCalled();
+  });
+
+  it('pushes an edit made while signed out once the same account signs back in', async () => {
+    const server = new FakeSyncServer();
+    const device = await enabledThenSignedOut(server);
+    const seqBefore = serverGoal(server, 'g1')?.seq;
+    await setGoals([goalFactory.build({ id: 'g1', text: 'edited offline' })]);
+    await device.engine.markMutated('goals', 'g1');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(serverGoal(server, 'g1')?.seq).toBeGreaterThan(seqBefore ?? 0);
+    expect((await new SyncMetadataStore(device.kv).load()).dirty).toEqual({});
+  });
+
+  it('still backfills a same-account re-auth whose first enable never finished', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    device.apiClient.rejectNextGetChangesWith401 = true;
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    expect(device.engine.getStatus()).toBe('signed_out');
+    const backfill = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(backfill).toHaveBeenCalled();
+    expect(serverGoal(server, 'g1')).toBeDefined();
   });
 
   it('does not reuse the key, backfill or push when the sign-in lands on another account', async () => {
@@ -3144,37 +3193,74 @@ describe('SyncEngine re-auth after auth loss', () => {
 
     expect(device.engine.getStatus()).toBe('needs_enroll');
     expect(await loadPersistedDataKey(device.kv)).toBeNull();
+    expect(await device.kv.get(SYNC_PARKED_DATA_KEYS, 'local')).toHaveProperty('fake-user');
     expect(backfill).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('binds a pre-ENG-128 key to the account on an authenticated start', async () => {
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-    await unbindPersistedDataKey(device.kv);
-
-    await restart(device).start();
-
-    expect(await loadPersistedDataKey(device.kv)).toMatchObject({ userId: 'fake-user' });
-  });
-
-  it('does not bind a pre-ENG-128 key after auth loss, nor adopt it for the next sign-in', async () => {
+  it('drops the previous account’s key from memory while the next one enrolls', async () => {
     const device = await enabledThenSignedOut(new FakeSyncServer());
-    await unbindPersistedDataKey(device.kv);
-    await restart(device).start();
-    expect(await loadPersistedDataKey(device.kv)).toMatchObject({ userId: undefined });
-    const serverB = await enrolledAccount('user-b');
-    useStorage(device);
-    device.apiClient.switchAccount(serverB, 'user-b');
+    device.apiClient.switchAccount(await enrolledAccount('user-b'), 'user-b');
+    vi.spyOn(device.apiClient, 'getRecoveryEnvelope').mockRejectedValueOnce(
+      new ApiError('network_error', 0)
+    );
+    await expect(device.engine.enableSync('dev', 'cred-b', 'Device A')).rejects.toThrow();
     const push = vi.spyOn(device.apiClient, 'pushChanges');
 
+    expect(await device.engine.syncNow()).toMatchObject({ kind: 'no-key' });
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('switches back to the first account without its recovery code', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await enabledThenSignedOut(serverA);
+    const keyA = await loadPersistedDataKey(device.kv);
+    device.apiClient.switchAccount(await enrolledAccount('user-b'), 'user-b');
     await expect(device.engine.enableSync('dev', 'cred-b', 'Device A')).rejects.toThrow(
       RecoveryCodeRequiredError
     );
+    device.apiClient.switchAccount(serverA, 'fake-user');
 
-    expect(push).not.toHaveBeenCalled();
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('active');
+    expect((await loadPersistedDataKey(device.kv))?.dk).toEqual(keyA?.dk);
+  });
+
+  it('restores the key on the next start when the enable failed before naming the account', async () => {
+    const device = await enabledThenSignedOut(new FakeSyncServer());
+    vi.spyOn(device.apiClient, 'getAccount').mockRejectedValueOnce(
+      new ApiError('network_error', 0)
+    );
+    await expect(device.engine.enableSync('dev', 'cred-a', 'Device A')).rejects.toThrow();
+
+    const restarted = restart(device);
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+  });
+
+  it('does not report a minted key as a lost one when switching into a new account', async () => {
+    const device = await enabledThenSignedOut(new FakeSyncServer());
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
+    const errorSpy = vi.spyOn(logger, 'error');
+
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
+
+    expect(errorSpy).not.toHaveBeenCalledWith(
+      'Cloud sync minted a new data key for an already-enrolled device'
+    );
+  });
+
+  it('removes the keys an abandoned enroll set aside', async () => {
+    const device = await enabledThenSignedOut(new FakeSyncServer());
+    disableBeforeWriting(device.kv, SYNC_PARKED_DATA_KEYS, device.engine);
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(SYNC_PARKED_DATA_KEYS, 'local')).toBeNull();
   });
 
   it('disableSync removes the keys of accounts the device switched away from', async () => {
@@ -3186,6 +3272,63 @@ describe('SyncEngine re-auth after auth loss', () => {
     await device.engine.disableSync();
 
     expect(await device.kv.get(SYNC_PARKED_DATA_KEYS, 'local')).toBeNull();
+  });
+});
+
+describe('SyncEngine with a key stored before keys recorded their account', () => {
+  async function enabledWithUnboundKey(): Promise<Device> {
+    const device = createDevice(new FakeSyncServer());
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await unbindPersistedDataKey(device.kv);
+    return device;
+  }
+
+  it('binds it to the account on an authenticated start', async () => {
+    const device = await enabledWithUnboundKey();
+
+    await restart(device).start();
+
+    expect(await loadPersistedDataKey(device.kv)).toMatchObject({ userId: 'fake-user' });
+  });
+
+  it('leaves it unbound on a start without a session', async () => {
+    const device = await enabledWithUnboundKey();
+    await device.kv.remove(SYNC_SESSION_KEY, 'local');
+
+    await restart(device).start();
+
+    expect((await loadPersistedDataKey(device.kv))?.userId).toBeUndefined();
+  });
+
+  it('removes it again when a disable lands while it is being bound', async () => {
+    const device = await enabledWithUnboundKey();
+    const restarted = restart(device);
+    disableBeforeWriting(device.kv, SYNC_DATA_KEY, restarted);
+
+    await restarted.start();
+
+    expect(await device.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+  });
+
+  it('is not adopted by a sign-in to another account', async () => {
+    const device = await enabledWithUnboundKey();
+    const serverB = new FakeSyncServer();
+    const owner = createDevice(serverB);
+    owner.apiClient.accountResult = { userId: 'user-b', email: null };
+    useStorage(owner);
+    await setGoals([goalFactory.build({ id: 'b1' })]);
+    await owner.engine.enableSync('dev', 'cred-owner', 'Owner');
+    useStorage(device);
+    device.apiClient.switchAccount(serverB, 'user-b');
+    const push = vi.spyOn(device.apiClient, 'pushChanges');
+
+    await expect(device.engine.enableSync('dev', 'cred-b', 'Device A')).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(push).not.toHaveBeenCalled();
+    expect(await device.kv.get(SYNC_UNBOUND_DATA_KEY, 'local')).not.toBeNull();
   });
 });
 

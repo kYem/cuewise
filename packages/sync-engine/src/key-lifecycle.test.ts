@@ -7,17 +7,23 @@ import {
 } from '@cuewise/crypto';
 import { logger } from '@cuewise/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { FakeKeyTransport } from './__fixtures__/fake-key-transport';
+import { FakeKeyTransport, signIn } from './__fixtures__/fake-key-transport';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { unbindPersistedDataKey } from './__fixtures__/legacy-data-key';
+import { sealedGoal } from './__fixtures__/records';
 import {
   bindLegacyDataKey,
   checkForLostDataKey,
   initOrEnrollKey,
   loadPersistedDataKey,
+  markEnableCompleted,
   RecoveryCodeRequiredError,
+  type ResolvedDataKey,
   SelfHealNeedsEnrollError,
   SYNC_DATA_KEY,
+  SYNC_PARKED_DATA_KEYS,
+  SYNC_UNBOUND_DATA_KEY,
+  setAsideDataKey,
 } from './key-lifecycle';
 
 describe('initOrEnrollKey', () => {
@@ -130,7 +136,6 @@ describe('initOrEnrollKey', () => {
     expect(again.dk).toEqual(first.dk);
     expect(getEnvSpy).not.toHaveBeenCalled();
     expect(again.recoveryCodeToShow).toBeUndefined();
-    expect(again.resumed).toBe(true);
   });
 
   it('binds a newly minted key to the signed-in account', async () => {
@@ -140,32 +145,62 @@ describe('initOrEnrollKey', () => {
 
     expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
   });
+});
 
-  it('does not reuse a key persisted for another account, and asks for its code instead', async () => {
+/** Account B, already holding a key minted on another device; answers that device's code. */
+async function enrolledElsewhere(): Promise<{
+  accountB: FakeKeyTransport;
+  owner: ResolvedDataKey;
+  code: string;
+}> {
+  const accountB = new FakeKeyTransport('user-b');
+  const owner = await initOrEnrollKey({ transport: accountB, keyStore: new FakeKvStore() });
+  expect(owner.recoveryCodeToShow).toBeDefined();
+  return { accountB, owner, code: owner.recoveryCodeToShow ?? '' };
+}
+
+describe('signing in again', () => {
+  it('restores the same account’s key without a code', async () => {
     const keyStore = new FakeKvStore();
-    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
-    const accountB = new FakeKeyTransport('user-b');
-    await initOrEnrollKey({ transport: accountB, keyStore: new FakeKvStore() });
+    const accountA = new FakeKeyTransport('user-a');
+    const first = await initOrEnrollKey({ transport: accountA, keyStore });
 
-    await expect(initOrEnrollKey({ transport: accountB, keyStore })).rejects.toThrow(
-      RecoveryCodeRequiredError
-    );
-    expect(await loadPersistedDataKey(keyStore)).toBeNull();
+    const again = await signIn(accountA, keyStore);
+
+    expect(again.dk).toEqual(first.dk);
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
   });
 
-  it('honours a recovery code even though another account’s key is persisted', async () => {
+  it('reports a finished enable only once one was marked for that account', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    await initOrEnrollKey({ transport: accountA, keyStore });
+    expect((await signIn(accountA, keyStore)).enableCompleted).toBe(false);
+
+    await markEnableCompleted(keyStore);
+
+    expect((await signIn(accountA, keyStore)).enableCompleted).toBe(true);
+  });
+
+  it('does not reuse another account’s key, and asks for this one’s code instead', async () => {
     const keyStore = new FakeKvStore();
     await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
-    const accountB = new FakeKeyTransport('user-b');
-    const deviceB = await initOrEnrollKey({ transport: accountB, keyStore: new FakeKvStore() });
+    const { accountB } = await enrolledElsewhere();
 
-    const switched = await initOrEnrollKey(
-      { transport: accountB, keyStore },
-      deviceB.recoveryCodeToShow
-    );
+    await expect(signIn(accountB, keyStore)).rejects.toThrow(RecoveryCodeRequiredError);
 
-    expect(switched.dk).toEqual(deviceB.dk);
-    expect(switched.resumed).toBe(false);
+    expect(await loadPersistedDataKey(keyStore)).toBeNull();
+    expect(await keyStore.get(SYNC_PARKED_DATA_KEYS, 'local')).toHaveProperty('user-a');
+  });
+
+  it('honours a recovery code even though another account’s key was active', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    const { accountB, owner, code } = await enrolledElsewhere();
+
+    const switched = await signIn(accountB, keyStore, code);
+
+    expect(switched.dk).toEqual(owner.dk);
     expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-b' });
   });
 
@@ -173,37 +208,110 @@ describe('initOrEnrollKey', () => {
     const keyStore = new FakeKvStore();
     const accountA = new FakeKeyTransport('user-a');
     const first = await initOrEnrollKey({ transport: accountA, keyStore });
-    await initOrEnrollKey({ transport: new FakeKeyTransport('user-b'), keyStore });
+    await signIn(new FakeKeyTransport('user-b'), keyStore);
 
-    const back = await initOrEnrollKey({ transport: accountA, keyStore });
+    const back = await signIn(accountA, keyStore);
 
     expect(back.dk).toEqual(first.dk);
     expect(back.recoveryCodeToShow).toBeUndefined();
-    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
   });
 
-  it('never reuses a key persisted before keys were bound to an account', async () => {
-    const keyStore = new FakeKvStore();
-    const accountA = new FakeKeyTransport('user-a');
-    await initOrEnrollKey({ transport: accountA, keyStore });
-    await unbindPersistedDataKey(keyStore);
-
-    await expect(initOrEnrollKey({ transport: accountA, keyStore })).rejects.toThrow(
-      RecoveryCodeRequiredError
-    );
-  });
-
-  it('leaves no key in use when the account cannot be identified', async () => {
+  it('keeps the account’s key parked when the account cannot be identified', async () => {
     const keyStore = new FakeKvStore();
     const accountA = new FakeKeyTransport('user-a');
     const first = await initOrEnrollKey({ transport: accountA, keyStore });
     vi.spyOn(accountA, 'getAccount').mockRejectedValueOnce(new Error('offline'));
 
-    await expect(initOrEnrollKey({ transport: accountA, keyStore })).rejects.toThrow('offline');
+    await expect(signIn(accountA, keyStore)).rejects.toThrow('offline');
 
     expect(await loadPersistedDataKey(keyStore)).toBeNull();
-    const retried = await initOrEnrollKey({ transport: accountA, keyStore });
-    expect(retried.dk).toEqual(first.dk);
+    expect((await initOrEnrollKey({ transport: accountA, keyStore })).dk).toEqual(first.dk);
+  });
+
+  it('keeps the active key in place when the parked keys cannot be read', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    keyStore.failGetManyForKey = SYNC_PARKED_DATA_KEYS;
+
+    await expect(setAsideDataKey(keyStore)).rejects.toThrow(
+      `could not read ${SYNC_PARKED_DATA_KEYS}`
+    );
+
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
+  });
+
+  it('does not overwrite parked keys it could not read', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    await signIn(new FakeKeyTransport('user-b'), keyStore);
+    keyStore.unreadableKey = SYNC_PARKED_DATA_KEYS;
+
+    await expect(setAsideDataKey(keyStore)).rejects.toThrow('unreadable');
+
+    keyStore.unreadableKey = null;
+    expect(await keyStore.get(SYNC_PARKED_DATA_KEYS, 'local')).toHaveProperty('user-a');
+  });
+
+  it('keeps the active key in place when it cannot be parked', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    keyStore.failSetsForKey = SYNC_PARKED_DATA_KEYS;
+
+    await expect(setAsideDataKey(keyStore)).rejects.toThrow(
+      `failed to write ${SYNC_PARKED_DATA_KEYS}`
+    );
+
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
+  });
+
+  it('refuses to continue when the active key cannot be removed', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    keyStore.failRemovesForKey = SYNC_DATA_KEY;
+
+    await expect(setAsideDataKey(keyStore)).rejects.toThrow(
+      'failed to set aside the sync data key'
+    );
+  });
+});
+
+describe('a key stored before keys recorded their account', () => {
+  async function unboundKeyOf(accountA: FakeKeyTransport, keyStore: FakeKvStore) {
+    const first = await initOrEnrollKey({ transport: accountA, keyStore });
+    await unbindPersistedDataKey(keyStore);
+    return first;
+  }
+
+  it('is kept, not reused, when no record proves it', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    await unboundKeyOf(accountA, keyStore);
+
+    await expect(signIn(accountA, keyStore)).rejects.toThrow(RecoveryCodeRequiredError);
+
+    expect(await keyStore.get(SYNC_UNBOUND_DATA_KEY, 'local')).not.toBeNull();
+  });
+
+  it('is bound and reused once it opens the account’s records', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    const first = await unboundKeyOf(accountA, keyStore);
+    accountA.records = [await sealedGoal(first.dk, first.keyId)];
+
+    const restored = await signIn(accountA, keyStore);
+
+    expect(restored.dk).toEqual(first.dk);
+    expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
+    expect(await keyStore.get(SYNC_UNBOUND_DATA_KEY, 'local')).toBeNull();
+  });
+
+  it('is not adopted by an account whose records it cannot open', async () => {
+    const keyStore = new FakeKvStore();
+    await unboundKeyOf(new FakeKeyTransport('user-a'), keyStore);
+    const { accountB, owner } = await enrolledElsewhere();
+    accountB.records = [await sealedGoal(owner.dk, owner.keyId)];
+
+    await expect(signIn(accountB, keyStore)).rejects.toThrow(RecoveryCodeRequiredError);
   });
 });
 

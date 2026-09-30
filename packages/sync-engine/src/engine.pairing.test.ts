@@ -135,6 +135,13 @@ interface ApproverSide {
  * A device waiting for a key (the lost-key path `start()` reports as needs_enroll), plus a second
  * session on the same account to approve from and the account's real data key to hand over.
  */
+/** Writes that installed a key, not the later mark that its enable finished. */
+function keyAdoptions(calls: unknown[][]): number {
+  return calls.filter(([key, value]) => {
+    return key === SYNC_DATA_KEY && (value as { enabled?: boolean }).enabled !== true;
+  }).length;
+}
+
 async function pairingFlow(): Promise<PairingFlow> {
   const server = new FakeSyncServer();
   const device = createDevice(server);
@@ -523,7 +530,7 @@ describe('SyncEngine.pollPairing', () => {
     const results = await Promise.all(both);
     expect(results.filter((result) => result.kind === 'complete')).toHaveLength(1);
     expect(results.filter((result) => result.kind === 'failed')).toHaveLength(1);
-    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(keyAdoptions(writes.mock.calls)).toBe(1);
     expect(flow.requester.engine.getStatus()).toBe('active');
   });
 
@@ -553,7 +560,7 @@ describe('SyncEngine.pollPairing', () => {
     gate.release();
 
     expect(await first).toEqual({ kind: 'failed', reason: 'error' });
-    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(keyAdoptions(writes.mock.calls)).toBe(1);
     expect(flow.requester.engine.getStatus()).toBe('active');
   });
 
@@ -576,7 +583,7 @@ describe('SyncEngine.pollPairing', () => {
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
 
     // A second adopt would re-persist the key and rewind the cursor over the enrol that won.
-    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(keyAdoptions(writes.mock.calls)).toBe(1);
     expect((await meta.load()).cursor).toBe(cursor);
     expect(flow.requester.engine.getStatus()).toBe('active');
   });

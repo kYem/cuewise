@@ -46,11 +46,14 @@ import {
   initOrEnrollKey,
   type KeyLifecycleDeps,
   loadPersistedDataKey,
+  markEnableCompleted,
   persistDataKey,
   RecoveryCodeRequiredError,
   SelfHealNeedsEnrollError,
   SYNC_DATA_KEY,
   SYNC_PARKED_DATA_KEYS,
+  SYNC_UNBOUND_DATA_KEY,
+  setAsideDataKey,
 } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
@@ -200,6 +203,8 @@ interface PairingRequest {
   revealed: boolean;
   sas: string | null;
   approverPub: PairingPublicKey | null;
+  /** The account the adopted key will be bound to, fixed while nothing is yet claimed. */
+  userId: string;
 }
 
 /**
@@ -335,11 +340,14 @@ export class SyncEngine {
           ? { provider, credential, deviceName, codeVerifier }
           : { provider, credential, deviceName };
       const { token } = await this.deps.apiClient.exchangeToken(request);
+      // Before the save: the chooser may have landed on another account, and a key left active
+      // beside that session would seal its records if anything below fails.
+      const setAsideFrom = await setAsideDataKey(this.deps.keyStore);
       const saved = await this.deps.sessionManager.saveToken(token);
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
-      await this.enrollAndActivate(recoveryCode, epoch);
+      await this.enrollAndActivate(recoveryCode, epoch, setAsideFrom);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
     }
@@ -366,7 +374,7 @@ export class SyncEngine {
         await this.handleAuthLoss();
         return;
       }
-      await this.enrollAndActivate(recoveryCode, epoch);
+      await this.enrollAndActivate(recoveryCode, epoch, null);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
     }
@@ -397,6 +405,7 @@ export class SyncEngine {
         }
         return null;
       }
+      const { userId } = await this.deps.apiClient.getAccount();
       const keypair = await generatePairingKeypair();
       const { commitment, nonce } = await makePairingCommitment(keypair.publicKey);
       const created = await this.deps.apiClient.createPairing(commitment);
@@ -416,6 +425,7 @@ export class SyncEngine {
         revealed: false,
         sas: null,
         approverPub: null,
+        userId,
       };
       return { pairingId: created.id };
     } catch (err) {
@@ -570,8 +580,7 @@ export class SyncEngine {
     );
     // Persisted before the activation, not after: a disable landing inside activateWithKey rolls
     // this write back with the rest, where a later write would outlive that rollback.
-    const { userId } = await this.deps.apiClient.getAccount();
-    await persistDataKey(this.deps.keyStore, keyId, dk, userId);
+    await persistDataKey(this.deps.keyStore, keyId, dk, pairing.userId);
     await this.activateWithKey(dk, keyId, epoch, false, true);
     if (this.accountEpoch !== epoch) {
       // activateWithKey rolled its own work back rather than adopt a key for a removed account.
@@ -815,17 +824,27 @@ export class SyncEngine {
     }
   }
 
-  /** The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode. */
-  private async enrollAndActivate(recoveryCode: string | undefined, epoch: number): Promise<void> {
-    // A code is only passed when enrolling an additional device; brand-new enable passes none.
+  /**
+   * The enroll → initial-sync → activate tail shared by enableSync and resumeEnrollWithCode.
+   * `setAsideFrom` is the account whose key the sign-in set aside, if any.
+   */
+  private async enrollAndActivate(
+    recoveryCode: string | undefined,
+    epoch: number,
+    setAsideFrom: string | null
+  ): Promise<void> {
+    // The previous account's key must not seal a push that runs while this one enrolls.
+    this.dk = null;
+    this.keyId = null;
+    // A code is passed when joining an account that already has a key; a brand-new one needs none.
     this.setStatus(recoveryCode ? 'enrolling' : 'key_init');
     const wasEnabled = await this.deps.keyStore.get<boolean>(CLOUD_SYNC_ENABLED_KEY, 'local');
     // Queued, because initNewKey's envelope PUT happens in here.
     const enrolled = await this.queueEnvelope(() => initOrEnrollKey(this.keyDeps(), recoveryCode));
     if (enrolled.recoveryCodeToShow !== undefined) {
-      if (wasEnabled === true) {
-        // A fresh key on a device that was already enrolled: every record the old key sealed is now
-        // unopenable, and other devices keep it. The user only sees an ordinary new-code modal.
+      // A switch into a new account mints legitimately. Otherwise this device was enrolled without
+      // holding a key for it: every record the old key sealed is now unopenable here.
+      if (wasEnabled === true && setAsideFrom === null) {
         logger.error('Cloud sync minted a new data key for an already-enrolled device');
       }
       // Handed over before the guard below, not after — see abandonEnroll.
@@ -842,9 +861,8 @@ export class SyncEngine {
       enrolled.keyId,
       epoch,
       enrolled.recoveryCodeToShow !== undefined,
-      // A re-auth into the account this device finished enabling: its ledger already tracks every
-      // edit, so a backfill would only re-push the whole library.
-      !(enrolled.resumed && wasEnabled === true)
+      // Its ledger already tracks every edit, and a backfill's fresh HLCs would outrank newer ones.
+      !enrolled.enableCompleted
     );
   }
 
@@ -884,6 +902,9 @@ export class SyncEngine {
       return;
     }
 
+    // Best-effort: missing, the next re-auth into this account only repeats the backfill. Before
+    // the flag, so the re-check below also covers this read-then-write racing a disable.
+    await this.bestEffort(() => markEnableCompleted(this.deps.keyStore), 'enable completion mark');
     const enabledResult = await this.deps.keyStore.set(CLOUD_SYNC_ENABLED_KEY, true, 'local');
     if (!enabledResult.success) {
       throw new Error(`failed to persist cloudSyncEnabled: ${enabledResult.error.message}`);
@@ -941,8 +962,9 @@ export class SyncEngine {
     this.dk = null;
     this.keyId = null;
     await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'abandoned an enable');
-    // The enrol may have parked a key after the disable cleared them all.
+    // A set-aside may have landed after the disable cleared them.
     await this.rollbackKey(SYNC_PARKED_DATA_KEYS, 'its parked data keys', 'abandoned an enable');
+    await this.rollbackKey(SYNC_UNBOUND_DATA_KEY, 'its unbound data key', 'abandoned an enable');
     // disableSync cleared the session before this enroll's saveToken wrote it, so a live token
     // for the disconnected account survives unless this removes it — and `clear` reports failure
     // by returning false, exactly as `remove` does.
@@ -1013,6 +1035,7 @@ export class SyncEngine {
     for (const key of [
       SYNC_DATA_KEY,
       SYNC_PARKED_DATA_KEYS,
+      SYNC_UNBOUND_DATA_KEY,
       CLOUD_SYNC_ENABLED_KEY,
       LAST_SYNCED_AT_KEY,
       LAST_CYCLE_KEY,
@@ -1591,6 +1614,8 @@ export class SyncEngine {
 
     const persisted = await loadPersistedDataKey(this.deps.keyStore);
     if (this.startSuperseded(epoch)) {
+      // checkForLostDataKey may have restored a set-aside key after the disable removed it.
+      await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'was disabled while starting');
       return;
     }
     if (persisted === null) {

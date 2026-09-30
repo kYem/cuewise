@@ -1,5 +1,5 @@
 import type { DataKey } from '@cuewise/crypto';
-import type { KeyValueStore, SyncRecord } from '@cuewise/shared';
+import { hlcEncode, type KeyValueStore, type SyncRecord } from '@cuewise/shared';
 import type { CycleDeps } from '../cycle';
 import { loadPersistedDataKey } from '../key-lifecycle';
 import { SyncMetadataStore } from '../metadata-store';
@@ -19,6 +19,12 @@ export async function sealServerRecord(
 ): Promise<SyncRecord> {
   const pushRecord = await toPushRecord(dk, keyId, collection, entityId, body);
   return { ...pushRecord, seq };
+}
+
+/** One goal record sealed under the given key, as the first row of an account's pull. */
+export function sealedGoal(dk: DataKey, keyId: string): Promise<SyncRecord> {
+  const hlc = hlcEncode({ physical: 1_000, counter: 0, node: 'owner' });
+  return sealServerRecord(dk, keyId, 'goals', 'g1', { entity: { id: 'g1' }, hlc }, 1);
 }
 
 /** Seeds the row the server already holds for an entity, sealed under the cycle's own key. */
