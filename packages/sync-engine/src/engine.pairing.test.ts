@@ -131,6 +131,13 @@ interface ApproverSide {
   keypair: PairingKeyPair;
 }
 
+/** Writes that installed a key, not the later mark that its enable finished. */
+function keyAdoptions(calls: unknown[][]): number {
+  return calls.filter(([key, value]) => {
+    return key === SYNC_DATA_KEY && (value as { enabled?: boolean }).enabled !== true;
+  }).length;
+}
+
 /**
  * A device waiting for a key (the lost-key path `start()` reports as needs_enroll), plus a second
  * session on the same account to approve from and the account's real data key to hand over.
@@ -442,6 +449,34 @@ describe('SyncEngine.pollPairing', () => {
     expect(restarted.getStatus()).toBe('active');
   });
 
+  it('binds the adopted key to the account it was paired into', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    await flow.requester.engine.pollPairing();
+
+    expect(await loadPersistedDataKey(flow.requester.kv)).toMatchObject({ userId: 'fake-user' });
+  });
+
+  it('binds the adopted key to the account that began the request', async () => {
+    const flow = await pairingFlow();
+    flow.requester.apiClient.accountResult = { userId: 'user-at-begin', email: null };
+    await beginPairing(flow.requester.engine);
+    flow.requester.apiClient.accountResult = { userId: 'user-at-adopt', email: null };
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    await flow.requester.engine.pollPairing();
+
+    expect(await loadPersistedDataKey(flow.requester.kv)).toMatchObject({
+      userId: 'user-at-begin',
+    });
+  });
+
   it('answers expired_or_denied once the row is gone, and begins a fresh request after it', async () => {
     const flow = await pairingFlow();
     const id = await beginPairing(flow.requester.engine);
@@ -511,7 +546,7 @@ describe('SyncEngine.pollPairing', () => {
     const results = await Promise.all(both);
     expect(results.filter((result) => result.kind === 'complete')).toHaveLength(1);
     expect(results.filter((result) => result.kind === 'failed')).toHaveLength(1);
-    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(keyAdoptions(writes.mock.calls)).toBe(1);
     expect(flow.requester.engine.getStatus()).toBe('active');
   });
 
@@ -541,7 +576,7 @@ describe('SyncEngine.pollPairing', () => {
     gate.release();
 
     expect(await first).toEqual({ kind: 'failed', reason: 'error' });
-    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(keyAdoptions(writes.mock.calls)).toBe(1);
     expect(flow.requester.engine.getStatus()).toBe('active');
   });
 
@@ -564,7 +599,7 @@ describe('SyncEngine.pollPairing', () => {
     expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'complete' });
 
     // A second adopt would re-persist the key and rewind the cursor over the enrol that won.
-    expect(writes.mock.calls.filter(([key]) => key === SYNC_DATA_KEY)).toHaveLength(1);
+    expect(keyAdoptions(writes.mock.calls)).toBe(1);
     expect((await meta.load()).cursor).toBe(cursor);
     expect(flow.requester.engine.getStatus()).toBe('active');
   });
