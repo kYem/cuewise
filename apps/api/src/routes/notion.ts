@@ -52,6 +52,8 @@ import {
 } from './bounce-shared';
 
 const PROVIDER = 'notion';
+// Notion caps nothing we rely on; this bounds what a client may store as a display label.
+const MAX_TABLE_NAME_LENGTH = 200;
 const NOTION_AUTHORIZE_URL = 'https://api.notion.com/v1/oauth/authorize';
 /** Notion redirects here itself, so it is the one route under the prefix that carries no session. */
 export const NOTION_CALLBACK_PATH = '/v1/integrations/notion/callback';
@@ -71,13 +73,34 @@ const OUR_AUTHORIZE_FAULTS = new Set([
   'unsupported_response_type',
 ]);
 
+// The extension's launchWebAuthFlow ends on a navigation to its https redirect URL, which a plain
+// 302 is; the interstitial exists for custom schemes, whose redirect would strand the tab.
+function redirectTo(target: URL): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: target.toString(),
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+    },
+  });
+}
+
 function returnWithCode(returnUri: string, code: string): Response {
   const target = new URL(returnUri);
   target.searchParams.set('code', code);
+  if (target.protocol === 'https:') {
+    return redirectTo(target);
+  }
   return respondWithDeepLink(target, 'Notion is connected.');
 }
 
 function returnWithError(returnUri: string, outcome: ConnectOutcome): Response {
+  const target = new URL(returnUri);
+  if (target.protocol === 'https:') {
+    target.searchParams.set('error', outcome);
+    return redirectTo(target);
+  }
   return respondWithDeepLinkError(
     returnUri,
     outcome,
@@ -780,15 +803,41 @@ export function registerNotionRoutes(
     });
   });
 
+  // No Notion call: settings reads the connection without spending the integration's rate limit.
+  app.get('/v1/integrations/notion', async (c) => {
+    const connection = await deps
+      .storeFactory(c.env.DB)
+      .getProviderConnection(c.get('userId'), PROVIDER);
+    if (connection === null) {
+      return problem('provider_not_connected');
+    }
+    return c.json({
+      workspace: connection.workspace,
+      dataSourceId: connection.dataSourceId,
+      tableName: connection.dataSourceName,
+    });
+  });
+
   app.put('/v1/integrations/notion/selection', async (c) => {
     const body = await parseJsonBody(c);
     if (body instanceof Response) {
       return body;
     }
-    const record = body as { dataSourceId?: unknown } | null;
+    const record = body as { dataSourceId?: unknown; name?: unknown } | null;
     const dataSourceId = record === null ? undefined : record.dataSourceId;
     if (typeof dataSourceId !== 'string' || !NOTION_ID_RE.test(dataSourceId)) {
       return invalidId('/dataSourceId');
+    }
+    const name = record === null ? undefined : record.name;
+    if (name !== undefined && (typeof name !== 'string' || name.length > MAX_TABLE_NAME_LENGTH)) {
+      return problem('invalid_request', {
+        errors: [
+          {
+            pointer: '/name',
+            detail: `name must be a string of at most ${MAX_TABLE_NAME_LENGTH} characters.`,
+          },
+        ],
+      });
     }
     const grant = await open(c.env, c.get('userId'));
     if (grant instanceof Response) {
@@ -804,8 +853,10 @@ export function registerNotionRoutes(
     if (property === null) {
       return problem('provider_schema_unusable');
     }
+    const trimmed = typeof name === 'string' ? name.trim() : '';
     const stored = await grant.store.setProviderSelection(grant.userId, PROVIDER, {
       dataSourceId,
+      dataSourceName: trimmed === '' ? null : trimmed,
       completionProperty: JSON.stringify(property),
     });
     if (!stored) {

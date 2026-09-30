@@ -78,7 +78,7 @@ export interface D1SyncStoreLimits {
 }
 
 const PROVIDER_CONNECTION_COLUMNS =
-  'provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id, token_fingerprint, completion_property';
+  'provider, ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, data_source_id, data_source_name, token_fingerprint, completion_property';
 
 interface ProviderConnectionRow {
   provider: string;
@@ -88,6 +88,7 @@ interface ProviderConnectionRow {
   refresh_iv: string | null;
   workspace: string | null;
   data_source_id: string | null;
+  data_source_name: string | null;
   token_fingerprint: string;
   completion_property: string | null;
 }
@@ -101,6 +102,7 @@ function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
     refreshIv: row.refresh_iv,
     workspace: row.workspace,
     dataSourceId: row.data_source_id,
+    dataSourceName: row.data_source_name,
     tokenFingerprint: row.token_fingerprint,
     completionProperty: row.completion_property,
   };
@@ -739,14 +741,21 @@ export class D1SyncStore implements SyncStore {
   async setProviderSelection(
     userId: string,
     provider: string,
-    selection: { dataSourceId: string; completionProperty: string }
+    selection: { dataSourceId: string; dataSourceName: string | null; completionProperty: string }
   ): Promise<boolean> {
     const res = await this.db
       .prepare(
-        `UPDATE provider_tokens SET data_source_id = ?, completion_property = ?
+        `UPDATE provider_tokens
+            SET data_source_id = ?, data_source_name = ?, completion_property = ?
           WHERE user_id = ? AND provider = ?`
       )
-      .bind(selection.dataSourceId, selection.completionProperty, userId, provider)
+      .bind(
+        selection.dataSourceId,
+        selection.dataSourceName,
+        selection.completionProperty,
+        userId,
+        provider
+      )
       .run();
     return (res.meta.changes ?? 0) > 0;
   }
@@ -779,6 +788,7 @@ export class D1SyncStore implements SyncStore {
            workspace = excluded.workspace,
            token_fingerprint = excluded.token_fingerprint,
            data_source_id = provider_tokens.data_source_id,
+           data_source_name = provider_tokens.data_source_name,
            completion_property = provider_tokens.completion_property,
            renewal_started_at = NULL`
         )

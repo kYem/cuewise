@@ -32,6 +32,7 @@ function connection(overrides: Partial<ProviderConnection> = {}): ProviderConnec
     provider: 'notion',
     ...grant(),
     dataSourceId: null,
+    dataSourceName: null,
     completionProperty: null,
     ...overrides,
   };
@@ -70,6 +71,7 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant());
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds-kept',
+      dataSourceName: 'Kept',
       completionProperty: 'prop-kept',
     });
 
@@ -86,6 +88,7 @@ describe('provider connections', () => {
         workspace: 'Renamed',
         tokenFingerprint: 'fp-2',
         dataSourceId: 'ds-kept',
+        dataSourceName: 'Kept',
         completionProperty: 'prop-kept',
       })
     );
@@ -268,6 +271,7 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds1',
+      dataSourceName: null,
       completionProperty: 'prop1',
     });
 
@@ -305,17 +309,27 @@ describe('provider connections', () => {
 
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds9',
+      dataSourceName: 'Tasks',
       completionProperty: 'prop9',
     });
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ ...REFRESH_PAIR, dataSourceId: 'ds9', completionProperty: 'prop9' })
+      connection({
+        ...REFRESH_PAIR,
+        dataSourceId: 'ds9',
+        dataSourceName: 'Tasks',
+        completionProperty: 'prop9',
+      })
     );
   });
 
   it('narrow writers answer false for an account with no grant', async () => {
     await expect(
-      store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds1', completionProperty: 'p' })
+      store.setProviderSelection(userId, 'notion', {
+        dataSourceId: 'ds1',
+        dataSourceName: null,
+        completionProperty: 'p',
+      })
     ).resolves.toBe(false);
     await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(false);
 
@@ -326,7 +340,11 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant());
 
     await expect(
-      store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds9', completionProperty: 'p' })
+      store.setProviderSelection(userId, 'notion', {
+        dataSourceId: 'ds9',
+        dataSourceName: null,
+        completionProperty: 'p',
+      })
     ).resolves.toBe(true);
     await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(true);
   });

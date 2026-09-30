@@ -122,6 +122,8 @@ export class StorageQuotaExceededError extends Error {
 export interface ProviderConnection extends SealedGrant {
   provider: string;
   dataSourceId: string | null;
+  // The table's name as the picker showed it; null when the client sent none.
+  dataSourceName: string | null;
   // The property completion is written to, chosen with the table and opaque to the store. Null
   // exactly while no table is picked.
   completionProperty: string | null;
@@ -219,7 +221,7 @@ export interface SyncStore {
   setProviderSelection(
     userId: string,
     provider: string,
-    selection: { dataSourceId: string; completionProperty: string }
+    selection: { dataSourceId: string; dataSourceName: string | null; completionProperty: string }
   ): Promise<boolean>;
   // Returns null only when the token row was physically deleted mid-request (concurrent account
   // deletion); revocation leaves the row and is already caught upstream by lookupSession.
