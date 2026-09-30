@@ -19,7 +19,7 @@ describe('isNotionEnabled', () => {
   });
 
   it('is on once a client id is supplied', () => {
-    vi.stubEnv('VITE_NOTION_CLIENT_ID', '3f9a855f-8bd8-4d4c-a3a4-caf40bac8df2');
+    vi.stubEnv('VITE_NOTION_CLIENT_ID', 'test-client-id');
 
     expect(isNotionEnabled()).toBe(true);
   });
