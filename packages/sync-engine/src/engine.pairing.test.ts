@@ -131,10 +131,6 @@ interface ApproverSide {
   keypair: PairingKeyPair;
 }
 
-/**
- * A device waiting for a key (the lost-key path `start()` reports as needs_enroll), plus a second
- * session on the same account to approve from and the account's real data key to hand over.
- */
 /** Writes that installed a key, not the later mark that its enable finished. */
 function keyAdoptions(calls: unknown[][]): number {
   return calls.filter(([key, value]) => {
@@ -142,6 +138,10 @@ function keyAdoptions(calls: unknown[][]): number {
   }).length;
 }
 
+/**
+ * A device waiting for a key (the lost-key path `start()` reports as needs_enroll), plus a second
+ * session on the same account to approve from and the account's real data key to hand over.
+ */
 async function pairingFlow(): Promise<PairingFlow> {
   const server = new FakeSyncServer();
   const device = createDevice(server);
@@ -459,6 +459,22 @@ describe('SyncEngine.pollPairing', () => {
     await flow.requester.engine.pollPairing();
 
     expect(await loadPersistedDataKey(flow.requester.kv)).toMatchObject({ userId: 'fake-user' });
+  });
+
+  it('binds the adopted key to the account that began the request', async () => {
+    const flow = await pairingFlow();
+    flow.requester.apiClient.accountResult = { userId: 'user-at-begin', email: null };
+    await beginPairing(flow.requester.engine);
+    flow.requester.apiClient.accountResult = { userId: 'user-at-adopt', email: null };
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+
+    await flow.requester.engine.pollPairing();
+
+    expect(await loadPersistedDataKey(flow.requester.kv)).toMatchObject({
+      userId: 'user-at-begin',
+    });
   });
 
   it('answers expired_or_denied once the row is gone, and begins a fresh request after it', async () => {

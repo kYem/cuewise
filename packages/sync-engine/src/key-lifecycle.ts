@@ -47,8 +47,8 @@ export class RecoveryCodeRequiredError extends Error {
 }
 
 /**
- * checkForLostDataKey signal: the local data key is gone but the server still has a blob for this
- * account. The device can't recover the key itself (no MK/code persisted) — it must re-enroll.
+ * checkForLostDataKey signal: this device holds no key for the signed-in account, whose server has an
+ * envelope. The device can't recover the key itself (no MK/code persisted) — it must re-enroll.
  */
 export class SelfHealNeedsEnrollError extends Error {
   constructor() {
@@ -76,7 +76,7 @@ export interface ResolvedDataKey {
   keyId: string;
   userId: string;
   recoveryCodeToShow?: string;
-  /** This account's enable already finished here, so a backfill would only re-push the library. */
+  /** An enable into this account finished on this device at some point. */
   enableCompleted: boolean;
 }
 
@@ -116,6 +116,26 @@ async function readSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | nu
     throw new Error(`${key} is stored but unreadable`);
   }
   return entry.value as T;
+}
+
+/**
+ * A parked or unbound slot that is stored but unreadable is logged and dropped: refusing would
+ * block every sign-in, and nothing can read it back. A failed read still throws.
+ */
+async function readSetAsideSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | null> {
+  const stored = await keyStore.getMany([key], 'local');
+  if (stored === null) {
+    throw new Error(`could not read ${key}`);
+  }
+  const entry = stored[key];
+  if (entry === undefined || entry.readable) {
+    return (entry?.value ?? null) as T | null;
+  }
+  logger.error(`Cloud sync dropped ${key}: it is stored but unreadable`);
+  if (!(await keyStore.remove(key, 'local'))) {
+    throw new Error(`${key} is unreadable and could not be removed`);
+  }
+  return null;
 }
 
 async function writeSlot(keyStore: KeyValueStore, key: string, value: unknown): Promise<void> {
@@ -167,12 +187,16 @@ export async function markEnableCompleted(keyStore: KeyValueStore): Promise<void
   await writeSlot(keyStore, SYNC_DATA_KEY, { ...persisted, enabled: true });
 }
 
+/** What a set-aside took out of use; `userId` is unset for a key that recorded no account. */
+export interface SetAsideKey {
+  userId?: string;
+}
+
 /**
- * Takes the active key out of use before a new session is saved beside it, so no failure after
- * that save can leave it sealing another account's records. Nothing is discarded: a bound key is
- * parked under its account, an unbound one moves to its own slot. Answers the bound account.
+ * Takes the active key out of use before a new session is saved beside it, parking a bound key
+ * under its account and an unbound one in its own slot. Answers null when there was none.
  */
-export async function setAsideDataKey(keyStore: KeyValueStore): Promise<string | null> {
+export async function setAsideDataKey(keyStore: KeyValueStore): Promise<SetAsideKey | null> {
   const active = await readSlot<PersistedDataKey>(keyStore, SYNC_DATA_KEY);
   if (active === null) {
     return null;
@@ -182,14 +206,14 @@ export async function setAsideDataKey(keyStore: KeyValueStore): Promise<string |
     logger.warn('Cloud sync set aside a data key with no account; a pulled record must prove it');
     await writeSlot(keyStore, SYNC_UNBOUND_DATA_KEY, key);
   } else {
-    const parked = (await readSlot<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
+    const parked = (await readSetAsideSlot<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
     parked[userId] = key;
     await writeSlot(keyStore, SYNC_PARKED_DATA_KEYS, parked);
   }
   if (!(await keyStore.remove(SYNC_DATA_KEY, 'local'))) {
     throw new Error('failed to set aside the sync data key');
   }
-  return userId ?? null;
+  return { userId };
 }
 
 /**
@@ -224,17 +248,18 @@ async function restoreHeldKey(
   if (active !== null && active.userId === userId) {
     return resolved(active, userId);
   }
-  // resumeEnrollWithCode saves no new session, so nothing set a key aside before it.
+  // Only enableSync sets aside before calling; a foreign active key must not be overwritten.
   await setAsideDataKey(deps.keyStore);
 
-  const parked = (await readSlot<ParkedDataKeys>(deps.keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
+  const parked =
+    (await readSetAsideSlot<ParkedDataKeys>(deps.keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
   const own = parked[userId];
   if (own !== undefined) {
     await writeSlot(deps.keyStore, SYNC_DATA_KEY, { ...own, userId });
     return resolved(own, userId);
   }
 
-  const unbound = await readSlot<StoredKey>(deps.keyStore, SYNC_UNBOUND_DATA_KEY);
+  const unbound = await readSetAsideSlot<StoredKey>(deps.keyStore, SYNC_UNBOUND_DATA_KEY);
   if (unbound !== null && (await opensAccountRecords(deps.transport, unbound))) {
     const proven = { keyId: unbound.keyId, dkB64: unbound.dkB64 };
     await writeSlot(deps.keyStore, SYNC_DATA_KEY, { ...proven, userId });
@@ -335,9 +360,8 @@ async function enrollFromEnvelope(
 }
 
 /**
- * Throws `SelfHealNeedsEnrollError` when this device holds no key for the signed-in account but
- * the server has an envelope the recovery code can unwrap; restores one it does hold, e.g. after
- * an enable that failed before it could identify the account.
+ * Restores a held key for the signed-in account; else throws `SelfHealNeedsEnrollError` when the
+ * server has an envelope the recovery code can unwrap.
  *
  * The server is asked ONLY when the key is missing. With the DK on disk the device syncs whatever
  * the envelope says, and the one thing that reads it is the settings banner, which asks for itself
@@ -362,10 +386,11 @@ export async function checkForLostDataKey(deps: KeyLifecycleDeps): Promise<void>
   // Neither present: sync was never enabled on this device, so there is nothing to recover.
 }
 
-async function holdsSetAsideKeys(keyStore: KeyValueStore): Promise<boolean> {
-  const parked = await readSlot<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS);
+/** Whether this device keeps any key it set aside, whichever account it belongs to. */
+export async function holdsSetAsideKeys(keyStore: KeyValueStore): Promise<boolean> {
+  const parked = await readSetAsideSlot<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS);
   if (parked !== null && Object.keys(parked).length > 0) {
     return true;
   }
-  return (await readSlot<StoredKey>(keyStore, SYNC_UNBOUND_DATA_KEY)) !== null;
+  return (await readSetAsideSlot<StoredKey>(keyStore, SYNC_UNBOUND_DATA_KEY)) !== null;
 }

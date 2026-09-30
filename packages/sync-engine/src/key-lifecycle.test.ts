@@ -155,8 +155,10 @@ async function enrolledElsewhere(): Promise<{
 }> {
   const accountB = new FakeKeyTransport('user-b');
   const owner = await initOrEnrollKey({ transport: accountB, keyStore: new FakeKvStore() });
-  expect(owner.recoveryCodeToShow).toBeDefined();
-  return { accountB, owner, code: owner.recoveryCodeToShow ?? '' };
+  if (owner.recoveryCodeToShow === undefined) {
+    throw new Error('expected account B to mint a recovery code');
+  }
+  return { accountB, owner, code: owner.recoveryCodeToShow };
 }
 
 describe('signing in again', () => {
@@ -171,15 +173,33 @@ describe('signing in again', () => {
     expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
   });
 
-  it('reports a finished enable only once one was marked for that account', async () => {
+  it('reports no finished enable for a key that was never marked', async () => {
     const keyStore = new FakeKvStore();
     const accountA = new FakeKeyTransport('user-a');
     await initOrEnrollKey({ transport: accountA, keyStore });
-    expect((await signIn(accountA, keyStore)).enableCompleted).toBe(false);
 
+    expect((await signIn(accountA, keyStore)).enableCompleted).toBe(false);
+  });
+
+  it('reports a finished enable once one was marked for that account', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    await initOrEnrollKey({ transport: accountA, keyStore });
     await markEnableCompleted(keyStore);
 
     expect((await signIn(accountA, keyStore)).enableCompleted).toBe(true);
+  });
+
+  it('parks a foreign active key even when nothing set it aside first', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    const { accountB } = await enrolledElsewhere();
+
+    await expect(initOrEnrollKey({ transport: accountB, keyStore })).rejects.toThrow(
+      RecoveryCodeRequiredError
+    );
+
+    expect(await keyStore.get(SYNC_PARKED_DATA_KEYS, 'local')).toHaveProperty('user-a');
   });
 
   it('does not reuse another account’s key, and asks for this one’s code instead', async () => {
@@ -240,16 +260,19 @@ describe('signing in again', () => {
     expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
   });
 
-  it('does not overwrite parked keys it could not read', async () => {
+  it('drops an unreadable parked slot rather than blocking every sign-in', async () => {
     const keyStore = new FakeKvStore();
     await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
-    await signIn(new FakeKeyTransport('user-b'), keyStore);
     keyStore.unreadableKey = SYNC_PARKED_DATA_KEYS;
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(setAsideDataKey(keyStore)).rejects.toThrow('unreadable');
+    await setAsideDataKey(keyStore);
 
     keyStore.unreadableKey = null;
     expect(await keyStore.get(SYNC_PARKED_DATA_KEYS, 'local')).toHaveProperty('user-a');
+    expect(errorSpy).toHaveBeenCalledWith(
+      `Cloud sync dropped ${SYNC_PARKED_DATA_KEYS}: it is stored but unreadable`
+    );
   });
 
   it('keeps the active key in place when it cannot be parked', async () => {
@@ -303,6 +326,30 @@ describe('a key stored before keys recorded their account', () => {
     expect(restored.dk).toEqual(first.dk);
     expect(await loadPersistedDataKey(keyStore)).toMatchObject({ userId: 'user-a' });
     expect(await keyStore.get(SYNC_UNBOUND_DATA_KEY, 'local')).toBeNull();
+  });
+
+  it('is kept when the account’s records cannot be fetched', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    await unboundKeyOf(accountA, keyStore);
+    vi.spyOn(accountA, 'getChanges').mockRejectedValueOnce(new Error('offline'));
+
+    await expect(signIn(accountA, keyStore)).rejects.toThrow('offline');
+
+    expect(await keyStore.get(SYNC_UNBOUND_DATA_KEY, 'local')).not.toBeNull();
+  });
+
+  it('is not proven by a page it opens only in part', async () => {
+    const keyStore = new FakeKvStore();
+    const accountA = new FakeKeyTransport('user-a');
+    const first = await unboundKeyOf(accountA, keyStore);
+    const { owner } = await enrolledElsewhere();
+    accountA.records = [
+      await sealedGoal(first.dk, first.keyId),
+      await sealedGoal(owner.dk, owner.keyId),
+    ];
+
+    await expect(signIn(accountA, keyStore)).rejects.toThrow(RecoveryCodeRequiredError);
   });
 
   it('is not adopted by an account whose records it cannot open', async () => {
@@ -359,6 +406,39 @@ describe('checkForLostDataKey', () => {
     await expect(checkForLostDataKey({ transport, keyStore: freshKeyStore })).rejects.toThrow(
       SelfHealNeedsEnrollError
     );
+  });
+
+  it('restores the signed-in account’s own set-aside key', async () => {
+    const transport = new FakeKeyTransport('user-a');
+    const keyStore = new FakeKvStore();
+    const first = await initOrEnrollKey({ transport, keyStore });
+    await setAsideDataKey(keyStore);
+
+    await checkForLostDataKey({ transport, keyStore });
+
+    expect((await loadPersistedDataKey(keyStore))?.dk).toEqual(first.dk);
+  });
+
+  it('does not install another account’s set-aside key', async () => {
+    const keyStore = new FakeKvStore();
+    await initOrEnrollKey({ transport: new FakeKeyTransport('user-a'), keyStore });
+    await setAsideDataKey(keyStore);
+    const { accountB } = await enrolledElsewhere();
+
+    await expect(checkForLostDataKey({ transport: accountB, keyStore })).rejects.toThrow(
+      SelfHealNeedsEnrollError
+    );
+
+    expect(await loadPersistedDataKey(keyStore)).toBeNull();
+  });
+
+  it('does not ask whose session it is when nothing was set aside', async () => {
+    const transport = new FakeKeyTransport();
+    const getAccount = vi.spyOn(transport, 'getAccount');
+
+    await checkForLostDataKey({ transport, keyStore: new FakeKvStore() });
+
+    expect(getAccount).not.toHaveBeenCalled();
   });
 
   it('no-ops when neither the local dk nor the server envelope exist', async () => {
