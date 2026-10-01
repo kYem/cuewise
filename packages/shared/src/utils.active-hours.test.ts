@@ -60,8 +60,12 @@ describe('fitToActiveHours', () => {
     expect(fitToActiveHours(at(7, 1), { ...LATE, days: [1] })).toEqual(at(12, 22));
   });
 
-  it('keeps a fire that lands just after the close, as a late alarm leaves it', () => {
-    expect(fitToActiveHours(at(5, 18, 0, 5), WORKDAY)).toEqual(at(5, 18, 0, 5));
+  it('keeps a time just past the close when that much lateness is allowed', () => {
+    expect(fitToActiveHours(at(5, 18, 0, 5), WORKDAY, 5_000)).toEqual(at(5, 18, 0, 5));
+  });
+
+  it('moves a time just past the close when no lateness is allowed', () => {
+    expect(fitToActiveHours(at(5, 18, 0, 5), WORKDAY)).toEqual(at(6, 9));
   });
 
   it('treats a window whose end equals its start as the whole day', () => {
@@ -81,6 +85,11 @@ describe('fitToActiveHours', () => {
 });
 
 describe('interval reminders with active hours', () => {
+  const every = (minutes: number, due: Date) =>
+    baseReminder({
+      dueDate: due.toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: minutes, activeHours: WORKDAY },
+    });
   const hourly = (activeHours: ReminderActiveHours) =>
     baseReminder({
       dueDate: at(5, 17, 30).toISOString(),
@@ -88,7 +97,19 @@ describe('interval reminders with active hours', () => {
     });
 
   it('still fire at the window close when the previous fire ran a few seconds late', () => {
-    expect(nextReminderDueDate(hourly(WORKDAY), at(5, 17, 0, 5))).toEqual(at(5, 18, 0, 5));
+    expect(nextReminderDueDate(every(60, at(5, 17)), at(5, 17, 0, 5))).toEqual(at(5, 18, 0, 5));
+  });
+
+  it('do not fire past the close just because they are anchored off the hour', () => {
+    expect(nextReminderDueDate(every(60, at(5, 17, 3)), at(5, 17, 3))).toEqual(at(6, 9));
+  });
+
+  it('do not keep firing a short interval past the close', () => {
+    expect(nextReminderDueDate(every(1, at(5, 18)), at(5, 18))).toEqual(at(6, 9));
+  });
+
+  it('never count more than a few minutes of lateness toward the close', () => {
+    expect(nextReminderDueDate(every(60, at(5, 16)), at(5, 17, 30))).toEqual(at(6, 9));
   });
 
   it('fire next at the following window start once the window has closed', () => {

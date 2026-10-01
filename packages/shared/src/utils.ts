@@ -1983,14 +1983,18 @@ function isActiveDay(day: Date, activeHours: ReminderActiveHours): boolean {
   return days.includes(day.getDay());
 }
 
-// Each fire schedules the next from when it ran, a little late, so the closing fire lands just past.
-const ACTIVE_HOURS_CLOSE_GRACE_MS = 5 * 60_000;
+// The most of a fire's own lateness that may carry its successor past the window's close.
+const ACTIVE_HOURS_LATENESS_CAP_MS = 5 * 60_000;
 
 /**
- * `candidate` if it falls inside an active window (both ends included), else the next window's
- * opening. Nine windows are searched, from the one that opened the day before.
+ * `candidate` if it falls inside an active window (both ends included, the close extended by
+ * `lateToleranceMs`), else the next window's opening. Nine windows are searched from the day before.
  */
-export function fitToActiveHours(candidate: Date, activeHours?: ReminderActiveHours): Date {
+export function fitToActiveHours(
+  candidate: Date,
+  activeHours?: ReminderActiveHours,
+  lateToleranceMs = 0
+): Date {
   if (activeHours === undefined) {
     return candidate;
   }
@@ -2013,7 +2017,7 @@ export function fitToActiveHours(candidate: Date, activeHours?: ReminderActiveHo
       0,
       startMinutes + span
     );
-    if (candidate >= open && candidate.getTime() <= close.getTime() + ACTIVE_HOURS_CLOSE_GRACE_MS) {
+    if (candidate >= open && candidate.getTime() <= close.getTime() + lateToleranceMs) {
       return candidate;
     }
     if (open > candidate) {
@@ -2072,7 +2076,16 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const recurring = reminder.recurring;
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
-    return fitToActiveHours(new Date(now.getTime() + minutes * 60_000), recurring.activeHours);
+    // A late fire pushes its successor late too; only that lateness may run past the close.
+    const lateness = now.getTime() - new Date(reminder.dueDate).getTime();
+    const tolerance = Number.isFinite(lateness)
+      ? Math.min(ACTIVE_HOURS_LATENESS_CAP_MS, Math.max(0, lateness))
+      : 0;
+    return fitToActiveHours(
+      new Date(now.getTime() + minutes * 60_000),
+      recurring.activeHours,
+      tolerance
+    );
   }
 
   const frequency = recurring?.frequency;
