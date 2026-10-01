@@ -122,7 +122,7 @@ export class StorageQuotaExceededError extends Error {
 export interface ProviderConnection extends SealedGrant {
   provider: string;
   dataSourceId: string | null;
-  // The table's name as the picker showed it; null when the client sent none.
+  // The table's name as the picker showed it; null when none was sent, or picked before 0011.
   dataSourceName: string | null;
   // The property completion is written to, chosen with the table and opaque to the store. Null
   // exactly while no table is picked.
@@ -200,7 +200,7 @@ export interface SyncStore {
   ): Promise<RenewalClaim | null>;
   // Keyed on the stamp, so a crashed renewal's late release cannot free the claim that took over.
   releaseProviderRenewal(userId: string, provider: string, claim: RenewalClaim): Promise<void>;
-  // A (re)connect: replaces the grant but keeps an already-chosen table, in SQL, so no
+  // A (re)connect: replaces the grant but keeps a table chosen on the same workspace, in SQL, so no
   // read-then-write window can revert a selection that lands in between. Answers the access pair
   // it displaced, read in the same transaction, so the caller can revoke a grant Notion still
   // honours — re-authorising does not invalidate the previous one.

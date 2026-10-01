@@ -19,12 +19,7 @@ export function createChromeNotionHost(baseUrl: string): NotionHost {
       try {
         granted = await chrome.permissions.request({ permissions: ['identity'] });
       } catch (error) {
-        logger.warn(
-          `Failed to request the identity permission for Notion: ${describeThrown(error)}`,
-          {
-            error,
-          }
-        );
+        logger.error('Failed to request the identity permission for Notion', error);
         return null;
       }
       if (!granted) {

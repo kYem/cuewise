@@ -788,7 +788,7 @@ export class D1SyncStore implements SyncStore {
            workspace = excluded.workspace,
            token_fingerprint = excluded.token_fingerprint,
            -- Another workspace's table id means nothing here. Compared by name, the only handle
-           -- stored: a renamed workspace costs a re-pick, never a wrong table.
+           -- stored: a rename costs a re-pick, a collision a stale id that reads as unavailable.
            data_source_id = CASE WHEN provider_tokens.workspace IS excluded.workspace
              THEN provider_tokens.data_source_id END,
            data_source_name = CASE WHEN provider_tokens.workspace IS excluded.workspace

@@ -35,7 +35,7 @@ export interface FakeNotionHost extends NotionHost {
   readonly api: { [K in keyof NotionApi]: ReturnType<typeof vi.fn<NotionApi[K]>> };
 }
 
-/** Every call answers the happy path of a first connect to a workspace with one table. */
+/** Not connected yet; consent returns a code, and the workspace shares one table. */
 export function fakeNotionHost(
   redirect: string | null = returnedWith({ code: 'one-time-code' })
 ): FakeNotionHost {

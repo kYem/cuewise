@@ -50,7 +50,7 @@ function problemCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
-/** Faults that change what the section shows; anything else keeps the view and says what failed. */
+/** Faults that change what the section shows; null for anything else. */
 function viewForFault(error: unknown): NotionView | null {
   const code = problemCode(error);
   if (code === 'invalid_token' || code === 'unauthorized') {
@@ -198,6 +198,7 @@ export const useNotionStore = create<NotionStore>((set, get) => {
         });
       } catch (error) {
         if (problemCode(error) === 'provider_schema_unusable') {
+          logger.warn('Notion refused the table: no usable completion property');
           useToastStore
             .getState()
             .error(`“${table.name}” has no Complete status or Done checkbox to mark tasks with.`);
@@ -205,6 +206,7 @@ export const useNotionStore = create<NotionStore>((set, get) => {
           return;
         }
         if (problemCode(error) === 'provider_table_unavailable') {
+          logger.warn('Notion refused the table: it is no longer shared');
           useToastStore.getState().error(`“${table.name}” is no longer shared with Cuewise.`);
           set({ busy: false });
           await get().changeTable(host);
