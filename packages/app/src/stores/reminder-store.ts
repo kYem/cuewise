@@ -3,6 +3,7 @@ import {
   generateId,
   getNotifier,
   getScheduler,
+  isDailyTargetMet,
   isUpcomingRecurringOccurrence,
   logger,
   nextReminderDueDate,
@@ -11,6 +12,7 @@ import {
   type Reminder,
   type ReminderCategory,
   type ReminderRecurrence,
+  recordReminderDone,
   reminderAlarmId,
   STORAGE_KEYS,
   skipReminderOccurrence,
@@ -325,15 +327,17 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           // Any recurring reminder (active OR paused) advances to its next occurrence
           // instead of being marked complete, which would permanently destroy it.
           if (isCompleting && r.recurring) {
+            // Counted first, so the Done that meets a daily target already defers to tomorrow.
+            const counted = recordReminderDone(r, now);
             // Calendar cadences keep their stored clock time either way; only interval differs —
             // an early skip adds one cadence to the due date, a due or overdue one restarts at now.
             const nextDueDate = isUpcomingRecurringOccurrence(r, now)
-              ? skipReminderOccurrence(r)
-              : nextReminderDueDate(r, now);
+              ? skipReminderOccurrence(counted, now)
+              : nextReminderDueDate(counted, now);
             // The full spread preserves paused/recurring, so a paused reminder stays paused.
             done.outcome = 'advanced';
             done.written = {
-              ...r,
+              ...counted,
               dueDate: nextDueDate.toISOString(),
               completed: false,
               notified: false,
@@ -371,6 +375,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         await clearReminderAlarm(reminderId);
         if (!done.written.paused) {
           await armReminderAlarm(reminderId, new Date(done.written.dueDate).getTime());
+        }
+        if (isDailyTargetMet(done.written, now)) {
+          useToastStore.getState().success('Daily target reached — back tomorrow');
+          return;
         }
         useToastStore.getState().success('Recurring reminder advanced to next occurrence');
         return;
@@ -433,14 +441,24 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       // Honor the persist result before committing state or updating the alarm.
-      const applied = { found: false };
+      const applied: { found: boolean; dueDate: string | undefined } = {
+        found: false,
+        dueDate: updates.dueDate,
+      };
+      const now = new Date();
       const { result, reminders: updatedReminders } = await updateReminders((current) =>
         current.map((reminder) => {
           if (reminder.id !== reminderId) {
             return reminder;
           }
           applied.found = true;
-          return { ...reminder, ...updates };
+          const edited = { ...reminder, ...updates };
+          // A form re-times every interval edit; one whose target is met today stays quiet.
+          if (updates.dueDate !== undefined && isDailyTargetMet(edited, now)) {
+            applied.dueDate = nextReminderDueDate(edited, now).toISOString();
+            return { ...edited, dueDate: applied.dueDate };
+          }
+          return edited;
         })
       );
       if (result?.success === false) {
@@ -462,12 +480,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       notifyMutated('reminders', reminderId);
 
       // Update alarm if dueDate changed
-      if (updates.dueDate) {
+      if (applied.dueDate) {
         await clearReminderAlarm(reminderId);
         // Don't re-arm a paused reminder. It is necessarily present — the write matched it.
         const updatedReminder = updatedReminders.find((r) => r.id === reminderId);
         if (updatedReminder?.paused !== true) {
-          await armReminderAlarm(reminderId, new Date(updates.dueDate).getTime());
+          await armReminderAlarm(reminderId, new Date(applied.dueDate).getTime());
         }
       }
 

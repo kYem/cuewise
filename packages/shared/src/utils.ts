@@ -20,6 +20,7 @@ import {
 import {
   BACKGROUND_EFFECT_BOUNDS,
   DAY_IN_MS,
+  DEFAULT_REMINDER_ACTIVE_HOURS,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   MAX_NOTE_LENGTH,
   POMODORO_DURATION_BOUNDS,
@@ -2074,6 +2075,9 @@ export function reminderIdFromAlarm(alarmId: string): string | null {
  */
 export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const recurring = reminder.recurring;
+  if (recurring?.frequency === 'interval' && isDailyTargetMet(reminder, now)) {
+    return afterTodaysTarget(reminder, now);
+  }
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
     // A late fire pushes its successor late too; only that lateness may run past the close.
@@ -2102,9 +2106,12 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
  * dueDate (not `now`). Calendar cadences keep their clock time (tonight 9pm →
  * tomorrow 9pm); interval adds one cadence.
  */
-export function skipReminderOccurrence(reminder: Reminder): Date {
+export function skipReminderOccurrence(reminder: Reminder, now: Date = new Date()): Date {
   const recurring = reminder.recurring;
   const next = new Date(reminder.dueDate);
+  if (recurring?.frequency === 'interval' && isDailyTargetMet(reminder, now)) {
+    return afterTodaysTarget(reminder, now);
+  }
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
     next.setTime(next.getTime() + minutes * 60_000);
@@ -2112,6 +2119,74 @@ export function skipReminderOccurrence(reminder: Reminder): Date {
   }
   advanceCalendarDate(next, recurring?.frequency);
   return next;
+}
+
+function dailyTargetOf(reminder: Reminder): number | undefined {
+  const recurring = reminder.recurring;
+  if (recurring?.frequency !== 'interval' || recurring.dailyTarget === undefined) {
+    return undefined;
+  }
+  return recurring.dailyTarget >= 1 ? recurring.dailyTarget : undefined;
+}
+
+/**
+ * The day a daily target counts toward: the date the current window opened. The small hours of a
+ * window that crosses midnight still belong to the evening before.
+ */
+function targetDayOf(reminder: Reminder, now: Date): Date {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const recurring = reminder.recurring;
+  if (recurring?.frequency !== 'interval' || recurring.activeHours === undefined) {
+    return today;
+  }
+  const start = minutesOfDay(recurring.activeHours.start);
+  const end = minutesOfDay(recurring.activeHours.end);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (end <= start && nowMinutes < end) {
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  }
+  return today;
+}
+
+/** How many times the reminder was marked done today; a count from an earlier day is zero. */
+export function doneCountToday(reminder: Reminder, now: Date): number {
+  const done = reminder.doneToday;
+  if (done === undefined || done.date !== formatDateString(targetDayOf(reminder, now))) {
+    return 0;
+  }
+  return done.count;
+}
+
+export function isDailyTargetMet(reminder: Reminder, now: Date): boolean {
+  const target = dailyTargetOf(reminder);
+  return target !== undefined && doneCountToday(reminder, now) >= target;
+}
+
+/** One more done toward today's target; a reminder with no target is returned as is. */
+export function recordReminderDone(reminder: Reminder, now: Date): Reminder {
+  if (dailyTargetOf(reminder) === undefined) {
+    return reminder;
+  }
+  const count = doneCountToday(reminder, now) + 1;
+  return { ...reminder, doneToday: { date: formatDateString(targetDayOf(reminder, now)), count } };
+}
+
+/** The opening of the window after the one the target was met in. */
+function afterTodaysTarget(reminder: Reminder, now: Date): Date {
+  const recurring = reminder.recurring;
+  const window =
+    recurring?.frequency === 'interval' && recurring.activeHours !== undefined
+      ? recurring.activeHours
+      : DEFAULT_REMINDER_ACTIVE_HOURS;
+  const day = targetDayOf(reminder, now);
+  const next = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate() + 1,
+    0,
+    minutesOfDay(window.start)
+  );
+  return fitToActiveHours(next, window);
 }
 
 /**
@@ -2136,16 +2211,21 @@ export function buildReminderRecurring(
   isRecurring: boolean,
   frequency: ReminderFrequency,
   clampedIntervalMinutes: number,
-  activeHours?: ReminderActiveHours
+  activeHours?: ReminderActiveHours,
+  dailyTarget?: number
 ): Reminder['recurring'] {
   if (!isRecurring) {
     return undefined;
   }
   if (frequency === 'interval') {
-    if (activeHours === undefined) {
-      return { frequency, intervalMinutes: clampedIntervalMinutes };
+    const recurring: Reminder['recurring'] = { frequency, intervalMinutes: clampedIntervalMinutes };
+    if (activeHours !== undefined) {
+      recurring.activeHours = activeHours;
     }
-    return { frequency, intervalMinutes: clampedIntervalMinutes, activeHours };
+    if (dailyTarget !== undefined) {
+      recurring.dailyTarget = dailyTarget;
+    }
+    return recurring;
   }
   return { frequency };
 }
@@ -2163,6 +2243,7 @@ export function formatReminderCadence(recurring: NonNullable<Reminder['recurring
 
 export type ReminderNotificationAction =
   | { type: 'complete' }
+  | { type: 'count' }
   | { type: 'snooze'; dueDate: string }
   | { type: 'dismiss' };
 
@@ -2183,6 +2264,9 @@ export function resolveReminderNotificationAction(
     // on fire, and a paused one must not be completed — just dismiss.
     if (!reminder.recurring) {
       return { type: 'complete' };
+    }
+    if (dailyTargetOf(reminder) !== undefined && !reminder.paused) {
+      return { type: 'count' };
     }
     return { type: 'dismiss' };
   }

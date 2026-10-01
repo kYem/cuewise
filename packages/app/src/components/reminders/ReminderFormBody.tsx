@@ -109,6 +109,17 @@ function formatDateLabel(date: string): string {
   });
 }
 
+const DAILY_TARGET_MAX = 50;
+
+// A whole number of Dones from 1 to the max; anything else means no target.
+function parseDailyTarget(value: string): number | undefined {
+  const target = Number(value);
+  if (value.trim() === '' || !Number.isInteger(target) || target < 1) {
+    return undefined;
+  }
+  return Math.min(target, DAILY_TARGET_MAX);
+}
+
 const chipClass = (active: boolean): string =>
   cn(
     'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
@@ -154,6 +165,13 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       initial?.recurring?.frequency !== 'interval'
     )
   );
+  // Empty means no target; kept as text so a half-typed value is not snapped to a number.
+  const [dailyTarget, setDailyTarget] = useState(
+    initial?.recurring?.frequency === 'interval' && initial.recurring.dailyTarget !== undefined
+      ? String(initial.recurring.dailyTarget)
+      : ''
+  );
+  const parsedTarget = parseDailyTarget(dailyTarget);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isInterval = isRecurring && recurringFrequency === 'interval';
@@ -170,17 +188,18 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
     if (isInterval) {
       const clamped = clampIntervalMinutes(intervalMinutes);
       const window = toActiveHours(activeHours);
-      if (window === undefined) {
-        return `Repeats every ${formatCompactInterval(clamped)} · starting now`;
-      }
       const every = `Repeats every ${formatCompactInterval(clamped)}`;
+      const target = parsedTarget === undefined ? null : `quiet after ${parsedTarget} done`;
+      if (window === undefined) {
+        return [every, 'starting now', target].filter((part) => part !== null).join(' · ');
+      }
       if (window.start === '' || window.end === '') {
         return `${every} · set both active hours`;
       }
       const hours = `${formatTimeLabel(window.start)}–${formatTimeLabel(window.end)}`;
       const days = describeActiveDays(window.days);
       const perDay = `about ${firesPerActiveDay(clamped, window)} a day`;
-      return [every, hours, days, perDay].filter((part) => part !== null).join(' · ');
+      return [every, hours, days, perDay, target].filter((part) => part !== null).join(' · ');
     }
     if (isRecurring && recurringFrequency === 'daily') {
       return `Daily at ${timeLabel}`;
@@ -224,7 +243,8 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
       isRecurring,
       recurringFrequency,
       clampedInterval,
-      window
+      window,
+      parsedTarget
     );
 
     setIsSubmitting(true);
@@ -344,6 +364,28 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
             <>
               <IntervalCadencePicker value={intervalMinutes} onChange={setIntervalMinutes} />
               <ActiveHoursPicker value={activeHours} onChange={setActiveHours} />
+              <div>
+                <label
+                  htmlFor="reminder-daily-target"
+                  className="block text-xs font-medium text-secondary mb-1"
+                >
+                  Daily target
+                </label>
+                <input
+                  id="reminder-daily-target"
+                  type="number"
+                  min={1}
+                  max={DAILY_TARGET_MAX}
+                  inputMode="numeric"
+                  placeholder="None — nudge all day"
+                  value={dailyTarget}
+                  onChange={(e) => setDailyTarget(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary placeholder:text-secondary"
+                />
+                <p className="mt-1 text-xs text-secondary">
+                  Quiet for the rest of the day once you mark it done this many times.
+                </p>
+              </div>
             </>
           )}
         </div>

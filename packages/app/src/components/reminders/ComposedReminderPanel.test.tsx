@@ -91,6 +91,21 @@ describe('ComposedReminderPanel', () => {
     expect(props.onToggle).toHaveBeenCalledWith('habit-1');
   });
 
+  it('shows today’s progress on a habit with a daily target', () => {
+    const habit = reminderFactory.build({
+      id: 'water',
+      text: 'Drink water',
+      category: 'health',
+      dueDate: new Date(Date.now() + HOUR_MS).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 8 },
+      doneToday: { date: '2026-06-15', count: 3 },
+    });
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    expect(screen.getByRole('button', { name: 'Mark Drink water done' })).toHaveTextContent('3/8');
+  });
+
   it('switches layout via the in-header view switcher', () => {
     const { habit } = buildMixedReminders();
     const onChange = vi.fn();

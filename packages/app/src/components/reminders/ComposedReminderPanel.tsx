@@ -1,4 +1,9 @@
-import { formatCompactInterval, REMINDER_CATEGORY_META, type Reminder } from '@cuewise/shared';
+import {
+  doneCountToday,
+  formatCompactInterval,
+  REMINDER_CATEGORY_META,
+  type Reminder,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
 import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
@@ -43,6 +48,18 @@ interface HabitPillProps {
   onPauseToggle: (id: string, paused: boolean) => void;
 }
 
+// Today's progress toward a daily target, else the interval. Only interval reminders get here.
+function habitCadence(reminder: Reminder): string {
+  if (reminder.recurring?.frequency !== 'interval') {
+    return '';
+  }
+  const target = reminder.recurring.dailyTarget;
+  if (target === undefined) {
+    return formatCompactInterval(reminder.recurring.intervalMinutes);
+  }
+  return `${doneCountToday(reminder, new Date())}/${target}`;
+}
+
 /**
  * Ambient habit chip: a category dot/text/cadence pill that is tap-to-mark-done
  * when active, shows a pulsing check while nudging, and resumes on tap when
@@ -58,11 +75,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   const category = reminder.category ?? 'productivity';
   const categoryColor = REMINDER_CATEGORY_META[category].color;
   const showCheck = nudging || justAcked || (!paused && hover);
-  // HabitPill only ever renders interval reminders, so the empty fallback is dead but type-safe.
-  const cadence =
-    reminder.recurring?.frequency === 'interval'
-      ? formatCompactInterval(reminder.recurring.intervalMinutes)
-      : '';
+  const cadence = habitCadence(reminder);
 
   // Tint the border (and the glow keyframe's color, while nudging) by category.
   const pillStyle: CSSProperties = {};

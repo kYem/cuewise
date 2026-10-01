@@ -1,4 +1,9 @@
-import { logger } from '@cuewise/shared';
+import {
+  configurePlatform,
+  formatDateString,
+  logger,
+  type Reminder as SharedReminder,
+} from '@cuewise/shared';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -397,6 +402,93 @@ describe('background: notification action buttons', () => {
     await vi.waitFor(() => {
       const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
       expect(saved.map((r) => r.id)).toEqual(['r3', 'pulled']);
+    });
+  });
+
+  const water = (dailyTarget: number): SharedReminder =>
+    recurringReminderFactory.build({
+      id: 'water',
+      text: 'Drink water',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      recurring: {
+        frequency: 'interval',
+        intervalMinutes: 60,
+        activeHours: { start: '09:00', end: '18:00' },
+        dailyTarget,
+      },
+    });
+
+  it('counts a Done toward a daily target', async () => {
+    getRemindersMock.mockResolvedValue([water(8)]);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+      expect(saved.find((r) => r.id === 'water')?.doneToday).toEqual({
+        date: formatDateString(new Date()),
+        count: 1,
+      });
+    });
+  });
+
+  it('leaves the armed nudge alone when a Done stays under the daily target', async () => {
+    const reminder = water(8);
+    getRemindersMock.mockResolvedValue([reminder]);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith(expect.objectContaining({ event: 'done' }));
+    });
+    const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(saved.find((r) => r.id === 'water')?.dueDate).toBe(reminder.dueDate);
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  it('marks a counted Done for sync', async () => {
+    const sink = { markMutated: vi.fn(), markDeleted: vi.fn() };
+    configurePlatform({ syncSink: sink });
+    getRemindersMock.mockResolvedValue([water(8)]);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(sink.markMutated).toHaveBeenCalledWith('reminders', 'water');
+    });
+  });
+
+  it('does not arm tomorrow’s wake when the counted Done did not persist', async () => {
+    getRemindersMock.mockResolvedValue([water(1)]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'water',
+        text: 'Drink water',
+        detail: 'done: not persisted',
+      });
+    });
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  it('re-arms for tomorrow’s window once a Done meets the daily target', async () => {
+    getRemindersMock.mockResolvedValue([water(1)]);
+    const now = new Date();
+    const tomorrowOpening = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-water', {
+        when: tomorrowOpening.getTime(),
+      });
     });
   });
 

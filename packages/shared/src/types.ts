@@ -99,7 +99,13 @@ export interface ReminderActiveHours {
 // interval cadence always carries it; calendar cadences never do.
 export type ReminderRecurrence =
   | { frequency: 'daily' | 'weekly' | 'monthly' }
-  | { frequency: 'interval'; intervalMinutes: number; activeHours?: ReminderActiveHours };
+  | {
+      frequency: 'interval';
+      intervalMinutes: number;
+      activeHours?: ReminderActiveHours;
+      /** Once this many are marked done in a day, it stays quiet until the next day's window. */
+      dailyTarget?: number;
+    };
 
 // Reminder interface
 export interface Reminder {
@@ -110,6 +116,8 @@ export interface Reminder {
   notified: boolean;
   recurring?: ReminderRecurrence;
   paused?: boolean; // true when a recurring reminder is paused (won't fire)
+  /** Times marked done on `date` (local YYYY-MM-DD), toward an interval's daily target. */
+  doneToday?: { date: string; count: number };
   // Context-aware suggestions
   category?: ReminderCategory; // Optional category for suggestions
   completedAt?: string; // ISO timestamp when marked complete (for suggestions)
@@ -125,6 +133,7 @@ export interface ReminderTemplate {
   category: ReminderCategory;
   intervalMinutes?: number; // for 'interval' templates
   activeHours?: ReminderActiveHours;
+  dailyTarget?: number;
 }
 
 // Pomodoro session interface
