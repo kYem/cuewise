@@ -1,4 +1,4 @@
-import { logger } from '@cuewise/shared';
+import { formatDateString, logger, type Reminder as SharedReminder } from '@cuewise/shared';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -397,6 +397,47 @@ describe('background: notification action buttons', () => {
     await vi.waitFor(() => {
       const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
       expect(saved.map((r) => r.id)).toEqual(['r3', 'pulled']);
+    });
+  });
+
+  const water = (dailyTarget: number): SharedReminder =>
+    recurringReminderFactory.build({
+      id: 'water',
+      text: 'Drink water',
+      dueDate: new Date(Date.now() + 60 * 60_000).toISOString(),
+      recurring: {
+        frequency: 'interval',
+        intervalMinutes: 60,
+        activeHours: { start: '09:00', end: '18:00' },
+        dailyTarget,
+      },
+    });
+
+  it('counts a Done toward a daily target', async () => {
+    getRemindersMock.mockResolvedValue([water(8)]);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+      expect(saved.find((r) => r.id === 'water')?.doneToday).toEqual({
+        date: formatDateString(new Date()),
+        count: 1,
+      });
+    });
+  });
+
+  it('re-arms for tomorrow’s window once a Done meets the daily target', async () => {
+    getRemindersMock.mockResolvedValue([water(1)]);
+    const now = new Date();
+    const tomorrowOpening = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-water', {
+        when: tomorrowOpening.getTime(),
+      });
     });
   });
 

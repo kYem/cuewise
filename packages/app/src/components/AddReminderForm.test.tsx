@@ -102,6 +102,7 @@ describe('AddReminderForm', () => {
       frequency: 'interval',
       intervalMinutes: 60,
       activeHours: DEFAULT_REMINDER_ACTIVE_HOURS,
+      dailyTarget: 8,
     });
   });
 

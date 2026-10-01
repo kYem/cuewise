@@ -369,6 +369,7 @@ export const REMINDER_TEMPLATES: ReminderTemplate[] = [
     category: 'health',
     intervalMinutes: 60,
     activeHours: DEFAULT_REMINDER_ACTIVE_HOURS,
+    dailyTarget: 8,
   },
   {
     id: 'stretch',

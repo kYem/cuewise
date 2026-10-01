@@ -64,3 +64,28 @@ describe('ReminderFormBody active hours', () => {
     );
   });
 });
+
+describe('ReminderFormBody daily target', () => {
+  it('stores the daily target typed in', async () => {
+    const onSubmit = renderEdit({ frequency: 'interval', intervalMinutes: 60 });
+
+    fireEvent.change(screen.getByLabelText('Daily target'), { target: { value: '6' } });
+
+    expect((await submitted(onSubmit)).dailyTarget).toBe(6);
+  });
+
+  it('stores no target when the field is left empty', async () => {
+    const onSubmit = renderEdit({ frequency: 'interval', intervalMinutes: 60, dailyTarget: 4 });
+
+    fireEvent.change(screen.getByLabelText('Daily target'), { target: { value: '' } });
+
+    expect(await submitted(onSubmit)).not.toHaveProperty('dailyTarget');
+  });
+
+  it('pre-fills the target an interval reminder already has', () => {
+    renderEdit({ frequency: 'interval', intervalMinutes: 60, dailyTarget: 8 });
+
+    expect(screen.getByLabelText('Daily target')).toHaveValue(8);
+    expect(screen.getByText(/quiet after 8 done/)).toBeInTheDocument();
+  });
+});

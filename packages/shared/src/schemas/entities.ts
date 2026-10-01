@@ -45,6 +45,7 @@ const reminderRecurrenceSchema = z.union([
     activeHours: z.optional(
       z.object({ start: z.string(), end: z.string(), days: z.optional(z.array(z.number())) })
     ),
+    dailyTarget: z.optional(z.number()),
   }),
 ]);
 
@@ -56,6 +57,7 @@ export const reminderSchema = z.object({
   notified: z.boolean(),
   recurring: z.optional(reminderRecurrenceSchema),
   paused: z.optional(z.boolean()),
+  doneToday: z.optional(z.object({ date: z.string(), count: z.number() })),
   category: z.optional(z.enum(['health', 'productivity', 'personal'])),
   completedAt: z.optional(z.string()),
 });

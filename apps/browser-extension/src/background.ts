@@ -9,8 +9,11 @@ import { armMissingReminderAlarms, handleReminderFire } from '@cuewise/app/remin
 import {
   describeThrown,
   getStorage,
+  isDailyTargetMet,
   logger,
+  nextReminderDueDate,
   type Reminder,
+  recordReminderDone,
   reminderAlarmId,
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
@@ -264,6 +267,39 @@ notifier.onAction(async (notificationId, buttonIndex) => {
         });
       } else if (reminder) {
         await recordReminderActivity({ event: 'done', ...activitySubject(reminder) });
+      }
+    } else if (action.type === 'count') {
+      const now = new Date();
+      // Counted against the stored copy, inside the write: a pull may have moved it meanwhile.
+      const counted: { reminder: Reminder | null } = { reminder: null };
+      const { result } = await updateReminders((current) =>
+        current.map((r) => {
+          if (r.id !== reminderId) {
+            return r;
+          }
+          const done = recordReminderDone(r, now);
+          // The fire already armed the next nudge; only a met target moves it to tomorrow.
+          counted.reminder = isDailyTargetMet(done, now)
+            ? { ...done, dueDate: nextReminderDueDate(done, now).toISOString() }
+            : done;
+          return counted.reminder;
+        })
+      );
+      if (result?.success === false) {
+        logger.error('Could not persist the counted reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'done: not persisted',
+        });
+      } else if (counted.reminder !== null) {
+        if (isDailyTargetMet(counted.reminder, now)) {
+          await scheduler.scheduleAt(
+            reminderAlarmId(reminderId),
+            new Date(counted.reminder.dueDate)
+          );
+        }
+        await recordReminderActivity({ event: 'done', ...activitySubject(counted.reminder) });
       }
     } else if (action.type === 'snooze') {
       const { result } = await updateReminders((current) =>
