@@ -1,4 +1,9 @@
-import { formatDateString, logger, type Reminder as SharedReminder } from '@cuewise/shared';
+import {
+  configurePlatform,
+  formatDateString,
+  logger,
+  type Reminder as SharedReminder,
+} from '@cuewise/shared';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -425,6 +430,52 @@ describe('background: notification action buttons', () => {
         count: 1,
       });
     });
+  });
+
+  it('leaves the armed nudge alone when a Done stays under the daily target', async () => {
+    const reminder = water(8);
+    getRemindersMock.mockResolvedValue([reminder]);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith(expect.objectContaining({ event: 'done' }));
+    });
+    const saved = setRemindersMock.mock.calls[0][0] as Reminder[];
+    expect(saved.find((r) => r.id === 'water')?.dueDate).toBe(reminder.dueDate);
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
+  });
+
+  it('marks a counted Done for sync', async () => {
+    const sink = { markMutated: vi.fn(), markDeleted: vi.fn() };
+    configurePlatform({ syncSink: sink });
+    getRemindersMock.mockResolvedValue([water(8)]);
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(sink.markMutated).toHaveBeenCalledWith('reminders', 'water');
+    });
+  });
+
+  it('does not arm tomorrow’s wake when the counted Done did not persist', async () => {
+    getRemindersMock.mockResolvedValue([water(1)]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    fireButton('reminder-water', 0);
+
+    await vi.waitFor(() => {
+      expect(recordActivityMock).toHaveBeenCalledWith({
+        event: 'failed',
+        reminderId: 'water',
+        text: 'Drink water',
+        detail: 'done: not persisted',
+      });
+    });
+    expect(chromeMock.alarms.create).not.toHaveBeenCalled();
   });
 
   it('re-arms for tomorrow’s window once a Done meets the daily target', async () => {

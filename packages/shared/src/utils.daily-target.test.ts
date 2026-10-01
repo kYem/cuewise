@@ -105,6 +105,32 @@ describe('a met target on a window that crosses midnight', () => {
   });
 });
 
+describe('a daily target on a window that crosses midnight', () => {
+  const lateNight = (doneToday?: Reminder['doneToday']) =>
+    baseReminder({
+      dueDate: at(23).toISOString(),
+      recurring: {
+        frequency: 'interval',
+        intervalMinutes: 60,
+        activeHours: { start: '22:00', end: '02:00' },
+        dailyTarget: 2,
+      },
+      doneToday,
+    });
+
+  it('counts a Done after midnight toward the night the window opened', () => {
+    const counted = recordReminderDone(lateNight({ date: '2026-10-05', count: 1 }), at(1, 0, 6));
+
+    expect(counted.doneToday).toEqual({ date: '2026-10-05', count: 2 });
+  });
+
+  it('waits for that evening’s opening once the target is met after midnight', () => {
+    expect(nextReminderDueDate(lateNight({ date: '2026-10-05', count: 2 }), at(1, 0, 6))).toEqual(
+      at(22, 0, 6)
+    );
+  });
+});
+
 describe('the Drink Water template', () => {
   it('aims for eight a day', () => {
     expect(REMINDER_TEMPLATES.find((t) => t.id === 'water')?.dailyTarget).toBe(8);

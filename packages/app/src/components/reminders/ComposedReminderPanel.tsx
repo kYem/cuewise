@@ -48,11 +48,6 @@ interface HabitPillProps {
   onPauseToggle: (id: string, paused: boolean) => void;
 }
 
-/**
- * Ambient habit chip: a category dot/text/cadence pill that is tap-to-mark-done
- * when active, shows a pulsing check while nudging, and resumes on tap when
- * paused. Ported from the design `HabitPill`.
- */
 // Today's progress toward a daily target, else the interval. Only interval reminders get here.
 function habitCadence(reminder: Reminder): string {
   if (reminder.recurring?.frequency !== 'interval') {
@@ -65,6 +60,11 @@ function habitCadence(reminder: Reminder): string {
   return `${doneCountToday(reminder, new Date())}/${target}`;
 }
 
+/**
+ * Ambient habit chip: a category dot/text/cadence pill that is tap-to-mark-done
+ * when active, shows a pulsing check while nudging, and resumes on tap when
+ * paused. Ported from the design `HabitPill`.
+ */
 function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps) {
   const [hover, setHover] = useState(false);
   // Brief tick confirmation after a tap — acking just re-anchors the timer, so

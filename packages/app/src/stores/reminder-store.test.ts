@@ -184,6 +184,40 @@ describe('toggleReminder on a reminder with a daily target', () => {
     });
   });
 
+  it('keeps a met target quiet when the reminder is edited the same day', async () => {
+    const met = { ...water(1), doneToday: { date: formatDateString(new Date()), count: 1 } };
+    useReminderStore.setState({ reminders: [met] });
+    const now = new Date();
+    const tomorrowOpening = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0);
+
+    await useReminderStore.getState().updateReminder('water', {
+      text: 'Drink more water',
+      dueDate: new Date(now.getTime() + 60 * 60_000).toISOString(),
+    });
+
+    expect(useReminderStore.getState().reminders[0].dueDate).toBe(tomorrowOpening.toISOString());
+    expect(fakeScheduler.scheduleAt).toHaveBeenCalledWith('reminder-water', tomorrowOpening);
+  });
+
+  it('counts an early skip and defers to tomorrow once it meets the target', async () => {
+    const upcoming = { ...water(1), dueDate: new Date(Date.now() + 30 * 60_000).toISOString() };
+    useReminderStore.setState({ reminders: [upcoming] });
+    const now = new Date();
+    const tomorrowOpening = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0);
+
+    await useReminderStore.getState().toggleReminder('water');
+
+    expect(useReminderStore.getState().reminders[0].dueDate).toBe(tomorrowOpening.toISOString());
+  });
+
+  it('keeps nudging on its interval while the Done stays under the target', async () => {
+    useReminderStore.setState({ reminders: [water(8)] });
+
+    await useReminderStore.getState().toggleReminder('water');
+
+    expect(toastSuccess).toHaveBeenCalledWith('Recurring reminder advanced to next occurrence');
+  });
+
   it('stays quiet until tomorrow’s window once the Done meets the target', async () => {
     useReminderStore.setState({ reminders: [water(1)] });
     const now = new Date();

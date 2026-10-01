@@ -441,14 +441,24 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       // Honor the persist result before committing state or updating the alarm.
-      const applied = { found: false };
+      const applied: { found: boolean; dueDate: string | undefined } = {
+        found: false,
+        dueDate: updates.dueDate,
+      };
+      const now = new Date();
       const { result, reminders: updatedReminders } = await updateReminders((current) =>
         current.map((reminder) => {
           if (reminder.id !== reminderId) {
             return reminder;
           }
           applied.found = true;
-          return { ...reminder, ...updates };
+          const edited = { ...reminder, ...updates };
+          // A form re-times every interval edit; one whose target is met today stays quiet.
+          if (updates.dueDate !== undefined && isDailyTargetMet(edited, now)) {
+            applied.dueDate = nextReminderDueDate(edited, now).toISOString();
+            return { ...edited, dueDate: applied.dueDate };
+          }
+          return edited;
         })
       );
       if (result?.success === false) {
@@ -470,12 +480,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       notifyMutated('reminders', reminderId);
 
       // Update alarm if dueDate changed
-      if (updates.dueDate) {
+      if (applied.dueDate) {
         await clearReminderAlarm(reminderId);
         // Don't re-arm a paused reminder. It is necessarily present — the write matched it.
         const updatedReminder = updatedReminders.find((r) => r.id === reminderId);
         if (updatedReminder?.paused !== true) {
-          await armReminderAlarm(reminderId, new Date(updates.dueDate).getTime());
+          await armReminderAlarm(reminderId, new Date(applied.dueDate).getTime());
         }
       }
 

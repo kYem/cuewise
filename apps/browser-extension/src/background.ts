@@ -12,6 +12,7 @@ import {
   isDailyTargetMet,
   logger,
   nextReminderDueDate,
+  notifyMutated,
   type Reminder,
   recordReminderDone,
   reminderAlarmId,
@@ -180,8 +181,8 @@ if (syncApiBaseUrl) {
 
   // ENG-45 option B: the page realm relays its store mutations here (this
   // service-worker realm is the single sync owner) instead of holding its own
-  // SyncEngine. The SW's own self-registered sink (from createSyncEngine) is
-  // unused here but harmless — nothing in this realm calls notifyMutated etc.
+  // SyncEngine. Writes made in this realm itself (captures, notification Done counts) reach the
+  // SW's own sink, which createSyncEngine registered.
   chrome.runtime.onMessage.addListener((msg) => {
     handleSyncMessage(syncEngine, msg);
   });
@@ -293,6 +294,7 @@ notifier.onAction(async (notificationId, buttonIndex) => {
           detail: 'done: not persisted',
         });
       } else if (counted.reminder !== null) {
+        notifyMutated('reminders', reminderId);
         if (isDailyTargetMet(counted.reminder, now)) {
           await scheduler.scheduleAt(
             reminderAlarmId(reminderId),

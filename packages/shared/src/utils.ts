@@ -2076,7 +2076,7 @@ export function reminderIdFromAlarm(alarmId: string): string | null {
 export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const recurring = reminder.recurring;
   if (recurring?.frequency === 'interval' && isDailyTargetMet(reminder, now)) {
-    return afterTodaysTarget(recurring.activeHours, now);
+    return afterTodaysTarget(reminder, now);
   }
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
@@ -2110,7 +2110,7 @@ export function skipReminderOccurrence(reminder: Reminder, now: Date = new Date(
   const recurring = reminder.recurring;
   const next = new Date(reminder.dueDate);
   if (recurring?.frequency === 'interval' && isDailyTargetMet(reminder, now)) {
-    return afterTodaysTarget(recurring.activeHours, now);
+    return afterTodaysTarget(reminder, now);
   }
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
@@ -2129,10 +2129,29 @@ function dailyTargetOf(reminder: Reminder): number | undefined {
   return recurring.dailyTarget >= 1 ? recurring.dailyTarget : undefined;
 }
 
+/**
+ * The day a daily target counts toward: the date the current window opened. The small hours of a
+ * window that crosses midnight still belong to the evening before.
+ */
+function targetDayOf(reminder: Reminder, now: Date): Date {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const recurring = reminder.recurring;
+  if (recurring?.frequency !== 'interval' || recurring.activeHours === undefined) {
+    return today;
+  }
+  const start = minutesOfDay(recurring.activeHours.start);
+  const end = minutesOfDay(recurring.activeHours.end);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (end <= start && nowMinutes < end) {
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  }
+  return today;
+}
+
 /** How many times the reminder was marked done today; a count from an earlier day is zero. */
 export function doneCountToday(reminder: Reminder, now: Date): number {
   const done = reminder.doneToday;
-  if (done === undefined || done.date !== formatDateString(now)) {
+  if (done === undefined || done.date !== formatDateString(targetDayOf(reminder, now))) {
     return 0;
   }
   return done.count;
@@ -2149,15 +2168,25 @@ export function recordReminderDone(reminder: Reminder, now: Date): Reminder {
     return reminder;
   }
   const count = doneCountToday(reminder, now) + 1;
-  return { ...reminder, doneToday: { date: formatDateString(now), count } };
+  return { ...reminder, doneToday: { date: formatDateString(targetDayOf(reminder, now)), count } };
 }
 
-// From tomorrow's opening, not midnight: a window that crosses midnight is still today's at 00:00.
-function afterTodaysTarget(activeHours: ReminderActiveHours | undefined, now: Date): Date {
-  const window = activeHours ?? DEFAULT_REMINDER_ACTIVE_HOURS;
-  const [hours, minutes] = window.start.split(':').map(Number);
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hours, minutes);
-  return fitToActiveHours(tomorrow, window);
+/** The opening of the window after the one the target was met in. */
+function afterTodaysTarget(reminder: Reminder, now: Date): Date {
+  const recurring = reminder.recurring;
+  const window =
+    recurring?.frequency === 'interval' && recurring.activeHours !== undefined
+      ? recurring.activeHours
+      : DEFAULT_REMINDER_ACTIVE_HOURS;
+  const day = targetDayOf(reminder, now);
+  const next = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate() + 1,
+    0,
+    minutesOfDay(window.start)
+  );
+  return fitToActiveHours(next, window);
 }
 
 /**
