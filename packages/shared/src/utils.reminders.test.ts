@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { baseReminder } from './__fixtures__/reminders.fixtures';
 import {
+  DEFAULT_REMINDER_ACTIVE_HOURS,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
   REMINDER_INTERVAL_MAX,
   REMINDER_INTERVAL_MIN,
@@ -191,6 +192,22 @@ describe('REMINDER_TEMPLATES move preset', () => {
     expect(move?.frequency).toBe('interval');
     expect(move?.intervalMinutes).toBe(30);
     expect(move?.category).toBe('health');
+  });
+
+  it('keeps the movement template to the default active hours', () => {
+    const move = REMINDER_TEMPLATES.find((t) => t.id === 'move');
+    expect(move?.activeHours).toEqual(DEFAULT_REMINDER_ACTIVE_HOURS);
+  });
+});
+
+describe('REMINDER_TEMPLATES water preset', () => {
+  it('nudges hourly within the default active hours', () => {
+    const water = REMINDER_TEMPLATES.find((t) => t.id === 'water');
+    expect(water).toMatchObject({
+      frequency: 'interval',
+      intervalMinutes: 60,
+      activeHours: DEFAULT_REMINDER_ACTIVE_HOURS,
+    });
   });
 });
 

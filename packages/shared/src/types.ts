@@ -85,11 +85,21 @@ export type ReminderCategory = 'health' | 'productivity' | 'personal';
 // Reminder frequency for recurring reminders and templates
 export type ReminderFrequency = 'daily' | 'weekly' | 'monthly' | 'interval';
 
+/**
+ * The daily window an interval reminder may fire in, local `HH:MM`. An `end` at or before
+ * `start` crosses midnight and counts toward the day it opened. `days`: 0 = Sunday; none = all.
+ */
+export interface ReminderActiveHours {
+  start: string;
+  end: string;
+  days?: number[];
+}
+
 // Recurrence cadence. The union ties intervalMinutes to the 'interval' arm: an
 // interval cadence always carries it; calendar cadences never do.
 export type ReminderRecurrence =
   | { frequency: 'daily' | 'weekly' | 'monthly' }
-  | { frequency: 'interval'; intervalMinutes: number };
+  | { frequency: 'interval'; intervalMinutes: number; activeHours?: ReminderActiveHours };
 
 // Reminder interface
 export interface Reminder {
@@ -114,6 +124,7 @@ export interface ReminderTemplate {
   frequency: ReminderFrequency;
   category: ReminderCategory;
   intervalMinutes?: number; // for 'interval' templates
+  activeHours?: ReminderActiveHours;
 }
 
 // Pomodoro session interface

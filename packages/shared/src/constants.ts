@@ -4,6 +4,7 @@ import type {
   FocusImageCategory,
   LayoutDensity,
   QuoteCategory,
+  ReminderActiveHours,
   ReminderCategory,
   ReminderTemplate,
   Settings,
@@ -343,6 +344,9 @@ export const REMINDER_CATEGORY_META: Record<ReminderCategory, { color: string }>
   personal: { color: '#c4b5fd' },
 };
 
+/** The window a new interval reminder is kept to unless the user widens it. */
+export const DEFAULT_REMINDER_ACTIVE_HOURS: ReminderActiveHours = { start: '09:00', end: '18:00' };
+
 // Built-in reminder templates for quick creation
 export const REMINDER_TEMPLATES: ReminderTemplate[] = [
   // Health & Wellness
@@ -354,14 +358,17 @@ export const REMINDER_TEMPLATES: ReminderTemplate[] = [
     frequency: 'interval',
     category: 'health',
     intervalMinutes: 30,
+    activeHours: DEFAULT_REMINDER_ACTIVE_HOURS,
   },
   {
     id: 'water',
     name: 'Drink Water',
     text: 'Time to drink water',
     defaultTime: '10:00',
-    frequency: 'daily',
+    frequency: 'interval',
     category: 'health',
+    intervalMinutes: 60,
+    activeHours: DEFAULT_REMINDER_ACTIVE_HOURS,
   },
   {
     id: 'stretch',

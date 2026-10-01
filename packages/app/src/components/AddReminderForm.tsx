@@ -1,4 +1,5 @@
 import {
+  buildReminderRecurring,
   clampIntervalMinutes,
   createScheduledDate,
   DEFAULT_REMINDER_INTERVAL_MINUTES,
@@ -35,8 +36,8 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
       try {
         const created = await addReminder(
           template.text,
-          intervalDueDateFromNow(minutes),
-          { frequency: 'interval', intervalMinutes: minutes },
+          intervalDueDateFromNow(minutes, template.activeHours),
+          buildReminderRecurring(true, 'interval', minutes, template.activeHours),
           template.category
         );
         // Store already toasts the error on a failed write; only confirm on success.

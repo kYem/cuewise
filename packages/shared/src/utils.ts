@@ -52,6 +52,7 @@ import type {
   Quote,
   QuoteCategory,
   Reminder,
+  ReminderActiveHours,
   ReminderFrequency,
   Settings,
   Subtask,
@@ -1958,9 +1959,84 @@ export function formatCompactInterval(minutes: number): string {
   return `${hours}h ${mins}m`;
 }
 
-/** A Date `minutes` from now — the fire-time anchor for interval cadences. */
-export function intervalDueDateFromNow(minutes: number): Date {
-  return new Date(Date.now() + minutes * 60_000);
+/** A Date `minutes` from now — the fire-time anchor for interval cadences — moved into its window. */
+export function intervalDueDateFromNow(minutes: number, activeHours?: ReminderActiveHours): Date {
+  return fitToActiveHours(new Date(Date.now() + minutes * 60_000), activeHours);
+}
+
+function minutesOfDay(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/** Length of the window in minutes; an end at or before the start runs past midnight. */
+function activeSpanMinutes(activeHours: ReminderActiveHours): number {
+  const span = minutesOfDay(activeHours.end) - minutesOfDay(activeHours.start);
+  return span > 0 ? span : span + 24 * 60;
+}
+
+function isActiveDay(day: Date, activeHours: ReminderActiveHours): boolean {
+  const days = activeHours.days;
+  if (days === undefined || days.length === 0) {
+    return true;
+  }
+  return days.includes(day.getDay());
+}
+
+// The most of a fire's own lateness that may carry its successor past the window's close.
+const ACTIVE_HOURS_LATENESS_CAP_MS = 5 * 60_000;
+
+/**
+ * `candidate` if it falls inside an active window (both ends included, the close extended by
+ * `lateToleranceMs`), else the next window's opening. Nine windows are searched from the day before.
+ */
+export function fitToActiveHours(
+  candidate: Date,
+  activeHours?: ReminderActiveHours,
+  lateToleranceMs = 0
+): Date {
+  if (activeHours === undefined) {
+    return candidate;
+  }
+  const startMinutes = minutesOfDay(activeHours.start);
+  const span = activeSpanMinutes(activeHours);
+  for (let offset = -1; offset <= 7; offset += 1) {
+    const day = new Date(
+      candidate.getFullYear(),
+      candidate.getMonth(),
+      candidate.getDate() + offset
+    );
+    if (!isActiveDay(day, activeHours)) {
+      continue;
+    }
+    const open = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, startMinutes);
+    const close = new Date(
+      day.getFullYear(),
+      day.getMonth(),
+      day.getDate(),
+      0,
+      startMinutes + span
+    );
+    if (candidate >= open && candidate.getTime() <= close.getTime() + lateToleranceMs) {
+      return candidate;
+    }
+    if (open > candidate) {
+      return open;
+    }
+  }
+  // Only a day list naming no weekday, or an unparseable time, gets here: firing beats never firing.
+  return candidate;
+}
+
+/** How many fires an interval lands inside one window, counting its opening once. */
+export function firesPerActiveDay(
+  intervalMinutes: number,
+  activeHours: ReminderActiveHours
+): number {
+  const span = activeSpanMinutes(activeHours);
+  const fits = Math.floor(span / clampIntervalMinutes(intervalMinutes));
+  // A whole-day window's close is the next opening, so it is not a fire of its own.
+  return span === 24 * 60 ? fits : fits + 1;
 }
 
 /** Advance a Date by one calendar cadence in place (daily / weekly / monthly). */
@@ -2000,7 +2076,16 @@ export function nextReminderDueDate(reminder: Reminder, now: Date): Date {
   const recurring = reminder.recurring;
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
-    return new Date(now.getTime() + minutes * 60_000);
+    // A late fire pushes its successor late too; only that lateness may run past the close.
+    const lateness = now.getTime() - new Date(reminder.dueDate).getTime();
+    const tolerance = Number.isFinite(lateness)
+      ? Math.min(ACTIVE_HOURS_LATENESS_CAP_MS, Math.max(0, lateness))
+      : 0;
+    return fitToActiveHours(
+      new Date(now.getTime() + minutes * 60_000),
+      recurring.activeHours,
+      tolerance
+    );
   }
 
   const frequency = recurring?.frequency;
@@ -2023,7 +2108,7 @@ export function skipReminderOccurrence(reminder: Reminder): Date {
   if (recurring?.frequency === 'interval') {
     const minutes = clampIntervalMinutes(recurring.intervalMinutes);
     next.setTime(next.getTime() + minutes * 60_000);
-    return next;
+    return fitToActiveHours(next, recurring.activeHours);
   }
   advanceCalendarDate(next, recurring?.frequency);
   return next;
@@ -2050,13 +2135,17 @@ export function isUpcomingRecurringOccurrence(reminder: Reminder, now: Date): bo
 export function buildReminderRecurring(
   isRecurring: boolean,
   frequency: ReminderFrequency,
-  clampedIntervalMinutes: number
+  clampedIntervalMinutes: number,
+  activeHours?: ReminderActiveHours
 ): Reminder['recurring'] {
   if (!isRecurring) {
     return undefined;
   }
   if (frequency === 'interval') {
-    return { frequency, intervalMinutes: clampedIntervalMinutes };
+    if (activeHours === undefined) {
+      return { frequency, intervalMinutes: clampedIntervalMinutes };
+    }
+    return { frequency, intervalMinutes: clampedIntervalMinutes, activeHours };
   }
   return { frequency };
 }
