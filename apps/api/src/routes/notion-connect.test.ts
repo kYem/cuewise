@@ -1383,17 +1383,25 @@ describe('PUT /v1/integrations/notion/selection', () => {
     });
   });
 
-  it.each([
-    ['a name that is not a string', 42],
-    ['a name longer than 200 characters', 'x'.repeat(201)],
-  ])('refuses %s before calling Notion', async (_label, name) => {
+  it('refuses a name that is not a string, before calling Notion', async () => {
     const { headers } = await connectedNotionUser({ dataSourceId: null });
     const client = stubNotionClient();
 
-    const res = await select(headers, TEST_DATA_SOURCE_ID, client, name);
+    const res = await select(headers, TEST_DATA_SOURCE_ID, client, 42);
 
     expect(res.status).toBe(400);
     expect(client.getPropertySchemas).not.toHaveBeenCalled();
+  });
+
+  it('cuts a name longer than 200 characters rather than refusing the table', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await select(headers, TEST_DATA_SOURCE_ID, undefined, 'x'.repeat(250));
+
+    expect(res.status).toBe(200);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceName: 'x'.repeat(200),
+    });
   });
 
   it('401s without a session', async () => {

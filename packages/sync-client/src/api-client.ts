@@ -34,13 +34,13 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Reads `seq` off whatever the reply held: a null or primitive entry must answer invalid_response,
-// not throw a TypeError the engine would then blame on this device.
 /** A missing Notion grant is a state the settings UI branches on, never an error. */
 function isNotionNotConnected(err: unknown): boolean {
   return err instanceof ApiError && err.code === 'provider_not_connected';
 }
 
+// Reads `seq` off whatever the reply held: a null or primitive entry must answer invalid_response,
+// not throw a TypeError the engine would then blame on this device.
 function namesSeq(record: unknown): boolean {
   if (record === null || typeof record !== 'object') {
     return false;

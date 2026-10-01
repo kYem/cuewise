@@ -1,10 +1,6 @@
 import type { NotionHost } from '@cuewise/app';
-import { getStorage, logger } from '@cuewise/shared';
+import { describeThrown, getStorage, logger } from '@cuewise/shared';
 import { ApiClient, SessionManager } from '@cuewise/sync-client';
-
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * The page realm's own client, over the session the worker's sync engine keeps in storage. It never
@@ -24,7 +20,7 @@ export function createChromeNotionHost(baseUrl: string): NotionHost {
         granted = await chrome.permissions.request({ permissions: ['identity'] });
       } catch (error) {
         logger.warn(
-          `Failed to request the identity permission for Notion: ${describeError(error)}`,
+          `Failed to request the identity permission for Notion: ${describeThrown(error)}`,
           {
             error,
           }
@@ -41,7 +37,7 @@ export function createChromeNotionHost(baseUrl: string): NotionHost {
         return redirect ?? null;
       } catch (error) {
         // Chromium reports any window close this way, a Notion-side error page included.
-        logger.warn(`Notion consent window was closed or failed: ${describeError(error)}`, {
+        logger.warn(`Notion consent window was closed or failed: ${describeThrown(error)}`, {
           error,
         });
         return null;

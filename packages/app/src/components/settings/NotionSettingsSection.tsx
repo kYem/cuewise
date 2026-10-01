@@ -11,7 +11,12 @@ import type { SettingsSectionProps } from './settings-types';
 const LABEL = 'Notion';
 const KEYWORDS = 'integrations notion connect table database tasks disconnect';
 // Statuses with a live Cuewise session, which every Notion call rides on.
-const SIGNED_IN: ReadonlySet<SyncUiStatus> = new Set(['active', 'syncing', 'error']);
+const SIGNED_IN: ReadonlySet<SyncUiStatus> = new Set([
+  'active',
+  'syncing',
+  'error',
+  'needs_enroll',
+]);
 const BUTTON =
   'rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -59,8 +64,9 @@ const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, 
     return syncController.subscribe(setSyncStatus);
   }, [syncController]);
 
+  // A remount mid-action must not reload over it: a connect's consent window may still be open.
   useEffect(() => {
-    if (signedIn) {
+    if (signedIn && !useNotionStore.getState().busy) {
       void useNotionStore.getState().load(host);
     }
   }, [host, signedIn]);
@@ -81,7 +87,11 @@ const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, 
   }
 
   const tables = view.status === 'picking' ? view.tables : [];
-  const chosen = tables.find((table) => table.id === chosenId) ?? tables[0];
+  const currentId = view.status === 'picking' ? view.currentId : null;
+  const chosen =
+    tables.find((table) => table.id === chosenId) ??
+    tables.find((table) => table.id === currentId) ??
+    tables[0];
   const disconnectButton = (
     <button type="button" className={BUTTON} disabled={busy} onClick={() => void disconnect(host)}>
       Disconnect
@@ -154,7 +164,7 @@ const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, 
             </button>
           </>
         )}
-        {view.currentTable !== null && (
+        {view.currentId !== null && (
           <button type="button" className={BUTTON} disabled={busy} onClick={() => void load(host)}>
             Cancel
           </button>

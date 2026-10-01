@@ -29,7 +29,7 @@ function pickingTasks(): NotionView {
     workspace: 'Acme',
     tables: [tasks, notionTableFactory.build()],
     truncated: false,
-    currentTable: null,
+    currentId: null,
   };
 }
 
@@ -56,6 +56,7 @@ describe('load', () => {
     expect(useNotionStore.getState().view).toEqual({
       status: 'connected',
       workspace: 'Acme',
+      dataSourceId: connectedWithTable.dataSourceId,
       tableName: 'Tasks',
     });
     expect(host.api.listNotionTables).not.toHaveBeenCalled();
@@ -71,7 +72,7 @@ describe('load', () => {
     expect(useNotionStore.getState().view).toMatchObject({
       status: 'picking',
       truncated: true,
-      currentTable: null,
+      currentId: null,
     });
   });
 
@@ -125,6 +126,7 @@ describe('connect', () => {
     expect(useNotionStore.getState().view).toEqual({
       status: 'connected',
       workspace: 'Acme',
+      dataSourceId: tasks.id,
       tableName: 'Tasks',
     });
   });
@@ -209,6 +211,7 @@ describe('pick', () => {
     expect(useNotionStore.getState().view).toEqual({
       status: 'connected',
       workspace: 'Acme',
+      dataSourceId: tasks.id,
       tableName: 'Tasks',
     });
   });
@@ -255,7 +258,7 @@ describe('pick', () => {
 describe('changeTable', () => {
   it('opens the picker and remembers the table still stored', async () => {
     useNotionStore.setState({
-      view: { status: 'connected', workspace: 'Acme', tableName: 'Tasks' },
+      view: { status: 'connected', workspace: 'Acme', dataSourceId: tasks.id, tableName: 'Tasks' },
     });
     const host = fakeNotionHost();
 
@@ -263,7 +266,7 @@ describe('changeTable', () => {
 
     expect(useNotionStore.getState().view).toMatchObject({
       status: 'picking',
-      currentTable: 'Tasks',
+      currentId: tasks.id,
     });
   });
 });
@@ -271,7 +274,7 @@ describe('changeTable', () => {
 describe('disconnect', () => {
   it('shows disconnected once the grant is gone', async () => {
     useNotionStore.setState({
-      view: { status: 'connected', workspace: 'Acme', tableName: 'Tasks' },
+      view: { status: 'connected', workspace: 'Acme', dataSourceId: tasks.id, tableName: 'Tasks' },
     });
     const host = fakeNotionHost();
 
@@ -282,7 +285,12 @@ describe('disconnect', () => {
 
   it('keeps the connection, and says Notion is not responding, on an upstream outage', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
-    const connected: NotionView = { status: 'connected', workspace: 'Acme', tableName: 'Tasks' };
+    const connected: NotionView = {
+      status: 'connected',
+      workspace: 'Acme',
+      dataSourceId: tasks.id,
+      tableName: 'Tasks',
+    };
     useNotionStore.setState({ view: connected });
     const host = fakeNotionHost();
     host.api.disconnectNotion.mockRejectedValue(problem('upstream_unavailable'));

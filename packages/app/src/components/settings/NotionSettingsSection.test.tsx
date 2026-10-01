@@ -89,6 +89,45 @@ describe('Notion settings', () => {
     expect(inbox.id).not.toBe(projects.id);
   });
 
+  it('preselects the stored table when changing it', async () => {
+    const user = userEvent.setup();
+    const [inbox, projects] = notionTableFactory.buildList(2);
+    const host = fakeNotionHost();
+    host.api.getNotionConnection.mockResolvedValue({
+      workspace: 'Acme',
+      dataSourceId: projects.id,
+      tableName: projects.name,
+    });
+    host.api.listNotionTables.mockResolvedValue({
+      workspace: 'Acme',
+      tables: [inbox, projects],
+      truncated: false,
+    });
+    renderNotionSection(host);
+
+    await user.click(await screen.findByRole('button', { name: 'Change table' }));
+
+    expect(await screen.findByLabelText('Notion table')).toHaveValue(projects.id);
+  });
+
+  it('leaves a connect in flight alone when the section remounts', () => {
+    const host = fakeNotionHost();
+    useNotionStore.setState({ view: { status: 'connecting' }, busy: true });
+
+    renderNotionSection(host);
+
+    expect(host.api.getNotionConnection).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Connecting…' })).toBeDisabled();
+  });
+
+  it('counts a session that still needs its recovery code as signed in', async () => {
+    const host = fakeNotionHost();
+
+    renderNotionSection(host, 'needs_enroll');
+
+    expect(await screen.findByRole('button', { name: 'Connect Notion' })).toBeInTheDocument();
+  });
+
   it('disconnects, and offers to connect again', async () => {
     const user = userEvent.setup();
     const host = fakeNotionHost();

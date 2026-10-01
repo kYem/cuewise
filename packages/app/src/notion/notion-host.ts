@@ -13,10 +13,7 @@ export interface NotionApi {
 /** What a host supplies to connect Notion; only the consent window is platform-specific. */
 export interface NotionHost {
   readonly api: NotionApi;
-  /**
-   * Runs Notion's consent and answers the URL it returned to, or null when the flow did not finish
-   * (the host logs why). `start` runs after anything the user's click is needed for, such as a
-   * permission prompt, and builds the consent URL for the host's return URI.
-   */
+  /** The URL Notion's consent returned to, or null if it did not finish (the host logs why). */
+  // `start` builds the consent URL; hosts call it only after any prompt the click must reach.
   authorize(start: (returnUri: string) => Promise<string>): Promise<string | null>;
 }

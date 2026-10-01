@@ -67,7 +67,7 @@ describe('provider connections', () => {
     );
   });
 
-  it('putProviderGrant replaces the tokens but keeps the chosen table, in one statement', async () => {
+  it('putProviderGrant replaces the tokens but keeps the chosen table of the same workspace', async () => {
     await store.putProviderGrant(userId, 'notion', grant());
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds-kept',
@@ -78,20 +78,41 @@ describe('provider connections', () => {
     await store.putProviderGrant(
       userId,
       'notion',
-      grant({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed', tokenFingerprint: 'fp-2' })
+      grant({ ciphertext: 'ct-2', iv: 'iv-2', tokenFingerprint: 'fp-2' })
     );
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
       connection({
         ciphertext: 'ct-2',
         iv: 'iv-2',
-        workspace: 'Renamed',
         tokenFingerprint: 'fp-2',
         dataSourceId: 'ds-kept',
         dataSourceName: 'Kept',
         completionProperty: 'prop-kept',
       })
     );
+  });
+
+  it('putProviderGrant drops the chosen table when the reconnect lands on another workspace', async () => {
+    await store.putProviderGrant(userId, 'notion', grant());
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: 'ds-a',
+      dataSourceName: 'Tasks',
+      completionProperty: 'prop-a',
+    });
+
+    await store.putProviderGrant(
+      userId,
+      'notion',
+      grant({ workspace: 'Other', tokenFingerprint: 'fp-2' })
+    );
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      workspace: 'Other',
+      dataSourceId: null,
+      dataSourceName: null,
+      completionProperty: null,
+    });
   });
 
   it('scopes reads to the owning user, so another account cannot see the grant', async () => {

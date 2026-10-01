@@ -787,9 +787,14 @@ export class D1SyncStore implements SyncStore {
            refresh_iv = excluded.refresh_iv,
            workspace = excluded.workspace,
            token_fingerprint = excluded.token_fingerprint,
-           data_source_id = provider_tokens.data_source_id,
-           data_source_name = provider_tokens.data_source_name,
-           completion_property = provider_tokens.completion_property,
+           -- Another workspace's table id means nothing here. Compared by name, the only handle
+           -- stored: a renamed workspace costs a re-pick, never a wrong table.
+           data_source_id = CASE WHEN provider_tokens.workspace IS excluded.workspace
+             THEN provider_tokens.data_source_id END,
+           data_source_name = CASE WHEN provider_tokens.workspace IS excluded.workspace
+             THEN provider_tokens.data_source_name END,
+           completion_property = CASE WHEN provider_tokens.workspace IS excluded.workspace
+             THEN provider_tokens.completion_property END,
            renewal_started_at = NULL`
         )
         .bind(

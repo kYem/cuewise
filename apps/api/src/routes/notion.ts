@@ -52,7 +52,7 @@ import {
 } from './bounce-shared';
 
 const PROVIDER = 'notion';
-// Notion caps nothing we rely on; this bounds what a client may store as a display label.
+// A display label only: a longer title is cut, never refused, since Notion does not cap it.
 const MAX_TABLE_NAME_LENGTH = 200;
 const NOTION_AUTHORIZE_URL = 'https://api.notion.com/v1/oauth/authorize';
 /** Notion redirects here itself, so it is the one route under the prefix that carries no session. */
@@ -829,14 +829,9 @@ export function registerNotionRoutes(
       return invalidId('/dataSourceId');
     }
     const name = record === null ? undefined : record.name;
-    if (name !== undefined && (typeof name !== 'string' || name.length > MAX_TABLE_NAME_LENGTH)) {
+    if (name !== undefined && typeof name !== 'string') {
       return problem('invalid_request', {
-        errors: [
-          {
-            pointer: '/name',
-            detail: `name must be a string of at most ${MAX_TABLE_NAME_LENGTH} characters.`,
-          },
-        ],
+        errors: [{ pointer: '/name', detail: 'name must be a string.' }],
       });
     }
     const grant = await open(c.env, c.get('userId'));
@@ -853,7 +848,7 @@ export function registerNotionRoutes(
     if (property === null) {
       return problem('provider_schema_unusable');
     }
-    const trimmed = typeof name === 'string' ? name.trim() : '';
+    const trimmed = typeof name === 'string' ? name.trim().slice(0, MAX_TABLE_NAME_LENGTH) : '';
     const stored = await grant.store.setProviderSelection(grant.userId, PROVIDER, {
       dataSourceId,
       dataSourceName: trimmed === '' ? null : trimmed,

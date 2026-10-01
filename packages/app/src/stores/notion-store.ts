@@ -17,10 +17,15 @@ export type NotionView =
       workspace: string | null;
       tables: NotionTable[];
       truncated: boolean;
-      /** The table still stored while the user changes it; null on a first pick. */
-      currentTable: string | null;
+      /** The id of the table still stored while the user changes it; null on a first pick. */
+      currentId: string | null;
     }
-  | { status: 'connected'; workspace: string | null; tableName: string | null }
+  | {
+      status: 'connected';
+      workspace: string | null;
+      dataSourceId: string;
+      tableName: string | null;
+    }
   | { status: 'reauth' };
 
 interface NotionStore {
@@ -60,22 +65,22 @@ function viewForFault(error: unknown): NotionView | null {
   return null;
 }
 
-function picking(found: NotionTables, currentTable: string | null): NotionView {
+function picking(found: NotionTables, currentId: string | null): NotionView {
   return {
     status: 'picking',
     workspace: found.workspace,
     tables: found.tables,
     truncated: found.truncated,
-    currentTable,
+    currentId,
   };
 }
 
-function storedTableName(view: NotionView): string | null {
+function storedTableId(view: NotionView): string | null {
   if (view.status === 'connected') {
-    return view.tableName;
+    return view.dataSourceId;
   }
   if (view.status === 'picking') {
-    return view.currentTable;
+    return view.currentId;
   }
   return null;
 }
@@ -112,6 +117,7 @@ export const useNotionStore = create<NotionStore>((set, get) => {
             view: {
               status: 'connected',
               workspace: connection.workspace,
+              dataSourceId: connection.dataSourceId,
               tableName: connection.tableName,
             },
             busy: false,
@@ -182,7 +188,12 @@ export const useNotionStore = create<NotionStore>((set, get) => {
       try {
         await host.api.selectNotionTable(table.id, table.name);
         set({
-          view: { status: 'connected', workspace: previous.workspace, tableName: table.name },
+          view: {
+            status: 'connected',
+            workspace: previous.workspace,
+            dataSourceId: table.id,
+            tableName: table.name,
+          },
           busy: false,
         });
       } catch (error) {
@@ -208,7 +219,7 @@ export const useNotionStore = create<NotionStore>((set, get) => {
       set({ busy: true });
       try {
         const found = await host.api.listNotionTables();
-        set({ view: picking(found, storedTableName(previous)), busy: false });
+        set({ view: picking(found, storedTableId(previous)), busy: false });
       } catch (error) {
         fail(error, "Couldn't list your Notion tables.", previous);
       }
