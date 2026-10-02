@@ -106,6 +106,23 @@ describe('ComposedReminderPanel', () => {
     expect(screen.getByRole('button', { name: 'Mark Drink water done' })).toHaveTextContent('3/8');
   });
 
+  it('shows a met daily target as a tick with the count, not a fraction', () => {
+    const habit = reminderFactory.build({
+      id: 'water',
+      text: 'Drink water',
+      category: 'health',
+      dueDate: new Date(Date.now() + HOUR_MS).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 8 },
+      doneToday: { date: '2026-06-15', count: 9 },
+    });
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    const pill = screen.getByRole('button', { name: 'Mark Drink water done' });
+    expect(pill).toHaveTextContent('✓ 9');
+    expect(pill).not.toHaveTextContent('9/8');
+  });
+
   it('switches layout via the in-header view switcher', () => {
     const { habit } = buildMixedReminders();
     const onChange = vi.fn();
