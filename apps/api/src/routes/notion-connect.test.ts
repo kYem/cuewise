@@ -250,6 +250,39 @@ describe('GET /v1/integrations/notion/callback', () => {
     expect(await res.text()).toContain('code=');
   });
 
+  it('answers an https return URI with a bare 302, which launchWebAuthFlow catches', async () => {
+    const extensionReturn = 'https://ext.chromiumapp.org/notion';
+    const state = await signedState(extensionReturn);
+
+    const res = await app().request(
+      callbackUrl(state),
+      {},
+      notionEnv({ ALLOWED_RETURN_URIS: `cuewise://auth,${extensionReturn}` })
+    );
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    const location = new URL(res.headers.get('Location') ?? '');
+    expect(location.origin + location.pathname).toBe(extensionReturn);
+    expect(location.searchParams.get('code')).not.toBeNull();
+  });
+
+  it('carries an error back to an https return URI as a 302 too', async () => {
+    const extensionReturn = 'https://ext.chromiumapp.org/notion';
+    const state = await signedState(extensionReturn);
+
+    const res = await app().request(
+      callbackUrl(state, { error: 'access_denied' }),
+      {},
+      notionEnv({ ALLOWED_RETURN_URIS: extensionReturn })
+    );
+
+    expect(res.status).toBe(302);
+    expect(new URL(res.headers.get('Location') ?? '').searchParams.get('error')).toBe(
+      'access_denied'
+    );
+  });
+
   it('relays a redirect with neither code nor error as ours, and logs it', async () => {
     const warnSpy = spyOnLoggerWarn();
     const state = await signedState();
@@ -808,6 +841,7 @@ describe('POST /v1/integrations/notion/claim', () => {
     const code = await parkedCode();
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: TEST_DATA_SOURCE_ID,
+      dataSourceName: null,
       completionProperty: JSON.stringify(checkboxCompletion),
     });
 
@@ -1260,18 +1294,115 @@ describe('GET /v1/integrations/notion/tables', () => {
   });
 });
 
+describe('GET /v1/integrations/notion', () => {
+  function status(headers: Record<string, string> = {}, client = stubNotionClient()) {
+    return app(client).request('/v1/integrations/notion', { headers }, notionEnv());
+  }
+
+  it('401s without a session', async () => {
+    const res = await status();
+
+    expect(res.status).toBe(401);
+  });
+
+  it('answers provider_not_connected when the account holds no grant', async () => {
+    const { headers } = await signedInWithoutNotion();
+
+    const res = await status(headers);
+    const body = (await res.json()) as { code: string };
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe('provider_not_connected');
+  });
+
+  it('answers the workspace with no table before one is picked', async () => {
+    const { headers } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await status(headers);
+
+    await expect(res.json()).resolves.toEqual({
+      workspace: 'Acme',
+      dataSourceId: null,
+      tableName: null,
+    });
+  });
+
+  it('answers the picked table and its name without calling Notion', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: TEST_DATA_SOURCE_ID,
+      dataSourceName: 'Tasks',
+      completionProperty: JSON.stringify(checkboxCompletion),
+    });
+    const client = stubNotionClient();
+
+    const res = await status(headers, client);
+
+    await expect(res.json()).resolves.toEqual({
+      workspace: 'Acme',
+      dataSourceId: TEST_DATA_SOURCE_ID,
+      tableName: 'Tasks',
+    });
+    expect(client.getPropertySchemas).not.toHaveBeenCalled();
+    expect(client.searchDataSources).not.toHaveBeenCalled();
+  });
+});
+
 describe('PUT /v1/integrations/notion/selection', () => {
   function select(
     headers: Record<string, string>,
     dataSourceId: unknown,
-    client?: ReturnType<typeof stubNotionClient>
+    client?: ReturnType<typeof stubNotionClient>,
+    name?: unknown
   ) {
     return app(client).request(
       '/v1/integrations/notion/selection',
-      { method: 'PUT', headers, body: JSON.stringify({ dataSourceId }) },
+      { method: 'PUT', headers, body: JSON.stringify({ dataSourceId, name }) },
       notionEnv()
     );
   }
+
+  it('stores the name the picker showed, trimmed', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await select(headers, TEST_DATA_SOURCE_ID, undefined, '  Tasks  ');
+
+    expect(res.status).toBe(200);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceName: 'Tasks',
+    });
+  });
+
+  it('stores no name when the client sends a blank one', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+
+    await select(headers, TEST_DATA_SOURCE_ID, undefined, '   ');
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceName: null,
+    });
+  });
+
+  it('refuses a name that is not a string, before calling Notion', async () => {
+    const { headers } = await connectedNotionUser({ dataSourceId: null });
+    const client = stubNotionClient();
+
+    const res = await select(headers, TEST_DATA_SOURCE_ID, client, 42);
+
+    expect(res.status).toBe(400);
+    expect(client.getPropertySchemas).not.toHaveBeenCalled();
+  });
+
+  it('cuts a name longer than 200 characters rather than refusing the table', async () => {
+    const { headers, store, userId } = await connectedNotionUser({ dataSourceId: null });
+
+    const res = await select(headers, TEST_DATA_SOURCE_ID, undefined, 'x'.repeat(250));
+
+    expect(res.status).toBe(200);
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      dataSourceName: 'x'.repeat(200),
+    });
+  });
 
   it('401s without a session', async () => {
     const res = await app().request(

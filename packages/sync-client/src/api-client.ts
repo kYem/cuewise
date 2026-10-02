@@ -4,7 +4,7 @@ import type {
   PairingPublicKeyB64,
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
-import { logger } from '@cuewise/shared';
+import { logger, type NotionConnection, type NotionTables } from '@cuewise/shared';
 import { ApiError } from './api-error';
 import type {
   ExchangeTokenRequest,
@@ -32,6 +32,11 @@ export type { ExchangeTokenRequest };
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A missing Notion grant is a state the settings UI branches on, never an error. */
+function isNotionNotConnected(err: unknown): boolean {
+  return err instanceof ApiError && err.code === 'provider_not_connected';
 }
 
 // Reads `seq` off whatever the reply held: a null or primitive entry must answer invalid_response,
@@ -300,6 +305,74 @@ export class ApiClient {
       );
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
+        return;
+      }
+      throw err;
+    }
+  }
+
+  async getNotionConnection(): Promise<NotionConnection | null> {
+    try {
+      const res = await this.request('/v1/integrations/notion', { method: 'GET' }, { auth: true });
+      return await this.parseSuccessBody<NotionConnection>(res);
+    } catch (err) {
+      if (isNotionNotConnected(err)) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /** Answers the Notion consent URL; the state it carries names no account. */
+  async startNotion(returnUri: string, codeChallenge: string): Promise<string> {
+    const query = new URLSearchParams({ return_uri: returnUri, code_challenge: codeChallenge });
+    const res = await this.request(
+      `/v1/integrations/notion/start?${query}`,
+      { method: 'GET' },
+      { auth: true }
+    );
+    return (await this.parseSuccessBody<{ authorizeUrl: string }>(res)).authorizeUrl;
+  }
+
+  // Never retried: the server burns the code on first read, so a retry would replay a spent one.
+  async claimNotion(code: string, codeVerifier: string): Promise<void> {
+    await this.request(
+      '/v1/integrations/notion/claim',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, codeVerifier }),
+      },
+      { auth: true, retry: false }
+    );
+  }
+
+  async listNotionTables(): Promise<NotionTables> {
+    const res = await this.request(
+      '/v1/integrations/notion/tables',
+      { method: 'GET' },
+      { auth: true }
+    );
+    return this.parseSuccessBody<NotionTables>(res);
+  }
+
+  async selectNotionTable(dataSourceId: string, name: string): Promise<void> {
+    await this.request(
+      '/v1/integrations/notion/selection',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataSourceId, name }),
+      },
+      { auth: true }
+    );
+  }
+
+  async disconnectNotion(): Promise<void> {
+    try {
+      await this.request('/v1/integrations/notion', { method: 'DELETE' }, { auth: true });
+    } catch (err) {
+      if (isNotionNotConnected(err)) {
         return;
       }
       throw err;

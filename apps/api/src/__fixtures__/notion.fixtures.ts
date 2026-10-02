@@ -237,6 +237,7 @@ export async function connectedNotionUser(
   if (dataSourceId !== null) {
     await user.store.setProviderSelection(user.userId, 'notion', {
       dataSourceId,
+      dataSourceName: null,
       completionProperty: JSON.stringify(options.completion ?? checkboxCompletion),
     });
   }

@@ -1,5 +1,6 @@
 export * from './conceptCard.factory';
 export * from './goal.factory';
+export * from './notion.factory';
 export * from './pomodoro.factory';
 export * from './quote.factory';
 export * from './reminder.factory';

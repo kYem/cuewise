@@ -4,7 +4,8 @@
 // via @cuewise/shared's configurePlatform before rendering.
 export { default as App } from './App';
 export { PomodoroPipProvider } from './components/PomodoroPipProvider';
-
+// Notion (ENG-147): hosts supply the consent window; the build gate decides whether they wire it.
+export { createNotionSettingsSection } from './components/settings/NotionSettingsSection';
 // Settings-section kit for hosts that inject a platform-specific section into the
 // shared Settings modal (e.g. the macOS "Posture" section).
 export {
@@ -16,6 +17,7 @@ export {
 } from './components/settings/SettingControls';
 export type { SettingsSection } from './components/settings/SettingsSections';
 export type { SettingsSectionProps } from './components/settings/settings-types';
+export type { NotionApi, NotionHost } from './notion/notion-host';
 // Store + selector surface for platform hosts that project state outside the app
 // tree (e.g. the macOS menu-bar tray).
 export { useFocusModeStore } from './stores/focus-mode-store';
@@ -41,5 +43,7 @@ export {
   SyncControllerContext,
   useSyncController,
 } from './sync/sync-controller';
+export { isNotionEnabled } from './utils/notion-enabled';
+export { computeCodeChallenge, generateCodeVerifier } from './utils/pkce';
 export type { SessionType } from './utils/pomodoro-styles';
 export { getSessionLabel } from './utils/pomodoro-styles';

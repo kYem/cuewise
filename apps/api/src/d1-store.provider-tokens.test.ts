@@ -32,6 +32,7 @@ function connection(overrides: Partial<ProviderConnection> = {}): ProviderConnec
     provider: 'notion',
     ...grant(),
     dataSourceId: null,
+    dataSourceName: null,
     completionProperty: null,
     ...overrides,
   };
@@ -66,29 +67,52 @@ describe('provider connections', () => {
     );
   });
 
-  it('putProviderGrant replaces the tokens but keeps the chosen table, in one statement', async () => {
+  it('putProviderGrant replaces the tokens but keeps the chosen table of the same workspace', async () => {
     await store.putProviderGrant(userId, 'notion', grant());
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds-kept',
+      dataSourceName: 'Kept',
       completionProperty: 'prop-kept',
     });
 
     await store.putProviderGrant(
       userId,
       'notion',
-      grant({ ciphertext: 'ct-2', iv: 'iv-2', workspace: 'Renamed', tokenFingerprint: 'fp-2' })
+      grant({ ciphertext: 'ct-2', iv: 'iv-2', tokenFingerprint: 'fp-2' })
     );
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
       connection({
         ciphertext: 'ct-2',
         iv: 'iv-2',
-        workspace: 'Renamed',
         tokenFingerprint: 'fp-2',
         dataSourceId: 'ds-kept',
+        dataSourceName: 'Kept',
         completionProperty: 'prop-kept',
       })
     );
+  });
+
+  it('putProviderGrant drops the chosen table when the reconnect lands on another workspace', async () => {
+    await store.putProviderGrant(userId, 'notion', grant());
+    await store.setProviderSelection(userId, 'notion', {
+      dataSourceId: 'ds-a',
+      dataSourceName: 'Tasks',
+      completionProperty: 'prop-a',
+    });
+
+    await store.putProviderGrant(
+      userId,
+      'notion',
+      grant({ workspace: 'Other', tokenFingerprint: 'fp-2' })
+    );
+
+    await expect(store.getProviderConnection(userId, 'notion')).resolves.toMatchObject({
+      workspace: 'Other',
+      dataSourceId: null,
+      dataSourceName: null,
+      completionProperty: null,
+    });
   });
 
   it('scopes reads to the owning user, so another account cannot see the grant', async () => {
@@ -268,6 +292,7 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant(REFRESH_PAIR));
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds1',
+      dataSourceName: null,
       completionProperty: 'prop1',
     });
 
@@ -305,17 +330,27 @@ describe('provider connections', () => {
 
     await store.setProviderSelection(userId, 'notion', {
       dataSourceId: 'ds9',
+      dataSourceName: 'Tasks',
       completionProperty: 'prop9',
     });
 
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toEqual(
-      connection({ ...REFRESH_PAIR, dataSourceId: 'ds9', completionProperty: 'prop9' })
+      connection({
+        ...REFRESH_PAIR,
+        dataSourceId: 'ds9',
+        dataSourceName: 'Tasks',
+        completionProperty: 'prop9',
+      })
     );
   });
 
   it('narrow writers answer false for an account with no grant', async () => {
     await expect(
-      store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds1', completionProperty: 'p' })
+      store.setProviderSelection(userId, 'notion', {
+        dataSourceId: 'ds1',
+        dataSourceName: null,
+        completionProperty: 'p',
+      })
     ).resolves.toBe(false);
     await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(false);
 
@@ -326,7 +361,11 @@ describe('provider connections', () => {
     await store.putProviderGrant(userId, 'notion', grant());
 
     await expect(
-      store.setProviderSelection(userId, 'notion', { dataSourceId: 'ds9', completionProperty: 'p' })
+      store.setProviderSelection(userId, 'notion', {
+        dataSourceId: 'ds9',
+        dataSourceName: null,
+        completionProperty: 'p',
+      })
     ).resolves.toBe(true);
     await expect(store.updateProviderTokens(userId, 'notion', TOKENS_2, FP)).resolves.toBe(true);
   });
