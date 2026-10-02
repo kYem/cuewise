@@ -94,7 +94,10 @@ describe('load', () => {
     await useNotionStore.getState().load(host);
 
     expect(useNotionStore.getState().view).toEqual({ status: 'failed' });
-    expect(errorSpy).toHaveBeenCalledWith('Failed to read the Notion connection', thrown);
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Failed to read the Notion connection or its tables',
+      thrown
+    );
   });
 });
 
@@ -131,10 +134,13 @@ describe('connect', () => {
     });
   });
 
-  it('leaves several tables, or a truncated list of one, to the picker', async () => {
+  it.each([
+    ['several tables', tablesOf(2)],
+    ['a truncated list of one', tablesOf(1, true)],
+  ])('leaves %s to the picker', async (_label, found) => {
     const host = fakeNotionHost();
     host.api.getNotionConnection.mockResolvedValue(connectedWithoutTable);
-    host.api.listNotionTables.mockResolvedValue(tablesOf(1, true));
+    host.api.listNotionTables.mockResolvedValue(found);
 
     await useNotionStore.getState().connect(host);
 

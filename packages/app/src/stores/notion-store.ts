@@ -6,7 +6,7 @@ import { useToastStore } from './toast-store';
 
 export type NotionView =
   | { status: 'loading' }
-  /** The connection could not be read at all; the section offers a retry. */
+  /** The connection, or the tables to pick from, could not be read; the section offers a retry. */
   | { status: 'failed' }
   /** The Cuewise session is gone, and every Notion call needs one. */
   | { status: 'unavailable' }
@@ -131,7 +131,7 @@ export const useNotionStore = create<NotionStore>((set, get) => {
           set({ view: next, busy: false });
           return;
         }
-        logger.error('Failed to read the Notion connection', error);
+        logger.error('Failed to read the Notion connection or its tables', error);
         set({ view: { status: 'failed' }, busy: false });
       }
     },
