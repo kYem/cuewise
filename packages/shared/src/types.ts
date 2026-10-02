@@ -180,6 +180,9 @@ export type LayoutDensity = 'compact' | 'comfortable' | 'spacious';
 export type SettingsLogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 export type GoalViewMode = 'full' | 'compact' | 'focus';
 
+/** Which list Today's Focus shows: the user's own goals or the connected Notion table. */
+export type GoalsSource = 'cuewise' | 'notion';
+
 // Where the calendar sits relative to goals when it's shown on the new tab.
 export type NewTabCalendarPosition = 'above' | 'below';
 export type TimeFormat = '12h' | '24h';
@@ -487,6 +490,7 @@ export interface Settings {
   showCompletedGoals: boolean; // Show completed tasks in Today's Focus list (default true)
   showIncompleteGoals: boolean; // Unfinished tasks from previous days in the widget (default true)
   showUpcomingGoals: boolean; // Reveal the upcoming (due-soon) section in the widget (default false)
+  goalsSource: GoalsSource; // List shown in Today's Focus, per device (default 'cuewise')
   // Quote Display
   quoteDisplayMode: QuoteDisplayMode; // How quotes are displayed on home page (default 'bottom')
   enableQuoteAnimation: boolean; // Enable smart-ticker animation for quotes (default false)
@@ -786,6 +790,19 @@ export interface NotionTable {
 export interface NotionTables {
   workspace: string | null;
   tables: NotionTable[];
+  truncated: boolean;
+}
+
+export interface NotionItem {
+  pageId: string;
+  text: string;
+  done: boolean;
+}
+
+/** `GET /v1/integrations/notion/items`, in Notion's order; `truncated` when the read stopped short (500 rows at most). */
+export interface NotionItems {
+  workspace: string | null;
+  items: NotionItem[];
   truncated: boolean;
 }
 

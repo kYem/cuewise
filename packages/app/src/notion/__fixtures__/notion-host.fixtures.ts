@@ -1,13 +1,15 @@
-import type { NotionConnection, NotionTables } from '@cuewise/shared';
+import type { NotionConnection, NotionItem, NotionItems, NotionTables } from '@cuewise/shared';
 import { notionTableFactory } from '@cuewise/test-utils/factories';
 import { vi } from 'vitest';
 import type { NotionApi, NotionHost } from '../notion-host';
 
 export const NOTION_RETURN_URI = 'https://ext.chromiumapp.org/notion';
 
+export const TABLE_ID = '3f9a855f-8bd8-4d4c-a3a4-caf40bac8df2';
+
 export const connectedWithTable: NotionConnection = {
   workspace: 'Acme',
-  dataSourceId: '3f9a855f-8bd8-4d4c-a3a4-caf40bac8df2',
+  dataSourceId: TABLE_ID,
   tableName: 'Tasks',
 };
 
@@ -19,6 +21,10 @@ export const connectedWithoutTable: NotionConnection = {
 
 export function tablesOf(count: number, truncated = false): NotionTables {
   return { workspace: 'Acme', tables: notionTableFactory.buildList(count), truncated };
+}
+
+export function itemsOf(items: NotionItem[], truncated = false): NotionItems {
+  return { workspace: 'Acme', items, truncated };
 }
 
 /** A thrown `ApiError` as the store sees it: only its problem code matters. */
@@ -45,6 +51,8 @@ export function fakeNotionHost(
     claimNotion: vi.fn<NotionApi['claimNotion']>(async () => undefined),
     listNotionTables: vi.fn<NotionApi['listNotionTables']>(async () => tablesOf(1)),
     selectNotionTable: vi.fn<NotionApi['selectNotionTable']>(async () => undefined),
+    listNotionItems: vi.fn<NotionApi['listNotionItems']>(async () => itemsOf([])),
+    setNotionItemDone: vi.fn<NotionApi['setNotionItemDone']>(async () => undefined),
     disconnectNotion: vi.fn<NotionApi['disconnectNotion']>(async () => undefined),
   };
   return {

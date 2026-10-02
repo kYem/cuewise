@@ -1,5 +1,6 @@
 import {
   type Goal,
+  type GoalsSource,
   type GoalViewMode,
   getRecentIncompleteTasks,
   getUpcomingTasks,
@@ -24,8 +25,11 @@ import {
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useSyncSignedIn } from '../hooks/useSyncSignedIn';
+import type { NotionHost } from '../notion/notion-host';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
+import { useNotionStore } from '../stores/notion-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { resolveNewTabCalendar } from '../utils/calendar-visibility';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
@@ -34,7 +38,13 @@ import { ErrorFallback } from './ErrorFallback';
 import { GoalFocusView } from './GoalFocusView';
 import { GoalProgressRing } from './GoalProgressRing';
 import { GoalsList } from './GoalsList';
+import { NotionGoalsList } from './NotionGoalsList';
 import { StorageIndicator } from './StorageIndicator';
+
+const GOALS_SOURCES: { value: GoalsSource; label: string }[] = [
+  { value: 'cuewise', label: 'My goals' },
+  { value: 'notion', label: 'Notion' },
+];
 
 const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
   { mode: 'full', icon: List, label: 'Full' },
@@ -86,7 +96,45 @@ function MenuToggleItem({
   );
 }
 
-export const GoalsSection: React.FC = () => {
+function SourceSwitch({
+  source,
+  onChange,
+}: {
+  source: GoalsSource;
+  onChange: (source: GoalsSource) => void;
+}): React.ReactElement {
+  return (
+    <div className="flex flex-shrink-0 rounded-lg border border-border bg-surface-variant/60 p-0.5 text-xs font-medium">
+      {GOALS_SOURCES.map(({ value, label }) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={source === value}
+          onClick={() => onChange(value)}
+          className={cn(
+            'rounded-md px-2 py-1 transition-colors',
+            source === value
+              ? 'bg-surface text-primary shadow-sm'
+              : 'text-secondary hover:text-primary'
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface GoalsSectionProps {
+  /** Present where Notion is offered; the widget then lists the connected table on request. */
+  notionHost?: NotionHost;
+  onOpenIntegrations?: () => void;
+}
+
+export const GoalsSection: React.FC<GoalsSectionProps> = ({
+  notionHost,
+  onOpenIntegrations = () => undefined,
+}) => {
   // State values - use useShallow to prevent re-renders when unrelated state changes
   const { isLoading, error, todayTasks, goals } = useGoalStore(
     useShallow((state) => ({
@@ -104,6 +152,8 @@ export const GoalsSection: React.FC = () => {
   const initCalendar = useCalendarStore((state) => state.initialize);
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
+  const signedIn = useSyncSignedIn();
+  const notionView = useNotionStore((state) => state.view);
 
   const completedCount = todayTasks.filter((t) => t.completed).length;
   const totalCount = todayTasks.length;
@@ -121,6 +171,15 @@ export const GoalsSection: React.FC = () => {
   };
 
   const viewMode = settings.goalViewMode;
+  // A chosen Notion source keeps the switch even once the table goes away, so the card can say why.
+  const showSourceSwitch =
+    notionHost !== undefined &&
+    signedIn &&
+    viewMode !== 'focus' &&
+    (notionView.status === 'connected' || settings.goalsSource === 'notion');
+  const notionListHost =
+    showSourceSwitch && settings.goalsSource === 'notion' ? notionHost : undefined;
+  const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
 
   // Goals always show (with their density); the calendar is an optional add-on
   // stacked above/below. calendarFeatureEnabled gates the options-menu control;
@@ -135,6 +194,12 @@ export const GoalsSection: React.FC = () => {
     initialize();
     loadStorageInfo();
   }, [initialize]);
+
+  useEffect(() => {
+    if (notionHost !== undefined && signedIn && !useNotionStore.getState().busy) {
+      void useNotionStore.getState().load(notionHost);
+    }
+  }, [notionHost, signedIn]);
 
   // Only touch calendar state when the calendar block is actually shown.
   useEffect(() => {
@@ -172,6 +237,10 @@ export const GoalsSection: React.FC = () => {
     updateSettings({ showUpcomingGoals: !settings.showUpcomingGoals });
   };
 
+  const handleSourceChange = (goalsSource: GoalsSource) => {
+    updateSettings({ goalsSource });
+  };
+
   if (isLoading) {
     return (
       <div className="w-full max-w-[400px] mx-auto">
@@ -195,7 +264,10 @@ export const GoalsSection: React.FC = () => {
   }
 
   // Encouragement line under the title, mirroring the goals-widget design
-  const subtitle = getSubtitle(totalCount, incompleteCount);
+  const subtitle =
+    notionListHost === undefined
+      ? getSubtitle(totalCount, incompleteCount)
+      : `From Notion${notionTableName === null ? '' : ` · ${notionTableName}`}`;
 
   // Consolidated view-options menu (⚙) — view mode + show-completed / incomplete
   // / upcoming toggles (or the focus-on picker in focus mode). Used in all modes.
@@ -384,7 +456,7 @@ export const GoalsSection: React.FC = () => {
           {/* Header */}
           {viewMode === 'full' ? (
             <div className="flex items-center gap-2.5 mb-4">
-              {totalCount > 0 ? (
+              {totalCount > 0 && notionListHost === undefined ? (
                 <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
               ) : (
                 <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
@@ -393,8 +465,11 @@ export const GoalsSection: React.FC = () => {
               )}
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
-                <p className="text-xs text-secondary">{subtitle}</p>
+                <p className="text-xs text-secondary truncate">{subtitle}</p>
               </div>
+              {showSourceSwitch && (
+                <SourceSwitch source={settings.goalsSource} onChange={handleSourceChange} />
+              )}
               {optionsMenu()}
             </div>
           ) : (
@@ -403,17 +478,30 @@ export const GoalsSection: React.FC = () => {
               <h2 className="text-base font-semibold text-primary font-display flex-1">
                 Today's Focus
               </h2>
-              {totalCount > 0 && (
+              {totalCount > 0 && notionListHost === undefined && (
                 <span className="text-xs text-secondary tabular-nums">
                   {completedCount}/{totalCount}
                 </span>
+              )}
+              {showSourceSwitch && (
+                <SourceSwitch source={settings.goalsSource} onChange={handleSourceChange} />
               )}
               {optionsMenu()}
             </div>
           )}
 
+          {notionListHost !== undefined && (
+            <div className="flex-1">
+              <NotionGoalsList
+                host={notionListHost}
+                compact={viewMode === 'compact'}
+                onOpenIntegrations={onOpenIntegrations}
+              />
+            </div>
+          )}
+
           {/* Full Mode Content */}
-          {viewMode === 'full' && (
+          {viewMode === 'full' && notionListHost === undefined && (
             <>
               {/* Storage Warning - only show if warning or critical */}
               {storageUsage?.available === true &&
@@ -431,7 +519,7 @@ export const GoalsSection: React.FC = () => {
           )}
 
           {/* Compact Mode Content */}
-          {viewMode === 'compact' && (
+          {viewMode === 'compact' && notionListHost === undefined && (
             <div className="flex-1">
               <GoalsList viewMode="compact" />
             </div>

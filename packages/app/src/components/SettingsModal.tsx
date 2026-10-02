@@ -17,6 +17,8 @@ interface SettingsModalProps {
   onClose: () => void;
   /** Platform-specific sections injected by the host (e.g. the macOS "Posture" section). */
   extraSections?: SettingsSection[];
+  /** The section to land on when the modal opens; unset keeps the last one visited. */
+  initialSection?: string;
 }
 
 function SettingsSearch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -71,7 +73,12 @@ function SavedIndicator({ tick }: { tick: number }) {
   );
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, extraSections }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  extraSections,
+  initialSection,
+}) => {
   const { settings, updateSettings, resetToDefaults } = useSettingsStore();
   const reloadPomodoroSettings = usePomodoroStore((state) => state.reloadSettings);
   const openSoundsPanel = useSoundsStore((state) => state.openPanel);
@@ -122,6 +129,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, e
     openSoundsPanel();
     onClose();
   }, [openSoundsPanel, onClose]);
+
+  useEffect(() => {
+    if (isOpen && initialSection !== undefined) {
+      setActive(initialSection);
+      setQuery('');
+    }
+  }, [isOpen, initialSection]);
 
   // Close on Escape and lock body scroll while open.
   useEffect(() => {

@@ -11,6 +11,7 @@ describe('DEVICE_LOCAL_SETTINGS_KEYS', () => {
       'hasSeenOnboarding',
       'notesExpanded',
       'notesPinned',
+      'goalsSource',
     ]);
   });
 });

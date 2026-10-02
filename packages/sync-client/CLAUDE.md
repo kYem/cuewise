@@ -34,6 +34,8 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `claimNotion(code, codeVerifier)` | `POST /v1/integrations/notion/claim`, never retried | Yes |
 | `listNotionTables()` | `GET /v1/integrations/notion/tables` | Yes |
 | `selectNotionTable(dataSourceId, name)` | `PUT /v1/integrations/notion/selection` | Yes |
+| `listNotionItems()` | `GET /v1/integrations/notion/items` | Yes |
+| `setNotionItemDone(pageId, done)` | `PATCH /v1/integrations/notion/items/:pageId` | Yes |
 | `disconnectNotion()` | `DELETE /v1/integrations/notion` (not connected = done) | Yes |
 
 A record's optional `baseSeq` makes its push conditional on the server row still being at that seq, or absent (`0` matches no row, so it lands only where none exists); refused rows come back under `conflicts` with the current row. An older server's bare `{cursor}` is normalised to every record under `applied` (no `seq`) and no `conflicts`, with one warning per client; a reply carrying only one of the two arrays — or naming a record with no `seq` — is an `invalid_response`.

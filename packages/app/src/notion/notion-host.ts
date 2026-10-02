@@ -1,4 +1,4 @@
-import type { NotionConnection, NotionTables } from '@cuewise/shared';
+import type { NotionConnection, NotionItems, NotionTables } from '@cuewise/shared';
 
 /** The Notion routes of the sync API client, declared structurally so this package stays off it. */
 export interface NotionApi {
@@ -7,6 +7,8 @@ export interface NotionApi {
   claimNotion(code: string, codeVerifier: string): Promise<void>;
   listNotionTables(): Promise<NotionTables>;
   selectNotionTable(dataSourceId: string, name: string): Promise<void>;
+  listNotionItems(): Promise<NotionItems>;
+  setNotionItemDone(pageId: string, done: boolean): Promise<void>;
   disconnectNotion(): Promise<void>;
 }
 

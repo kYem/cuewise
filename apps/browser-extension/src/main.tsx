@@ -1,4 +1,4 @@
-import type { SettingsSection, SyncController } from '@cuewise/app';
+import type { NotionHost, SettingsSection, SyncController } from '@cuewise/app';
 import {
   App,
   createNotionSettingsSection,
@@ -44,6 +44,7 @@ const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
 const hasExtensionApis = typeof chrome !== 'undefined' && chrome.storage?.local !== undefined;
 let syncController: SyncController | undefined;
 let extraSections: SettingsSection[] | undefined;
+let notionHost: NotionHost | undefined;
 if (syncApiBaseUrl && hasExtensionApis) {
   configurePlatform({ syncSink: new ChromeRuntimeSyncSink() });
   // Task 11: the enable-sync UI's control seam, relaying to the SW's handleSyncControlMessage.
@@ -53,7 +54,8 @@ if (syncApiBaseUrl && hasExtensionApis) {
   });
   // Notion rides the same Cuewise session as sync, so it is offered only where sync is.
   if (isNotionEnabled()) {
-    extraSections = [createNotionSettingsSection(createChromeNotionHost(syncApiBaseUrl))];
+    notionHost = createChromeNotionHost(syncApiBaseUrl);
+    extraSections = [createNotionSettingsSection(notionHost)];
   }
 }
 
@@ -65,7 +67,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PomodoroPipProvider>
-      <App syncController={syncController} extraSections={extraSections} />
+      <App syncController={syncController} extraSections={extraSections} notionHost={notionHost} />
     </PomodoroPipProvider>
   </React.StrictMode>
 );

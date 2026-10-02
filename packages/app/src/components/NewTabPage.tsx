@@ -5,6 +5,7 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConceptNudge } from '../hooks/useConceptNudge';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
+import type { NotionHost } from '../notion/notion-host';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
@@ -35,9 +36,10 @@ import { AddWidgetChip } from './widgets/AddWidgetChip';
 interface NewTabPageProps {
   /** Platform-specific settings sections injected by the host (macOS Posture). */
   extraSections?: SettingsSection[];
+  notionHost?: NotionHost;
 }
 
-export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
+export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHost }) => {
   const initializeQuotes = useQuoteStore((state) => state.initialize);
   const refreshQuote = useQuoteStore((state) => state.refreshQuote);
   const initializeSettings = useSettingsStore((state) => state.initialize);
@@ -82,6 +84,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
   usePomodoroStorageSync();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
   const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
 
@@ -256,6 +259,12 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
 
   const handleOpenSettings = () => {
     setIsMenuOpen(false);
+    setSettingsSection(undefined);
+    setIsSettingsModalOpen(true);
+  };
+
+  const handleOpenIntegrations = () => {
+    setSettingsSection('integrations');
     setIsSettingsModalOpen(true);
   };
 
@@ -470,7 +479,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
 
           {/* Goals Section - Centered */}
           <div className="max-w-4xl mx-auto">
-            <GoalsSection />
+            <GoalsSection notionHost={notionHost} onOpenIntegrations={handleOpenIntegrations} />
           </div>
 
           {/* Concept-cards discovery nudge (engaged users with no cards yet) */}
@@ -517,6 +526,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections }) => {
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         extraSections={extraSections}
+        initialSection={settingsSection}
       />
 
       {/* Add Concept Modal */}

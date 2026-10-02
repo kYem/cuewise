@@ -99,6 +99,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showCompletedGoals: true, // Show completed tasks in Today's Focus by default
   showIncompleteGoals: true, // Unfinished tasks from previous days shown by default
   showUpcomingGoals: false, // Upcoming section collapsed by default
+  goalsSource: 'cuewise', // Own goals until the user switches to Notion
   // Quote Display
   quoteDisplayMode: 'bottom', // Show quotes below goals by default
   enableQuoteAnimation: false, // Disabled by default (can be CPU-intensive)
