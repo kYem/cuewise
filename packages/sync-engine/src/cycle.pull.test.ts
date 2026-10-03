@@ -1028,6 +1028,22 @@ describe('pullOnce', () => {
     expect(saved.seqs).toEqual({});
   });
 
+  it('keeps no seq from earlier pages when a later page is refused as ahead', async () => {
+    transport.pullRecords = await Promise.all(
+      Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
+        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
+      )
+    );
+    const getChanges = transport.getChanges.bind(transport);
+    vi.spyOn(transport, 'getChanges')
+      .mockImplementationOnce(getChanges)
+      .mockRejectedValueOnce(new ApiError('cursor_ahead', 409));
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).seqs).toEqual({});
+  });
+
   it('never lets a purge refusal replace an owed restore relist', async () => {
     await metaStore.update((meta) => {
       meta.relistOwed = 'restored';

@@ -610,6 +610,10 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
         pull.meta.cursor = 0;
         pull.cursorReset = true;
         pull.relistRaised = refusal;
+        // Earlier pages' seqs predate the restore that refused this one.
+        if (refusal === 'restored') {
+          pull.seqs.clear();
+        }
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }

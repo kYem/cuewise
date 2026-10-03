@@ -28,7 +28,7 @@ export function registerChangesRoutes(
     const userId = c.get('userId');
     const { lastSeq, purgedSeq } = await store.getSeqBounds(userId);
     // since=0 is always valid. A cursor below the watermark may have missed a purged delete, unless
-    // it pages a listing from 0, which can miss only one purged while it was mid-listing.
+    // it pages a listing from 0, which can miss only a delete purged while it was mid-listing.
     if (since > 0 && since > lastSeq) {
       return problem('cursor_ahead');
     }
