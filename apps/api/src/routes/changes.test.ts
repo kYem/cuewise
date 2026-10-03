@@ -328,6 +328,18 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
   });
 });
 
+describe('GET /v1/changes final page cursor', () => {
+  it('ends a listing at the last seq assigned, past one a refused push reserved', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+    await postChanges(app, token, { records: [record({ entityId: 'a', baseSeq: 9 })] });
+
+    const res = await getChanges(app, token, '0');
+    const { cursor } = await res.json<{ cursor: number }>();
+    expect(cursor).toBe(2);
+  });
+});
+
 describe('GET /v1/changes cursor ahead of the server', () => {
   it('returns 409 cursor_ahead for a cursor past the highest seq the server ever assigned', async () => {
     const { token } = await signedInToken();
