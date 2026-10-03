@@ -13,6 +13,8 @@ export interface SyncMeta {
   seqs: Record<string, number>; // "collection/entityId" -> highest server seq seen (push base)
   tombstones: string[]; // "collection/entityId" that are deleted
   quarantine: string[]; // "collection/entityId" that failed decrypt
+  /** Set by a refused cursor, cleared once a pull from zero has dropped what the server purged. */
+  purgeCheckOwed?: boolean;
 }
 
 export function defaultMeta(deviceNode: string): SyncMeta {

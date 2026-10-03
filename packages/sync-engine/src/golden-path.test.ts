@@ -431,6 +431,7 @@ describe('a device returning after the server purged a delete it never pulled', 
       goalFactory.build({ id: 'g2', text: 'seed' }),
     ]);
     await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    await deviceA.engine.syncNow();
     const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
 
     const deviceB = createDevice(server, makeClock(5_000_000));
@@ -442,7 +443,6 @@ describe('a device returning after the server purged a delete it never pulled', 
     await deviceB.engine.markMutated('goals', 'g2');
     await deviceB.engine.syncNow();
     server.purgeTombstones();
-    deviceA.apiClient.rejectNextGetChangesWithResync();
     return { server, deviceA };
   }
 

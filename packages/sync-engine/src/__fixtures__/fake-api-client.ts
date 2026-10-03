@@ -46,6 +46,7 @@ interface FakePairing {
  */
 export class FakeSyncServer {
   private nextSeq = 0;
+  private purgedSeq = 0;
   private nextSession = 0;
   private nextPairing = 0;
   private recoveryEnvelope: string | null = null;
@@ -109,17 +110,29 @@ export class FakeSyncServer {
 
   /** A peer deleted the entity and the cron has since reclaimed that tombstone: no row is left. */
   purgeDeletedElsewhere(collection: string, entityId: string): void {
+    // The delete took a seq of its own, and that tombstone's seq is what the watermark records.
+    this.nextSeq += 1;
+    this.purgedSeq = this.nextSeq;
     const kept = this.records.filter((r) => r.collection !== collection || r.entityId !== entityId);
     this.records.splice(0, this.records.length, ...kept);
   }
 
-  /** The daily cron reclaiming every tombstone; pair with rejectNextGetChangesWithResync. */
+  /** The daily cron reclaiming every tombstone and raising the watermark past them. */
   purgeTombstones(): void {
+    for (const row of this.records) {
+      if (row.deleted) {
+        this.purgedSeq = Math.max(this.purgedSeq, row.seq);
+      }
+    }
     const live = this.records.filter((r) => !r.deleted);
     this.records.splice(0, this.records.length, ...live);
   }
 
   getChanges(since: number): { records: SyncRecord[]; cursor: number } {
+    // Like routes/changes.ts: since=0 is always served, a cursor behind the watermark never is.
+    if (since > 0 && since < this.purgedSeq) {
+      throw new ApiError('resync_required', 409);
+    }
     // Real D1 always does `ORDER BY seq ASC` (records is upsert-per-entity, so array insertion
     // order drifts from seq order once an entity is pushed a second time) — sort to match.
     const page = this.records

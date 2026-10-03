@@ -386,7 +386,7 @@ describe('pullOnce', () => {
     expect(result).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g1' });
     const saved = await metaStore.load();
     expect(saved.seqs['goals/g1']).toBe(1);
-    expect(saved.cursor).toBe(0);
+    expect(saved.cursor).toBe(1);
     expect(saved.dirty.goals).toBeUndefined();
     errorSpy.mockRestore();
   });
@@ -481,7 +481,7 @@ describe('pullOnce', () => {
     expect(first).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g2' });
     const afterStall = await metaStore.load();
     expect(afterStall.quarantine).toEqual(['goals/g1']);
-    expect(afterStall.cursor).toBe(0);
+    expect(afterStall.cursor).toBe(1);
 
     // Without that persisted progress the wedged device re-quarantines g1 on every 5-minute wake,
     // re-toasting "a synced item couldn't be read" forever.
@@ -1009,7 +1009,15 @@ describe('pullOnce', () => {
     expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('incoming');
   });
 
-  describe('an entity a full pull from zero no longer lists', () => {
+  it('owes the purge check once the server refuses its cursor', async () => {
+    transport.rejectNextGetChangesWithResync();
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).purgeCheckOwed).toBe(true);
+  });
+
+  describe('an entity the listing after a refused cursor no longer names', () => {
     const purged = goalFactory.build({ id: 'g1', text: 'deleted elsewhere' });
     const kept = goalFactory.build({ id: 'g2', text: 'still on the server' });
 
@@ -1019,10 +1027,17 @@ describe('pullOnce', () => {
       ];
     }
 
+    async function setPurgeCheckOwed(owed: boolean): Promise<void> {
+      await metaStore.update((meta) => {
+        meta.purgeCheckOwed = owed;
+      });
+    }
+
     beforeEach(async () => {
       await setGoals([purged, kept]);
       await seedSynced(metaStore, 'goals', 'g1', 2);
       await seedSynced(metaStore, 'goals', 'g2', 3);
+      await setPurgeCheckOwed(true);
       await listOnly(kept, 3);
     });
 
@@ -1034,6 +1049,59 @@ describe('pullOnce', () => {
       expect(saved.hlcs['goals/g1']).toBeUndefined();
       expect(saved.seqs['goals/g1']).toBeUndefined();
       expect(saved.seqs['goals/g2']).toBe(3);
+    });
+
+    it('settles the owed check once the listing completes', async () => {
+      await pullOnce(makeDeps());
+
+      expect((await metaStore.load()).purgeCheckOwed).toBeUndefined();
+    });
+
+    it('lists from zero while the check is owed, whatever the cursor says', async () => {
+      await metaStore.update((meta) => {
+        meta.cursor = 3;
+      });
+
+      await pullOnce(makeDeps());
+
+      expect(transport.getChangesSinceCalls).toEqual([0]);
+      expect(await getGoals()).toEqual([kept]);
+    });
+
+    it('is kept by a pull from zero no refusal asked for, as after a database restore', async () => {
+      await setPurgeCheckOwed(false);
+
+      await pullOnce(makeDeps());
+
+      expect(await getGoals()).toEqual([purged, kept]);
+    });
+
+    it('leaves settings alone, since a settings key is never deleted', async () => {
+      await seedSynced(metaStore, 'settings', 'theme', 1);
+
+      await pullOnce(makeDeps());
+
+      expect((await metaStore.load()).seqs['settings/theme']).toBe(1);
+    });
+
+    it('stalls when a collection cannot be read, still owing the check', async () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const bindings = defaultBindings();
+      const goals = requireBinding(bindings, 'goals');
+      const readAll = goals.readAll.bind(goals);
+      vi.spyOn(goals, 'readAll')
+        .mockImplementationOnce(readAll)
+        .mockRejectedValue(new Error('boom'));
+
+      await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({
+        kind: 'stalled',
+        collection: 'goals',
+        entityId: '*',
+      });
+
+      const saved = await metaStore.load();
+      expect(saved.purgeCheckOwed).toBe(true);
+      expect(saved.cursor).toBe(0);
     });
 
     it('is kept while it has an edit waiting to push', async () => {
@@ -1095,21 +1163,17 @@ describe('pullOnce', () => {
       expect(await getGoals()).toEqual([purged, kept]);
     });
 
-    it('is kept on an incremental pull, which never lists every row', async () => {
-      const meta = await metaStore.load();
-      meta.cursor = 2;
-      await metaStore.save(meta);
-
-      await pullOnce(makeDeps());
-
-      expect(await getGoals()).toEqual([purged, kept]);
-    });
-
     it('is kept when the pull stalls before the listing ends', async () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
       const bindings = defaultBindings();
-      vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
-        storageFailure('quota exceeded')
-      );
+      const goals = requireBinding(bindings, 'goals');
+      const writeOne = goals.writeOne.bind(goals);
+      vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+        if (entityId === 'g2') {
+          return storageFailure('quota exceeded');
+        }
+        return writeOne(entityId, entity);
+      });
       await listOnly(goalFactory.build({ id: 'g2', text: 'newer' }), 3);
       const meta = await metaStore.load();
       delete meta.hlcs['goals/g2'];
@@ -1126,7 +1190,11 @@ describe('pullOnce', () => {
       vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValueOnce(
         storageFailure('quota exceeded')
       );
-      await listOnly(goalFactory.build({ id: 'g2', text: 'newer' }), 3);
+      const newer = goalFactory.build({ id: 'g2', text: 'newer' });
+      transport.pullRecords = [
+        await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: null, hlc: OLDER_HLC }, 1),
+        await sealServerRecord(dk, KEY_ID, 'goals', 'g2', { entity: newer, hlc: OLDER_HLC }, 3),
+      ];
       const meta = await metaStore.load();
       delete meta.hlcs['goals/g2'];
       await metaStore.save(meta);

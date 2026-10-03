@@ -885,11 +885,10 @@ export class SyncEngine {
     await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
-    // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
-    // cursor is this account's. Skipping the backfill does prove the ledger is, so its seqs stay:
-    // the pull from zero needs them to drop deletes purged while this device was signed out.
-    await this.resetPullCursor({ keepSeqs: !backfill });
+    // The enabled flag survives handleAuthLoss, so it cannot mean the cursor is this account's;
+    // skipping the backfill does. Kept, that cursor lets the server refuse it if it purged since.
     if (backfill) {
+      await this.resetPullCursor();
       await this.backfillDirty();
     }
     // backfillDirty wrote to the ledger disableSync had just cleared, so a disable landing across
@@ -1194,11 +1193,9 @@ export class SyncEngine {
     if (pull.kind === 'cancelled') {
       return { kind: 'cancelled' };
     }
-    // Unreachable while since=0 is never refused; if it is, nothing may push behind it.
+    // A purge landing mid-listing refuses a later page; the next wake lists from zero again.
     if (pull.kind === 'resynced') {
-      logger.error(
-        'Sync server refused a pull from zero; holding back the push until it serves one'
-      );
+      logger.warn('Sync server refused a page of the pull from zero; retrying on the next wake');
       return { kind: 'resynced' };
     }
 
@@ -1859,12 +1856,10 @@ export class SyncEngine {
 
   // Only the cursor and the per-entity seqs: widening this would drop the quarantine list too,
   // and the device would re-quarantine the same records on its next pull, re-toasting the user.
-  private async resetPullCursor({ keepSeqs = false } = {}): Promise<void> {
+  private async resetPullCursor(): Promise<void> {
     await this.meta.update((meta) => {
       meta.cursor = 0;
-      if (!keepSeqs) {
-        meta.seqs = {};
-      }
+      meta.seqs = {};
     });
   }
 
@@ -1876,6 +1871,7 @@ export class SyncEngine {
       meta.seqs = {};
       meta.tombstones = [];
       meta.quarantine = [];
+      delete meta.purgeCheckOwed;
     });
   }
 

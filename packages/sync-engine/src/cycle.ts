@@ -55,6 +55,8 @@ interface PullState {
   cursorReset: boolean;
   /** Keys deleted locally as purged, with the hlc and seq they were judged at; see dropPurged. */
   purged: Map<string, { hlc: string | undefined; seq: number }>;
+  /** What this pull learned about the ledger's `purgeCheckOwed`: raised by a refusal, or settled. */
+  purgeCheck: 'owed' | 'done' | null;
   /** This path re-pushes over what it could not read, so no host hears an item was skipped. */
   repairsQuarantined: boolean;
 }
@@ -68,6 +70,7 @@ function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
     redirtied: new Map(),
     cursorReset: false,
     purged: new Map(),
+    purgeCheck: null,
     repairsQuarantined,
   };
 }
@@ -135,6 +138,12 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
     delete fresh.hlcs[key];
     delete fresh.seqs[key];
     fresh.tombstones = withMembership(fresh.tombstones, key, false);
+  }
+  if (pull.purgeCheck === 'owed') {
+    fresh.purgeCheckOwed = true;
+  }
+  if (pull.purgeCheck === 'done') {
+    delete fresh.purgeCheckOwed;
   }
 }
 
@@ -556,6 +565,12 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
   let appliedCount = 0;
+  // Only a refusal proves the server purged past this device. A row merely missing from a pull
+  // from zero may be one a restored database lost, and deleting it here would lose the last copy.
+  const purgeOwed = pull.meta.purgeCheckOwed === true;
+  if (purgeOwed) {
+    pull.meta.cursor = 0;
+  }
   const startCursor = pull.meta.cursor;
   const appliedCollections: string[] = [];
   const listed = new Set<string>();
@@ -572,6 +587,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
         pull.meta.cursor = 0;
         pull.cursorReset = true;
+        pull.purgeCheck = 'owed';
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
@@ -589,8 +605,8 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
       if (applied === 'failed') {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it. A
-        // pull from zero restarts there instead, since dropPurged needs the whole listing at once.
-        pull.cursorReset = startCursor === 0;
+        // pull owing the purge check restarts at 0 instead: dropPurged needs the whole listing.
+        pull.cursorReset = purgeOwed;
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
@@ -603,7 +619,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
   }
 
-  if (startCursor === 0) {
+  if (purgeOwed) {
     const dropped = await dropPurged(deps, pull, listed);
     if (dropped.kind === 'cancelled') {
       return cancelledPull(appliedCount + pull.purged.size);
@@ -615,6 +631,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       }
       return dropped;
     }
+    pull.purgeCheck = 'done';
   }
   if (!(await savePullUnlessCancelled(deps, pull))) {
     return cancelledPull(appliedCount + pull.purged.size);
@@ -627,8 +644,8 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
 }
 
 /**
- * After a full listing from zero, a synced entity the server no longer holds was deleted elsewhere
- * and its tombstone purged, so it is deleted here too. A failed delete stalls like a failed write.
+ * After a refused cursor's full listing, a synced entity the server no longer holds was deleted
+ * elsewhere and its tombstone purged, so it goes here too. A failed read or delete stalls the pull.
  *
  * A dirty one is kept and pushed, re-creating it: nothing says whether its edit postdates the
  * delete (ENG-127). A seq that moved during the pull is a push acked after the listing passed it.
@@ -642,8 +659,20 @@ async function dropPurged(
   // Fresh, not the pull's snapshot: an edit made during the round trip must keep its entity.
   const fresh = await deps.meta.load();
   for (const binding of deps.bindings) {
+    // Settings keys are never deleted, so a missing one is a peer's build, not a purge.
+    if (binding.name === 'settings') {
+      continue;
+    }
     const dirty = fresh.dirty[binding.name] ?? [];
-    for (const entityId of Object.keys(await binding.readAll())) {
+    let local: Record<string, unknown>;
+    try {
+      local = await binding.readAll();
+    } catch (error) {
+      logger.error(`Sync could not read ${binding.name} to drop what the server purged`, error);
+      stalled ??= { kind: 'stalled', collection: binding.name, entityId: '*' };
+      continue;
+    }
+    for (const entityId of Object.keys(local)) {
       const key = SyncMetadataStore.entityKey(binding.name, entityId);
       const seq = fresh.seqs[key];
       const ackedMidPull = seq !== pull.meta.seqs[key];

@@ -778,9 +778,10 @@ describe('SyncEngine.enableSync', () => {
     seeded.quarantine = ['goals/g-poison'];
     seeded.tombstones = ['goals/g-deleted'];
     await metaStore.save(seeded);
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
     const getChanges = vi.spyOn(device.apiClient, 'getChanges');
 
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
 
     expect(getChanges).toHaveBeenCalledWith(0);
     const after = await metaStore.load();
@@ -790,7 +791,7 @@ describe('SyncEngine.enableSync', () => {
     expect(after.tombstones).toEqual(['goals/g-deleted']);
   });
 
-  it('discards the cursor on a re-auth too, which can land on a different account', async () => {
+  it('discards the cursor on a re-auth that lands on a different account', async () => {
     // The enabled flag cannot answer "is this cursor mine": it survives handleAuthLoss, and a
     // reconnect re-runs the provider's account chooser.
     const server = new FakeSyncServer();
@@ -800,11 +801,42 @@ describe('SyncEngine.enableSync', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.engine.syncNow();
     expect((await new SyncMetadataStore(device.kv).load()).cursor).toBeGreaterThan(0);
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
     const getChanges = vi.spyOn(device.apiClient, 'getChanges');
 
     await device.engine.enableSync('dev', 'cred-b', 'Device A');
 
     expect(getChanges).toHaveBeenCalledWith(0);
+  });
+
+  it('drops an owed purge check on disable', async () => {
+    const device = createDevice(new FakeSyncServer());
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      meta.purgeCheckOwed = true;
+    });
+
+    await device.engine.disableSync();
+
+    expect((await metaStore.load()).purgeCheckOwed).toBeUndefined();
+  });
+
+  it('keeps the cursor on a re-auth into the same account, so the server can refuse it', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    const cursor = (await new SyncMetadataStore(device.kv).load()).cursor;
+    const getChanges = vi.spyOn(device.apiClient, 'getChanges');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(getChanges).toHaveBeenCalledWith(cursor);
+    expect(getChanges).not.toHaveBeenCalledWith(0);
   });
 
   it('getAccount returns the api result with a session and null when signed out', async () => {
@@ -2879,10 +2911,10 @@ describe('SyncEngine.start / stop', () => {
         return result;
       }
       metaReads += 1;
-      // The fourth is the push opening its own ledger read; before it come the pull's snapshot, the
-      // purge check's read and the re-read its delta write makes. Coupled to that count: a new
-      // ledger read anywhere in the cycle re-targets this and must move it.
-      if (metaReads === 4) {
+      // The third is the push opening its own ledger read; the first two are the pull's snapshot
+      // and the re-read its delta write makes. Coupled to that count: a new ledger read anywhere
+      // in the cycle re-targets this and must move it.
+      if (metaReads === 3) {
         disabled = true;
         await device.engine.disableSync();
       }
@@ -3212,7 +3244,12 @@ describe('SyncEngine re-auth after auth loss', () => {
 
   it('deletes what was deleted and purged elsewhere while it was signed out', async () => {
     const server = new FakeSyncServer();
-    const device = await enabledThenSignedOut(server);
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    await loseAuth(device);
     server.purgeDeletedElsewhere('goals', 'g1');
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
