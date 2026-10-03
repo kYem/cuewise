@@ -155,6 +155,23 @@ describe('setDone', () => {
     expect(shownItems()).toEqual([{ ...brief, done: true }, review]);
   });
 
+  it('keeps a tick over a read sent while it was saving', async () => {
+    const host = await loaded();
+    const write = deferred<void>();
+    const slow = deferred<NotionItems>();
+    host.api.setNotionItemDone.mockReturnValueOnce(write.promise);
+    host.api.listNotionItems.mockReturnValueOnce(slow.promise);
+
+    const ticking = useNotionItemsStore.getState().setDone(host, brief.pageId, true);
+    const reading = useNotionItemsStore.getState().load(host, TABLE_ID);
+    write.release();
+    await ticking;
+    slow.release(itemsOf([brief, review]));
+    await reading;
+
+    expect(shownItems()).toEqual([{ ...brief, done: true }, review]);
+  });
+
   it('reads the table again once a tick lands on a stale list', async () => {
     const host = await loaded();
     host.api.listNotionItems.mockRejectedValueOnce(problem('upstream_unavailable'));

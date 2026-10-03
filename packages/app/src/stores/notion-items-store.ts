@@ -145,6 +145,8 @@ export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
       });
       try {
         await host.api.setNotionItemDone(pageId, done);
+        // A read sent while this was saving may predate the write too.
+        tickedDuring.set(pageId, latestRead);
         set({ saving: without(get().saving, pageId) });
         // Notion answered, so a stale notice is out of date too: read again to clear it.
         const latest = get().list;
