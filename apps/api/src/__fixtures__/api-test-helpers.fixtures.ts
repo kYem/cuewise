@@ -87,7 +87,7 @@ export async function getChanges(
   app: App,
   token: string,
   since = '0',
-  listing?: 'full'
+  listing?: string
 ): Promise<Response> {
   const query = listing === undefined ? '' : `&listing=${listing}`;
   return app.request(

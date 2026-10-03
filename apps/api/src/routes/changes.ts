@@ -27,9 +27,8 @@ export function registerChangesRoutes(
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
     const { lastSeq, purgedSeq } = await store.getSeqBounds(userId);
-    // since=0 is always valid (full re-bootstrap). Any other cursor must not predate a purged
-    // tombstone, or the client would silently miss a delete, unless it pages a listing that began
-    // at 0: that one misses only a tombstone purged while it was mid-listing.
+    // since=0 is always valid. A cursor below the watermark may have missed a purged delete, unless
+    // it pages a listing from 0, which can miss only one purged while it was mid-listing.
     if (since > 0 && since > lastSeq) {
       return problem('cursor_ahead');
     }

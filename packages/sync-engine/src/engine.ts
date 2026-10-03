@@ -1193,7 +1193,7 @@ export class SyncEngine {
     if (pull.kind === 'cancelled') {
       return { kind: 'cancelled' };
     }
-    // Refused again: a server without full-listing paging, or a purge mid-listing. The push still
+    // Refused again: a server without full-listing paging, or a restore mid-listing. The push still
     // goes, since compare-and-set keeps it from landing over a newer row.
     if (pull.kind === 'resynced') {
       logger.warn('Sync server refused the pull from zero too; it is retried on the next wake');

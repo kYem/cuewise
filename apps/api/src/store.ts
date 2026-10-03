@@ -157,10 +157,8 @@ export interface SyncStore {
   // A row whose `baseSeq` is stale is refused and answered under `conflicts` as the current row;
   // the rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
   applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse>;
-  // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
-  // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty),
-  // raised on the final page to `floor`: no row is left between them, and a cursor stopping short
-  // of the purge watermark would be refused on every later pull.
+  // At most MAX_CHANGES_PAGE_SIZE records; a full page means pull again from `cursor`. A final
+  // page's cursor is raised to `floor`, since no row lies between, so the next pull is not refused.
   listChanges(
     userId: string,
     since: number,
@@ -172,9 +170,8 @@ export interface SyncStore {
   deleteUser(userId: string): Promise<ProviderConnection[]>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;
-  // The cursor bounds GET /changes enforces, 0 for an unknown user. `purgedSeq` is the highest seq
-  // ever purged: a cursor below it may have missed a purged tombstone. `lastSeq` is the highest
-  // ever assigned: a cursor above it was issued before a restore rolled the database back.
+  // The cursor bounds GET /changes enforces (0 for an unknown user): below `purgedSeq` may have
+  // missed a purged delete; above `lastSeq` was issued before a restore rolled the database back.
   getSeqBounds(userId: string): Promise<{ lastSeq: number; purgedSeq: number }>;
   // E2E key envelopes: opaque client-wrapped blobs the server can never read.
   getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null>;

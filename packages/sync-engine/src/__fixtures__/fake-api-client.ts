@@ -133,6 +133,7 @@ export class FakeSyncServer {
     const kept = this.records.filter((r) => r.seq <= seq);
     this.records.splice(0, this.records.length, ...kept);
     this.nextSeq = seq;
+    this.purgedSeq = Math.min(this.purgedSeq, seq);
   }
 
   getChanges(since: number, fullListing = false): { records: SyncRecord[]; cursor: number } {

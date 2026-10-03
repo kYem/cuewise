@@ -185,11 +185,11 @@ describe('GET /v1/changes cursor validation', () => {
     expect(normal.status).toBe(200);
   });
 
-  it('accepts since=Number.MAX_SAFE_INTEGER (16 digits) as a well-formed cursor', async () => {
+  it('accepts since=Number.MAX_SAFE_INTEGER (16 digits) as well-formed, refusing it only as ahead', async () => {
     const { token } = await signedInToken();
     const res = await getChanges(app, token, '9007199254740991');
     const body = await res.json<{ code: string }>();
-    expect(body.code).not.toBe('invalid_cursor');
+    expect(body.code).toBe('cursor_ahead');
   });
 });
 
@@ -323,6 +323,24 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
 
     const res = await getChanges(app, token, '1', 'full');
     expect(res.status).toBe(200);
+    const { cursor } = await res.json<{ cursor: number }>();
+    expect(cursor).toBe(2);
+  });
+
+  it('still refuses a cursor below the watermark for any listing value but full', async () => {
+    const { token, userId } = await signedInToken();
+    const retention = 100_000;
+    const { store, tick } = clockedStore(1_000);
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b', deleted: true }),
+    ]);
+    tick(retention + 1);
+    await store.purgeTombstones(retention);
+
+    const res = await getChanges(app, token, '1', 'partial');
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('resync_required');
   });
 
   it('ends a listing at the watermark, so the next pull from its cursor is not refused', async () => {
@@ -351,6 +369,15 @@ describe('GET /v1/changes cursor ahead of the server', () => {
 
     const res = await getChanges(app, token, '5');
     expect(res.status).toBe(409);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('cursor_ahead');
+  });
+
+  it('refuses a cursor ahead even on a page of a full listing', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+
+    const res = await getChanges(app, token, '5', 'full');
     const body = await res.json<{ code: string }>();
     expect(body.code).toBe('cursor_ahead');
   });

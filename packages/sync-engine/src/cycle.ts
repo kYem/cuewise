@@ -153,9 +153,7 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
   for (const [key, judged] of pull.purged) {
     // Moved since it was judged: an edit or an ack owns the key now, not the purge.
     if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
-      logger.warn('Sync deleted a purged entity that changed as it went; its ledger stays', {
-        key,
-      });
+      logger.error('Sync deleted a purged entity as it was edited; that edit may be lost', { key });
       continue;
     }
     delete fresh.hlcs[key];
@@ -714,11 +712,8 @@ async function readForRelist(
 }
 
 /**
- * After a purge refusal's full listing, a synced entity the server no longer holds was deleted
- * elsewhere and its tombstone purged, so it goes here too. A failed read or delete stalls the pull.
- *
- * A dirty one is kept and pushed, re-creating it: nothing says whether its edit postdates the
- * delete (ENG-127). A seq that moved during the pull is a push acked after the listing passed it.
+ * After a purge refusal's full listing, deletes the synced entities the server no longer holds; a
+ * dirty one is kept, since its edit may postdate the delete. A failed read or delete stalls.
  */
 async function dropPurged(
   deps: CycleDeps,

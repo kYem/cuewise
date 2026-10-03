@@ -1087,6 +1087,40 @@ describe('pullOnce', () => {
       expect(saved.relistOwed).toBeUndefined();
     });
 
+    it('stalls when a collection cannot be read, still owing the restore relist', async () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const bindings = defaultBindings();
+      const goals = requireBinding(bindings, 'goals');
+      const readAll = goals.readAll.bind(goals);
+      vi.spyOn(goals, 'readAll')
+        .mockImplementationOnce(readAll)
+        .mockRejectedValue(new Error('boom'));
+
+      await expect(pullOnce(makeDeps({ bindings }))).resolves.toMatchObject({ kind: 'stalled' });
+
+      const saved = await metaStore.load();
+      expect(saved.relistOwed).toBe('restored');
+      expect(saved.cursor).toBe(0);
+    });
+
+    it('restarts a restore relist at 0 when a listed record cannot be written', async () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+      transport.pullRecords = [
+        await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: null, hlc: OLDER_HLC }, 1),
+        await sealServerRecord(dk, KEY_ID, 'goals', 'g2', { entity: null, hlc: NEWER_HLC }, 2),
+      ];
+      const bindings = defaultBindings();
+      vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+        storageFailure('quota exceeded')
+      );
+
+      await pullOnce(makeDeps({ bindings }));
+
+      const saved = await metaStore.load();
+      expect(saved.relistOwed).toBe('restored');
+      expect(saved.cursor).toBe(0);
+    });
+
     it('is left alone when this device never synced it', async () => {
       await metaStore.update((meta) => {
         delete meta.hlcs['goals/g1'];

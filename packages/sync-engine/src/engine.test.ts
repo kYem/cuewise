@@ -1296,6 +1296,10 @@ describe('SyncEngine.syncNow', () => {
       'pushChanges',
     ]);
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
+    expect(device.engine.getLastCycle()).toEqual({
+      known: true,
+      cycle: { at: 6_000, outcome: { kind: 'resynced' } },
+    });
   });
 
   it('returns a classified failure rather than throwing, and does not stamp', async () => {
