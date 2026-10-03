@@ -107,6 +107,12 @@ export class FakeSyncServer {
     return this.records;
   }
 
+  /** A peer deleted the entity and the cron has since reclaimed that tombstone: no row is left. */
+  purgeDeletedElsewhere(collection: string, entityId: string): void {
+    const kept = this.records.filter((r) => r.collection !== collection || r.entityId !== entityId);
+    this.records.splice(0, this.records.length, ...kept);
+  }
+
   /** The daily cron reclaiming every tombstone; pair with rejectNextGetChangesWithResync. */
   purgeTombstones(): void {
     const live = this.records.filter((r) => !r.deleted);

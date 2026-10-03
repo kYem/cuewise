@@ -588,7 +588,9 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       listed.add(SyncMetadataStore.entityKey(rec.collection, rec.entityId));
       const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
       if (applied === 'failed') {
-        // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
+        // Apply-before-advance: the write failed, so stop here and leave the cursor before it. A
+        // pull from zero restarts there instead, since dropPurged needs the whole listing at once.
+        pull.cursorReset = startCursor === 0;
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
@@ -601,11 +603,21 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
   }
 
-  if (startCursor === 0 && !(await dropPurged(deps, pull, listed))) {
-    return cancelledPull(appliedCount);
+  if (startCursor === 0) {
+    const dropped = await dropPurged(deps, pull, listed);
+    if (dropped.kind === 'cancelled') {
+      return cancelledPull(appliedCount + pull.purged.size);
+    }
+    if (dropped.kind === 'stalled') {
+      pull.cursorReset = true;
+      if (!(await savePullUnlessCancelled(deps, pull))) {
+        return cancelledPull(appliedCount + pull.purged.size);
+      }
+      return dropped;
+    }
   }
   if (!(await savePullUnlessCancelled(deps, pull))) {
-    return cancelledPull(appliedCount);
+    return cancelledPull(appliedCount + pull.purged.size);
   }
   logger.debug(`Sync pull applied ${appliedCount} record(s)`, {
     byCollection: tallyByCollection(appliedCollections),
@@ -616,12 +628,17 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
 
 /**
  * After a full listing from zero, a synced entity the server no longer holds was deleted elsewhere
- * and its tombstone purged, so it is deleted here too. False means the account went mid-way.
+ * and its tombstone purged, so it is deleted here too. A failed delete stalls like a failed write.
  *
  * A dirty one is kept and pushed, re-creating it: nothing says whether its edit postdates the
  * delete (ENG-127). A seq that moved during the pull is a push acked after the listing passed it.
  */
-async function dropPurged(deps: CycleDeps, pull: PullState, listed: Set<string>): Promise<boolean> {
+async function dropPurged(
+  deps: CycleDeps,
+  pull: PullState,
+  listed: Set<string>
+): Promise<Exclude<PullResult, { kind: 'resynced' }>> {
+  let stalled: Extract<PullResult, { kind: 'stalled' }> | null = null;
   // Fresh, not the pull's snapshot: an edit made during the round trip must keep its entity.
   const fresh = await deps.meta.load();
   for (const binding of deps.bindings) {
@@ -634,7 +651,7 @@ async function dropPurged(deps: CycleDeps, pull: PullState, listed: Set<string>)
         continue;
       }
       if (deps.isCancelled()) {
-        return false;
+        return { kind: 'cancelled' };
       }
       const res = await binding.writeOne(entityId, null);
       if (!res.success) {
@@ -643,17 +660,19 @@ async function dropPurged(deps: CycleDeps, pull: PullState, listed: Set<string>)
           entityId,
           error: res.error,
         });
+        stalled ??= { kind: 'stalled', collection: binding.name, entityId };
         continue;
       }
       pull.purged.set(key, { hlc: fresh.hlcs[key], seq });
     }
   }
   if (pull.purged.size > 0) {
-    logger.debug(`Sync pull deleted ${pull.purged.size} record(s) the server had purged`, {
+    // Info, not debug: the one trace of sync deleting local data on inference rather than a record.
+    logger.info(`Sync pull deleted ${pull.purged.size} record(s) the server had purged`, {
       byCollection: tallyByCollection([...pull.purged.keys()].map((k) => k.split('/')[0])),
     });
   }
-  return true;
+  return stalled ?? { kind: 'complete' };
 }
 
 /** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */

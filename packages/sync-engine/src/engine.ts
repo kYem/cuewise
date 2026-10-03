@@ -886,8 +886,9 @@ export class SyncEngine {
 
     this.setStatus('initial_sync');
     // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
-    // cursor is this account's — a re-auth can land on another at the provider's chooser.
-    await this.resetPullCursor();
+    // cursor is this account's. Skipping the backfill does prove the ledger is, so its seqs stay:
+    // the pull from zero needs them to drop deletes purged while this device was signed out.
+    await this.resetPullCursor({ keepSeqs: !backfill });
     if (backfill) {
       await this.backfillDirty();
     }
@@ -1195,6 +1196,9 @@ export class SyncEngine {
     }
     // Unreachable while since=0 is never refused; if it is, nothing may push behind it.
     if (pull.kind === 'resynced') {
+      logger.error(
+        'Sync server refused a pull from zero; holding back the push until it serves one'
+      );
       return { kind: 'resynced' };
     }
 
@@ -1855,10 +1859,12 @@ export class SyncEngine {
 
   // Only the cursor and the per-entity seqs: widening this would drop the quarantine list too,
   // and the device would re-quarantine the same records on its next pull, re-toasting the user.
-  private async resetPullCursor(): Promise<void> {
+  private async resetPullCursor({ keepSeqs = false } = {}): Promise<void> {
     await this.meta.update((meta) => {
       meta.cursor = 0;
-      meta.seqs = {};
+      if (!keepSeqs) {
+        meta.seqs = {};
+      }
     });
   }
 

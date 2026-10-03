@@ -3210,6 +3210,25 @@ describe('SyncEngine re-auth after auth loss', () => {
     expect((await new SyncMetadataStore(device.kv).load()).dirty).toEqual({});
   });
 
+  it('deletes what was deleted and purged elsewhere while it was signed out', async () => {
+    const server = new FakeSyncServer();
+    const device = await enabledThenSignedOut(server);
+    server.purgeDeletedElsewhere('goals', 'g1');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await getGoals()).toEqual([]);
+  });
+
+  it('keeps what it never synced when a re-auth lands on another account', async () => {
+    const device = await enabledThenSignedOut(new FakeSyncServer());
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
+
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
+
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g1']);
+  });
+
   it('still backfills a same-account re-auth whose first enable never finished', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
