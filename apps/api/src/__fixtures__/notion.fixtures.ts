@@ -6,7 +6,6 @@ import type { Env } from '../env';
 import { type NotionClient, type NotionGrant, NotionUnavailableError } from '../notion-client';
 import type { CompletionProperty, PropertySchemas } from '../notion-schema';
 import type {
-  AuthCodePayload,
   FingerprintedToken,
   ProviderConnection,
   RenewalClaim,
@@ -292,7 +291,7 @@ export async function storedNotionTokens(
 }
 
 type FailingWrite =
-  | 'mintAuthCode'
+  | 'parkProviderGrant'
   | 'putProviderGrant'
   | 'updateProviderTokens'
   | 'releaseProviderRenewal'
@@ -307,11 +306,15 @@ export class FailingWriteStore extends D1SyncStore {
     this.failing = failing;
   }
 
-  override async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
-    if (this.failing === 'mintAuthCode') {
+  override async parkProviderGrant(
+    provider: string,
+    grant: SealedGrant,
+    codeChallenge: string
+  ): Promise<string> {
+    if (this.failing === 'parkProviderGrant') {
       throw new Error('D1 write failed');
     }
-    return super.mintAuthCode(payload, codeChallenge);
+    return super.parkProviderGrant(provider, grant, codeChallenge);
   }
 
   override async putProviderGrant(
@@ -360,18 +363,16 @@ export class FailingWriteStore extends D1SyncStore {
 export async function mintParkedGrant(
   store: D1SyncStore,
   key: string = TEST_PROVIDER_KEY
-): Promise<void> {
+): Promise<string> {
   const sealed = await encryptSecret(TEST_ACCESS_TOKEN, key);
-  await store.mintAuthCode(
+  return store.parkProviderGrant(
+    'notion',
     {
-      provider: 'notion',
-      grant: {
-        ...sealed,
-        refreshCiphertext: null,
-        refreshIv: null,
-        workspace: null,
-        tokenFingerprint: await sha256Hex(TEST_ACCESS_TOKEN),
-      },
+      ...sealed,
+      refreshCiphertext: null,
+      refreshIv: null,
+      workspace: null,
+      tokenFingerprint: await sha256Hex(TEST_ACCESS_TOKEN),
     },
     'c1'
   );

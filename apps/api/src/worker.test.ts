@@ -33,9 +33,9 @@ describe('worker scheduled parked-grant purge', () => {
     await waitOnExecutionContext(ctx);
 
     expect(calls).toEqual(['POST https://api.notion.com/v1/oauth/revoke']);
-    const remaining = await env.DB.prepare('SELECT COUNT(*) AS count FROM auth_codes').first<{
-      count: number;
-    }>();
+    const remaining = await env.DB.prepare(
+      'SELECT COUNT(*) AS count FROM parked_provider_grants'
+    ).first<{ count: number }>();
     expect(remaining?.count).toBe(0);
   });
 });

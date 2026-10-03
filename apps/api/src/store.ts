@@ -47,13 +47,11 @@ export interface SignInCodePayload {
   email?: string;
 }
 
-/** Parked between Notion's redirect and /claim: the claimer gets it, not the link's minter. */
-export interface ProviderCodePayload {
-  provider: 'notion';
+/** Parked between a provider's redirect and /claim: the claimer gets it, not the link's minter. */
+export interface ParkedGrant {
   grant: SealedGrant;
+  codeChallenge: string;
 }
-
-export type AuthCodePayload = SignInCodePayload | ProviderCodePayload;
 
 export interface ExpiredParkedGrant {
   codeHash: string;
@@ -145,17 +143,23 @@ export interface SyncStore {
   revokeSessionById(userId: string, id: SessionId): Promise<boolean>;
   renameSession(userId: string, id: SessionId, deviceName: string): Promise<boolean>;
   revokeOtherSessions(userId: string, currentTokenHash: SessionTokenHash): Promise<number>;
-  mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string>;
-  // Deletes expired sign-in codes; an expired parked grant stays until its revoke succeeds.
+  mintAuthCode(payload: SignInCodePayload, codeChallenge: string): Promise<string>;
   purgeExpiredSignInCodes(now: number): Promise<number>;
-  // Never-attempted rows first, then the longest-untried, so rows that keep failing cannot hold up
-  // the ones behind them; a row marked at `now` is excluded, so one sweep never sees it twice.
-  listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]>;
-  markParkedGrantAttempted(codeHash: string, now: number): Promise<void>;
-  deleteAuthCode(codeHash: string): Promise<void>;
   consumeAuthCode(
     rawCode: string
-  ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null>;
+  ): Promise<{ payload: SignInCodePayload; codeChallenge: string } | null>;
+  // Unlike a sign-in code, never swept on expiry: the grant stays live upstream until revoked.
+  parkProviderGrant(provider: string, grant: SealedGrant, codeChallenge: string): Promise<string>;
+  consumeParkedGrant(provider: string, rawCode: string): Promise<ParkedGrant | null>;
+  // Never-attempted rows first, then the longest-untried, so rows that keep failing cannot hold up
+  // the ones behind them; a row marked at `now` is excluded, so one sweep never sees it twice.
+  listExpiredParkedGrants(
+    provider: string,
+    now: number,
+    limit: number
+  ): Promise<ExpiredParkedGrant[]>;
+  markParkedGrantAttempted(codeHash: string, now: number): Promise<void>;
+  deleteParkedGrant(codeHash: string): Promise<void>;
   // A row whose `baseSeq` is stale is refused and answered under `conflicts` as the current row;
   // the rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
   applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse>;

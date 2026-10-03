@@ -17,7 +17,6 @@ import {
 } from './crypto-utils';
 import {
   type AppliedRecord,
-  type AuthCodePayload,
   type ExpiredParkedGrant,
   type FingerprintedToken,
   type Identity,
@@ -25,8 +24,8 @@ import {
   type KeyEnvelopeRecord,
   PAIRING_TTL_MS,
   type PairingForRequester,
+  type ParkedGrant,
   type PendingPairing,
-  type ProviderCodePayload,
   type ProviderConnection,
   type PushRecord,
   type RenewalClaim,
@@ -35,6 +34,7 @@ import {
   type SealedTokens,
   type ServerPushResponse,
   type Session,
+  type SignInCodePayload,
   StorageQuotaExceededError,
   type SyncRecord,
   type SyncSession,
@@ -105,6 +105,25 @@ function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
     dataSourceName: row.data_source_name,
     tokenFingerprint: row.token_fingerprint,
     completionProperty: row.completion_property,
+  };
+}
+
+const SEALED_GRANT_COLUMNS =
+  'ciphertext, iv, refresh_ciphertext, refresh_iv, workspace, token_fingerprint';
+
+type SealedGrantRow = Pick<
+  ProviderConnectionRow,
+  'ciphertext' | 'iv' | 'refresh_ciphertext' | 'refresh_iv' | 'workspace' | 'token_fingerprint'
+>;
+
+function toSealedGrant(row: SealedGrantRow): SealedGrant {
+  return {
+    ciphertext: row.ciphertext,
+    iv: row.iv,
+    refreshCiphertext: row.refresh_ciphertext,
+    refreshIv: row.refresh_iv,
+    workspace: row.workspace,
+    tokenFingerprint: row.token_fingerprint,
   };
 }
 
@@ -286,19 +305,13 @@ export class D1SyncStore implements SyncStore {
     return res.meta.changes ?? 0;
   }
 
-  async mintAuthCode(payload: AuthCodePayload, codeChallenge: string): Promise<string> {
+  async mintAuthCode(payload: SignInCodePayload, codeChallenge: string): Promise<string> {
     const code = randomToken();
     const codeHash = await sha256Hex(code);
     const ts = this.now();
-    // Best-effort PII sweep: expired sign-in codes are purged on the next mint call, not by a
-    // timer. A parked Notion grant is left for the cron, which also revokes it upstream.
+    // Best-effort PII sweep on every mint; the daily cron catches codes no mint follows.
     await this.db.batch([
-      this.db
-        .prepare(
-          `DELETE FROM auth_codes
-            WHERE expires_at <= ? AND json_extract(payload, '$.provider') IS NOT 'notion'`
-        )
-        .bind(ts),
+      this.db.prepare('DELETE FROM auth_codes WHERE expires_at <= ?').bind(ts),
       this.db
         .prepare(
           'INSERT INTO auth_codes (code_hash, payload, expires_at, code_challenge) VALUES (?, ?, ?, ?)'
@@ -310,46 +323,94 @@ export class D1SyncStore implements SyncStore {
 
   async purgeExpiredSignInCodes(now: number): Promise<number> {
     const res = await this.db
-      .prepare(
-        `DELETE FROM auth_codes
-          WHERE expires_at <= ? AND json_extract(payload, '$.provider') IS NOT 'notion'`
-      )
+      .prepare('DELETE FROM auth_codes WHERE expires_at <= ?')
       .bind(now)
       .run();
     return res.meta.changes ?? 0;
   }
 
-  async listExpiredParkedGrants(now: number, limit: number): Promise<ExpiredParkedGrant[]> {
+  async parkProviderGrant(
+    provider: string,
+    grant: SealedGrant,
+    codeChallenge: string
+  ): Promise<string> {
+    const code = randomToken();
+    await this.db
+      .prepare(
+        `INSERT INTO parked_provider_grants
+           (code_hash, provider, ${SEALED_GRANT_COLUMNS}, code_challenge, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        await sha256Hex(code),
+        provider,
+        grant.ciphertext,
+        grant.iv,
+        grant.refreshCiphertext,
+        grant.refreshIv,
+        grant.workspace,
+        grant.tokenFingerprint,
+        codeChallenge,
+        this.now() + AUTH_CODE_TTL_MS
+      )
+      .run();
+    return code;
+  }
+
+  async consumeParkedGrant(provider: string, rawCode: string): Promise<ParkedGrant | null> {
+    // One DELETE ... RETURNING, like consumeAuthCode: concurrent claims yield one row.
+    const row = await this.db
+      .prepare(
+        `DELETE FROM parked_provider_grants
+          WHERE code_hash = ? AND provider = ? AND expires_at > ?
+          RETURNING ${SEALED_GRANT_COLUMNS}, code_challenge`
+      )
+      .bind(await sha256Hex(rawCode), provider, this.now())
+      .first<SealedGrantRow & { code_challenge: string }>();
+    if (row === null) {
+      return null;
+    }
+    return { grant: toSealedGrant(row), codeChallenge: row.code_challenge };
+  }
+
+  async listExpiredParkedGrants(
+    provider: string,
+    now: number,
+    limit: number
+  ): Promise<ExpiredParkedGrant[]> {
     const res = await this.db
       .prepare(
-        `SELECT code_hash, expires_at, payload FROM auth_codes
-          WHERE expires_at <= ? AND json_extract(payload, '$.provider') = 'notion'
+        `SELECT code_hash, expires_at, ${SEALED_GRANT_COLUMNS} FROM parked_provider_grants
+          WHERE provider = ? AND expires_at <= ?
             AND (revoke_attempted_at IS NULL OR revoke_attempted_at < ?)
           ORDER BY COALESCE(revoke_attempted_at, 0), expires_at, code_hash LIMIT ?`
       )
-      .bind(now, now, limit)
-      .all<{ code_hash: string; expires_at: number; payload: string }>();
+      .bind(provider, now, now, limit)
+      .all<SealedGrantRow & { code_hash: string; expires_at: number }>();
     return res.results.map((row) => ({
       codeHash: row.code_hash,
       expiresAt: row.expires_at,
-      grant: (JSON.parse(row.payload) as ProviderCodePayload).grant,
+      grant: toSealedGrant(row),
     }));
   }
 
   async markParkedGrantAttempted(codeHash: string, now: number): Promise<void> {
     await this.db
-      .prepare('UPDATE auth_codes SET revoke_attempted_at = ? WHERE code_hash = ?')
+      .prepare('UPDATE parked_provider_grants SET revoke_attempted_at = ? WHERE code_hash = ?')
       .bind(now, codeHash)
       .run();
   }
 
-  async deleteAuthCode(codeHash: string): Promise<void> {
-    await this.db.prepare('DELETE FROM auth_codes WHERE code_hash = ?').bind(codeHash).run();
+  async deleteParkedGrant(codeHash: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM parked_provider_grants WHERE code_hash = ?')
+      .bind(codeHash)
+      .run();
   }
 
   async consumeAuthCode(
     rawCode: string
-  ): Promise<{ payload: AuthCodePayload; codeChallenge: string } | null> {
+  ): Promise<{ payload: SignInCodePayload; codeChallenge: string } | null> {
     const codeHash = await sha256Hex(rawCode);
     const ts = this.now();
     // DELETE (not mark-used) so a redeemed code's PII payload is gone at once, not left for the
@@ -372,7 +433,7 @@ export class D1SyncStore implements SyncStore {
       return null;
     }
     return {
-      payload: JSON.parse(row.payload) as AuthCodePayload,
+      payload: JSON.parse(row.payload) as SignInCodePayload,
       codeChallenge: row.code_challenge,
     };
   }
