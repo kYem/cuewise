@@ -8,4 +8,5 @@ export const DEVICE_LOCAL_SETTINGS_KEYS: readonly string[] = [
   'hasSeenOnboarding',
   'notesExpanded',
   'notesPinned',
+  'goalsSource',
 ];

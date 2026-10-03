@@ -4,7 +4,12 @@ import type {
   PairingPublicKeyB64,
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
-import { logger, type NotionConnection, type NotionTables } from '@cuewise/shared';
+import {
+  logger,
+  type NotionConnection,
+  type NotionItems,
+  type NotionTables,
+} from '@cuewise/shared';
 import { ApiError } from './api-error';
 import type {
   ExchangeTokenRequest,
@@ -363,6 +368,27 @@ export class ApiClient {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataSourceId, name }),
+      },
+      { auth: true }
+    );
+  }
+
+  async listNotionItems(): Promise<NotionItems> {
+    const res = await this.request(
+      '/v1/integrations/notion/items',
+      { method: 'GET' },
+      { auth: true }
+    );
+    return this.parseSuccessBody<NotionItems>(res);
+  }
+
+  async setNotionItemDone(pageId: string, done: boolean): Promise<void> {
+    await this.request(
+      `/v1/integrations/notion/items/${encodeURIComponent(pageId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done }),
       },
       { auth: true }
     );

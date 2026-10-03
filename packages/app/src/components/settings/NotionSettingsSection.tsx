@@ -1,22 +1,16 @@
 import { Blocks } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useSyncSignedIn } from '../../hooks/useSyncSignedIn';
 import type { NotionHost } from '../../notion/notion-host';
 import { type NotionView, useNotionStore } from '../../stores/notion-store';
-import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { SelectControl, SettingRow } from './SettingControls';
 import type { SettingsSection } from './SettingsSections';
 import type { SettingsSectionProps } from './settings-types';
 
+export const INTEGRATIONS_SECTION_ID = 'integrations';
 const LABEL = 'Notion';
 const KEYWORDS = 'integrations notion connect table database tasks disconnect';
-// Statuses with a live Cuewise session, which every Notion call rides on.
-const SIGNED_IN: ReadonlySet<SyncUiStatus> = new Set([
-  'active',
-  'syncing',
-  'error',
-  'needs_enroll',
-]);
 const BUTTON =
   'rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-surface-variant disabled:cursor-not-allowed disabled:opacity-50';
 
@@ -47,22 +41,10 @@ function helpFor(view: NotionView): string {
 }
 
 const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, filter }) => {
-  const syncController = useSyncController();
-  const [syncStatus, setSyncStatus] = useState<SyncUiStatus>(
-    () => syncController?.getStatus() ?? 'off'
-  );
+  const signedIn = useSyncSignedIn();
   const view = useNotionStore((s) => s.view);
   const busy = useNotionStore((s) => s.busy);
   const [chosenId, setChosenId] = useState<string | null>(null);
-  const signedIn = SIGNED_IN.has(syncStatus);
-
-  useEffect(() => {
-    if (syncController === null) {
-      return;
-    }
-    setSyncStatus(syncController.getStatus());
-    return syncController.subscribe(setSyncStatus);
-  }, [syncController]);
 
   // A remount mid-action must not reload over it: a connect's consent window may still be open.
   useEffect(() => {
@@ -193,7 +175,7 @@ export function createNotionSettingsSection(host: NotionHost): SettingsSection {
     <NotionSettings host={host} filter={filter} />
   );
   return {
-    id: 'integrations',
+    id: INTEGRATIONS_SECTION_ID,
     label: 'Integrations',
     icon: Blocks,
     component: Section,

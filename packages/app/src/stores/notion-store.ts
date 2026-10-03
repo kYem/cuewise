@@ -39,10 +39,10 @@ interface NotionStore {
   disconnect: (host: NotionHost) => Promise<void>;
 }
 
-const NOTION_UNREACHABLE = "Notion isn't responding right now. Try again in a moment.";
+export const NOTION_UNREACHABLE = "Notion isn't responding right now. Try again in a moment.";
 
 /** The problem code an `ApiError` carries, read structurally since this package cannot import it. */
-function problemCode(error: unknown): string | null {
+export function problemCode(error: unknown): string | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }

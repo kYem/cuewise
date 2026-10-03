@@ -15,6 +15,7 @@ import type { SettingsSection } from './components/settings/SettingsSections';
 import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useDayChange } from './hooks/useDayChange';
+import type { NotionHost } from './notion/notion-host';
 import { useBackgroundStore } from './stores/background-store';
 import { useGoalStore } from './stores/goal-store';
 import {
@@ -47,9 +48,11 @@ interface AppProps {
   extraSections?: SettingsSection[];
   /** Platform sync adapter (Task 4 seam); when present the Cloud Sync section is injected. */
   syncController?: SyncController | null;
+  /** Feeds the goals widget's Notion list; the host's settings section uses the same one. */
+  notionHost?: NotionHost;
 }
 
-function App({ extraSections, syncController }: AppProps = {}) {
+function App({ extraSections, syncController, notionHost }: AppProps = {}) {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const { toasts, removeToast } = useToastStore();
   const { settings } = useSettingsStore();
@@ -293,7 +296,9 @@ function App({ extraSections, syncController }: AppProps = {}) {
             {currentPage === 'quotes' && <QuoteManagementPage />}
             {currentPage === 'goals' && <GoalsPage />}
             {currentPage === 'concepts' && <ConceptsPage />}
-            {currentPage === 'home' && <NewTabPage extraSections={effectiveExtraSections} />}
+            {currentPage === 'home' && (
+              <NewTabPage extraSections={effectiveExtraSections} notionHost={notionHost} />
+            )}
           </main>
 
           {/* Live Theme Switcher (pushes content to the left when visible) */}

@@ -42,7 +42,7 @@ export function useStaleRefresh(
       const age = weatherAgeMs(lastFetch, new Date(now));
       if (age === null && loggedStepRef.current !== lastFetch) {
         loggedStepRef.current = lastFetch;
-        logger.error('Weather reading is stamped ahead of now; the clock stepped back', {
+        logger.error('Reading is stamped ahead of now; the clock stepped back', {
           lastFetch,
           now: new Date(now).toISOString(),
         });

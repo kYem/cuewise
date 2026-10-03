@@ -165,7 +165,7 @@ describe('useStaleRefresh', () => {
     await advance(2 * 60_000);
 
     expect(errorSpy).toHaveBeenCalledExactlyOnceWith(
-      'Weather reading is stamped ahead of now; the clock stepped back',
+      'Reading is stamped ahead of now; the clock stepped back',
       { lastFetch, now: noticedAt }
     );
   });

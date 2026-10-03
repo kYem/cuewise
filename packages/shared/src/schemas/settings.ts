@@ -61,6 +61,7 @@ export const settingsSchema = z.object({
   showCompletedGoals: z.boolean(),
   showIncompleteGoals: z.boolean(),
   showUpcomingGoals: z.boolean(),
+  goalsSource: z.enum(['cuewise', 'notion']),
   quoteDisplayMode: z.enum(['normal', 'compact', 'bottom', 'hidden']),
   enableQuoteAnimation: z.boolean(),
   focusPosition: z.enum(['top', 'center', 'bottom']),

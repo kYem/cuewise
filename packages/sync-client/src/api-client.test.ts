@@ -909,6 +909,28 @@ describe('ApiClient', () => {
       });
     });
 
+    it('listNotionItems GETs /items and returns them', async () => {
+      const body = {
+        workspace: 'Acme',
+        items: [{ pageId: 'p1', text: 'Write the brief', done: false }],
+        truncated: false,
+      };
+      const { client, calls } = notionClient([{ status: 200, body }]);
+
+      await expect(client.listNotionItems()).resolves.toEqual(body);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/integrations/notion/items`);
+    });
+
+    it('setNotionItemDone PATCHes the row with its done flag', async () => {
+      const { client, calls } = notionClient([{ status: 204 }]);
+
+      await client.setNotionItemDone('p1', true);
+
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/integrations/notion/items/p1`);
+      expect(calls[0].init.method).toBe('PATCH');
+      expect(JSON.parse(calls[0].init.body as string)).toEqual({ done: true });
+    });
+
     it('disconnectNotion DELETEs the grant, and treats one already gone as done', async () => {
       const { client, calls } = notionClient([
         { status: 204 },
