@@ -108,6 +108,17 @@ describe('GoalsSection - Notion source', () => {
     expect(screen.queryByRole('menuitemradio', { name: 'Notion' })).toBeNull();
   });
 
+  it('switches source from the compact header mark', async () => {
+    const user = userEvent.setup();
+    const { updateSettings } = mockStores({ goalViewMode: 'compact' });
+
+    renderGoalsWithNotion(connectedHost());
+    await user.click(await screen.findByRole('button', { name: PICKER }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Notion' }));
+
+    expect(updateSettings).toHaveBeenCalledWith({ goalsSource: 'notion' });
+  });
+
   it('lists open rows and keeps completed ones behind a toggle', async () => {
     const user = userEvent.setup();
     mockStores({ goalsSource: 'notion' });

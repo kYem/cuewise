@@ -409,14 +409,14 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     totalCount > 0 && notionListHost === undefined ? (
       <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
     ) : (
-      <div
+      <span
         className={cn(
           'w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0',
           notionListHost === undefined ? 'bg-primary-100' : 'bg-surface-variant'
         )}
       >
         <SourceIcon className={cn('w-5 h-5', sourceIconTone)} />
-      </div>
+      </span>
     );
   // With a second source on offer the header's mark is the picker; with one it stays a mark.
   const sourceMark = (mark: React.ReactNode, small = false) => {
