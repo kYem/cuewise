@@ -885,10 +885,10 @@ export class SyncEngine {
     await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
-    // Unconditionally: the enabled flag survives handleAuthLoss, so its presence cannot mean the
-    // cursor is this account's — a re-auth can land on another at the provider's chooser.
-    await this.resetPullCursor();
+    // The enabled flag survives handleAuthLoss, so it cannot mean the cursor is this account's;
+    // skipping the backfill does. Kept, that cursor lets the server refuse it if it purged since.
     if (backfill) {
+      await this.resetPullCursor();
       await this.backfillDirty();
     }
     // backfillDirty wrote to the ledger disableSync had just cleared, so a disable landing across
@@ -1182,11 +1182,21 @@ export class SyncEngine {
     let pull: PullResult;
     try {
       pull = await pullOnce(cycleDeps);
+      // A refused cursor is re-pulled from zero before anything pushes: the device must see what
+      // the server holds, and which deletes it purged, before its stale edits go anywhere.
+      if (pull.kind === 'resynced') {
+        pull = await pullOnce(cycleDeps);
+      }
     } catch (err) {
       return this.cycleFailure(err);
     }
     if (pull.kind === 'cancelled') {
       return { kind: 'cancelled' };
+    }
+    // Refused again: a server without full-listing paging, or a restore mid-listing. The push still
+    // goes, since compare-and-set keeps it from landing over a newer row.
+    if (pull.kind === 'resynced') {
+      logger.warn('Sync server refused the pull from zero too; it is retried on the next wake');
     }
 
     // Push still runs after a stalled pull — outbound changes must not be held hostage by an
@@ -1213,7 +1223,7 @@ export class SyncEngine {
         kind: 'failed',
         reason: 'device',
         error: stallError(
-          `sync pull stalled writing ${pull.collection}/${pull.entityId}`,
+          `sync pull stalled on ${pull.collection}/${pull.entityId}`,
           outrankedPush
         ),
       };
@@ -1861,6 +1871,7 @@ export class SyncEngine {
       meta.seqs = {};
       meta.tombstones = [];
       meta.quarantine = [];
+      delete meta.relistOwed;
     });
   }
 

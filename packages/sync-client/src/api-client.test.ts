@@ -35,6 +35,15 @@ describe('ApiClient', () => {
     expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
   });
 
+  it('marks a page of a listing from 0 so the server serves it past the purge watermark', async () => {
+    const { fetchFn, calls } = stubFetch([{ status: 200, body: { records: [], cursor: 500 } }]);
+    const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+    await client.getChanges(500, { fullListing: true });
+
+    expect(calls[0].url).toBe(`${BASE_URL}/v1/changes?since=500&listing=full`);
+  });
+
   it('POSTs { records } to /v1/changes and returns the cursor with what landed and what was refused', async () => {
     const body = {
       cursor: 5,

@@ -26,15 +26,16 @@ export function registerChangesRoutes(
     }
     const store = deps.storeFactory(c.env.DB);
     const userId = c.get('userId');
-    // since=0 is always valid (full re-bootstrap); anything else must not predate a
-    // purged tombstone, or the client would silently miss a delete.
-    if (since > 0) {
-      const purgedSeq = await store.getPurgedSeq(userId);
-      if (since < purgedSeq) {
-        return problem('resync_required');
-      }
+    const { lastSeq, purgedSeq } = await store.getSeqBounds(userId);
+    // since=0 is always valid. A cursor below the watermark may have missed a purged delete, unless
+    // it pages a listing from 0, which can miss only a delete purged while it was mid-listing.
+    if (since > lastSeq) {
+      return problem('cursor_ahead');
     }
-    const { records, cursor } = await store.listChanges(userId, since);
+    if (since > 0 && since < purgedSeq && c.req.query('listing') !== 'full') {
+      return problem('resync_required');
+    }
+    const { records, cursor } = await store.listChanges(userId, since, lastSeq);
     return c.json({ records, cursor });
   });
 

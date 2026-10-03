@@ -11,6 +11,8 @@ const PROBLEM_DEFS = {
   invalid_key_envelope: { status: 400, title: 'Invalid key envelope' },
   key_envelope_exists: { status: 409, title: 'Key envelope already exists' },
   resync_required: { status: 409, title: 'Resync required' },
+  // Not resync_required: the client re-pushes what a rollback lost, where a purge means delete.
+  cursor_ahead: { status: 409, title: 'Cursor is ahead of the server' },
   not_found: { status: 404, title: 'Not found' },
   pairing_not_found: { status: 404, title: 'No such pairing request.' },
   pairing_conflict: { status: 409, title: 'The pairing request was already answered.' },

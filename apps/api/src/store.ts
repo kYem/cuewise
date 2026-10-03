@@ -159,18 +159,22 @@ export interface SyncStore {
   // A row whose `baseSeq` is stale is refused and answered under `conflicts` as the current row;
   // the rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
   applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse>;
-  // Returns at most MAX_CHANGES_PAGE_SIZE records; a full page means the caller should pull
-  // again from the returned cursor. `cursor` is the last returned seq (or `since` when empty).
-  listChanges(userId: string, since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
+  // At most MAX_CHANGES_PAGE_SIZE records; a full page means pull again from `cursor`. A final
+  // page's cursor is raised to `floor`, since no row lies between, so the next pull is not refused.
+  listChanges(
+    userId: string,
+    since: number,
+    floor?: number
+  ): Promise<{ records: SyncRecord[]; cursor: number }>;
   // Without the envelopes an export is undecryptable even by a user holding their recovery code.
   exportUser(userId: string): Promise<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>;
   // Returns the provider grants it removed: whoever calls it owes Notion their revocation.
   deleteUser(userId: string): Promise<ProviderConnection[]>;
   // Deletes tombstones older than retentionMs (a maintenance sweep across all users); returns the count.
   purgeTombstones(retentionMs: number): Promise<number>;
-  // Highest seq ever purged for this user (0 if never purged) — the resync-required boundary
-  // for GET /changes: a since cursor below this may have missed a purged tombstone.
-  getPurgedSeq(userId: string): Promise<number>;
+  // The cursor bounds GET /changes enforces (0 for an unknown user): below `purgedSeq` may have
+  // missed a purged delete; above `lastSeq` was issued before a restore rolled the database back.
+  getSeqBounds(userId: string): Promise<{ lastSeq: number; purgedSeq: number }>;
   // E2E key envelopes: opaque client-wrapped blobs the server can never read.
   getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null>;
   putKeyEnvelope(userId: string, kind: string, envelope: string): Promise<void>;

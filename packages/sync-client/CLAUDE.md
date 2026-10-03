@@ -11,7 +11,7 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | Method | Endpoint | Auth |
 |---|---|---|
 | `exchangeToken(req)` | `POST /v1/auth/token` | No |
-| `getChanges(since)` | `GET /v1/changes?since=` | Yes |
+| `getChanges(since, {fullListing?})` | `GET /v1/changes?since=[&listing=full]` | Yes |
 | `pushChanges(records)` | `POST /v1/changes` → `{cursor, applied, conflicts}` | Yes |
 | `logout()` | `POST /v1/auth/logout` | Yes |
 | `exportData()` | `GET /v1/export` | Yes |

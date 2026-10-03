@@ -100,6 +100,26 @@ describe('D1SyncStore records', () => {
     expect(secondPage.records.map((r) => r.seq)).toEqual([3]);
   });
 
+  it('listChanges raises the final page cursor to the floor it is given', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-floor-final');
+    await store.applyChanges(userId, [record({ entityId: 'a' })]);
+
+    expect((await store.listChanges(userId, 0, 7)).cursor).toBe(7);
+  });
+
+  it('listChanges keeps a full page at its last seq whatever the floor, so paging misses nothing', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-floor-full');
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b' }),
+      record({ entityId: 'c' }),
+    ]);
+
+    expect((await store.listChanges(userId, 0, 7)).cursor).toBe(2);
+  });
+
   it('exportUser pages internally and returns every record past a single page', async () => {
     const store = cappedStore();
     const userId = await newUser(store, 'u-export');
@@ -198,10 +218,16 @@ describe('D1SyncStore records', () => {
     expect(await store.purgeTombstones(100_000)).toBe(0);
   });
 
-  it('getPurgedSeq is 0 for a user who has never had a tombstone purged', async () => {
+  it('getSeqBounds has a purged seq of 0 for a user who has never had a tombstone purged', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await newUser(store, 'u-never-purged');
-    expect(await store.getPurgedSeq(userId)).toBe(0);
+    await store.applyChanges(userId, [record({ entityId: 'a' })]);
+    expect(await store.getSeqBounds(userId)).toEqual({ lastSeq: 1, purgedSeq: 0 });
+  });
+
+  it('getSeqBounds answers zeros for an unknown user', async () => {
+    const store = new D1SyncStore(env.DB);
+    expect(await store.getSeqBounds('no-such-user')).toEqual({ lastSeq: 0, purgedSeq: 0 });
   });
 
   it('purgeTombstones advances the user watermark to the purged tombstone highest seq', async () => {
@@ -217,7 +243,7 @@ describe('D1SyncStore records', () => {
     tick(retention + 1);
 
     expect(await store.purgeTombstones(retention)).toBe(1);
-    expect(await store.getPurgedSeq(userId)).toBe(2);
+    expect((await store.getSeqBounds(userId)).purgedSeq).toBe(2);
   });
 
   it('purgeTombstones does not bump the watermark for a user with no purged tombstone', async () => {
@@ -228,7 +254,7 @@ describe('D1SyncStore records', () => {
     tick(retention + 1);
 
     expect(await store.purgeTombstones(retention)).toBe(0);
-    expect(await store.getPurgedSeq(userId)).toBe(0);
+    expect((await store.getSeqBounds(userId)).purgedSeq).toBe(0);
   });
 
   it('applyChanges with an empty array returns the current cursor and writes nothing', async () => {

@@ -5,6 +5,7 @@ import {
   postChanges,
   record,
   signedInToken,
+  withPurgedTombstone,
 } from '../__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from '../d1-store';
 import app, { createApp } from '../index';
@@ -176,16 +177,20 @@ describe('GET /v1/changes cursor validation', () => {
 
   it('accepts since=0 and a normal cursor', async () => {
     const { token } = await signedInToken();
+    await postChanges(app, token, {
+      records: [record({ entityId: 'a' }), record({ entityId: 'b' })],
+    });
     const zero = await getChanges(app, token, '0');
     expect(zero.status).toBe(200);
-    const normal = await getChanges(app, token, '42');
+    const normal = await getChanges(app, token, '2');
     expect(normal.status).toBe(200);
   });
 
-  it('accepts since=Number.MAX_SAFE_INTEGER (16 digits)', async () => {
+  it('accepts since=Number.MAX_SAFE_INTEGER (16 digits) as well-formed, refusing it only as ahead', async () => {
     const { token } = await signedInToken();
     const res = await getChanges(app, token, '9007199254740991');
-    expect(res.status).toBe(200);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('cursor_ahead');
   });
 });
 
@@ -255,14 +260,7 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
   // without also expiring the session token (its TTL is measured in real time).
   it('returns 409 resync_required when since predates the purged tombstone watermark', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const stale = await getChanges(app, token, '1');
     expect(stale.status).toBe(409);
@@ -284,22 +282,89 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
 
   it('since equal to the purged watermark is valid (the client already saw that seq)', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const res = await getChanges(app, token, '2');
     expect(res.status).toBe(200);
   });
 
-  it('never resyncs a user who has never had a tombstone purged, at any cursor', async () => {
+  it('never resyncs a user who has never had a tombstone purged, at any cursor it was issued', async () => {
     const { token } = await signedInToken();
-    const res = await getChanges(app, token, '999999');
+    await postChanges(app, token, {
+      records: [record({ entityId: 'a' }), record({ entityId: 'b' })],
+    });
+    const res = await getChanges(app, token, '1');
+    expect(res.status).toBe(200);
+  });
+
+  it('serves a cursor below the watermark that pages a listing from 0', async () => {
+    const { token, userId } = await signedInToken();
+    await withPurgedTombstone(userId);
+
+    const res = await getChanges(app, token, '1', 'full');
+    expect(res.status).toBe(200);
+    const { cursor } = await res.json<{ cursor: number }>();
+    expect(cursor).toBe(2);
+  });
+
+  it('still refuses a cursor below the watermark for any listing value but full', async () => {
+    const { token, userId } = await signedInToken();
+    await withPurgedTombstone(userId);
+
+    const res = await getChanges(app, token, '1', 'partial');
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('resync_required');
+  });
+
+  it('ends a listing at the watermark, so the next pull from its cursor is not refused', async () => {
+    const { token, userId } = await signedInToken();
+    await withPurgedTombstone(userId);
+
+    const listing = await getChanges(app, token, '0');
+    const { cursor } = await listing.json<{ cursor: number }>();
+    expect(cursor).toBe(2);
+    const next = await getChanges(app, token, String(cursor));
+    expect(next.status).toBe(200);
+  });
+});
+
+describe('GET /v1/changes final page cursor', () => {
+  it('ends a listing at the last seq assigned, past one a refused push reserved', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+    await postChanges(app, token, { records: [record({ entityId: 'a', baseSeq: 9 })] });
+
+    const res = await getChanges(app, token, '0');
+    const { cursor } = await res.json<{ cursor: number }>();
+    expect(cursor).toBe(2);
+  });
+});
+
+describe('GET /v1/changes cursor ahead of the server', () => {
+  it('returns 409 cursor_ahead for a cursor past the highest seq the server ever assigned', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+
+    const res = await getChanges(app, token, '5');
+    expect(res.status).toBe(409);
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('cursor_ahead');
+  });
+
+  it('refuses a cursor ahead even on a page of a full listing', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+
+    const res = await getChanges(app, token, '5', 'full');
+    const body = await res.json<{ code: string }>();
+    expect(body.code).toBe('cursor_ahead');
+  });
+
+  it('serves a cursor equal to the highest seq assigned', async () => {
+    const { token } = await signedInToken();
+    await postChanges(app, token, { records: [record({ entityId: 'a' })] });
+
+    const res = await getChanges(app, token, '1');
     expect(res.status).toBe(200);
   });
 });
