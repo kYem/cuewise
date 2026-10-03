@@ -1,5 +1,6 @@
 import type { NotionItem } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import { CheckCircle2 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useStaleRefresh } from '../hooks/useStaleRefresh';
@@ -42,6 +43,8 @@ function blockForView(view: NotionView): NotionListBlock | 'loading' | null {
 
 const BUTTON =
   'rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-surface-variant';
+const ON_IMAGE_BUTTON =
+  'rounded-full bg-white/20 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white transition-all hover:bg-white/30';
 
 function Spinner() {
   return (
@@ -85,17 +88,77 @@ function NotionRow({
   );
 }
 
+const ON_IMAGE_SHADOW = 'drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]';
+
+/** Focus mode's one task at a time: the first open row, which the next takes over once ticked. */
+function NotionFocusTask({
+  next,
+  openCount,
+  tableName,
+  saving,
+  onToggle,
+}: {
+  next: NotionItem | undefined;
+  openCount: number;
+  tableName: string | null;
+  saving: boolean;
+  onToggle: () => void;
+}) {
+  if (next === undefined) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-8">
+        <CheckCircle2 className={cn('w-12 h-12 text-white', ON_IMAGE_SHADOW)} />
+        <p className={cn('text-lg font-medium text-white', ON_IMAGE_SHADOW)}>
+          Nothing left to do in this table.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <p
+        className={cn(
+          'text-xs font-medium uppercase tracking-wider text-white/80',
+          ON_IMAGE_SHADOW
+        )}
+      >
+        {tableName === null ? 'Next in Notion' : `Next in Notion · ${tableName}`}
+      </p>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={saving}
+        aria-label={`Mark as complete: ${next.text}`}
+        className="flex items-center gap-4 px-4 py-3 rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 disabled:cursor-wait"
+      >
+        <AnimatedCheckbox checked={false} size="xl" tone="onImage" />
+        <span
+          className="text-3xl md:text-4xl text-left font-semibold text-white"
+          style={{ textShadow: '0 2px 8px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4)' }}
+        >
+          {next.text}
+        </span>
+      </button>
+      <p className={cn('text-sm text-white/70', ON_IMAGE_SHADOW)}>{openCount} open in this table</p>
+    </div>
+  );
+}
+
+export type NotionListVariant = 'full' | 'compact' | 'focus';
+
 interface NotionGoalsListProps {
   host: NotionHost;
-  compact: boolean;
+  variant: NotionListVariant;
   onOpenIntegrations: () => void;
 }
 
 export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
   host,
-  compact,
+  variant,
   onOpenIntegrations,
 }) => {
+  const compact = variant === 'compact';
+  const onImage = variant === 'focus';
   const view = useNotionStore((s) => s.view);
   const list = useNotionItemsStore((s) => s.list);
   const saving = useNotionItemsStore((s) => s.saving);
@@ -123,11 +186,13 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
 
   const card = (reason: NotionListBlock) => (
     <div className="flex flex-col items-center gap-3 py-6 text-center">
-      <p className="text-sm text-secondary">{BLOCKED_COPY[reason]}</p>
+      <p className={cn('text-sm', onImage ? cn('text-white', ON_IMAGE_SHADOW) : 'text-secondary')}>
+        {BLOCKED_COPY[reason]}
+      </p>
       {reason === 'failed' ? (
         <button
           type="button"
-          className={BUTTON}
+          className={onImage ? ON_IMAGE_BUTTON : BUTTON}
           onClick={() => {
             if (connectedId === null) {
               void useNotionStore.getState().load(host);
@@ -139,7 +204,11 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
           Try again
         </button>
       ) : (
-        <button type="button" className={BUTTON} onClick={onOpenIntegrations}>
+        <button
+          type="button"
+          className={onImage ? ON_IMAGE_BUTTON : BUTTON}
+          onClick={onOpenIntegrations}
+        >
           Open Notion settings
         </button>
       )}
@@ -164,6 +233,19 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
   const done = readyFor.items.filter((item) => item.done);
   const toggle = (item: NotionItem) => () =>
     void useNotionItemsStore.getState().setDone(host, item.pageId, !item.done);
+
+  if (onImage) {
+    const next = open[0];
+    return (
+      <NotionFocusTask
+        next={next}
+        openCount={open.length}
+        tableName={view.status === 'connected' ? view.tableName : null}
+        saving={next !== undefined && saving.has(next.pageId)}
+        onToggle={next === undefined ? () => undefined : toggle(next)}
+      />
+    );
+  }
   // Expanded lists scroll inside the card, so a long table never grows the widget.
   const rows = (items: NotionItem[], scroll: boolean) => (
     <ul

@@ -44,6 +44,7 @@ import { NotionGoalsList } from './NotionGoalsList';
 import { StorageIndicator } from './StorageIndicator';
 
 const NOTION_SOURCE_ICON = Blocks;
+const ON_IMAGE_TRIGGER = 'bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10';
 
 const GOALS_SOURCES: { value: GoalsSource; label: string; icon: typeof List }[] = [
   { value: 'cuewise', label: 'My goals', icon: Target },
@@ -104,9 +105,11 @@ function MenuToggleItem({
 function SourcePicker({
   source,
   onChange,
+  triggerClassName,
 }: {
   source: GoalsSource;
   onChange: (source: GoalsSource) => void;
+  triggerClassName?: string;
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
   const current = GOALS_SOURCES.find(({ value }) => value === source) ?? GOALS_SOURCES[0];
@@ -118,7 +121,10 @@ function SourcePicker({
           type="button"
           aria-label={`Tasks from ${current.label}`}
           title={`Tasks from ${current.label}`}
-          className="h-8 flex flex-shrink-0 items-center gap-1 px-2 rounded-lg bg-surface-variant/80 hover:bg-surface-variant backdrop-blur-sm text-secondary hover:text-primary transition-all border border-border"
+          className={cn(
+            'h-8 flex flex-shrink-0 items-center gap-1 px-2 rounded-lg bg-surface-variant/80 hover:bg-surface-variant backdrop-blur-sm text-secondary hover:text-primary transition-all border border-border',
+            triggerClassName
+          )}
         >
           <CurrentIcon className="w-4 h-4" />
           <ChevronDown className="w-3.5 h-3.5" />
@@ -205,7 +211,6 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const showSourcePicker =
     notionHost !== undefined &&
     signedIn &&
-    viewMode !== 'focus' &&
     (notionView.status === 'connected' || settings.goalsSource === 'notion');
   const notionListHost =
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
@@ -392,7 +397,8 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         )}
 
         {viewMode === 'focus' ? (
-          todayTasks.length > 1 && (
+          todayTasks.length > 1 &&
+          notionListHost === undefined && (
             <>
               <div className="border-t border-border my-2" />
               <div className="text-xs font-medium text-tertiary px-2 py-1">
@@ -469,11 +475,29 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     viewMode === 'focus' ? (
       <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
         {/* Focus view - centered */}
-        <GoalFocusView showAddInput={showAddInput} onCloseAddInput={() => setShowAddInput(false)} />
+        {notionListHost === undefined ? (
+          <GoalFocusView
+            showAddInput={showAddInput}
+            onCloseAddInput={() => setShowAddInput(false)}
+          />
+        ) : (
+          <NotionGoalsList
+            host={notionListHost}
+            variant="focus"
+            onOpenIntegrations={onOpenIntegrations}
+          />
+        )}
 
         {/* Options menu - inline, appears on hover */}
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {optionsMenu('bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10')}
+        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          {showSourcePicker && (
+            <SourcePicker
+              source={settings.goalsSource}
+              onChange={handleSourceChange}
+              triggerClassName={ON_IMAGE_TRIGGER}
+            />
+          )}
+          {optionsMenu(ON_IMAGE_TRIGGER)}
         </div>
       </div>
     ) : (
@@ -506,9 +530,19 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           ) : (
             <div className="flex items-center gap-2 mb-2.5">
               <SourceIcon className="w-4 h-4 text-primary-600 flex-shrink-0" />
-              <h2 className="text-base font-semibold text-primary font-display flex-1">
+              <h2
+                className={cn(
+                  'text-base font-semibold text-primary font-display',
+                  notionListHost === undefined && 'flex-1'
+                )}
+              >
                 Today's Focus
               </h2>
+              {notionListHost !== undefined && (
+                <span className="flex-1 min-w-0 truncate text-xs text-secondary">
+                  · {notionTableName === null ? 'Notion' : `Notion · ${notionTableName}`}
+                </span>
+              )}
               {totalCount > 0 && notionListHost === undefined && (
                 <span className="text-xs text-secondary tabular-nums">
                   {completedCount}/{totalCount}
@@ -525,7 +559,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
             <div className="flex-1">
               <NotionGoalsList
                 host={notionListHost}
-                compact={viewMode === 'compact'}
+                variant={viewMode === 'compact' ? 'compact' : 'full'}
                 onOpenIntegrations={onOpenIntegrations}
               />
             </div>

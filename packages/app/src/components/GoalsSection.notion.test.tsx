@@ -24,6 +24,7 @@ vi.mock('@cuewise/storage', () => ({
   getStorageUsage: vi.fn(async () => ({ available: true, isWarning: false, isCritical: false })),
 }));
 vi.mock('./GoalsList', () => ({ GoalsList: () => <p>My goals list</p> }));
+vi.mock('./GoalFocusView', () => ({ GoalFocusView: () => <p>My focused goal</p> }));
 
 const PICKER = /^Tasks from /;
 const brief = notionItemFactory.build({ text: 'Write the brief' });
@@ -147,6 +148,29 @@ describe('GoalsSection - Notion source', () => {
       expect(screen.getAllByRole('button', { name: /^Mark as complete: / })).toHaveLength(6)
     );
     expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+  });
+
+  it('names the Notion table in the compact header', async () => {
+    mockStores({ goalsSource: 'notion', goalViewMode: 'compact' });
+
+    renderGoalsWithNotion(connectedHost());
+
+    expect(await screen.findByText('· Notion · Tasks')).toBeInTheDocument();
+  });
+
+  it('focuses on the next open Notion task and ticks it off', async () => {
+    const user = userEvent.setup();
+    mockStores({ goalsSource: 'notion', goalViewMode: 'focus' });
+    const host = connectedHost();
+
+    renderGoalsWithNotion(host);
+    await user.click(
+      await screen.findByRole('button', { name: 'Mark as complete: Write the brief' })
+    );
+
+    expect(screen.queryByText('My focused goal')).toBeNull();
+    expect(host.api.setNotionItemDone).toHaveBeenCalledExactlyOnceWith(brief.pageId, true);
+    expect(await screen.findByText('Nothing left to do in this table.')).toBeInTheDocument();
   });
 
   it('says when only the first rows are shown', async () => {
