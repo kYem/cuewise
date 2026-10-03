@@ -149,9 +149,8 @@ describe('D1SyncStore auth', () => {
     await store.parkProviderGrant('notion', parkedSealedGrant, 'c1');
     await store.mintAuthCode({ provider: 'apple', providerSub: 'purge3', email: 'p3@e.c' }, 'c2');
     tick(61_000);
-    await store.mintAuthCode({ provider: 'apple', providerSub: 'purge4', email: 'p4@e.c' }, 'c3');
 
-    expect(await store.purgeExpiredSignInCodes(62_000)).toBe(0);
+    expect(await store.purgeExpiredSignInCodes(62_000)).toBe(1);
     const parked = await store.listExpiredParkedGrants('notion', 62_000, 10);
     expect(parked.map((p) => p.grant)).toEqual([parkedSealedGrant]);
   });

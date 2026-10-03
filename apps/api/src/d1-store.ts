@@ -309,7 +309,7 @@ export class D1SyncStore implements SyncStore {
     const code = randomToken();
     const codeHash = await sha256Hex(code);
     const ts = this.now();
-    // Best-effort PII sweep: expired codes are purged on the next mint call, not by a timer.
+    // Best-effort PII sweep on every mint; the daily cron catches codes no mint follows.
     await this.db.batch([
       this.db.prepare('DELETE FROM auth_codes WHERE expires_at <= ?').bind(ts),
       this.db

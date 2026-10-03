@@ -1,5 +1,5 @@
--- ENG-136. An unclaimed provider grant gets its own table: it must be revoked upstream before it may
--- go, where a sign-in code is simply deleted. Rows parked in auth_codes move across; see Deploy.
+-- ENG-136. An unclaimed provider grant gets its own table: a sign-in code is simply deleted, but a
+-- grant waits for an upstream revoke. Rows parked in auth_codes move across; see Deploy.
 CREATE TABLE parked_provider_grants (
   code_hash            TEXT PRIMARY KEY,
   provider             TEXT NOT NULL,

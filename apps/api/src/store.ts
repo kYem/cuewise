@@ -148,7 +148,7 @@ export interface SyncStore {
   consumeAuthCode(
     rawCode: string
   ): Promise<{ payload: SignInCodePayload; codeChallenge: string } | null>;
-  // Never swept on expiry like a sign-in code: the grant is live upstream until revoked.
+  // Unlike a sign-in code, never swept on expiry: the grant stays live upstream until revoked.
   parkProviderGrant(provider: string, grant: SealedGrant, codeChallenge: string): Promise<string>;
   consumeParkedGrant(provider: string, rawCode: string): Promise<ParkedGrant | null>;
   // Never-attempted rows first, then the longest-untried, so rows that keep failing cannot hold up
