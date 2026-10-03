@@ -238,15 +238,6 @@ export async function revokeRemovedGrants(
   }
 }
 
-/** A parked grant that can never be claimed — its code is burned — must not stay live at Notion. */
-export async function revokeParkedGrant(
-  client: NotionClient,
-  grant: SealedGrant,
-  env: Env
-): Promise<void> {
-  await revokeSealed(client, grant, env, null);
-}
-
 async function sealGrant(grant: NotionGrant, key: string): Promise<SealedGrant> {
   const access = await encryptSecret(grant.accessToken, key);
   const refresh = grant.refreshToken === null ? null : await encryptSecret(grant.refreshToken, key);
@@ -493,7 +484,7 @@ export async function revokeExpiredParkedGrants(
   while (budget > 0) {
     const page = Math.min(PARKED_GRANT_BATCH, budget);
     // A row this run has tried is marked or deleted, so the next list cannot return it again.
-    const batch = await store.listExpiredParkedGrants(now, page);
+    const batch = await store.listExpiredParkedGrants(PROVIDER, now, page);
     if (batch.length === 0) {
       return sweep;
     }
@@ -504,7 +495,7 @@ export async function revokeExpiredParkedGrants(
       const outcome = await revokeSealed(client, parked.grant, env, null);
       unreadableStreak = outcome === 'unreadable' ? unreadableStreak + 1 : 0;
       if (outcome === 'revoked') {
-        await store.deleteAuthCode(parked.codeHash);
+        await store.deleteParkedGrant(parked.codeHash);
         sweep.revoked += 1;
       } else if (outcome !== 'unreadable' && now - parked.expiresAt >= PARKED_GRANT_RETRY_MS) {
         // The row is about to go, so name it: the hash of a long-expired single-use code is the
@@ -514,7 +505,7 @@ export async function revokeExpiredParkedGrants(
           expiresAt: parked.expiresAt,
           workspace: parked.grant.workspace,
         });
-        await store.deleteAuthCode(parked.codeHash);
+        await store.deleteParkedGrant(parked.codeHash);
         sweep.abandoned += 1;
       } else {
         await store.markParkedGrantAttempted(parked.codeHash, now);
@@ -723,7 +714,7 @@ export function registerNotionRoutes(
     try {
       const oneTime = await deps
         .storeFactory(c.env.DB)
-        .mintAuthCode({ provider: PROVIDER, grant: sealed }, state.codeChallenge);
+        .parkProviderGrant(PROVIDER, sealed, state.codeChallenge);
       return returnWithCode(state.returnUri, oneTime);
     } catch (error) {
       logger.error('Notion grant could not be parked; revoking it', error);
@@ -752,16 +743,12 @@ export function registerNotionRoutes(
     if (issues.length > 0 || typeof code !== 'string' || typeof codeVerifier !== 'string') {
       return problem('invalid_request', { errors: issues });
     }
-    const consumed = await store.consumeAuthCode(code);
+    const consumed = await store.consumeParkedGrant(PROVIDER, code);
     if (consumed === null) {
       logger.warn('Notion claim with an unknown, expired, or already-used code', { userId });
       return problem('provider_claim_invalid');
     }
-    if (consumed.payload.provider !== PROVIDER) {
-      logger.warn('Notion claim presented a sign-in code', { userId });
-      return problem('provider_claim_invalid');
-    }
-    const grant = consumed.payload.grant;
+    const grant = consumed.grant;
     // Burned before verifying, like the sign-in bounces: a wrong verifier kills the code, and the
     // grant it parked can never be claimed now, so it must not stay live at Notion.
     if ((await sha256Base64Url(codeVerifier)) !== consumed.codeChallenge) {
