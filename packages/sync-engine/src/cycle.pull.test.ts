@@ -49,6 +49,18 @@ async function seedLocalHlc(
   return meta;
 }
 
+/** Marks an entity as synced earlier: known at `hlc`, and held by the server at `seq`. */
+async function seedSynced(
+  metaStore: SyncMetadataStore,
+  collection: string,
+  entityId: string,
+  seq: number
+): Promise<void> {
+  const meta = await seedLocalHlc(metaStore, collection, entityId, OLDER_HLC);
+  meta.seqs[SyncMetadataStore.entityKey(collection, entityId)] = seq;
+  await metaStore.save(meta);
+}
+
 describe('pullOnce', () => {
   let kv: FakeKvStore;
   let transport: FakeTransport;
@@ -976,5 +988,117 @@ describe('pullOnce', () => {
       cursor: '0 -> 1',
     });
     expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('incoming');
+  });
+
+  describe('an entity a full pull from zero no longer lists', () => {
+    const purged = goalFactory.build({ id: 'g1', text: 'deleted elsewhere' });
+    const kept = goalFactory.build({ id: 'g2', text: 'still on the server' });
+
+    async function listOnly(entity: typeof kept, seq: number): Promise<void> {
+      transport.pullRecords = [
+        await sealServerRecord(dk, KEY_ID, 'goals', entity.id, { entity, hlc: OLDER_HLC }, seq),
+      ];
+    }
+
+    beforeEach(async () => {
+      await setGoals([purged, kept]);
+      await seedSynced(metaStore, 'goals', 'g1', 2);
+      await seedSynced(metaStore, 'goals', 'g2', 3);
+      await listOnly(kept, 3);
+    });
+
+    it('is deleted locally and forgotten, as a delete whose tombstone the server purged', async () => {
+      await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
+
+      expect(await getGoals()).toEqual([kept]);
+      const saved = await metaStore.load();
+      expect(saved.hlcs['goals/g1']).toBeUndefined();
+      expect(saved.seqs['goals/g1']).toBeUndefined();
+      expect(saved.seqs['goals/g2']).toBe(3);
+    });
+
+    it('is kept while it has an edit waiting to push', async () => {
+      await new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS).markMutated('goals', 'g1');
+
+      await pullOnce(makeDeps());
+
+      expect(await getGoals()).toEqual([purged, kept]);
+    });
+
+    it('is kept when it is edited while the pull is in flight', async () => {
+      const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
+      duringPull(transport, () => tracker.markMutated('goals', 'g1'));
+
+      await pullOnce(makeDeps());
+
+      expect(await getGoals()).toEqual([purged, kept]);
+      expect((await metaStore.load()).dirty.goals).toEqual(['g1']);
+    });
+
+    it('keeps the ledger of a key edited while its delete was being written', async () => {
+      const bindings = defaultBindings();
+      const goals = requireBinding(bindings, 'goals');
+      const writeOne = goals.writeOne.bind(goals);
+      const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
+      vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+        const res = await writeOne(entityId, entity);
+        await tracker.markMutated('goals', entityId);
+        return res;
+      });
+
+      await pullOnce(makeDeps({ bindings }));
+
+      const saved = await metaStore.load();
+      expect(saved.seqs['goals/g1']).toBe(2);
+      expect(saved.hlcs['goals/g1']).not.toBe(OLDER_HLC);
+      expect(saved.dirty.goals).toEqual(['g1']);
+    });
+
+    it('is kept when the server never held it', async () => {
+      const meta = await metaStore.load();
+      delete meta.seqs['goals/g1'];
+      await metaStore.save(meta);
+
+      await pullOnce(makeDeps());
+
+      expect(await getGoals()).toEqual([purged, kept]);
+    });
+
+    it('is kept when a push acked it while the pull was in flight', async () => {
+      duringPull(transport, () =>
+        metaStore.update((meta) => {
+          meta.seqs['goals/g1'] = 9;
+        })
+      );
+
+      await pullOnce(makeDeps());
+
+      expect(await getGoals()).toEqual([purged, kept]);
+    });
+
+    it('is kept on an incremental pull, which never lists every row', async () => {
+      const meta = await metaStore.load();
+      meta.cursor = 2;
+      await metaStore.save(meta);
+
+      await pullOnce(makeDeps());
+
+      expect(await getGoals()).toEqual([purged, kept]);
+    });
+
+    it('is kept when the pull stalls before the listing ends', async () => {
+      const bindings = defaultBindings();
+      vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
+        storageFailure('quota exceeded')
+      );
+      await listOnly(goalFactory.build({ id: 'g2', text: 'newer' }), 3);
+      const meta = await metaStore.load();
+      delete meta.hlcs['goals/g2'];
+      await metaStore.save(meta);
+
+      await expect(pullOnce(makeDeps({ bindings }))).resolves.toMatchObject({ kind: 'stalled' });
+
+      expect(await getGoals()).toEqual([purged, kept]);
+    });
   });
 });

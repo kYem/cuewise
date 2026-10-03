@@ -53,6 +53,8 @@ interface PullState {
   redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
+  /** Keys deleted locally as purged, with the hlc and seq they were judged at; see dropPurged. */
+  purged: Map<string, { hlc: string | undefined; seq: number }>;
   /** This path re-pushes over what it could not read, so no host hears an item was skipped. */
   repairsQuarantined: boolean;
 }
@@ -65,6 +67,7 @@ function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
     seqs: new Map(),
     redirtied: new Map(),
     cursorReset: false,
+    purged: new Map(),
     repairsQuarantined,
   };
 }
@@ -123,6 +126,15 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
   }
   for (const { collection, entityId } of pull.redirtied.values()) {
     markDirty(fresh, collection, entityId);
+  }
+  for (const [key, judged] of pull.purged) {
+    // Moved since it was judged: an edit or an ack owns the key now, not the purge.
+    if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
+      continue;
+    }
+    delete fresh.hlcs[key];
+    delete fresh.seqs[key];
+    fresh.tombstones = withMembership(fresh.tombstones, key, false);
   }
 }
 
@@ -546,6 +558,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   let appliedCount = 0;
   const startCursor = pull.meta.cursor;
   const appliedCollections: string[] = [];
+  const listed = new Set<string>();
 
   let pageSize = PULL_PAGE;
   while (pageSize === PULL_PAGE) {
@@ -572,6 +585,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       if (deps.isCancelled()) {
         return cancelledPull(appliedCount);
       }
+      listed.add(SyncMetadataStore.entityKey(rec.collection, rec.entityId));
       const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
       if (applied === 'failed') {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
@@ -587,6 +601,9 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
   }
 
+  if (startCursor === 0 && !(await dropPurged(deps, pull, listed))) {
+    return cancelledPull(appliedCount);
+  }
   if (!(await savePullUnlessCancelled(deps, pull))) {
     return cancelledPull(appliedCount);
   }
@@ -595,6 +612,48 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     cursor: `${startCursor} -> ${pull.meta.cursor}`,
   });
   return { kind: 'complete' };
+}
+
+/**
+ * After a full listing from zero, a synced entity the server no longer holds was deleted elsewhere
+ * and its tombstone purged, so it is deleted here too. False means the account went mid-way.
+ *
+ * A dirty one is kept and pushed, re-creating it: nothing says whether its edit postdates the
+ * delete (ENG-127). A seq that moved during the pull is a push acked after the listing passed it.
+ */
+async function dropPurged(deps: CycleDeps, pull: PullState, listed: Set<string>): Promise<boolean> {
+  // Fresh, not the pull's snapshot: an edit made during the round trip must keep its entity.
+  const fresh = await deps.meta.load();
+  for (const binding of deps.bindings) {
+    const dirty = fresh.dirty[binding.name] ?? [];
+    for (const entityId of Object.keys(await binding.readAll())) {
+      const key = SyncMetadataStore.entityKey(binding.name, entityId);
+      const seq = fresh.seqs[key];
+      const ackedMidPull = seq !== pull.meta.seqs[key];
+      if (seq === undefined || ackedMidPull || listed.has(key) || dirty.includes(entityId)) {
+        continue;
+      }
+      if (deps.isCancelled()) {
+        return false;
+      }
+      const res = await binding.writeOne(entityId, null);
+      if (!res.success) {
+        logger.error('Sync could not delete an entity whose server row was purged', {
+          collection: binding.name,
+          entityId,
+          error: res.error,
+        });
+        continue;
+      }
+      pull.purged.set(key, { hlc: fresh.hlcs[key], seq });
+    }
+  }
+  if (pull.purged.size > 0) {
+    logger.debug(`Sync pull deleted ${pull.purged.size} record(s) the server had purged`, {
+      byCollection: tallyByCollection([...pull.purged.keys()].map((k) => k.split('/')[0])),
+    });
+  }
+  return true;
 }
 
 /** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */

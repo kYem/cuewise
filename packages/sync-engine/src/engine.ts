@@ -1182,11 +1182,20 @@ export class SyncEngine {
     let pull: PullResult;
     try {
       pull = await pullOnce(cycleDeps);
+      // A refused cursor is re-pulled from zero before anything pushes: the device must see what
+      // the server holds, and which deletes it purged, before its stale edits go anywhere.
+      if (pull.kind === 'resynced') {
+        pull = await pullOnce(cycleDeps);
+      }
     } catch (err) {
       return this.cycleFailure(err);
     }
     if (pull.kind === 'cancelled') {
       return { kind: 'cancelled' };
+    }
+    // Unreachable while since=0 is never refused; if it is, nothing may push behind it.
+    if (pull.kind === 'resynced') {
+      return { kind: 'resynced' };
     }
 
     // Push still runs after a stalled pull — outbound changes must not be held hostage by an
@@ -1218,7 +1227,7 @@ export class SyncEngine {
         ),
       };
     }
-    return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };
+    return { kind: 'synced' };
   }
 
   /** Maps a thrown cycle error to its outcome: a 401 is auth loss, anything else is classified. */

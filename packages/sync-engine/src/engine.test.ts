@@ -1187,7 +1187,7 @@ describe('SyncEngine.syncNow', () => {
     expect(device.engine.getLastSyncedAt()).toBeNull();
   });
 
-  it('reports a refused cursor without stamping', async () => {
+  it('re-pulls from zero in the same cycle after a refused cursor, and stamps it', async () => {
     let t = 5_000;
     const server = new FakeSyncServer();
     const device = createDevice(server, { now: () => t });
@@ -1198,7 +1198,30 @@ describe('SyncEngine.syncNow', () => {
     device.apiClient.rejectNextGetChangesWithResync();
     const outcome = await device.engine.syncNow();
 
+    expect(outcome).toEqual({ kind: 'synced' });
+    expect(device.engine.getLastSyncedAt()).toBe(6_000);
+  });
+
+  it('reports a refused cursor without pushing when the re-pull from zero is refused too', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.markMutated('goals', 'g1');
+    const getChanges = device.apiClient.getChanges.bind(device.apiClient);
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since) => {
+      device.apiClient.rejectNextGetChangesWithResync();
+      return getChanges(since);
+    });
+    const callsBefore = device.apiClient.callOrder.length;
+
+    t = 6_000;
+    const outcome = await device.engine.syncNow();
+
     expect(outcome).toEqual({ kind: 'resynced' });
+    expect(device.apiClient.callOrder.slice(callsBefore)).toEqual(['getChanges', 'getChanges']);
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
   });
 
@@ -1498,12 +1521,11 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     t = 6_000;
-    device.apiClient.rejectNextGetChangesWithResync();
     await device.engine.syncNow();
 
     expect(device.engine.getLastCycle()).toEqual({
       known: true,
-      cycle: { at: 6_000, outcome: { kind: 'resynced' } },
+      cycle: { at: 6_000, outcome: { kind: 'synced' } },
     });
   });
 
@@ -2857,10 +2879,10 @@ describe('SyncEngine.start / stop', () => {
         return result;
       }
       metaReads += 1;
-      // The third is the push opening its own ledger read; the first two are the pull's snapshot
-      // and the re-read its delta write makes. Coupled to that count: a new ledger read anywhere
-      // in the cycle re-targets this and must move it.
-      if (metaReads === 3) {
+      // The fourth is the push opening its own ledger read; before it come the pull's snapshot, the
+      // purge check's read and the re-read its delta write makes. Coupled to that count: a new
+      // ledger read anywhere in the cycle re-targets this and must move it.
+      if (metaReads === 4) {
         disabled = true;
         await device.engine.disableSync();
       }

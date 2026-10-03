@@ -420,6 +420,59 @@ describe('compare-and-set: the server never regresses an entity', () => {
   });
 });
 
+describe('a device returning after the server purged a delete it never pulled', () => {
+  /** A and B share g1 and g2; B deletes g1 and edits g2, then the server purges the tombstone. */
+  async function purgedWhileAway() {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setGoals([
+      goalFactory.build({ id: 'g1', text: 'deleted on B' }),
+      goalFactory.build({ id: 'g2', text: 'seed' }),
+    ]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await getBinding('goals').writeOne('g1', null);
+    await deviceB.engine.markDeleted('goals', 'g1');
+    await getBinding('goals').writeOne('g2', goalFactory.build({ id: 'g2', text: 'B newer' }));
+    await deviceB.engine.markMutated('goals', 'g2');
+    await deviceB.engine.syncNow();
+    server.purgeTombstones();
+    deviceA.apiClient.rejectNextGetChangesWithResync();
+    return { server, deviceA };
+  }
+
+  it('deletes it too, in the same cycle the server refused its cursor', async () => {
+    const { deviceA } = await purgedWhileAway();
+    useStorage(deviceA);
+
+    await expect(deviceA.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g2']);
+  });
+
+  it('pulls from zero before it pushes, so a stale edit loses to the newer one first', async () => {
+    const { deviceA } = await purgedWhileAway();
+    useStorage(deviceA);
+    await getBinding('goals').writeOne('g2', goalFactory.build({ id: 'g2', text: 'A stale' }));
+    await deviceA.engine.markMutated('goals', 'g2');
+    const callsBefore = deviceA.apiClient.callOrder.length;
+
+    await deviceA.engine.syncNow();
+
+    expect(deviceA.apiClient.callOrder.slice(callsBefore)).toEqual([
+      'getChanges',
+      'getChanges',
+      'pushChanges',
+    ]);
+    expect((await getGoals()).find((g) => g.id === 'g2')?.text).toBe('B newer');
+  });
+});
+
 describe('settings: an enrolling device claims only the keys it explicitly wrote', () => {
   it('a choice stored before sync was enabled reaches the account through the backfill alone', async () => {
     const server = new FakeSyncServer();

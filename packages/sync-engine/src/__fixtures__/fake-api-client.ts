@@ -107,6 +107,12 @@ export class FakeSyncServer {
     return this.records;
   }
 
+  /** The daily cron reclaiming every tombstone; pair with rejectNextGetChangesWithResync. */
+  purgeTombstones(): void {
+    const live = this.records.filter((r) => !r.deleted);
+    this.records.splice(0, this.records.length, ...live);
+  }
+
   getChanges(since: number): { records: SyncRecord[]; cursor: number } {
     // Real D1 always does `ORDER BY seq ASC` (records is upsert-per-entity, so array insertion
     // order drifts from seq order once an entity is pushed a second time) — sort to match.
