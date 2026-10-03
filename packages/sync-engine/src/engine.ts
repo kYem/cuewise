@@ -1193,10 +1193,10 @@ export class SyncEngine {
     if (pull.kind === 'cancelled') {
       return { kind: 'cancelled' };
     }
-    // A purge landing mid-listing refuses a later page; the next wake lists from zero again.
+    // Refused again: a server without full-listing paging, or a purge mid-listing. The push still
+    // goes, since compare-and-set keeps it from landing over a newer row.
     if (pull.kind === 'resynced') {
-      logger.warn('Sync server refused a page of the pull from zero; retrying on the next wake');
-      return { kind: 'resynced' };
+      logger.warn('Sync server refused the pull from zero too; it is retried on the next wake');
     }
 
     // Push still runs after a stalled pull — outbound changes must not be held hostage by an
@@ -1223,10 +1223,13 @@ export class SyncEngine {
         kind: 'failed',
         reason: 'device',
         error: stallError(
-          `sync pull stalled writing ${pull.collection}/${pull.entityId}`,
+          `sync pull stalled on ${pull.collection}/${pull.entityId}`,
           outrankedPush
         ),
       };
+    }
+    if (pull.kind === 'resynced') {
+      return { kind: 'resynced' };
     }
     return { kind: 'synced' };
   }
@@ -1871,7 +1874,7 @@ export class SyncEngine {
       meta.seqs = {};
       meta.tombstones = [];
       meta.quarantine = [];
-      delete meta.purgeCheckOwed;
+      delete meta.relistOwed;
     });
   }
 

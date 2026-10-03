@@ -74,8 +74,17 @@ export class ApiClient {
     return this.parseSuccessBody<{ token: string }>(res);
   }
 
-  async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
-    const res = await this.request(`/v1/changes?since=${since}`, { method: 'GET' }, { auth: true });
+  /** `fullListing` marks a later page of a pull that began at 0, which the purge watermark allows. */
+  async getChanges(
+    since: number,
+    { fullListing = false }: { fullListing?: boolean } = {}
+  ): Promise<{ records: SyncRecord[]; cursor: number }> {
+    const listing = fullListing ? '&listing=full' : '';
+    const res = await this.request(
+      `/v1/changes?since=${since}${listing}`,
+      { method: 'GET' },
+      { auth: true }
+    );
     return this.parseSuccessBody<{ records: SyncRecord[]; cursor: number }>(res);
   }
 

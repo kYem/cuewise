@@ -1,5 +1,7 @@
 ---
 '@cuewise/sync-engine': patch
+'@cuewise/sync-client': patch
+'@cuewise/api': patch
 '@cuewise/browser-extension': patch
 '@cuewise/macos': patch
 ---

@@ -496,7 +496,8 @@ export class D1SyncStore implements SyncStore {
 
   async listChanges(
     userId: string,
-    since: number
+    since: number,
+    floor = 0
   ): Promise<{ records: SyncRecord[]; cursor: number }> {
     const { results } = await this.db
       .prepare(
@@ -520,7 +521,11 @@ export class D1SyncStore implements SyncStore {
       clientUpdatedAt: r.client_updated_at,
     }));
     const last = records[records.length - 1];
-    return { records, cursor: last === undefined ? since : last.seq };
+    const cursor = last === undefined ? since : last.seq;
+    if (records.length < this.changesPageSize) {
+      return { records, cursor: Math.max(cursor, floor) };
+    }
+    return { records, cursor };
   }
 
   async exportUser(
@@ -610,12 +615,15 @@ export class D1SyncStore implements SyncStore {
     return deleteResult === undefined ? 0 : (deleteResult.meta.changes ?? 0);
   }
 
-  async getPurgedSeq(userId: string): Promise<number> {
+  async getSeqBounds(userId: string): Promise<{ lastSeq: number; purgedSeq: number }> {
     const row = await this.db
-      .prepare('SELECT purged_seq FROM users WHERE id = ?')
+      .prepare('SELECT last_seq, purged_seq FROM users WHERE id = ?')
       .bind(userId)
-      .first<{ purged_seq: number }>();
-    return row === null ? 0 : row.purged_seq;
+      .first<{ last_seq: number; purged_seq: number }>();
+    if (row === null) {
+      return { lastSeq: 0, purgedSeq: 0 };
+    }
+    return { lastSeq: row.last_seq, purgedSeq: row.purged_seq };
   }
 
   async getKeyEnvelope(userId: string, kind: string): Promise<KeyEnvelopeRecord | null> {

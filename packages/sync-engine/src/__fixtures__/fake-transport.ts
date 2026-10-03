@@ -15,16 +15,25 @@ export class FakeTransport implements SyncTransport {
   legacyPushResponse = false;
   /** Canned server-side records for getChanges to page through, sorted by seq. */
   pullRecords: SyncRecord[] = [];
+  /** The cursor a final page answers instead of its last seq, as a server raising it to its watermark. */
+  finalPageCursor: number | null = null;
   /** Thrown by EVERY getChanges call until reset — a persistently failing transport. */
   getChangesError: Error | null = null;
   /** `since` argument of every getChanges call, in order — lets tests assert pagination. */
   readonly getChangesSinceCalls: number[] = [];
+  /** Whether each getChanges call marked itself a page of a listing from 0, in the same order. */
+  readonly getChangesFullListing: boolean[] = [];
   private cursor = 0;
   private nextGetChangesError: Error | null = null;
 
   /** One-shot: fails the next getChanges as the server does on a discarded cursor, then clears. */
   rejectNextGetChangesWithResync(): void {
     this.nextGetChangesError = new ApiError('resync_required', 409);
+  }
+
+  /** One-shot: fails the next getChanges with `error`, then clears. */
+  rejectNextGetChangesWith(error: Error): void {
+    this.nextGetChangesError = error;
   }
 
   async pushChanges(records: PushRecord[]): Promise<PushResponse> {
@@ -64,8 +73,12 @@ export class FakeTransport implements SyncTransport {
     return response;
   }
 
-  async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
+  async getChanges(
+    since: number,
+    { fullListing = false }: { fullListing?: boolean } = {}
+  ): Promise<{ records: SyncRecord[]; cursor: number }> {
     this.getChangesSinceCalls.push(since);
+    this.getChangesFullListing.push(fullListing);
     if (this.getChangesError !== null) {
       throw this.getChangesError;
     }
@@ -76,6 +89,9 @@ export class FakeTransport implements SyncTransport {
     }
     const page = this.pullRecords.filter((r) => r.seq > since).slice(0, PULL_PAGE);
     const cursor = page.length > 0 ? page[page.length - 1].seq : since;
+    if (page.length < PULL_PAGE && this.finalPageCursor !== null) {
+      return { records: page, cursor: this.finalPageCursor };
+    }
     return { records: page, cursor };
   }
 }

@@ -13,8 +13,11 @@ export interface SyncMeta {
   seqs: Record<string, number>; // "collection/entityId" -> highest server seq seen (push base)
   tombstones: string[]; // "collection/entityId" that are deleted
   quarantine: string[]; // "collection/entityId" that failed decrypt
-  /** Set by a refused cursor, cleared once a pull from zero has dropped what the server purged. */
-  purgeCheckOwed?: boolean;
+  /**
+   * Why the server refused the cursor, kept until a full listing has reconciled against it: a
+   * purge means what it no longer holds was deleted, a restore that it was lost and must re-push.
+   */
+  relistOwed?: 'purged' | 'restored';
 }
 
 export function defaultMeta(deviceNode: string): SyncMeta {

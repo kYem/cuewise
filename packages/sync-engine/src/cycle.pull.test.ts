@@ -1009,12 +1009,93 @@ describe('pullOnce', () => {
     expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('incoming');
   });
 
-  it('owes the purge check once the server refuses its cursor', async () => {
+  it('owes a purge relist once the server refuses its cursor as past its purge', async () => {
     transport.rejectNextGetChangesWithResync();
 
     await pullOnce(makeDeps());
 
-    expect((await metaStore.load()).purgeCheckOwed).toBe(true);
+    expect((await metaStore.load()).relistOwed).toBe('purged');
+  });
+
+  it('owes a restore relist, and drops every seq, once the server refuses its cursor as ahead', async () => {
+    await seedSynced(metaStore, 'goals', 'g1', 2);
+    transport.rejectNextGetChangesWith(new ApiError('cursor_ahead', 409));
+
+    await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'resynced' });
+
+    const saved = await metaStore.load();
+    expect(saved.relistOwed).toBe('restored');
+    expect(saved.seqs).toEqual({});
+  });
+
+  it('never lets a purge refusal replace an owed restore relist', async () => {
+    await metaStore.update((meta) => {
+      meta.relistOwed = 'restored';
+    });
+    transport.rejectNextGetChangesWithResync();
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).relistOwed).toBe('restored');
+  });
+
+  it('marks every page after the first of a listing from zero as a full listing', async () => {
+    transport.pullRecords = await Promise.all(
+      Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
+        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
+      )
+    );
+
+    await pullOnce(makeDeps());
+
+    expect(transport.getChangesFullListing).toEqual([false, true]);
+  });
+
+  it('takes the cursor a final page answers past its last record', async () => {
+    transport.pullRecords = [
+      await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: null, hlc: OLDER_HLC }, 1),
+    ];
+    transport.finalPageCursor = 4;
+
+    await pullOnce(makeDeps());
+
+    expect((await metaStore.load()).cursor).toBe(4);
+  });
+
+  describe('an entity the listing after a restore refusal no longer names', () => {
+    const lost = goalFactory.build({ id: 'g1', text: 'pushed after the backup' });
+    const kept = goalFactory.build({ id: 'g2', text: 'in the backup' });
+
+    beforeEach(async () => {
+      await setGoals([lost, kept]);
+      await seedLocalHlc(metaStore, 'goals', 'g1', OLDER_HLC);
+      await seedLocalHlc(metaStore, 'goals', 'g2', OLDER_HLC);
+      await metaStore.update((meta) => {
+        meta.relistOwed = 'restored';
+      });
+      transport.pullRecords = [
+        await sealServerRecord(dk, KEY_ID, 'goals', 'g2', { entity: kept, hlc: OLDER_HLC }, 1),
+      ];
+    });
+
+    it('is kept and marked to push again, since the rollback lost it', async () => {
+      await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'complete' });
+
+      expect(await getGoals()).toEqual([lost, kept]);
+      const saved = await metaStore.load();
+      expect(saved.dirty.goals).toEqual(['g1']);
+      expect(saved.relistOwed).toBeUndefined();
+    });
+
+    it('is left alone when this device never synced it', async () => {
+      await metaStore.update((meta) => {
+        delete meta.hlcs['goals/g1'];
+      });
+
+      await pullOnce(makeDeps());
+
+      expect((await metaStore.load()).dirty.goals).toBeUndefined();
+    });
   });
 
   describe('an entity the listing after a refused cursor no longer names', () => {
@@ -1027,17 +1108,13 @@ describe('pullOnce', () => {
       ];
     }
 
-    async function setPurgeCheckOwed(owed: boolean): Promise<void> {
-      await metaStore.update((meta) => {
-        meta.purgeCheckOwed = owed;
-      });
-    }
-
     beforeEach(async () => {
       await setGoals([purged, kept]);
       await seedSynced(metaStore, 'goals', 'g1', 2);
       await seedSynced(metaStore, 'goals', 'g2', 3);
-      await setPurgeCheckOwed(true);
+      await metaStore.update((meta) => {
+        meta.relistOwed = 'purged';
+      });
       await listOnly(kept, 3);
     });
 
@@ -1054,7 +1131,37 @@ describe('pullOnce', () => {
     it('settles the owed check once the listing completes', async () => {
       await pullOnce(makeDeps());
 
-      expect((await metaStore.load()).purgeCheckOwed).toBeUndefined();
+      expect((await metaStore.load()).relistOwed).toBeUndefined();
+    });
+
+    it('leaves a restore relist raised during the listing owed', async () => {
+      duringPull(transport, () =>
+        metaStore.update((meta) => {
+          meta.relistOwed = 'restored';
+        })
+      );
+
+      await pullOnce(makeDeps());
+
+      expect((await metaStore.load()).relistOwed).toBe('restored');
+    });
+
+    it('is kept when it is edited after the check read the ledger, before its delete', async () => {
+      const bindings = defaultBindings();
+      const goals = requireBinding(bindings, 'goals');
+      const readAll = goals.readAll.bind(goals);
+      const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
+      vi.spyOn(goals, 'readAll')
+        .mockImplementationOnce(readAll)
+        .mockImplementationOnce(async () => {
+          const local = await readAll();
+          await tracker.markMutated('goals', 'g1');
+          return local;
+        });
+
+      await pullOnce(makeDeps({ bindings }));
+
+      expect(await getGoals()).toEqual([purged, kept]);
     });
 
     it('lists from zero while the check is owed, whatever the cursor says', async () => {
@@ -1069,7 +1176,9 @@ describe('pullOnce', () => {
     });
 
     it('is kept by a pull from zero no refusal asked for, as after a database restore', async () => {
-      await setPurgeCheckOwed(false);
+      await metaStore.update((meta) => {
+        delete meta.relistOwed;
+      });
 
       await pullOnce(makeDeps());
 
@@ -1100,7 +1209,7 @@ describe('pullOnce', () => {
       });
 
       const saved = await metaStore.load();
-      expect(saved.purgeCheckOwed).toBe(true);
+      expect(saved.relistOwed).toBe('purged');
       expect(saved.cursor).toBe(0);
     });
 

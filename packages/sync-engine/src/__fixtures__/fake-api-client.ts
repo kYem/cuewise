@@ -128,9 +128,20 @@ export class FakeSyncServer {
     this.records.splice(0, this.records.length, ...live);
   }
 
-  getChanges(since: number): { records: SyncRecord[]; cursor: number } {
-    // Like routes/changes.ts: since=0 is always served, a cursor behind the watermark never is.
-    if (since > 0 && since < this.purgedSeq) {
+  /** The database restored from a backup taken at `seq`: every later row and seq is gone. */
+  restoreBackupAt(seq: number): void {
+    const kept = this.records.filter((r) => r.seq <= seq);
+    this.records.splice(0, this.records.length, ...kept);
+    this.nextSeq = seq;
+  }
+
+  getChanges(since: number, fullListing = false): { records: SyncRecord[]; cursor: number } {
+    // Like routes/changes.ts: since=0 is always served; a cursor past the last seq ever assigned,
+    // or behind the watermark without paging a listing from 0, never is.
+    if (since > 0 && since > this.nextSeq) {
+      throw new ApiError('cursor_ahead', 409);
+    }
+    if (since > 0 && since < this.purgedSeq && !fullListing) {
       throw new ApiError('resync_required', 409);
     }
     // Real D1 always does `ORDER BY seq ASC` (records is upsert-per-entity, so array insertion
@@ -140,6 +151,9 @@ export class FakeSyncServer {
       .sort((a, b) => a.seq - b.seq)
       .slice(0, PULL_PAGE);
     const cursor = page.length > 0 ? page[page.length - 1].seq : since;
+    if (page.length < PULL_PAGE) {
+      return { records: page, cursor: Math.max(cursor, this.purgedSeq) };
+    }
     return { records: page, cursor };
   }
 
@@ -505,7 +519,10 @@ export class FakeApiClient implements EngineApiClient {
     this.server.deletePairing(id);
   }
 
-  async getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }> {
+  async getChanges(
+    since: number,
+    { fullListing = false }: { fullListing?: boolean } = {}
+  ): Promise<{ records: SyncRecord[]; cursor: number }> {
     // Recorded before every throw below: a call that HAPPENED must be visible to a test that
     // also scripts it to fail, or a call-order assertion silently reads it as never made.
     this.callOrder.push('getChanges');
@@ -523,7 +540,7 @@ export class FakeApiClient implements EngineApiClient {
       this.nextGetChangesError = null;
       throw err;
     }
-    return this.server.getChanges(since);
+    return this.server.getChanges(since, fullListing);
   }
 
   async pushChanges(records: PushRecord[]): Promise<PushResponse> {

@@ -83,9 +83,15 @@ export function clockedStore(now: number): { store: D1SyncStore; tick: (ms: numb
   };
 }
 
-export async function getChanges(app: App, token: string, since = '0'): Promise<Response> {
+export async function getChanges(
+  app: App,
+  token: string,
+  since = '0',
+  listing?: 'full'
+): Promise<Response> {
+  const query = listing === undefined ? '' : `&listing=${listing}`;
   return app.request(
-    `/v1/changes?since=${since}`,
+    `/v1/changes?since=${since}${query}`,
     { headers: { Authorization: `Bearer ${token}` } },
     env
   );
