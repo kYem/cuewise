@@ -25,6 +25,7 @@ vi.mock('@cuewise/storage', () => ({
 }));
 vi.mock('./GoalsList', () => ({ GoalsList: () => <p>My goals list</p> }));
 
+const PICKER = /^Tasks from /;
 const brief = notionItemFactory.build({ text: 'Write the brief' });
 const shipped = notionItemFactory.build({ text: 'Ship the release', done: true });
 
@@ -66,7 +67,7 @@ describe('GoalsSection - Notion source', () => {
 
     renderGoalsWithNotion(undefined);
 
-    expect(screen.queryByRole('button', { name: 'Notion' })).toBeNull();
+    expect(screen.queryByRole('button', { name: PICKER })).toBeNull();
   });
 
   it('offers no switch while signed out of Cuewise', () => {
@@ -75,7 +76,7 @@ describe('GoalsSection - Notion source', () => {
 
     renderGoalsWithNotion(host, { status: 'off' });
 
-    expect(screen.queryByRole('button', { name: 'Notion' })).toBeNull();
+    expect(screen.queryByRole('button', { name: PICKER })).toBeNull();
     expect(host.api.getNotionConnection).not.toHaveBeenCalled();
   });
 
@@ -86,7 +87,7 @@ describe('GoalsSection - Notion source', () => {
     renderGoalsWithNotion(host);
 
     await waitFor(() => expect(useNotionStore.getState().view.status).toBe('disconnected'));
-    expect(screen.queryByRole('button', { name: 'Notion' })).toBeNull();
+    expect(screen.queryByRole('button', { name: PICKER })).toBeNull();
   });
 
   it('remembers the Notion choice once a table is connected', async () => {
@@ -94,9 +95,11 @@ describe('GoalsSection - Notion source', () => {
     const { updateSettings } = mockStores();
 
     renderGoalsWithNotion(connectedHost());
-    await user.click(await screen.findByRole('button', { name: 'Notion' }));
+    await user.click(await screen.findByRole('button', { name: PICKER }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Notion' }));
 
     expect(updateSettings).toHaveBeenCalledWith({ goalsSource: 'notion' });
+    expect(screen.queryByRole('menuitemradio', { name: 'Notion' })).toBeNull();
   });
 
   it('lists open rows and keeps completed ones behind a toggle', async () => {
