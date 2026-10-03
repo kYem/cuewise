@@ -5,6 +5,7 @@ import {
   postChanges,
   record,
   signedInToken,
+  withPurgedTombstone,
 } from '../__fixtures__/api-test-helpers.fixtures';
 import { D1SyncStore } from '../d1-store';
 import app, { createApp } from '../index';
@@ -259,14 +260,7 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
   // without also expiring the session token (its TTL is measured in real time).
   it('returns 409 resync_required when since predates the purged tombstone watermark', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const stale = await getChanges(app, token, '1');
     expect(stale.status).toBe(409);
@@ -288,14 +282,7 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
 
   it('since equal to the purged watermark is valid (the client already saw that seq)', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const res = await getChanges(app, token, '2');
     expect(res.status).toBe(200);
@@ -312,14 +299,7 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
 
   it('serves a cursor below the watermark that pages a listing from 0', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const res = await getChanges(app, token, '1', 'full');
     expect(res.status).toBe(200);
@@ -329,14 +309,7 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
 
   it('still refuses a cursor below the watermark for any listing value but full', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const res = await getChanges(app, token, '1', 'partial');
     const body = await res.json<{ code: string }>();
@@ -345,14 +318,7 @@ describe('GET /v1/changes tombstone-boundary resync signal', () => {
 
   it('ends a listing at the watermark, so the next pull from its cursor is not refused', async () => {
     const { token, userId } = await signedInToken();
-    const retention = 100_000;
-    const { store, tick } = clockedStore(1_000);
-    await store.applyChanges(userId, [
-      record({ entityId: 'a' }),
-      record({ entityId: 'b', deleted: true }),
-    ]);
-    tick(retention + 1);
-    await store.purgeTombstones(retention);
+    await withPurgedTombstone(userId);
 
     const listing = await getChanges(app, token, '0');
     const { cursor } = await listing.json<{ cursor: number }>();

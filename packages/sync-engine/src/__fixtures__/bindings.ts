@@ -21,3 +21,11 @@ export function disableAfterFirstWrite(binding: CollectionBinding): { isCancelle
   });
   return { isCancelled: () => disabled };
 }
+
+/** Lets the read that applies a pulled record through, then fails every later read of `binding`. */
+export function failReadsAfterFirst(binding: CollectionBinding): void {
+  const readAll = binding.readAll.bind(binding);
+  vi.spyOn(binding, 'readAll')
+    .mockImplementationOnce(readAll)
+    .mockRejectedValue(new Error('storage unavailable'));
+}

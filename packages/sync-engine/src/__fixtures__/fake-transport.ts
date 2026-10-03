@@ -28,11 +28,11 @@ export class FakeTransport implements SyncTransport {
 
   /** One-shot: fails the next getChanges as the server does on a discarded cursor, then clears. */
   rejectNextGetChangesWithResync(): void {
-    this.nextGetChangesError = new ApiError('resync_required', 409);
+    this.rejectNextGetChanges(new ApiError('resync_required', 409));
   }
 
   /** One-shot: fails the next getChanges with `error`, then clears. */
-  rejectNextGetChangesWith(error: Error): void {
+  rejectNextGetChanges(error: Error): void {
     this.nextGetChangesError = error;
   }
 

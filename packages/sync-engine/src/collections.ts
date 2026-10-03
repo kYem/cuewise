@@ -21,6 +21,8 @@ export interface CollectionBinding {
   name: string;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
+  /** False where a delete is never written, so an entity missing from a listing was not purged. */
+  deletable?: false;
   /**
    * Ids the enroll backfill may claim authorship of; defaults to every id readAll answers. Must
    * answer a subset of readAll's ids — an extra id pushes as a tombstone.
@@ -103,6 +105,7 @@ interface SettingsEntity {
 function settingsBinding(): CollectionBinding {
   return {
     name: 'settings',
+    deletable: false,
     // Merges defaults on purpose: a key a reset just cleared is dirty, and its push must carry
     // the default the reset chose.
     async readAll() {

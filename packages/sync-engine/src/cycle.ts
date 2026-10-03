@@ -57,7 +57,7 @@ interface PullState {
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
   /** Keys deleted locally as purged, with the hlc and seq they were judged at; see dropPurged. */
-  purged: Map<string, { hlc: string | undefined; seq: number }>;
+  purged: Map<string, { collection: string; hlc: string | undefined; seq: number }>;
   /** The refusal this pull met, which the ledger's `relistOwed` must now carry. */
   relistRaised: Relist | null;
   /** The owed relist this pull reconciled, cleared from the ledger only if still the one owed. */
@@ -144,12 +144,16 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
     fresh.hlcs[key] = pull.meta.hlcs[key];
     fresh.tombstones = withMembership(fresh.tombstones, key, pull.meta.tombstones.includes(key));
   }
-  for (const [key, seq] of pull.seqs) {
-    fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+  // Seqs this pull saw before a restore refused it predate that restore too.
+  if (pull.relistRaised !== 'restored') {
+    for (const [key, seq] of pull.seqs) {
+      fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+    }
   }
   for (const { collection, entityId } of pull.redirtied.values()) {
     markDirty(fresh, collection, entityId);
   }
+  // A purged key's entity was still held here, so it was never one of the ledger's tombstones.
   for (const [key, judged] of pull.purged) {
     // Moved since it was judged: an edit or an ack owns the key now, not the purge.
     if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
@@ -158,7 +162,6 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
     }
     delete fresh.hlcs[key];
     delete fresh.seqs[key];
-    fresh.tombstones = withMembership(fresh.tombstones, key, false);
   }
 }
 
@@ -610,10 +613,6 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
         pull.meta.cursor = 0;
         pull.cursorReset = true;
         pull.relistRaised = refusal;
-        // Earlier pages' seqs predate the restore that refused this one.
-        if (refusal === 'restored') {
-          pull.seqs.clear();
-        }
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
@@ -628,7 +627,9 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       if (deps.isCancelled()) {
         return cancelledPull(appliedCount);
       }
-      listed.add(SyncMetadataStore.entityKey(rec.collection, rec.entityId));
+      if (relist !== null) {
+        listed.add(SyncMetadataStore.entityKey(rec.collection, rec.entityId));
+      }
       const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
       if (applied === 'failed') {
         // Apply-before-advance: the write failed, so stop here and leave the cursor before it. A
@@ -646,7 +647,7 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
   }
 
-  // A final page may answer a cursor past its last record: the server's purge watermark.
+  // A final page may answer a cursor past its last record: the server's head.
   if (pageCursor > pull.meta.cursor) {
     pull.meta.cursor = pageCursor;
   }
@@ -657,20 +658,21 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     } else {
       reconciled = await repushLost(deps, pull, listed);
     }
+    appliedCount += pull.purged.size;
     if (reconciled.kind === 'cancelled') {
-      return cancelledPull(appliedCount + pull.purged.size);
+      return cancelledPull(appliedCount);
     }
     if (reconciled.kind === 'stalled') {
       pull.cursorReset = true;
       if (!(await savePullUnlessCancelled(deps, pull))) {
-        return cancelledPull(appliedCount + pull.purged.size);
+        return cancelledPull(appliedCount);
       }
       return reconciled;
     }
     pull.relistSettled = relist;
   }
   if (!(await savePullUnlessCancelled(deps, pull))) {
-    return cancelledPull(appliedCount + pull.purged.size);
+    return cancelledPull(appliedCount);
   }
   logger.debug(`Sync pull applied ${appliedCount} record(s)`, {
     byCollection: tallyByCollection(appliedCollections),
@@ -702,11 +704,12 @@ function refusedAs(err: unknown): Relist | null {
 }
 
 type Reconciled = Exclude<PullResult, { kind: 'resynced' }>;
+type Stalled = Extract<PullResult, { kind: 'stalled' }>;
 
 /** A collection's entities for reconciling, or the stall that a failed read must be. */
 async function readForRelist(
   binding: CollectionBinding
-): Promise<{ local: Record<string, unknown> } | Extract<PullResult, { kind: 'stalled' }>> {
+): Promise<{ local: Record<string, unknown> } | Stalled> {
   try {
     return { local: await binding.readAll() };
   } catch (error) {
@@ -724,12 +727,12 @@ async function dropPurged(
   pull: PullState,
   listed: Set<string>
 ): Promise<Reconciled> {
-  let stalled: Extract<PullResult, { kind: 'stalled' }> | null = null;
+  let stalled: Stalled | null = null;
   // Fresh, not the pull's snapshot: an edit made during the round trip must keep its entity.
   const fresh = await deps.meta.load();
   for (const binding of deps.bindings) {
-    // Settings keys are never deleted, so a missing one is a peer's build, not a purge.
-    if (binding.name === 'settings') {
+    // A missing key of a collection that never deletes is a peer's build, not a purge.
+    if (binding.deletable === false) {
       continue;
     }
     const read = await readForRelist(binding);
@@ -737,17 +740,17 @@ async function dropPurged(
       stalled ??= read;
       continue;
     }
-    const dirty = fresh.dirty[binding.name] ?? [];
+    const dirty = new Set(fresh.dirty[binding.name]);
     for (const entityId of Object.keys(read.local)) {
       const key = SyncMetadataStore.entityKey(binding.name, entityId);
       const seq = fresh.seqs[key];
       const ackedMidPull = seq !== pull.meta.seqs[key];
-      if (seq === undefined || ackedMidPull || listed.has(key) || dirty.includes(entityId)) {
+      if (seq === undefined || ackedMidPull || listed.has(key) || dirty.has(entityId)) {
         continue;
       }
       // Re-read at the delete itself: the reads above can be far behind an edit that just landed.
       const now = await deps.meta.load();
-      if ((now.dirty[binding.name] ?? []).includes(entityId) || now.hlcs[key] !== fresh.hlcs[key]) {
+      if (now.dirty[binding.name]?.includes(entityId) || now.hlcs[key] !== fresh.hlcs[key]) {
         continue;
       }
       if (deps.isCancelled()) {
@@ -763,13 +766,13 @@ async function dropPurged(
         stalled ??= { kind: 'stalled', collection: binding.name, entityId };
         continue;
       }
-      pull.purged.set(key, { hlc: fresh.hlcs[key], seq });
+      pull.purged.set(key, { collection: binding.name, hlc: fresh.hlcs[key], seq });
     }
   }
   if (pull.purged.size > 0) {
     // Info, not debug: the one trace of sync deleting local data on inference rather than a record.
     logger.info(`Sync pull deleted ${pull.purged.size} record(s) the server had purged`, {
-      byCollection: tallyByCollection([...pull.purged.keys()].map((k) => k.split('/')[0])),
+      byCollection: tallyByCollection([...pull.purged.values()].map((p) => p.collection)),
     });
   }
   return stalled ?? { kind: 'complete' };
@@ -784,12 +787,14 @@ async function repushLost(
   pull: PullState,
   listed: Set<string>
 ): Promise<Reconciled> {
+  let stalled: Stalled | null = null;
   const fresh = await deps.meta.load();
   let lost = 0;
   for (const binding of deps.bindings) {
     const read = await readForRelist(binding);
     if ('kind' in read) {
-      return read;
+      stalled ??= read;
+      continue;
     }
     for (const entityId of Object.keys(read.local)) {
       const key = SyncMetadataStore.entityKey(binding.name, entityId);
@@ -804,7 +809,7 @@ async function repushLost(
   if (lost > 0) {
     logger.info(`Sync will re-push ${lost} record(s) a server restore lost`);
   }
-  return { kind: 'complete' };
+  return stalled ?? { kind: 'complete' };
 }
 
 /** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */

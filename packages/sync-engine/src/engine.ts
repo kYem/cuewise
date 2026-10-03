@@ -1228,10 +1228,7 @@ export class SyncEngine {
         ),
       };
     }
-    if (pull.kind === 'resynced') {
-      return { kind: 'resynced' };
-    }
-    return { kind: 'synced' };
+    return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };
   }
 
   /** Maps a thrown cycle error to its outcome: a 401 is auth loss, anything else is classified. */

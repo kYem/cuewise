@@ -10,7 +10,11 @@ import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { disableAfterFirstWrite, requireBinding } from './__fixtures__/bindings';
+import {
+  disableAfterFirstWrite,
+  failReadsAfterFirst,
+  requireBinding,
+} from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
 import { sealServerRecord } from './__fixtures__/records';
@@ -74,6 +78,15 @@ describe('pullOnce', () => {
     metaStore = new SyncMetadataStore(kv);
     configurePlatform({ storage: kv });
   });
+
+  /** `count` sealed quote tombstones at seqs 1..count, for tests about paging alone. */
+  function quoteTombstones(count: number): Promise<SyncRecord[]> {
+    return Promise.all(
+      Array.from({ length: count }, (_, i) =>
+        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
+      )
+    );
+  }
 
   function makeDeps(overrides: Partial<CycleDeps> = {}): CycleDeps {
     return {
@@ -1019,7 +1032,7 @@ describe('pullOnce', () => {
 
   it('owes a restore relist, and drops every seq, once the server refuses its cursor as ahead', async () => {
     await seedSynced(metaStore, 'goals', 'g1', 2);
-    transport.rejectNextGetChangesWith(new ApiError('cursor_ahead', 409));
+    transport.rejectNextGetChanges(new ApiError('cursor_ahead', 409));
 
     await expect(pullOnce(makeDeps())).resolves.toEqual({ kind: 'resynced' });
 
@@ -1029,15 +1042,10 @@ describe('pullOnce', () => {
   });
 
   it('keeps no seq from earlier pages when a later page is refused as ahead', async () => {
-    transport.pullRecords = await Promise.all(
-      Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
-        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
-      )
-    );
-    const getChanges = transport.getChanges.bind(transport);
-    vi.spyOn(transport, 'getChanges')
-      .mockImplementationOnce(getChanges)
-      .mockRejectedValueOnce(new ApiError('cursor_ahead', 409));
+    transport.pullRecords = await quoteTombstones(PULL_PAGE + 1);
+    duringPull(transport, async () => {
+      transport.rejectNextGetChanges(new ApiError('cursor_ahead', 409));
+    });
 
     await pullOnce(makeDeps());
 
@@ -1056,11 +1064,7 @@ describe('pullOnce', () => {
   });
 
   it('marks every page after the first of a listing from zero as a full listing', async () => {
-    transport.pullRecords = await Promise.all(
-      Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
-        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
-      )
-    );
+    transport.pullRecords = await quoteTombstones(PULL_PAGE + 1);
 
     await pullOnce(makeDeps());
 
@@ -1071,11 +1075,7 @@ describe('pullOnce', () => {
     await metaStore.update((meta) => {
       meta.cursor = 1;
     });
-    transport.pullRecords = await Promise.all(
-      Array.from({ length: PULL_PAGE + 2 }, (_, i) =>
-        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
-      )
-    );
+    transport.pullRecords = await quoteTombstones(PULL_PAGE + 2);
 
     await pullOnce(makeDeps());
 
@@ -1121,11 +1121,7 @@ describe('pullOnce', () => {
     it('stalls when a collection cannot be read, still owing the restore relist', async () => {
       vi.spyOn(logger, 'error').mockImplementation(() => {});
       const bindings = defaultBindings();
-      const goals = requireBinding(bindings, 'goals');
-      const readAll = goals.readAll.bind(goals);
-      vi.spyOn(goals, 'readAll')
-        .mockImplementationOnce(readAll)
-        .mockRejectedValue(new Error('boom'));
+      failReadsAfterFirst(requireBinding(bindings, 'goals'));
 
       await expect(pullOnce(makeDeps({ bindings }))).resolves.toMatchObject({ kind: 'stalled' });
 
@@ -1261,11 +1257,7 @@ describe('pullOnce', () => {
     it('stalls when a collection cannot be read, still owing the check', async () => {
       vi.spyOn(logger, 'error').mockImplementation(() => {});
       const bindings = defaultBindings();
-      const goals = requireBinding(bindings, 'goals');
-      const readAll = goals.readAll.bind(goals);
-      vi.spyOn(goals, 'readAll')
-        .mockImplementationOnce(readAll)
-        .mockRejectedValue(new Error('boom'));
+      failReadsAfterFirst(requireBinding(bindings, 'goals'));
 
       await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({
         kind: 'stalled',
@@ -1428,8 +1420,9 @@ describe('pullOnce', () => {
       const meta = await metaStore.load();
       transport.pullRecords = [];
       for (const [i, goal] of many.entries()) {
-        meta.hlcs[`goals/${goal.id}`] = OLDER_HLC;
-        meta.seqs[`goals/${goal.id}`] = i + 1;
+        const key = SyncMetadataStore.entityKey('goals', goal.id);
+        meta.hlcs[key] = OLDER_HLC;
+        meta.seqs[key] = i + 1;
         transport.pullRecords.push(
           await sealServerRecord(
             dk,

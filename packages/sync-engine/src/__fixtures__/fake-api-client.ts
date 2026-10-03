@@ -139,7 +139,7 @@ export class FakeSyncServer {
   getChanges(since: number, fullListing = false): { records: SyncRecord[]; cursor: number } {
     // Like routes/changes.ts: since=0 is always served; a cursor past the last seq ever assigned,
     // or behind the watermark without paging a listing from 0, never is.
-    if (since > 0 && since > this.nextSeq) {
+    if (since > this.nextSeq) {
       throw new ApiError('cursor_ahead', 409);
     }
     if (since > 0 && since < this.purgedSeq && !fullListing) {
@@ -153,7 +153,7 @@ export class FakeSyncServer {
       .slice(0, PULL_PAGE);
     const cursor = page.length > 0 ? page[page.length - 1].seq : since;
     if (page.length < PULL_PAGE) {
-      return { records: page, cursor: Math.max(cursor, this.purgedSeq) };
+      return { records: page, cursor: Math.max(cursor, this.nextSeq) };
     }
     return { records: page, cursor };
   }

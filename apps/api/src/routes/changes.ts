@@ -29,13 +29,13 @@ export function registerChangesRoutes(
     const { lastSeq, purgedSeq } = await store.getSeqBounds(userId);
     // since=0 is always valid. A cursor below the watermark may have missed a purged delete, unless
     // it pages a listing from 0, which can miss only a delete purged while it was mid-listing.
-    if (since > 0 && since > lastSeq) {
+    if (since > lastSeq) {
       return problem('cursor_ahead');
     }
     if (since > 0 && since < purgedSeq && c.req.query('listing') !== 'full') {
       return problem('resync_required');
     }
-    const { records, cursor } = await store.listChanges(userId, since, purgedSeq);
+    const { records, cursor } = await store.listChanges(userId, since, lastSeq);
     return c.json({ records, cursor });
   });
 
