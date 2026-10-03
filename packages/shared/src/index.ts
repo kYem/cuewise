@@ -12,6 +12,8 @@ export * from './csv-utils';
 export * from './hlc';
 // Export logger
 export * from './logger';
+// Export Notion integration wire types
+export * from './notion';
 // Export platform ports (scheduler/notifier/storage interfaces + registry)
 export * from './platform';
 // Export posture daily-rollup helpers (macOS tracking → Insights)

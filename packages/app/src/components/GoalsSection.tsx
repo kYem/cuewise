@@ -11,12 +11,10 @@ import {
   AlignJustify,
   ArrowDown,
   ArrowUp,
-  Blocks,
   Calendar,
   CalendarClock,
   Check,
   CheckCircle2,
-  ChevronDown,
   Circle,
   Eye,
   History,
@@ -40,16 +38,11 @@ import { ErrorFallback } from './ErrorFallback';
 import { GoalFocusView } from './GoalFocusView';
 import { GoalProgressRing } from './GoalProgressRing';
 import { GoalsList } from './GoalsList';
+import { GoalsSourcePicker, goalsSourceIcon } from './GoalsSourcePicker';
 import { NotionGoalsList } from './NotionGoalsList';
 import { StorageIndicator } from './StorageIndicator';
 
-const NOTION_SOURCE_ICON = Blocks;
 const ON_IMAGE_TRIGGER = 'bg-white/10 hover:bg-white/20 text-secondary/80 border-white/10';
-
-const GOALS_SOURCES: { value: GoalsSource; label: string; icon: typeof List }[] = [
-  { value: 'cuewise', label: 'My goals', icon: Target },
-  { value: 'notion', label: 'Notion', icon: NOTION_SOURCE_ICON },
-];
 
 const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
   { mode: 'full', icon: List, label: 'Full' },
@@ -98,66 +91,6 @@ function MenuToggleItem({
         {count}
       </span>
     </button>
-  );
-}
-
-// One fixed-width button whatever the number of sources, so each integration adds a menu row.
-function SourcePicker({
-  source,
-  onChange,
-  triggerClassName,
-}: {
-  source: GoalsSource;
-  onChange: (source: GoalsSource) => void;
-  triggerClassName?: string;
-}): React.ReactElement {
-  const [open, setOpen] = useState(false);
-  const current = GOALS_SOURCES.find(({ value }) => value === source) ?? GOALS_SOURCES[0];
-  const CurrentIcon = current.icon;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Tasks from ${current.label}`}
-          title={`Tasks from ${current.label}`}
-          className={cn(
-            'h-8 flex flex-shrink-0 items-center gap-1 px-2 rounded-lg bg-surface-variant/80 hover:bg-surface-variant backdrop-blur-sm text-secondary hover:text-primary transition-all border border-border',
-            triggerClassName
-          )}
-        >
-          <CurrentIcon className="w-4 h-4" />
-          <ChevronDown className="w-3.5 h-3.5" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-52 p-2 bg-surface/95 backdrop-blur-xl" align="end">
-        <div className="text-xs font-medium text-tertiary px-2 py-1">Show tasks from</div>
-        <div className="space-y-0.5">
-          {GOALS_SOURCES.map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={source === value}
-              onClick={() => {
-                onChange(value);
-                setOpen(false);
-              }}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors',
-                source === value
-                  ? 'bg-primary-50 text-primary-600'
-                  : 'text-primary hover:bg-surface-variant'
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{label}</span>
-              {source === value && <Check className="w-4 h-4 ml-auto" />}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
 
@@ -215,7 +148,9 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const notionListHost =
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
-  const SourceIcon = notionListHost === undefined ? Target : NOTION_SOURCE_ICON;
+  const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');
+  // The logo keeps its own black or white rather than taking the theme accent.
+  const sourceIconTone = notionListHost === undefined ? 'text-primary-600' : 'text-primary';
 
   // Goals always show (with their density); the calendar is an optional add-on
   // stacked above/below. calendarFeatureEnabled gates the options-menu control;
@@ -491,7 +426,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         {/* Options menu - inline, appears on hover */}
         <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {showSourcePicker && (
-            <SourcePicker
+            <GoalsSourcePicker
               source={settings.goalsSource}
               onChange={handleSourceChange}
               triggerClassName={ON_IMAGE_TRIGGER}
@@ -514,8 +449,13 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
               {totalCount > 0 && notionListHost === undefined ? (
                 <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
               ) : (
-                <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
-                  <SourceIcon className="w-5 h-5 text-primary-600" />
+                <div
+                  className={cn(
+                    'w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0',
+                    notionListHost === undefined ? 'bg-primary-100' : 'bg-surface-variant'
+                  )}
+                >
+                  <SourceIcon className={cn('w-5 h-5', sourceIconTone)} />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -523,13 +463,13 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
                 <p className="text-xs text-secondary truncate">{subtitle}</p>
               </div>
               {showSourcePicker && (
-                <SourcePicker source={settings.goalsSource} onChange={handleSourceChange} />
+                <GoalsSourcePicker source={settings.goalsSource} onChange={handleSourceChange} />
               )}
               {optionsMenu()}
             </div>
           ) : (
             <div className="flex items-center gap-2 mb-2.5">
-              <SourceIcon className="w-4 h-4 text-primary-600 flex-shrink-0" />
+              <SourceIcon className={cn('w-4 h-4 flex-shrink-0', sourceIconTone)} />
               <h2
                 className={cn(
                   'text-base font-semibold text-primary font-display',
@@ -549,7 +489,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
                 </span>
               )}
               {showSourcePicker && (
-                <SourcePicker source={settings.goalsSource} onChange={handleSourceChange} />
+                <GoalsSourcePicker source={settings.goalsSource} onChange={handleSourceChange} />
               )}
               {optionsMenu()}
             </div>

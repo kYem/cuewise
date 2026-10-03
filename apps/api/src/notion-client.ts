@@ -1,3 +1,4 @@
+import type { NotionItem } from '@cuewise/shared';
 import type { Env } from './env';
 import { ERROR_CODE_RE } from './http';
 import {
@@ -56,12 +57,6 @@ export class NotionResourceError extends Error {
     super(message);
     this.status = status;
   }
-}
-
-export interface NotionItem {
-  pageId: string;
-  text: string;
-  done: boolean;
 }
 
 export interface NotionRows {
