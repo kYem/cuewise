@@ -149,7 +149,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
   const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');
-  // The logo keeps its own black or white rather than taking the theme accent.
+  // The Notion mark takes the text colour, never the theme accent, as its brand asks.
   const sourceIconTone = notionListHost === undefined ? 'text-primary-600' : 'text-primary';
 
   // Goals always show (with their density); the calendar is an optional add-on
@@ -499,7 +499,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
             <div className="flex-1">
               <NotionGoalsList
                 host={notionListHost}
-                variant={viewMode === 'compact' ? 'compact' : 'full'}
+                variant={viewMode}
                 onOpenIntegrations={onOpenIntegrations}
               />
             </div>

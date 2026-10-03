@@ -1,4 +1,4 @@
-import type { NotionItem } from '@cuewise/shared';
+import type { GoalViewMode, NotionItem } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { CheckCircle2 } from 'lucide-react';
 import type React from 'react';
@@ -144,11 +144,9 @@ function NotionFocusTask({
   );
 }
 
-export type NotionListVariant = 'full' | 'compact' | 'focus';
-
 interface NotionGoalsListProps {
   host: NotionHost;
-  variant: NotionListVariant;
+  variant: GoalViewMode;
   onOpenIntegrations: () => void;
 }
 
@@ -324,7 +322,7 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
       )}
       {readyFor.stale && (
         <p className="px-3 text-xs text-tertiary">
-          Notion isn't responding, so this list may be out of date.
+          Couldn't refresh from Notion, so this list may be out of date.
         </p>
       )}
     </div>

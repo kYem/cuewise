@@ -8,6 +8,7 @@ import {
   connectedWithTable,
   fakeNotionHost,
   itemsOf,
+  problem,
 } from '../notion/__fixtures__/notion-host.fixtures';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
@@ -29,6 +30,7 @@ vi.mock('./GoalFocusView', () => ({ GoalFocusView: () => <p>My focused goal</p> 
 const PICKER = /^Tasks from /;
 const brief = notionItemFactory.build({ text: 'Write the brief' });
 const shipped = notionItemFactory.build({ text: 'Ship the release', done: true });
+const draft = notionItemFactory.build({ text: 'Review the draft' });
 
 function mockStores(settings: Partial<Settings> = {}) {
   const today = goalFactory.build();
@@ -63,25 +65,28 @@ beforeEach(() => {
 });
 
 describe('GoalsSection - Notion source', () => {
-  it('offers no switch where the host has no Notion', () => {
-    mockStores();
+  it('offers no source picker where the host has no Notion', () => {
+    mockStores({ goalsSource: 'notion' });
 
     renderGoalsWithNotion(undefined);
 
     expect(screen.queryByRole('button', { name: PICKER })).toBeNull();
+    expect(screen.getByText('My goals list')).toBeInTheDocument();
   });
 
-  it('offers no switch while signed out of Cuewise', () => {
-    mockStores();
+  it('falls back to own goals while signed out, even with Notion chosen', () => {
+    mockStores({ goalsSource: 'notion' });
     const host = connectedHost();
 
     renderGoalsWithNotion(host, { status: 'off' });
 
     expect(screen.queryByRole('button', { name: PICKER })).toBeNull();
+    expect(screen.getByText('My goals list')).toBeInTheDocument();
     expect(host.api.getNotionConnection).not.toHaveBeenCalled();
+    expect(host.api.listNotionItems).not.toHaveBeenCalled();
   });
 
-  it('offers no switch until a table is connected', async () => {
+  it('offers no source picker until a table is connected', async () => {
     mockStores();
     const host = fakeNotionHost();
 
@@ -158,10 +163,10 @@ describe('GoalsSection - Notion source', () => {
     expect(await screen.findByText('· Notion · Tasks')).toBeInTheDocument();
   });
 
-  it('focuses on the next open Notion task and ticks it off', async () => {
+  it('focuses on the first open Notion task, then hands over to the next', async () => {
     const user = userEvent.setup();
     mockStores({ goalsSource: 'notion', goalViewMode: 'focus' });
-    const host = connectedHost();
+    const host = connectedHost([brief, draft, shipped]);
 
     renderGoalsWithNotion(host);
     await user.click(
@@ -170,7 +175,30 @@ describe('GoalsSection - Notion source', () => {
 
     expect(screen.queryByText('My focused goal')).toBeNull();
     expect(host.api.setNotionItemDone).toHaveBeenCalledExactlyOnceWith(brief.pageId, true);
+    expect(
+      await screen.findByRole('button', { name: 'Mark as complete: Review the draft' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('1 open in this table')).toBeInTheDocument();
+  });
+
+  it('says so once every Notion task in focus is done', async () => {
+    mockStores({ goalsSource: 'notion', goalViewMode: 'focus' });
+
+    renderGoalsWithNotion(connectedHost([shipped]));
+
     expect(await screen.findByText('Nothing left to do in this table.')).toBeInTheDocument();
+  });
+
+  it('retries a failed read from the card', async () => {
+    const user = userEvent.setup();
+    mockStores({ goalsSource: 'notion' });
+    const host = connectedHost();
+    host.api.listNotionItems.mockRejectedValueOnce(problem('internal'));
+
+    renderGoalsWithNotion(host);
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('Write the brief')).toBeInTheDocument();
   });
 
   it('says when only the first rows are shown', async () => {
@@ -181,7 +209,7 @@ describe('GoalsSection - Notion source', () => {
     expect(await screen.findByText('Showing the first 500 rows')).toBeInTheDocument();
   });
 
-  it('points at Settings once the chosen table is gone', async () => {
+  it('points at Settings when Notion is no longer connected', async () => {
     const user = userEvent.setup();
     const onOpenIntegrations = vi.fn();
     mockStores({ goalsSource: 'notion' });

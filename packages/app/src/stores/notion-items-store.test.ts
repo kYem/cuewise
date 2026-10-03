@@ -68,9 +68,13 @@ describe('load', () => {
     expect(useNotionItemsStore.getState().list).toEqual(expected);
   });
 
-  it('keeps the last rows, marked stale, when a refresh cannot reach Notion', async () => {
+  it.each([
+    'upstream_unavailable',
+    'network_error',
+    'internal',
+  ])('keeps the last rows, marked stale, when a refresh fails with %s', async (code) => {
     const host = await loaded();
-    host.api.listNotionItems.mockRejectedValue(problem('upstream_unavailable'));
+    host.api.listNotionItems.mockRejectedValue(problem(code));
 
     await useNotionItemsStore.getState().load(host, TABLE_ID);
 
@@ -138,10 +142,35 @@ describe('setDone', () => {
     await ticking;
   });
 
+  it('keeps a tick made while an earlier read was still on its way', async () => {
+    const host = await loaded();
+    const slow = deferred<NotionItems>();
+    host.api.listNotionItems.mockReturnValueOnce(slow.promise);
+
+    const reading = useNotionItemsStore.getState().load(host, TABLE_ID);
+    await useNotionItemsStore.getState().setDone(host, brief.pageId, true);
+    slow.release(itemsOf([brief, review]));
+    await reading;
+
+    expect(shownItems()).toEqual([{ ...brief, done: true }, review]);
+  });
+
+  it('reads the table again once a tick lands on a stale list', async () => {
+    const host = await loaded();
+    host.api.listNotionItems.mockRejectedValueOnce(problem('upstream_unavailable'));
+    await useNotionItemsStore.getState().load(host, TABLE_ID);
+
+    await useNotionItemsStore.getState().setDone(host, brief.pageId, true);
+
+    expect(host.api.listNotionItems).toHaveBeenCalledTimes(3);
+    expect(useNotionItemsStore.getState().list).toMatchObject({ stale: false });
+  });
+
   it.each([
     ['provider_todo_group_missing', 'This table has no To-do status to move the task back to.'],
     ['provider_write_forbidden', "Notion didn't let Cuewise change this task."],
     ['upstream_unavailable', NOTION_UNREACHABLE],
+    ['network_error', NOTION_UNREACHABLE],
     ['internal', "Couldn't update the task in Notion."],
   ])('rolls the tick back and says why on %s', async (code, message) => {
     const host = await loaded();
@@ -153,9 +182,12 @@ describe('setDone', () => {
     expect(errorToast).toHaveBeenCalledExactlyOnceWith(message);
   });
 
-  it('marks the list stale when Notion is unreachable', async () => {
+  it.each([
+    'upstream_unavailable',
+    'network_error',
+  ])('marks the list stale when a tick fails with %s', async (code) => {
     const host = await loaded();
-    host.api.setNotionItemDone.mockRejectedValue(problem('upstream_unavailable'));
+    host.api.setNotionItemDone.mockRejectedValue(problem(code));
 
     await useNotionItemsStore.getState().setDone(host, brief.pageId, true);
 

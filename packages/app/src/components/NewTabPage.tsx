@@ -28,6 +28,7 @@ import { ReminderWidget } from './ReminderWidget';
 import { ReviewPromptModal } from './ReviewPromptModal';
 import { SettingsModal } from './SettingsModal';
 import { SyncMenuFooter } from './SyncMenuFooter';
+import { INTEGRATIONS_SECTION_ID } from './settings/NotionSettingsSection';
 import type { SettingsSection } from './settings/SettingsSections';
 import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
@@ -264,7 +265,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
   };
 
   const handleOpenIntegrations = () => {
-    setSettingsSection('integrations');
+    setSettingsSection(INTEGRATIONS_SECTION_ID);
     setIsSettingsModalOpen(true);
   };
 

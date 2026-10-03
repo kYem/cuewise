@@ -8,6 +8,7 @@ import { SelectControl, SettingRow } from './SettingControls';
 import type { SettingsSection } from './SettingsSections';
 import type { SettingsSectionProps } from './settings-types';
 
+export const INTEGRATIONS_SECTION_ID = 'integrations';
 const LABEL = 'Notion';
 const KEYWORDS = 'integrations notion connect table database tasks disconnect';
 const BUTTON =
@@ -174,7 +175,7 @@ export function createNotionSettingsSection(host: NotionHost): SettingsSection {
     <NotionSettings host={host} filter={filter} />
   );
   return {
-    id: 'integrations',
+    id: INTEGRATIONS_SECTION_ID,
     label: 'Integrations',
     icon: Blocks,
     component: Section,

@@ -25,7 +25,7 @@ export type NotionList =
       items: NotionItem[];
       truncated: boolean;
       fetchedAt: string;
-      /** The last refresh or tick hit an unreachable Notion; the rows may be out of date. */
+      /** The last refresh or tick failed, so the rows may be out of date. */
       stale: boolean;
     };
 
@@ -51,6 +51,13 @@ function blockFor(error: unknown): NotionListBlock | null {
   return BLOCKS.get(problemCode(error) ?? '') ?? null;
 }
 
+// Failures that say nothing is wrong with the table or with Cuewise: retry later.
+const TRANSIENT: ReadonlySet<string> = new Set([
+  'upstream_unavailable',
+  'network_error',
+  'rate_limited',
+]);
+
 function withDone(items: NotionItem[], pageId: string, done: boolean): NotionItem[] {
   return items.map((item) => (item.pageId === pageId ? { ...item, done } : item));
 }
@@ -64,6 +71,8 @@ function without<T>(set: ReadonlySet<T>, value: T): ReadonlySet<T> {
 export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
   // Only the newest read may land, so a slow one cannot overwrite a table change.
   let latestRead = 0;
+  // The read each row's last tick started under: a read sent before the tick predates it.
+  const tickedDuring = new Map<string, number>();
 
   return {
     list: { status: 'idle' },
@@ -81,9 +90,10 @@ export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
           return;
         }
         const { list, saving } = get();
-        // A tick still saving keeps its optimistic value over the read that raced it.
+        // A tick still saving, or made after this read was sent, keeps its value over the read.
         const items = found.items.map((item) => {
-          if (!saving.has(item.pageId) || list.status !== 'ready') {
+          const ticked = (tickedDuring.get(item.pageId) ?? 0) >= read;
+          if (list.status !== 'ready' || !(saving.has(item.pageId) || ticked)) {
             return item;
           }
           return list.items.find((mine) => mine.pageId === item.pageId) ?? item;
@@ -110,7 +120,11 @@ export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
         }
         const list = get().list;
         if (list.status === 'ready' && list.tableId === tableId) {
-          logger.warn('Notion tasks refresh failed; keeping the last read', { error });
+          if (TRANSIENT.has(problemCode(error) ?? '')) {
+            logger.warn('Notion tasks refresh failed; keeping the last read', { error });
+          } else {
+            logger.error('Notion tasks refresh failed; keeping the last read', error);
+          }
           set({ list: { ...list, stale: true } });
           return;
         }
@@ -124,6 +138,7 @@ export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
       if (list.status !== 'ready' || saving.has(pageId)) {
         return;
       }
+      tickedDuring.set(pageId, latestRead);
       set({
         list: { ...list, items: withDone(list.items, pageId, done) },
         saving: new Set(saving).add(pageId),
@@ -131,6 +146,11 @@ export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
       try {
         await host.api.setNotionItemDone(pageId, done);
         set({ saving: without(get().saving, pageId) });
+        // Notion answered, so a stale notice is out of date too: read again to clear it.
+        const latest = get().list;
+        if (latest.status === 'ready' && latest.stale) {
+          await get().load(host, latest.tableId);
+        }
       } catch (error) {
         const shown = get().list;
         set({
@@ -170,7 +190,7 @@ export const useNotionItemsStore = create<NotionItemsStore>((set, get) => {
           set({ list: { status: 'blocked', reason } });
           return;
         }
-        if (code === 'upstream_unavailable') {
+        if (TRANSIENT.has(code ?? '')) {
           logger.warn('Notion unreachable while saving a task', { error });
           const latest = get().list;
           if (latest.status === 'ready') {

@@ -1,4 +1,4 @@
-// Wire types of the `/v1/integrations/notion` routes, shared by the Worker and its clients.
+// Wire types of the `/v1/integrations/notion` routes as the clients read them.
 
 /** `GET /v1/integrations/notion`: the connection as the server holds it, read without asking Notion. */
 export interface NotionConnection {

@@ -2,7 +2,7 @@ import type { GoalsSource } from '@cuewise/shared';
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@cuewise/ui';
 import { Check, ChevronDown, Target } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { NotionLogo } from './NotionLogo';
 
 type SourceIcon = React.ComponentType<{ className?: string }>;
@@ -29,6 +29,7 @@ export function GoalsSourcePicker({
   triggerClassName,
 }: GoalsSourcePickerProps): React.ReactElement {
   const [open, setOpen] = useState(false);
+  const labelId = useId();
   const current = GOALS_SOURCES.find(({ value }) => value === source) ?? GOALS_SOURCES[0];
   const CurrentIcon = current.icon;
   return (
@@ -36,6 +37,7 @@ export function GoalsSourcePicker({
       <PopoverTrigger asChild>
         <button
           type="button"
+          aria-haspopup="menu"
           aria-label={`Tasks from ${current.label}`}
           title={`Tasks from ${current.label}`}
           className={cn(
@@ -48,8 +50,10 @@ export function GoalsSourcePicker({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-52 p-2 bg-surface/95 backdrop-blur-xl" align="end">
-        <div className="text-xs font-medium text-tertiary px-2 py-1">Show tasks from</div>
-        <div className="space-y-0.5">
+        <div id={labelId} className="text-xs font-medium text-tertiary px-2 py-1">
+          Show tasks from
+        </div>
+        <div role="menu" aria-labelledby={labelId} className="space-y-0.5">
           {GOALS_SOURCES.map(({ value, label, icon: Icon }) => (
             <button
               key={value}
