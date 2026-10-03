@@ -498,7 +498,7 @@ describe('a device returning after the server purged a delete it never pulled', 
 });
 
 describe('a listing longer than one page past the purge watermark', () => {
-  it('reaches the end and pushes, rather than being refused on its second page', async () => {
+  it('reaches the end rather than being refused on its second page', async () => {
     const server = new FakeSyncServer();
     const deviceA = createDevice(server, makeClock(1_000_000));
     useStorage(deviceA);

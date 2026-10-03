@@ -1067,6 +1067,21 @@ describe('pullOnce', () => {
     expect(transport.getChangesFullListing).toEqual([false, true]);
   });
 
+  it('marks no page of an incremental pull as a full listing', async () => {
+    await metaStore.update((meta) => {
+      meta.cursor = 1;
+    });
+    transport.pullRecords = await Promise.all(
+      Array.from({ length: PULL_PAGE + 2 }, (_, i) =>
+        sealServerRecord(dk, KEY_ID, 'quotes', `q${i}`, { entity: null, hlc: OLDER_HLC }, i + 1)
+      )
+    );
+
+    await pullOnce(makeDeps());
+
+    expect(transport.getChangesFullListing).toEqual([false, false]);
+  });
+
   it('takes the cursor a final page answers past its last record', async () => {
     transport.pullRecords = [
       await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: null, hlc: OLDER_HLC }, 1),
