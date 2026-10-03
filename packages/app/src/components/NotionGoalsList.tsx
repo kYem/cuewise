@@ -9,6 +9,8 @@ import { type NotionView, useNotionStore } from '../stores/notion-store';
 import { AnimatedCheckbox } from './AnimatedCheckbox';
 
 const NOTION_STALE_MS = 5 * 60_000;
+// Open rows shown before a "+N more" line; a single extra row is shown rather than folded.
+const OPEN_SHOWN = 5;
 
 const BLOCKED_COPY: Record<NotionListBlock, string> = {
   unavailable: 'Your Cuewise sign-in has expired. Sign in again to see your Notion tasks.',
@@ -98,6 +100,7 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
   const list = useNotionItemsStore((s) => s.list);
   const saving = useNotionItemsStore((s) => s.saving);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showAllOpen, setShowAllOpen] = useState(false);
   const connectedId = view.status === 'connected' ? view.dataSourceId : null;
 
   useEffect(() => {
@@ -161,8 +164,15 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
   const done = readyFor.items.filter((item) => item.done);
   const toggle = (item: NotionItem) => () =>
     void useNotionItemsStore.getState().setDone(host, item.pageId, !item.done);
-  const rows = (items: NotionItem[]) => (
-    <ul className="space-y-0.5">
+  // Expanded lists scroll inside the card, so a long table never grows the widget.
+  const rows = (items: NotionItem[], scroll: boolean) => (
+    <ul
+      className={cn(
+        'space-y-0.5',
+        scroll && 'overflow-y-auto',
+        scroll && (compact ? 'max-h-40' : 'max-h-60')
+      )}
+    >
       {items.map((item) => (
         <NotionRow
           key={item.pageId}
@@ -174,14 +184,48 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
       ))}
     </ul>
   );
+  const collapsible = open.length > OPEN_SHOWN + 1;
+  const hidden = open.length - OPEN_SHOWN;
+
+  let openRows: React.ReactNode = rows(open, false);
+  if (open.length === 0) {
+    openRows = (
+      <p className="py-4 text-center text-sm text-secondary">Nothing left to do in this table.</p>
+    );
+  } else if (collapsible && !showAllOpen) {
+    openRows = (
+      <>
+        {rows(open.slice(0, OPEN_SHOWN), false)}
+        <button
+          type="button"
+          onClick={() => setShowAllOpen(true)}
+          className={cn(
+            'self-start px-3 text-sm font-medium text-secondary transition-colors hover:text-primary',
+            compact ? 'py-0.5' : 'py-1'
+          )}
+        >
+          +{hidden} more
+        </button>
+      </>
+    );
+  } else if (collapsible) {
+    openRows = (
+      <>
+        {rows(open, true)}
+        <button
+          type="button"
+          onClick={() => setShowAllOpen(false)}
+          className="self-start px-3 text-xs font-medium text-secondary transition-colors hover:text-primary"
+        >
+          Show less
+        </button>
+      </>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">
-      {open.length === 0 ? (
-        <p className="py-4 text-center text-sm text-secondary">Nothing left to do in this table.</p>
-      ) : (
-        rows(open)
-      )}
+      {openRows}
       {done.length > 0 && (
         <button
           type="button"
@@ -192,7 +236,7 @@ export const NotionGoalsList: React.FC<NotionGoalsListProps> = ({
           {showCompleted ? 'Hide completed' : `Show completed (${done.length})`}
         </button>
       )}
-      {showCompleted && rows(done)}
+      {showCompleted && rows(done, true)}
       {readyFor.truncated && (
         <p className="px-3 text-xs text-tertiary">Showing the first 500 rows</p>
       )}

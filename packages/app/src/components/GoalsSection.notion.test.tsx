@@ -128,6 +128,27 @@ describe('GoalsSection - Notion source', () => {
     expect(host.api.setNotionItemDone).toHaveBeenCalledExactlyOnceWith(brief.pageId, true);
   });
 
+  it('folds open rows past five into a +N more line', async () => {
+    const user = userEvent.setup();
+    mockStores({ goalsSource: 'notion' });
+
+    renderGoalsWithNotion(connectedHost(notionItemFactory.buildList(8)));
+    await user.click(await screen.findByRole('button', { name: '+3 more' }));
+
+    expect(screen.getAllByRole('button', { name: /^Mark as complete: / })).toHaveLength(8);
+  });
+
+  it('shows a sixth open row rather than folding it', async () => {
+    mockStores({ goalsSource: 'notion' });
+
+    renderGoalsWithNotion(connectedHost(notionItemFactory.buildList(6)));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^Mark as complete: / })).toHaveLength(6)
+    );
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull();
+  });
+
   it('says when only the first rows are shown', async () => {
     mockStores({ goalsSource: 'notion' });
 

@@ -43,9 +43,11 @@ import { GoalsList } from './GoalsList';
 import { NotionGoalsList } from './NotionGoalsList';
 import { StorageIndicator } from './StorageIndicator';
 
+const NOTION_SOURCE_ICON = Blocks;
+
 const GOALS_SOURCES: { value: GoalsSource; label: string; icon: typeof List }[] = [
   { value: 'cuewise', label: 'My goals', icon: Target },
-  { value: 'notion', label: 'Notion', icon: Blocks },
+  { value: 'notion', label: 'Notion', icon: NOTION_SOURCE_ICON },
 ];
 
 const VIEW_MODES: { mode: GoalViewMode; icon: typeof List; label: string }[] = [
@@ -208,6 +210,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const notionListHost =
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
+  const SourceIcon = notionListHost === undefined ? Target : NOTION_SOURCE_ICON;
 
   // Goals always show (with their density); the calendar is an optional add-on
   // stacked above/below. calendarFeatureEnabled gates the options-menu control;
@@ -488,7 +491,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
                 <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
               ) : (
                 <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-primary-100 flex-shrink-0">
-                  <Target className="w-5 h-5 text-primary-600" />
+                  <SourceIcon className="w-5 h-5 text-primary-600" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -502,7 +505,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
             </div>
           ) : (
             <div className="flex items-center gap-2 mb-2.5">
-              <Target className="w-4 h-4 text-primary-600 flex-shrink-0" />
+              <SourceIcon className="w-4 h-4 text-primary-600 flex-shrink-0" />
               <h2 className="text-base font-semibold text-primary font-display flex-1">
                 Today's Focus
               </h2>
