@@ -59,6 +59,29 @@ describe('D1SyncStore concurrency', () => {
     expect([a, b].filter((result) => result !== null)).toHaveLength(1);
   });
 
+  it('two concurrent consumeParkedGrant calls on the same code: exactly one resolves non-null', async () => {
+    const store = new D1SyncStore(env.DB);
+    const code = await store.parkProviderGrant(
+      'notion',
+      {
+        ciphertext: 'ct',
+        iv: 'iv',
+        refreshCiphertext: null,
+        refreshIv: null,
+        workspace: null,
+        tokenFingerprint: 'fp',
+      },
+      'challenge-concurrency'
+    );
+
+    const [a, b] = await Promise.all([
+      store.consumeParkedGrant('notion', code),
+      store.consumeParkedGrant('notion', code),
+    ]);
+
+    expect([a, b].filter((result) => result !== null)).toHaveLength(1);
+  });
+
   it('10 concurrent bumpRateWindow calls on one token: observed counts are a permutation of 1..10', async () => {
     const store = new D1SyncStore(env.DB);
     const userId = await store.findOrCreateUser({

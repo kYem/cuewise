@@ -2,7 +2,7 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { clockedStore } from './__fixtures__/api-test-helpers.fixtures';
 import { spyOnLoggerError } from './__fixtures__/logger.fixtures';
-import { SESSION_TTL_MS } from './d1-store';
+import { AUTH_CODE_TTL_MS, SESSION_TTL_MS } from './d1-store';
 import type { SealedGrant } from './store';
 
 const parkedSealedGrant: SealedGrant = {
@@ -175,6 +175,17 @@ describe('D1SyncStore auth', () => {
 
     expect(await store.consumeParkedGrant('notion', code)).toBeNull();
     expect(await store.listExpiredParkedGrants('notion', 62_000, 10)).toHaveLength(1);
+  });
+
+  it('at its expiry instant a parked grant is no longer claimable, and is listed for revoke', async () => {
+    const { store, tick } = clockedStore(1_000);
+    const code = await store.parkProviderGrant('notion', parkedSealedGrant, 'c1');
+    tick(AUTH_CODE_TTL_MS);
+
+    expect(await store.consumeParkedGrant('notion', code)).toBeNull();
+    expect(
+      await store.listExpiredParkedGrants('notion', 1_000 + AUTH_CODE_TTL_MS, 10)
+    ).toHaveLength(1);
   });
 
   it('a parked grant code is not a sign-in code, nor a sign-in code a parked grant', async () => {
