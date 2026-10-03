@@ -405,6 +405,31 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
 
   const minHeight = viewMode === 'compact' ? '' : 'min-h-[120px]';
 
+  const fullMark =
+    totalCount > 0 && notionListHost === undefined ? (
+      <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
+    ) : (
+      <div
+        className={cn(
+          'w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0',
+          notionListHost === undefined ? 'bg-primary-100' : 'bg-surface-variant'
+        )}
+      >
+        <SourceIcon className={cn('w-5 h-5', sourceIconTone)} />
+      </div>
+    );
+  // With a second source on offer the header's mark is the picker; with one it stays a mark.
+  const sourceMark = (mark: React.ReactNode, small = false) => {
+    if (!showSourcePicker) {
+      return mark;
+    }
+    return (
+      <GoalsSourcePicker source={settings.goalsSource} onChange={handleSourceChange} small={small}>
+        {mark}
+      </GoalsSourcePicker>
+    );
+  };
+
   // Goals block: focus renders centered without the card; full/compact use the card.
   const goalsContent =
     viewMode === 'focus' ? (
@@ -446,30 +471,19 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           {/* Header */}
           {viewMode === 'full' ? (
             <div className="flex items-center gap-2.5 mb-4">
-              {totalCount > 0 && notionListHost === undefined ? (
-                <GoalProgressRing completed={completedCount} total={totalCount} size={40} />
-              ) : (
-                <div
-                  className={cn(
-                    'w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0',
-                    notionListHost === undefined ? 'bg-primary-100' : 'bg-surface-variant'
-                  )}
-                >
-                  <SourceIcon className={cn('w-5 h-5', sourceIconTone)} />
-                </div>
-              )}
+              {sourceMark(fullMark)}
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-semibold text-primary font-display">Today's Focus</h2>
                 <p className="text-xs text-secondary truncate">{subtitle}</p>
               </div>
-              {showSourcePicker && (
-                <GoalsSourcePicker source={settings.goalsSource} onChange={handleSourceChange} />
-              )}
               {optionsMenu()}
             </div>
           ) : (
             <div className="flex items-center gap-2 mb-2.5">
-              <SourceIcon className={cn('w-4 h-4 flex-shrink-0', sourceIconTone)} />
+              {sourceMark(
+                <SourceIcon className={cn('w-4 h-4 flex-shrink-0', sourceIconTone)} />,
+                true
+              )}
               <h2
                 className={cn(
                   'text-base font-semibold text-primary font-display',
@@ -487,9 +501,6 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
                 <span className="text-xs text-secondary tabular-nums">
                   {completedCount}/{totalCount}
                 </span>
-              )}
-              {showSourcePicker && (
-                <GoalsSourcePicker source={settings.goalsSource} onChange={handleSourceChange} />
               )}
               {optionsMenu()}
             </div>
