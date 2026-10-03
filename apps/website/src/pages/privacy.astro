@@ -20,7 +20,7 @@ import { SITE } from '../lib/site';
         </div>
         <h1>Privacy Policy</h1>
         <p class="hero-sub">Your data is yours. This page explains, in plain terms, exactly what Cuewise does — and doesn't do — with it.</p>
-        <p class="last-updated">Last Updated: September 25, 2026</p>
+        <p class="last-updated">Last Updated: October 3, 2026</p>
       </div>
     </section>
 
@@ -83,7 +83,7 @@ import { SITE } from '../lib/site';
             <p>By default, all your goals, tasks, and productivity data are stored exclusively on your device using your browser's local storage. This means:</p>
             <ul>
               <li>We never see your personal data</li>
-              <li>Your data doesn't leave your device unless you turn on an optional feature that needs it: the end-to-end encrypted Cloud Sync, the Google Calendar agenda, or the Weather widget. Each is off until you switch it on, and each is described in its own section below. Background photos are the one thing fetched without asking — see "Third-Party Services" for what Unsplash can see</li>
+              <li>Your data doesn't leave your device unless you turn on an optional feature that needs it: the end-to-end encrypted Cloud Sync, the Google Calendar agenda, the Notion connection, or the Weather widget. Each is off until you switch it on, and each is described in its own section below. Background photos are the one thing fetched without asking — see "Third-Party Services" for what Unsplash can see</li>
               <li>No servers store your productivity information in readable form — with sync off, they store nothing at all</li>
               <li>You have complete control over your data</li>
             </ul>
@@ -171,6 +171,41 @@ import { SITE } from '../lib/site';
               <li><strong>Turn it off any time:</strong> disabling sync stops all syncing immediately; your local data is unaffected.</li>
               <li><strong>Export:</strong> you can export everything your account has stored.</li>
               <li><strong>Delete:</strong> deleting your account removes your user record, sessions, key material, and every synced record from our servers.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Card: Notion -->
+        <div class="content-card glass reveal">
+          <h2>
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="7" height="7" x="14" y="3" rx="1"/><path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3"/>
+            </svg>
+            Notion Integration (Optional)
+          </h2>
+          <p>Cuewise offers an <strong>optional, opt-in</strong> Notion connection that shows the tasks from one Notion table in Today's Focus and lets you tick them off. It is off by default, needs a Cloud Sync sign-in, and only activates when you click <strong>"Connect Notion"</strong> in Settings and approve it on Notion's own consent screen, where you choose which pages Cuewise may see.</p>
+          <div>
+            <h3>What we access:</h3>
+            <ul>
+              <li>The names of the tables you shared with Cuewise, so you can pick one.</li>
+              <li>For the one table you picked: each row's title and whether it is done.</li>
+              <li>The only change Cuewise ever makes in Notion is marking a row in that table done or not done when you tick it. It never creates, edits the text of, or deletes anything.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>What our servers store, and why this differs from Cloud Sync:</h3>
+            <ul>
+              <li><strong>Your Notion access token</strong>, because our server talks to Notion on your behalf. Unlike your synced data, this is a credential our server must be able to use, so it is encrypted (AES-256-GCM) with a server-held key rather than one only your device has.</li>
+              <li><strong>The connection's details:</strong> your workspace name, and the id and name of the table you picked, so every signed-in device can show it.</li>
+              <li><strong>Not your tasks.</strong> Rows are passed through to your browser when you open a new tab and are never stored or logged on our servers.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Your controls:</h3>
+            <ul>
+              <li><strong>Disconnect any time</strong> from Settings → Integrations. We delete the stored token and ask Notion to revoke it.</li>
+              <li><strong>Deleting your account</strong> deletes and revokes the Notion connection too.</li>
+              <li>You can also remove Cuewise from Notion itself, under Settings → Connections in your workspace.</li>
             </ul>
           </div>
         </div>
@@ -295,6 +330,7 @@ import { SITE } from '../lib/site';
             <li><strong>Email Delivery:</strong> We use Resend to send newsletter emails. They only have access to your email address if you subscribe.</li>
             <li><strong>Chrome Web Store:</strong> Extension downloads are managed by Google according to their privacy policy.</li>
             <li><strong>Google Calendar (optional):</strong> if you connect it, the extension reads your calendar directly from Google's API; the data stays client-side and never reaches our servers. See "Google Calendar Integration" above.</li>
+            <li><strong>Notion (optional):</strong> if you connect it, our server reads your chosen table and marks tasks done through Notion's API, holding an encrypted access token to do so. See "Notion Integration" above.</li>
             <li><strong>Open-Meteo (optional):</strong> if you turn on the Weather widget, forecasts come from Open-Meteo — but only ever via our server, so they never see you. See "Weather" above.</li>
             <li><strong>Unsplash:</strong> the background photos behind the glass theme and Focus mode are loaded straight from Unsplash's image CDN, so Unsplash sees the request — your IP address and browser, nothing more. No account, no identifier, and nothing about your goals or quotes. These photos load only when you use the glass theme, start Focus mode, or open the Pomodoro page; on the other themes nothing is fetched.</li>
             <li><strong>YouTube (optional):</strong> if you play a focus playlist, the player is YouTube's and they see it as an ordinary YouTube view, subject to their privacy policy. Nothing plays until you choose a playlist.</li>
