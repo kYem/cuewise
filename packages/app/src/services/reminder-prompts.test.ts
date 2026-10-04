@@ -35,26 +35,37 @@ describe('reminder prompts', () => {
     ]);
   });
 
-  it('keeps a prompt the fire raised since this occurrence came due', async () => {
-    await addReminderPrompt('r1', '2026-10-05T09:00:00.000Z', {
-      firedAt: new Date('2026-10-04T09:00:02.000Z'),
+  describe('a catch-up sweep that began at a given time', () => {
+    const sweepStart = new Date('2026-10-04T09:00:02.000Z');
+    const sweptDue = '2026-10-04T09:00:00.000Z';
+
+    it('keeps a prompt a fire raised once it had begun', async () => {
+      await addReminderPrompt('r1', '2026-10-05T09:00:00.000Z', {
+        firedAt: new Date('2026-10-04T09:00:03.000Z'),
+      });
+
+      await addReminderPrompt('r1', sweptDue, { keepFiredSince: sweepStart });
+
+      expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual([
+        '2026-10-05T09:00:00.000Z',
+      ]);
     });
 
-    await addReminderPrompt('r1', DUE, { keepNewerFire: true });
+    it('keeps one raised at the very moment it began', async () => {
+      await addReminderPrompt('r1', 'from-the-fire', { firedAt: sweepStart });
 
-    expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual([
-      '2026-10-05T09:00:00.000Z',
-    ]);
-  });
+      await addReminderPrompt('r1', sweptDue, { keepFiredSince: sweepStart });
 
-  it('still replaces a prompt left from before the occurrence came due', async () => {
-    await addReminderPrompt('r1', '2026-10-04T08:00:00.000Z', {
-      firedAt: new Date('2026-10-04T08:00:01.000Z'),
+      expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual(['from-the-fire']);
     });
 
-    await addReminderPrompt('r1', DUE, { keepNewerFire: true });
+    it('replaces a prompt left from before it began, even one raised after the due time', async () => {
+      await addReminderPrompt('r1', 'stale', { firedAt: new Date('2026-10-04T09:00:01.000Z') });
 
-    expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual([DUE]);
+      await addReminderPrompt('r1', sweptDue, { keepFiredSince: sweepStart });
+
+      expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual([sweptDue]);
+    });
   });
 
   it('drops only the answered reminder', async () => {

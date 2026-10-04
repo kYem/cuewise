@@ -511,7 +511,9 @@ describe('fireDueReminders', () => {
 
     await useReminderStore.getState().fireDueReminders();
 
-    expect(addPrompt).toHaveBeenCalledWith('due-1', due.dueDate, { keepNewerFire: true });
+    expect(addPrompt).toHaveBeenCalledWith('due-1', due.dueDate, {
+      keepFiredSince: expect.any(Date),
+    });
   });
 
   it('falls back to a toast for a reminder whose card could not be raised', async () => {
