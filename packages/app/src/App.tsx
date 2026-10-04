@@ -13,8 +13,10 @@ import { PomodoroPage } from './components/PomodoroPage';
 import { QuoteManagementPage } from './components/QuoteManagementPage';
 import type { SettingsSection } from './components/settings/SettingsSections';
 import { syncSettingsSection } from './components/settings/SyncSettingsSection';
+import { NowPlayingPill } from './components/sounds';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useDayChange } from './hooks/useDayChange';
+import { usePomodoroSounds } from './hooks/usePomodoroSounds';
 import type { NotionHost } from './notion/notion-host';
 import { useBackgroundStore } from './stores/background-store';
 import { useGoalStore } from './stores/goal-store';
@@ -42,6 +44,10 @@ type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
 /** Pages built around the photo. Opt-in, so a page added later dims it and hides its chrome. */
 const PHOTO_FORWARD_PAGES: ReadonlySet<Page> = new Set(['home', 'pomodoro']);
+
+/** Home has it in its nav row and Pomodoro has the full mini player; the rest get it floating. */
+const PAGES_WITH_SOUND_CONTROL: ReadonlySet<Page> = new Set(['home', 'pomodoro']);
+const FLOATING_PLAYER = 'fixed bottom-4 left-4 z-40';
 
 interface AppProps {
   /** Platform-specific settings sections injected by the host (macOS Posture). */
@@ -84,6 +90,9 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
 
   // Goals are day-scoped: refresh Today and roll newly due tasks at midnight.
   useDayChange(() => useGoalStore.getState().handleDayRollover());
+
+  usePomodoroSounds();
+  const pageWithoutSoundControl = !PAGES_WITH_SOUND_CONTROL.has(currentPage);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -300,6 +309,8 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
               <NewTabPage extraSections={effectiveExtraSections} notionHost={notionHost} />
             )}
           </main>
+
+          {pageWithoutSoundControl && <NowPlayingPill className={FLOATING_PLAYER} />}
 
           {/* Live Theme Switcher (pushes content to the left when visible) */}
           <ThemeSwitcher isVisible={settings.showThemeSwitcher} />

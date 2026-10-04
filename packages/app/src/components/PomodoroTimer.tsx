@@ -15,12 +15,11 @@ import type React from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
-import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
-import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
+import { useSoundsStore } from '../stores/sounds-store';
 import type { ChromeVariant } from '../utils/chrome-variant';
 import { getSessionLabel, getSessionStyles } from '../utils/pomodoro-styles';
 import { PomodoroMiniSettings } from './PomodoroMiniSettings';
@@ -161,24 +160,8 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
     [updateSettings, reloadSettings]
   );
 
-  // Sounds state - use useShallow for multiple values
-  const {
-    activeSource,
-    isPlaying: isSoundsPlaying,
-    isSoundsLeader,
-  } = useSoundsStore(
-    useShallow((state) => ({
-      activeSource: state.activeSource,
-      isPlaying: state.isPlaying,
-      isSoundsLeader: state.isLeader,
-    }))
-  );
-
-  // Sounds actions - stable references
-  const pauseSounds = useSoundsStore((state) => state.pause);
-  const resumeSounds = useSoundsStore((state) => state.resume);
-  const stopSounds = useSoundsStore((state) => state.stop);
-  const initSounds = useSoundsStore((state) => state.initialize);
+  const activeSource = useSoundsStore((state) => state.activeSource);
+  const isSoundsPlaying = useSoundsStore((state) => state.isPlaying);
   const getActiveSourceName = useSoundsStore((state) => state.getActiveSourceName);
 
   const [showGoalPicker, setShowGoalPicker] = useState(false);
@@ -208,71 +191,11 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
   // Timer leader election - only one tab/component runs the timer
   usePomodoroLeader();
 
-  // Sounds leader election - only one tab plays YouTube audio
-  useSoundsLeader();
-
-  // Must be mounted wherever the election runs, or the elected tab never hears another tab's write.
-  useSoundsStorageSync();
-
   // Initialize on mount
   useEffect(() => {
     initialize();
     initGoals();
-    initSounds();
-  }, [initialize, initGoals, initSounds]);
-
-  // Unified sound management (ambient + YouTube via sounds-store)
-  // The sounds-store handles leader election and cross-tab sync internally
-  useEffect(() => {
-    const { pomodoroMusicEnabled, pomodoroMusicAutoStart, pomodoroMusicPlayDuringBreaks } =
-      settings;
-
-    // Skip if sounds feature is disabled or auto-start is off
-    if (!pomodoroMusicEnabled || !pomodoroMusicAutoStart) {
-      return;
-    }
-
-    // The resume/pause/stop below follow this tab's lifecycle rather than the user, and they reach
-    // whichever tab holds the audio — so only the tab that owns it may drive them.
-    if (!isSoundsLeader) {
-      return;
-    }
-
-    // Skip if no sound source is selected
-    if (activeSource === 'none') {
-      return;
-    }
-
-    // Determine if we should play sounds based on session type
-    const shouldPlayForSession = sessionType === 'work' || pomodoroMusicPlayDuringBreaks;
-
-    if (status === 'running' && shouldPlayForSession) {
-      // Resume sounds when timer is running
-      resumeSounds();
-    } else if (status === 'paused') {
-      // Pause sounds when timer is paused
-      pauseSounds();
-    } else if (status === 'idle') {
-      // Stop sounds when timer is idle
-      stopSounds();
-    }
-
-    // Cleanup on unmount
-    return () => {
-      stopSounds();
-    };
-  }, [
-    status,
-    sessionType,
-    activeSource,
-    isSoundsLeader,
-    settings.pomodoroMusicEnabled,
-    settings.pomodoroMusicAutoStart,
-    settings.pomodoroMusicPlayDuringBreaks,
-    resumeSounds,
-    pauseSounds,
-    stopSounds,
-  ]);
+  }, [initialize, initGoals]);
 
   const progress = totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
 

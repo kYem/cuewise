@@ -11,6 +11,21 @@ const logger = createLogger({
   includeTimestamp: false,
 });
 
+const LOCK_NAME = 'cuewise-sounds-leader';
+
+let heldAtFirstAsk: Promise<boolean> | null = null;
+
+/**
+ * Asked once per page, before this page queues for the lock: a StrictMode remount would otherwise
+ * find the lock held by its own first mount and mistake that for another tab's audio.
+ */
+function anotherTabHeldTheAudio(): Promise<boolean> {
+  heldAtFirstAsk ??= navigator.locks
+    .query()
+    .then((snapshot) => (snapshot.held ?? []).some((lock) => lock.name === LOCK_NAME));
+  return heldAtFirstAsk;
+}
+
 /**
  * Hook to handle sounds playback leader election
  * Only one tab across the browser will play sounds (YouTube)
@@ -30,15 +45,17 @@ export function useSoundsLeader(): void {
       logger.debug('Requesting sounds leadership lock...');
 
       try {
-        await navigator.locks.request('cuewise-sounds-leader', async (lock) => {
+        const heldElsewhere = anotherTabHeldTheAudio();
+        await navigator.locks.request(LOCK_NAME, async (lock) => {
           if (!lock || aborted) {
             logger.debug('Lock not acquired or aborted');
             return;
           }
 
-          logger.debug('Sounds lock acquired! This tab is the sounds leader');
+          const fresh = !(await heldElsewhere);
+          logger.debug('Sounds lock acquired! This tab is the sounds leader', { fresh });
           lockHeldRef.current = true;
-          setIsLeader(true);
+          setIsLeader(true, { fresh });
 
           // Hold the lock until component unmounts
           await new Promise<void>((resolve) => {
@@ -59,7 +76,7 @@ export function useSoundsLeader(): void {
         // Fallback: assume leader if Web Locks not supported
         if (!aborted) {
           logger.warn('Using fallback (no Web Locks) - assuming leader');
-          setIsLeader(true);
+          setIsLeader(true, { fresh: true });
         }
       }
     };

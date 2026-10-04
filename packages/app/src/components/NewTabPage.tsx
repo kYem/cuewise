@@ -30,6 +30,7 @@ import { SettingsModal } from './SettingsModal';
 import { SyncMenuFooter } from './SyncMenuFooter';
 import { INTEGRATIONS_SECTION_ID } from './settings/NotionSettingsSection';
 import type { SettingsSection } from './settings/SettingsSections';
+import { NowPlayingPill } from './sounds';
 import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
 import { AddWidgetChip } from './widgets/AddWidgetChip';
@@ -279,6 +280,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
 
   const renderNavControls = (menuRef: React.RefObject<HTMLDivElement>) => (
     <>
+      <NowPlayingPill />
+
       {pomodoroStatus !== 'idle' ? (
         <ActivePomodoroWidget />
       ) : (

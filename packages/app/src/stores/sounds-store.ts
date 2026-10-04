@@ -64,7 +64,8 @@ interface SoundsStore {
 
   // Actions
   initialize: () => Promise<void>;
-  setIsLeader: (isLeader: boolean) => void;
+  /** `fresh`: no tab held the audio before this one, so any persisted playback is stale. */
+  setIsLeader: (isLeader: boolean, options?: { fresh?: boolean }) => void;
 
   // Unified playback actions
   playAmbient: (sound: AmbientSoundType) => void;
@@ -195,11 +196,15 @@ export const useSoundsStore = create<SoundsStore>()(
         }
       },
 
-      setIsLeader: (isLeader: boolean) => {
+      setIsLeader: (isLeader, options = {}) => {
         const wasLeader = get().isLeader;
         set({ isLeader });
 
-        if (isLeader && !wasLeader) {
+        if (isLeader && !wasLeader && options.fresh) {
+          initYoutubeLeader(set);
+          discardStalePlayback();
+          logger.info('This tab is now the sounds leader');
+        } else if (isLeader && !wasLeader) {
           initYoutubeLeader(set);
 
           // Resume playback if YouTube was active
@@ -688,6 +693,25 @@ async function findPlaylist(
     logger.warn('Another tab asked for a playlist this one cannot find', { selectedPlaylistId });
   }
   return found;
+}
+
+/** Nothing is playing in a session no tab was leading, whatever the last closed tab persisted. */
+function discardStalePlayback(): void {
+  const discard = () => {
+    const { isPlaying, isPaused } = useSoundsStore.getState();
+    if (isPlaying || isPaused) {
+      useSoundsStore.setState({ isPlaying: false, isPaused: false });
+    }
+  };
+
+  if (useSoundsStore.persist.hasHydrated()) {
+    discard();
+    return;
+  }
+  const unsubscribe = useSoundsStore.persist.onFinishHydration(() => {
+    unsubscribe();
+    discard();
+  });
 }
 
 /**

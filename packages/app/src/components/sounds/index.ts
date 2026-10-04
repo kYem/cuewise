@@ -1,3 +1,4 @@
+export { NowPlayingPill } from './NowPlayingPill';
 export { NowPlayingTab } from './NowPlayingTab';
 export { SoundscapesTab } from './SoundscapesTab';
 export { SoundsMiniPlayer } from './SoundsMiniPlayer';
