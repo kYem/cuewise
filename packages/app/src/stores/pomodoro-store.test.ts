@@ -439,6 +439,14 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
 
       expect(toastError).toHaveBeenCalledTimes(1);
     });
+
+    it('loads again once the shared load has settled', async () => {
+      await usePomodoroStore.getState().initialize();
+
+      await usePomodoroStore.getState().initialize();
+
+      expect(storage.getSettings).toHaveBeenCalledTimes(2);
+    });
   });
 });
 

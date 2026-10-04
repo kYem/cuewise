@@ -1,8 +1,10 @@
+import type { SoundSource } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type SessionType,
   type TimerStatus,
   usePomodoroStorageSync,
   usePomodoroStore,
@@ -25,13 +27,14 @@ vi.mock('./useSoundsLeader', () => ({ useSoundsLeader: vi.fn() }));
 
 interface MockOptions {
   status?: TimerStatus;
-  sessionType?: 'work' | 'break' | 'longBreak';
+  sessionType?: SessionType;
   timerLoading?: boolean;
   timerError?: string | null;
   isLeader?: boolean;
+  musicEnabled?: boolean;
   autoStart?: boolean;
   playDuringBreaks?: boolean;
-  activeSource?: 'none' | 'ambient' | 'youtube';
+  activeSource?: SoundSource;
 }
 
 const sounds = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), initialize: vi.fn() };
@@ -52,7 +55,7 @@ function mockStores(options: MockOptions = {}) {
     createSelectorMock({
       settings: {
         ...defaultSettings,
-        pomodoroMusicEnabled: true,
+        pomodoroMusicEnabled: options.musicEnabled ?? true,
         pomodoroMusicAutoStart: options.autoStart ?? true,
         pomodoroMusicPlayDuringBreaks: options.playDuringBreaks ?? false,
       },
@@ -204,6 +207,38 @@ describe('usePomodoroSounds', () => {
     transition({ status: 'running', isLeader: false }, { status: 'idle', isLeader: false });
 
     expect(sounds.stop).not.toHaveBeenCalled();
+  });
+
+  it('keeps following the timer after a later save fails', () => {
+    transition(
+      { status: 'running' },
+      { status: 'paused', timerError: 'Failed to save the session.' }
+    );
+
+    expect(sounds.pause).toHaveBeenCalled();
+  });
+
+  it('does not silence a sound picked while idle after the last one was turned off mid-session', () => {
+    mockStores({ status: 'running', activeSource: 'ambient' });
+    const { rerender } = renderHook(() => usePomodoroSounds());
+    mockStores({ status: 'running', activeSource: 'none' });
+    rerender();
+    mockStores({ status: 'idle', activeSource: 'none' });
+    rerender();
+    vi.clearAllMocks();
+
+    mockStores({ status: 'idle', activeSource: 'ambient' });
+    rerender();
+
+    expect(sounds.stop).not.toHaveBeenCalled();
+  });
+
+  it('leaves sound alone with music turned off', () => {
+    mockStores({ status: 'running', musicEnabled: false });
+
+    renderHook(() => usePomodoroSounds());
+
+    expect(sounds.resume).not.toHaveBeenCalled();
   });
 
   it('leaves sound alone with auto-start off', () => {

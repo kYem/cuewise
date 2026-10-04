@@ -616,6 +616,15 @@ export const useSoundsStore = create<SoundsStore>()(
         isPlaying: state.isPlaying,
         isPaused: state.isPaused,
       }),
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) {
+          logger.error('Could not load the saved sounds state', error);
+          // The store keeps its stopped defaults, so there is nothing stale left to discard.
+          if (cancelPendingDiscard !== null) {
+            cancelPendingDiscard();
+          }
+        }
+      },
     }
   )
 );
@@ -698,6 +707,8 @@ async function findPlaylist(
   return found;
 }
 
+let cancelPendingDiscard: (() => void) | null = null;
+
 /** Nothing is playing in a session no tab was leading, whatever the last closed tab persisted. */
 function discardStalePlayback(): void {
   const discard = () => {
@@ -711,10 +722,17 @@ function discardStalePlayback(): void {
     discard();
     return;
   }
+  // A failed hydration never fires this, and a later successful rehydrate would then wipe real
+  // playback — so a failure cancels it.
   const unsubscribe = useSoundsStore.persist.onFinishHydration(() => {
+    cancelPendingDiscard = null;
     unsubscribe();
     discard();
   });
+  cancelPendingDiscard = () => {
+    cancelPendingDiscard = null;
+    unsubscribe();
+  };
 }
 
 /**

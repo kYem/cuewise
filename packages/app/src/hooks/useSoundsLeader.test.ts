@@ -66,6 +66,25 @@ describe('useSoundsLeader', () => {
     unmount();
   });
 
+  it('keeps the first answer across a remount, which would otherwise see its own lock', async () => {
+    const query = vi
+      .fn<() => Promise<LockManagerSnapshot>>()
+      .mockImplementationOnce(heldBy([]))
+      .mockImplementation(heldBy(['cuewise-sounds-leader']));
+    installLocks(query);
+    const first = await renderLeader();
+    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
+    first.unmount();
+    setIsLeader.mockClear();
+
+    const { useSoundsLeader } = await import('./useSoundsLeader');
+    const second = renderHook(() => useSoundsLeader());
+
+    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
+    expect(query).toHaveBeenCalledTimes(1);
+    second.unmount();
+  });
+
   it('leads fresh without Web Locks', async () => {
     Reflect.deleteProperty(navigator, 'locks');
 

@@ -44,7 +44,7 @@ async function sessionNotificationsEnabled(): Promise<boolean> {
 }
 
 export type TimerStatus = 'idle' | 'running' | 'paused';
-type SessionType = 'work' | 'break' | 'longBreak';
+export type SessionType = 'work' | 'break' | 'longBreak';
 
 /** Resolve the configured duration (minutes) for a session type. */
 function durationForSession(

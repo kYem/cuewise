@@ -33,7 +33,7 @@ export function usePomodoroSounds(): void {
   const sessionType = usePomodoroStore((state) => state.sessionType);
   // Until initialize() has recovered it, status is whatever the last closed tab persisted.
   const isTimerLoading = usePomodoroStore((state) => state.isLoading);
-  const timerFailedToLoad = usePomodoroStore((state) => state.error !== null);
+  const timerError = usePomodoroStore((state) => state.error);
   const initTimer = usePomodoroStore((state) => state.initialize);
   const initSettings = useSettingsStore((state) => state.initialize);
   const musicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
@@ -50,13 +50,17 @@ export function usePomodoroSounds(): void {
   // Acting only when the timer's wish changes keeps a re-render (navigation reloading the timer,
   // a newly picked sound) from overriding what the user just pressed.
   const appliedRef = useRef<TimerSound | null>(null);
+  // Sampled only as loading ends: later save or reload failures also set `error`, and must not
+  // stop sound following the timer for the rest of the tab.
+  const loadFailedRef = useRef(false);
+  const wasLoadingRef = useRef(true);
 
   usePomodoroStorageSync();
   useSoundsLeader();
   // Must be mounted wherever the election runs, or the elected tab never hears another tab's write.
   useSoundsStorageSync();
 
-  // Any page can win the audio, and Insights/Quotes/Goals/Concepts load none of these themselves.
+  // Any page can win the audio, and most pages load none of these themselves.
   useEffect(() => {
     initTimer();
     initSettings();
@@ -64,16 +68,22 @@ export function usePomodoroSounds(): void {
   }, [initTimer, initSettings, initSounds]);
 
   useEffect(() => {
+    if (isTimerLoading) {
+      wasLoadingRef.current = true;
+      return;
+    }
+    if (wasLoadingRef.current) {
+      wasLoadingRef.current = false;
+      loadFailedRef.current = timerError !== null;
+    }
+    if (loadFailedRef.current) {
+      return;
+    }
     // These follow the timer rather than the user, and they reach whichever tab holds the audio —
-    // so only the tab that owns it may drive them.
-    if (!isLeader) {
+    // so only the tab that owns it may drive them. Any pause in following makes the next look a
+    // first one, so a wish recorded before it can't read as a transition after.
+    if (!isLeader || !musicEnabled || !autoStart || activeSource === 'none') {
       appliedRef.current = null;
-      return;
-    }
-    if (!musicEnabled || !autoStart || isTimerLoading || timerFailedToLoad) {
-      return;
-    }
-    if (activeSource === 'none') {
       return;
     }
 
@@ -100,7 +110,7 @@ export function usePomodoroSounds(): void {
     status,
     sessionType,
     isTimerLoading,
-    timerFailedToLoad,
+    timerError,
     activeSource,
     isLeader,
     musicEnabled,
