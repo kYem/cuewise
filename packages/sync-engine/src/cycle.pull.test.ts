@@ -29,6 +29,8 @@ const OLDER_HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 1, node: 'de
 const NEWER_HLC = hlcEncode({ physical: 1_700_000_001_000, counter: 1, node: 'device-a' });
 /** Wall clock for a local edit that must outrank anything the pull is carrying. */
 const AHEAD_OF_PULL_MS = 1_800_000_000_000;
+/** Sealing and applying more than a page of records runs past the 5s default on CI runners. */
+const PAGING_TIMEOUT_MS = 30_000;
 
 /** Runs `landing` inside the pull's round trip — after it loaded the ledger, before it saves. */
 function duringPull(transport: FakeTransport, landing: () => Promise<void>): void {
@@ -1041,16 +1043,20 @@ describe('pullOnce', () => {
     expect(saved.seqs).toEqual({});
   });
 
-  it('keeps no seq from earlier pages when a later page is refused as ahead', async () => {
-    transport.pullRecords = await quoteTombstones(PULL_PAGE + 1);
-    duringPull(transport, async () => {
-      transport.rejectNextGetChanges(new ApiError('cursor_ahead', 409));
-    });
+  it(
+    'keeps no seq from earlier pages when a later page is refused as ahead',
+    async () => {
+      transport.pullRecords = await quoteTombstones(PULL_PAGE + 1);
+      duringPull(transport, async () => {
+        transport.rejectNextGetChanges(new ApiError('cursor_ahead', 409));
+      });
 
-    await pullOnce(makeDeps());
+      await pullOnce(makeDeps());
 
-    expect((await metaStore.load()).seqs).toEqual({});
-  });
+      expect((await metaStore.load()).seqs).toEqual({});
+    },
+    PAGING_TIMEOUT_MS
+  );
 
   it('never lets a purge refusal replace an owed restore relist', async () => {
     await metaStore.update((meta) => {
@@ -1063,24 +1069,32 @@ describe('pullOnce', () => {
     expect((await metaStore.load()).relistOwed).toBe('restored');
   });
 
-  it('marks every page after the first of a listing from zero as a full listing', async () => {
-    transport.pullRecords = await quoteTombstones(PULL_PAGE + 1);
+  it(
+    'marks every page after the first of a listing from zero as a full listing',
+    async () => {
+      transport.pullRecords = await quoteTombstones(PULL_PAGE + 1);
 
-    await pullOnce(makeDeps());
+      await pullOnce(makeDeps());
 
-    expect(transport.getChangesFullListing).toEqual([false, true]);
-  });
+      expect(transport.getChangesFullListing).toEqual([false, true]);
+    },
+    PAGING_TIMEOUT_MS
+  );
 
-  it('marks no page of an incremental pull as a full listing', async () => {
-    await metaStore.update((meta) => {
-      meta.cursor = 1;
-    });
-    transport.pullRecords = await quoteTombstones(PULL_PAGE + 2);
+  it(
+    'marks no page of an incremental pull as a full listing',
+    async () => {
+      await metaStore.update((meta) => {
+        meta.cursor = 1;
+      });
+      transport.pullRecords = await quoteTombstones(PULL_PAGE + 2);
 
-    await pullOnce(makeDeps());
+      await pullOnce(makeDeps());
 
-    expect(transport.getChangesFullListing).toEqual([false, false]);
-  });
+      expect(transport.getChangesFullListing).toEqual([false, false]);
+    },
+    PAGING_TIMEOUT_MS
+  );
 
   it('takes the cursor a final page answers past its last record', async () => {
     transport.pullRecords = [
@@ -1424,33 +1438,37 @@ describe('pullOnce', () => {
       expect(saved.cursor).toBe(0);
     });
 
-    it('keeps every entity a listing spread over several pages names', async () => {
-      const many = Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
-        goalFactory.build({ id: `p${i}` })
-      );
-      await setGoals(many);
-      const meta = await metaStore.load();
-      transport.pullRecords = [];
-      for (const [i, goal] of many.entries()) {
-        const key = SyncMetadataStore.entityKey('goals', goal.id);
-        meta.hlcs[key] = OLDER_HLC;
-        meta.seqs[key] = i + 1;
-        transport.pullRecords.push(
-          await sealServerRecord(
-            dk,
-            KEY_ID,
-            'goals',
-            goal.id,
-            { entity: goal, hlc: OLDER_HLC },
-            i + 1
-          )
+    it(
+      'keeps every entity a listing spread over several pages names',
+      async () => {
+        const many = Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
+          goalFactory.build({ id: `p${i}` })
         );
-      }
-      await metaStore.save(meta);
+        await setGoals(many);
+        const meta = await metaStore.load();
+        transport.pullRecords = [];
+        for (const [i, goal] of many.entries()) {
+          const key = SyncMetadataStore.entityKey('goals', goal.id);
+          meta.hlcs[key] = OLDER_HLC;
+          meta.seqs[key] = i + 1;
+          transport.pullRecords.push(
+            await sealServerRecord(
+              dk,
+              KEY_ID,
+              'goals',
+              goal.id,
+              { entity: goal, hlc: OLDER_HLC },
+              i + 1
+            )
+          );
+        }
+        await metaStore.save(meta);
 
-      await pullOnce(makeDeps());
+        await pullOnce(makeDeps());
 
-      expect(await getGoals()).toHaveLength(PULL_PAGE + 1);
-    });
+        expect(await getGoals()).toHaveLength(PULL_PAGE + 1);
+      },
+      PAGING_TIMEOUT_MS
+    );
   });
 });
