@@ -73,7 +73,9 @@ describe('handleSyncMessage', () => {
       acked = true;
       return reply;
     });
-    await Promise.resolve();
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
     expect(acked).toBe(false);
 
     finishWrite();
@@ -97,6 +99,18 @@ describe('handleSyncMessage', () => {
     const ack = handleSyncMessage(engine, { kind: 'cuewise-sync-mutation', op: 'mutated' });
 
     await expect(ack).resolves.toEqual({ ok: false, reason: 'malformed' });
+  });
+
+  it.each([
+    { kind: 'cuewise-sync-mutation', op: 'mutated', collection: 'goals' },
+    { kind: 'cuewise-sync-mutation', op: 'mutatedBulk', collection: 'quotes' },
+  ])('acks malformed for a $op message missing its ids', async (message) => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    await expect(handleSyncMessage(fakeEngine(), message)).resolves.toEqual({
+      ok: false,
+      reason: 'malformed',
+    });
   });
 
   it('silently ignores a message with a different kind (e.g. sync-control) and never calls the engine', () => {

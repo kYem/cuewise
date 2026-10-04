@@ -14,11 +14,8 @@ function wait(ms: number): Promise<void> {
   });
 }
 
-/**
- * Page-realm sync sink (ENG-45 option B). The page has no SyncEngine of its own —
- * it relays each mutation to the background (the single sync owner) over
- * chrome.runtime messaging and retries until the worker acks the ledger write.
- */
+/** Page-realm sync sink (ENG-45 option B): relays each mark to the worker, the single sync
+ * owner, and retries until the worker acks the ledger write. */
 export class ChromeRuntimeSyncSink implements SyncMutationSink {
   private readonly queue: SyncMutationMessage[] = [];
   private draining = false;
@@ -62,7 +59,11 @@ export class ChromeRuntimeSyncSink implements SyncMutationSink {
     if (await this.send(message)) {
       return;
     }
-    logger.warn('Sync mutation relay gave up', { op: message.op, collection: message.collection });
+    // Error, not warn: the shipped log level is 'error', and this is a dirty mark lost for good.
+    logger.error('Sync mutation relay gave up', {
+      op: message.op,
+      collection: message.collection,
+    });
   }
 
   /** True once nothing is left to retry: the worker recorded the mark or refused its shape. */

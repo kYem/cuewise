@@ -28,11 +28,8 @@ function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
 
 const MALFORMED: SyncMutationAck = { ok: false, reason: 'malformed' };
 
-/**
- * Routes a page-relayed sync-mutation message (ENG-45 option B) to the background's
- * SyncEngine and resolves its ack once the ledger write settles. Answers undefined for a
- * message on another channel (e.g. sync-control) so that channel's listener replies instead.
- */
+/** Routes a page-relayed mark to the SyncEngine and acks once the ledger write settles;
+ * undefined for another channel's message (e.g. sync-control), so its own listener replies. */
 export function handleSyncMessage(
   engine: SyncMessageEngine,
   msg: unknown

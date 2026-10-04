@@ -17,6 +17,7 @@ beforeEach(() => {
   runtime.sendMessage.mockReset();
   runtime.sendMessage.mockResolvedValue(ACKED);
   vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  vi.spyOn(logger, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -110,7 +111,7 @@ describe('ChromeRuntimeSyncSink', () => {
     expect(runtime.sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({ entityId: 'g2' })
     );
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.error).toHaveBeenCalledWith(
       'Sync mutation relay gave up',
       expect.objectContaining({ op: 'mutated', collection: 'goals' })
     );
@@ -126,6 +127,17 @@ describe('ChromeRuntimeSyncSink', () => {
 
     const ops = runtime.sendMessage.mock.calls.map(([message]) => (message as { op: string }).op);
     expect(ops).toEqual(['mutated', 'mutated', 'deleted']);
+  });
+
+  it('sends a mark made after the queue has drained', async () => {
+    const sink = new ChromeRuntimeSyncSink();
+
+    sink.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(0);
+    sink.markMutated('goals', 'g2');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(runtime.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('never throws into the store mutation, even when sendMessage throws synchronously', () => {
