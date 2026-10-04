@@ -5,4 +5,4 @@
 '@cuewise/macos': patch
 ---
 
-Interval reminders can stop for the day once marked done a set number of times, and Drink Water aims for eight.
+Interval reminders can keep to active hours and stop after a daily target.

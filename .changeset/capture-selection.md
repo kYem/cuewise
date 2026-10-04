@@ -5,4 +5,4 @@
 '@cuewise/shared': minor
 ---
 
-Today's Focus shows unfinished tasks from earlier days, with Move all to today.
+Save a selection from any page as a concept or quote: right-click, the toolbar icon, or Alt+Shift+C.

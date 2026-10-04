@@ -5,6 +5,8 @@
 '@cuewise/shared': minor
 '@cuewise/browser-extension': patch
 '@cuewise/macos': patch
+'@cuewise/app': patch
+'@cuewise/storage': patch
 ---
 
-Cloud sync refuses a push that would overwrite a newer edit and re-pushes a local edit the server had lost, so devices converge on the latest version.
+Cloud sync, concept cards and background photos are more reliable.

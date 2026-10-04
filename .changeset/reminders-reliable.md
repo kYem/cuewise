@@ -6,4 +6,4 @@
 '@cuewise/shared': patch
 ---
 
-Recurring reminders keep firing when a notification fails to show, and a background photo that never loads is replaced.
+Reminders fire more reliably, and Settings can send a test notification.
