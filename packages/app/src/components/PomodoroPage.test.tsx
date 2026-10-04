@@ -176,6 +176,15 @@ describe('PomodoroPage - sound control', () => {
     expect(screen.getByTestId('now-playing-pill')).toBeInTheDocument();
     expect(screen.queryByTestId('sounds-mini-player')).not.toBeInTheDocument();
   });
+
+  it('leaves the sound control to focus mode while it is open', () => {
+    setup('quote', false, { pomodoroMusicEnabled: false });
+    vi.mocked(useFocusModeStore).mockImplementation(createSelectorMock({ isActive: true }));
+
+    render(<PomodoroPage />);
+
+    expect(screen.queryByTestId('now-playing-pill')).not.toBeInTheDocument();
+  });
 });
 
 // App paints the Glass photo app-wide (App.background.test.tsx covers it); this page must

@@ -20,14 +20,7 @@ const LOCK_NAME = 'cuewise-sounds-leader';
  */
 let firstGrantWasFree: boolean | null = null;
 
-/**
- * Hook to handle sounds playback leader election
- * Only one tab across the browser will play sounds (YouTube)
- * Uses Web Locks API for automatic leader election
- *
- * Sets isLeader in the sounds store, which controls whether
- * this tab actually plays audio or just shows the UI state.
- */
+/** Elects the one tab that plays YouTube and follows the timer; ambient plays where it started. */
 export function useSoundsLeader(): void {
   const setIsLeader = useSoundsStore((state) => state.setIsLeader);
   const lockHeldRef = useRef(false);

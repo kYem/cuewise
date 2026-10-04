@@ -671,7 +671,7 @@ export function useSoundsStorageSync() {
         logger.error('Could not rehydrate the sounds state after a storage change', error);
       });
       // Every tab, not only the leader: ambient plays out of whichever tab pressed it, so this is
-      // the one place that can silence what this tab is holding.
+      // the one place a remote stop or volume change reaches what this tab is holding.
       rehydrated.then(reconcileLocalAmbient).catch((error) => {
         logger.error('Could not reconcile ambient playback after a storage change', error);
       });
@@ -729,7 +729,7 @@ async function findPlaylist(
 let cancelPendingDiscard: (() => void) | null = null;
 let hydrationFailed = false;
 
-/** Nothing is playing or paused in a session no tab was leading, whatever the last tab persisted. */
+/** Nothing plays or is paused in a session no tab was leading, whatever the last tab persisted. */
 function discardStalePlayback(): void {
   const discard = () => {
     const { isPlaying, isPaused } = useSoundsStore.getState();

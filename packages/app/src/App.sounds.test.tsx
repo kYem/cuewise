@@ -66,4 +66,25 @@ describe('App sounds', () => {
 
     expect(await screen.findByTestId('now-playing-pill')).toHaveClass('fixed');
   });
+
+  it.each([
+    { hash: '', ownControl: 'now-playing-pill' },
+    { hash: 'pomodoro', ownControl: 'playing-indicator' },
+  ])('floats no second control over the "$hash" page, which has its own', async ({
+    hash,
+    ownControl,
+  }) => {
+    useSoundsStore.setState({
+      activeSource: 'ambient',
+      selectedAmbientSound: 'rain',
+      isPlaying: true,
+    });
+    window.location.hash = hash;
+
+    render(<App />);
+
+    await screen.findAllByTestId(ownControl);
+    const pills = screen.queryAllByTestId('now-playing-pill');
+    expect(pills.filter((pill) => pill.classList.contains('fixed'))).toHaveLength(0);
+  });
 });
