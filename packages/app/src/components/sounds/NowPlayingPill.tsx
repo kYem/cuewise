@@ -13,14 +13,12 @@ export const NowPlayingPill: React.FC<NowPlayingPillProps> = ({ className }) => 
   const isPlaying = useSoundsStore((state) => state.isPlaying);
   const isPaused = useSoundsStore((state) => state.isPaused);
   const togglePlayPause = useSoundsStore((state) => state.togglePlayPause);
-  const getActiveSourceName = useSoundsStore((state) => state.getActiveSourceName);
+  const sourceName = useSoundsStore((state) => state.getActiveSourceName());
 
   // Paused counts so the pill doesn't vanish under the cursor that just paused it; stop hides it.
   if (activeSource === 'none' || (!isPlaying && !isPaused)) {
     return null;
   }
-
-  const sourceName = getActiveSourceName();
 
   return (
     <div

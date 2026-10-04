@@ -214,6 +214,7 @@ async function refreshFromStorage(): Promise<void> {
 // Storage writes are per-key now and don't race, but each write still reads fresh settings to
 // compute the in-memory merge and notify diff — chaining keeps that read/set pair atomic per write.
 let writeChain: Promise<unknown> = Promise.resolve();
+let initializing: Promise<void> | null = null;
 
 function enqueueWrite<T>(run: () => Promise<T>): Promise<T> {
   const result = writeChain.then(run, run);
@@ -259,10 +260,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     set({ preview: null });
   },
 
-  initialize: () =>
+  initialize: () => {
+    // Shared while in flight, so the app-level sounds hook and the page loading beside it read once.
     // In the write queue, not beside it: an init resolving after a write would otherwise install
     // the settings it read BEFORE that write, reverting it in memory until the next reload.
-    enqueueWrite(async () => {
+    initializing ??= enqueueWrite(async () => {
       try {
         subscribeToStorage();
         reportedUnreadable = null;
@@ -278,7 +280,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         set({ error: errorMessage, isLoading: false });
         useToastStore.getState().error(errorMessage);
       }
-    }),
+    }).finally(() => {
+      initializing = null;
+    });
+    return initializing;
+  },
 
   updateSettings: (partialSettings: Partial<Settings>) =>
     enqueueWrite(async () => {

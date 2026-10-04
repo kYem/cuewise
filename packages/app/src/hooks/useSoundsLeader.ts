@@ -22,7 +22,9 @@ let heldAtFirstAsk: Promise<boolean> | null = null;
 function anotherTabHeldTheAudio(): Promise<boolean> {
   heldAtFirstAsk ??= navigator.locks
     .query()
-    .then((snapshot) => (snapshot.held ?? []).some((lock) => lock.name === LOCK_NAME));
+    .then((snapshot) => (snapshot.held ?? []).some((lock) => lock.name === LOCK_NAME))
+    // A failed probe must not reject the lock callback, or the fallback would claim leadership.
+    .catch(() => false);
   return heldAtFirstAsk;
 }
 
