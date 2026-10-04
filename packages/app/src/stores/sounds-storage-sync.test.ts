@@ -7,6 +7,7 @@ import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import {
   leaderPlayingYoutube,
   leaderPlaylist,
+  persistedAmbientPlayback,
   stubYoutubePlayer,
 } from './__fixtures__/sounds-store.fixtures';
 import { echoWritesTo, fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
@@ -329,6 +330,41 @@ describe('useSoundsStorageSync', () => {
     expect(playAmbient).not.toHaveBeenCalled();
     expect(stopAmbient).not.toHaveBeenCalled();
     expect(player.stop).toHaveBeenCalled();
+  });
+
+  it('applies a volume another tab set to the ambient this tab is playing', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const setVolume = vi.spyOn(ambientSoundPlayer, 'setVolume').mockImplementation(() => {});
+    vi.spyOn(ambientSoundPlayer, 'getCurrentSound').mockReturnValue('rain');
+    stubYoutubePlayer();
+    persistedAmbientPlayback();
+    useSoundsStore.setState({ ambientVolume: 12 });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(setVolume).toHaveBeenCalledWith(12);
+  });
+
+  it('applies a volume another tab set to the playlist the leader is playing', async () => {
+    vi.useFakeTimers();
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store });
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
+    const setVolume = vi.spyOn(youtubePlayer, 'setVolume').mockImplementation(() => {});
+    leaderPlayingYoutube();
+    useSoundsStore.setState({ youtubeVolume: 12 });
+    renderHook(() => useSoundsStorageSync());
+
+    fake.emit(['soundsState']);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(setVolume).toHaveBeenCalledWith(12);
   });
 
   it('silences its own ambient when another tab picks a different sound', async () => {

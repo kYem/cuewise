@@ -664,7 +664,7 @@ export function useSoundsStorageSync() {
       });
       // Every tab, not only the leader: ambient plays out of whichever tab pressed it, so this is
       // the one place that can silence what this tab is holding.
-      rehydrated.then(silenceAmbientUnlessWanted).catch((error) => {
+      rehydrated.then(reconcileLocalAmbient).catch((error) => {
         logger.error('Could not reconcile ambient playback after a storage change', error);
       });
       if (isLeader) {
@@ -751,11 +751,12 @@ function discardStalePlayback(): void {
 }
 
 /**
- * Stop but never start: playAmbient already runs in the tab that pressed it, so starting here
- * would sound the same thing twice — while stopping is what a remote stop has no other route to.
+ * Never starts: playAmbient already runs in the tab that pressed it, so starting here would sound
+ * the same thing twice. A remote stop or volume change has no other route to this tab's player.
  */
-function silenceAmbientUnlessWanted(): void {
-  const { activeSource, isPlaying, selectedAmbientSound } = useSoundsStore.getState();
+function reconcileLocalAmbient(): void {
+  const { activeSource, isPlaying, selectedAmbientSound, ambientVolume } =
+    useSoundsStore.getState();
   const wanted =
     activeSource === 'ambient' &&
     isPlaying &&
@@ -763,7 +764,9 @@ function silenceAmbientUnlessWanted(): void {
 
   if (!wanted) {
     ambientSoundPlayer.stop();
+    return;
   }
+  ambientSoundPlayer.setVolume(ambientVolume);
 }
 
 /**
@@ -829,8 +832,11 @@ async function syncLeaderPlayback() {
             failYoutubeLoad();
             throw error;
           }
-        } else if (!youtubePlayer.isPlaying()) {
-          youtubePlayer.play();
+        } else {
+          if (!youtubePlayer.isPlaying()) {
+            youtubePlayer.play();
+          }
+          youtubePlayer.setVolume(useSoundsStore.getState().youtubeVolume);
         }
       }
     } else if (isPaused) {
