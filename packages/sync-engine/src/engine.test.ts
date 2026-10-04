@@ -778,9 +778,10 @@ describe('SyncEngine.enableSync', () => {
     seeded.quarantine = ['goals/g-poison'];
     seeded.tombstones = ['goals/g-deleted'];
     await metaStore.save(seeded);
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
     const getChanges = vi.spyOn(device.apiClient, 'getChanges');
 
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
 
     expect(getChanges).toHaveBeenCalledWith(0);
     const after = await metaStore.load();
@@ -790,7 +791,7 @@ describe('SyncEngine.enableSync', () => {
     expect(after.tombstones).toEqual(['goals/g-deleted']);
   });
 
-  it('discards the cursor on a re-auth too, which can land on a different account', async () => {
+  it('discards the cursor on a re-auth that lands on a different account', async () => {
     // The enabled flag cannot answer "is this cursor mine": it survives handleAuthLoss, and a
     // reconnect re-runs the provider's account chooser.
     const server = new FakeSyncServer();
@@ -800,11 +801,79 @@ describe('SyncEngine.enableSync', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.engine.syncNow();
     expect((await new SyncMetadataStore(device.kv).load()).cursor).toBeGreaterThan(0);
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
     const getChanges = vi.spyOn(device.apiClient, 'getChanges');
 
     await device.engine.enableSync('dev', 'cred-b', 'Device A');
 
     expect(getChanges).toHaveBeenCalledWith(0);
+  });
+
+  it('drops an owed relist on disable', async () => {
+    const device = createDevice(new FakeSyncServer());
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      meta.relistOwed = 'purged';
+    });
+
+    await device.engine.disableSync();
+
+    expect((await metaStore.load()).relistOwed).toBeUndefined();
+  });
+
+  it('keeps the cursor and seqs on a re-auth into the same account, so the server can refuse them', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    const metaStore = new SyncMetadataStore(device.kv);
+    const before = await metaStore.load();
+    const getChanges = vi.spyOn(device.apiClient, 'getChanges');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(getChanges).toHaveBeenCalledWith(before.cursor);
+    expect(getChanges).not.toHaveBeenCalledWith(0);
+    expect((await metaStore.load()).seqs).toEqual(before.seqs);
+  });
+
+  it('deletes nothing for an account switched to while a purge relist was owed', async () => {
+    const device = createDevice(new FakeSyncServer());
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    await new SyncMetadataStore(device.kv).update((meta) => {
+      meta.relistOwed = 'purged';
+    });
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
+
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
+
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g1']);
+  });
+
+  it('re-pushes what a server restore lost once the same account signs back in', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'g2' })]);
+    await device.engine.markMutated('goals', 'g2');
+    await device.engine.syncNow();
+    await device.engine.syncNow();
+    await loseAuth(device);
+    server.restoreBackupAt(1);
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(serverGoal(server, 'g2')).toBeDefined();
   });
 
   it('getAccount returns the api result with a session and null when signed out', async () => {
@@ -1187,7 +1256,7 @@ describe('SyncEngine.syncNow', () => {
     expect(device.engine.getLastSyncedAt()).toBeNull();
   });
 
-  it('reports a refused cursor without stamping', async () => {
+  it('re-pulls from zero in the same cycle after a refused cursor, and stamps it', async () => {
     let t = 5_000;
     const server = new FakeSyncServer();
     const device = createDevice(server, { now: () => t });
@@ -1198,8 +1267,39 @@ describe('SyncEngine.syncNow', () => {
     device.apiClient.rejectNextGetChangesWithResync();
     const outcome = await device.engine.syncNow();
 
+    expect(outcome).toEqual({ kind: 'synced' });
+    expect(device.engine.getLastSyncedAt()).toBe(6_000);
+  });
+
+  it('still pushes, reporting the refusal unstamped, when the re-pull from zero is refused too', async () => {
+    let t = 5_000;
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.markMutated('goals', 'g1');
+    const getChanges = device.apiClient.getChanges.bind(device.apiClient);
+    vi.spyOn(device.apiClient, 'getChanges').mockImplementation(async (since) => {
+      device.apiClient.rejectNextGetChangesWithResync();
+      return getChanges(since);
+    });
+    const callsBefore = device.apiClient.callOrder.length;
+
+    t = 6_000;
+    const outcome = await device.engine.syncNow();
+
     expect(outcome).toEqual({ kind: 'resynced' });
+    expect(device.apiClient.callOrder.slice(callsBefore)).toEqual([
+      'getChanges',
+      'getChanges',
+      'pushChanges',
+    ]);
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
+    expect(device.engine.getLastCycle()).toEqual({
+      known: true,
+      cycle: { at: 6_000, outcome: { kind: 'resynced' } },
+    });
   });
 
   it('returns a classified failure rather than throwing, and does not stamp', async () => {
@@ -1498,12 +1598,11 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
 
     t = 6_000;
-    device.apiClient.rejectNextGetChangesWithResync();
     await device.engine.syncNow();
 
     expect(device.engine.getLastCycle()).toEqual({
       known: true,
-      cycle: { at: 6_000, outcome: { kind: 'resynced' } },
+      cycle: { at: 6_000, outcome: { kind: 'synced' } },
     });
   });
 
@@ -3186,6 +3285,30 @@ describe('SyncEngine re-auth after auth loss', () => {
 
     expect(serverGoal(server, 'g1')?.seq).toBeGreaterThan(seqBefore ?? Number.POSITIVE_INFINITY);
     expect((await new SyncMetadataStore(device.kv).load()).dirty).toEqual({});
+  });
+
+  it('deletes what was deleted and purged elsewhere while it was signed out', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.syncNow();
+    await loseAuth(device);
+    server.purgeDeletedElsewhere('goals', 'g1');
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await getGoals()).toEqual([]);
+  });
+
+  it('keeps what it never synced when a re-auth lands on another account', async () => {
+    const device = await enabledThenSignedOut(new FakeSyncServer());
+    device.apiClient.switchAccount(new FakeSyncServer(), 'user-b');
+
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
+
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g1']);
   });
 
   it('still backfills a same-account re-auth whose first enable never finished', async () => {

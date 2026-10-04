@@ -19,7 +19,10 @@ import type { ConflictStrategy, RecordBody } from './strategy';
 // Structural subset of ApiClient — the cycle only needs these two calls.
 export interface SyncTransport {
   pushChanges(records: PushRecord[]): Promise<PushResponse>;
-  getChanges(since: number): Promise<{ records: SyncRecord[]; cursor: number }>;
+  getChanges(
+    since: number,
+    options?: { fullListing?: boolean }
+  ): Promise<{ records: SyncRecord[]; cursor: number }>;
 }
 
 export interface CycleDeps {
@@ -53,9 +56,17 @@ interface PullState {
   redirtied: Map<string, { collection: string; entityId: string }>;
   /** The server discarded this device's cursor, so the merge must rewind it rather than advance. */
   cursorReset: boolean;
+  /** Keys deleted locally as purged, with the hlc and seq they were judged at; see dropPurged. */
+  purged: Map<string, { collection: string; hlc: string | undefined; seq: number }>;
+  /** The refusal this pull met, which the ledger's `relistOwed` must now carry. */
+  relistRaised: Relist | null;
+  /** The owed relist this pull reconciled, cleared from the ledger only if still the one owed. */
+  relistSettled: Relist | null;
   /** This path re-pushes over what it could not read, so no host hears an item was skipped. */
   repairsQuarantined: boolean;
 }
+
+type Relist = NonNullable<SyncMeta['relistOwed']>;
 
 function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
   return {
@@ -65,6 +76,9 @@ function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
     seqs: new Map(),
     redirtied: new Map(),
     cursorReset: false,
+    purged: new Map(),
+    relistRaised: null,
+    relistSettled: null,
     repairsQuarantined,
   };
 }
@@ -98,6 +112,18 @@ function withMembership(list: string[], key: string, member: boolean): string[] 
 
 /** Applies only what the pull owns onto a freshly-loaded ledger; see PullState. */
 function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
+  // A restored server reassigns seqs, so none held from before it can serve as a push base.
+  if (pull.relistRaised === 'restored') {
+    fresh.seqs = {};
+    fresh.relistOwed = 'restored';
+  }
+  // Never over an owed restore: that relist re-pushes what is missing, where a purge deletes it.
+  if (pull.relistRaised === 'purged' && fresh.relistOwed !== 'restored') {
+    fresh.relistOwed = 'purged';
+  }
+  if (pull.relistSettled !== null && fresh.relistOwed === pull.relistSettled) {
+    delete fresh.relistOwed;
+  }
   if (pull.cursorReset) {
     fresh.cursor = 0;
   } else {
@@ -118,11 +144,24 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
     fresh.hlcs[key] = pull.meta.hlcs[key];
     fresh.tombstones = withMembership(fresh.tombstones, key, pull.meta.tombstones.includes(key));
   }
-  for (const [key, seq] of pull.seqs) {
-    fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+  // Seqs this pull saw before a restore refused it predate that restore too.
+  if (pull.relistRaised !== 'restored') {
+    for (const [key, seq] of pull.seqs) {
+      fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
+    }
   }
   for (const { collection, entityId } of pull.redirtied.values()) {
     markDirty(fresh, collection, entityId);
+  }
+  // A purged key's entity was still held here, so the engine never tombstoned it.
+  for (const [key, judged] of pull.purged) {
+    // Moved since it was judged: an edit or an ack owns the key now, not the purge.
+    if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
+      logger.error('Sync deleted a purged entity as it was edited; that edit may be lost', { key });
+      continue;
+    }
+    delete fresh.hlcs[key];
+    delete fresh.seqs[key];
   }
 }
 
@@ -544,21 +583,36 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
   // Once per collection per pull — a page of unknown records is one line, not N.
   const warnedUnknownCollections = new Set<string>();
   let appliedCount = 0;
+  // Only the server's refusal says why a row is missing. A pull from zero alone cannot tell a purged
+  // delete from a row a restored database lost, so nothing is reconciled without one.
+  const relist = owedRelist(pull.meta);
+  if (relist !== null) {
+    pull.meta.cursor = 0;
+  }
   const startCursor = pull.meta.cursor;
   const appliedCollections: string[] = [];
+  const listed = new Set<string>();
 
   let pageSize = PULL_PAGE;
+  let pageCursor = startCursor;
   while (pageSize === PULL_PAGE) {
     if (deps.isCancelled()) {
       return cancelledPull(appliedCount);
     }
     let result: { records: SyncRecord[]; cursor: number };
     try {
-      result = await deps.transport.getChanges(pull.meta.cursor);
+      // A later page of a listing from 0 says so: the server serves it past its purge watermark.
+      if (startCursor === 0 && pull.meta.cursor > 0) {
+        result = await deps.transport.getChanges(pull.meta.cursor, { fullListing: true });
+      } else {
+        result = await deps.transport.getChanges(pull.meta.cursor);
+      }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409 && err.code === 'resync_required') {
+      const refusal = refusedAs(err);
+      if (refusal !== null) {
         pull.meta.cursor = 0;
         pull.cursorReset = true;
+        pull.relistRaised = refusal;
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
@@ -567,14 +621,20 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       throw err;
     }
     pageSize = result.records.length;
+    pageCursor = result.cursor;
 
     for (const rec of result.records) {
       if (deps.isCancelled()) {
         return cancelledPull(appliedCount);
       }
+      if (relist !== null) {
+        listed.add(SyncMetadataStore.entityKey(rec.collection, rec.entityId));
+      }
       const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
       if (applied === 'failed') {
-        // Apply-before-advance: the write failed, so stop here and leave the cursor before it.
+        // Apply-before-advance: the write failed, so stop here and leave the cursor before it. A
+        // pull owing a relist restarts at 0 instead: reconciling needs the whole listing.
+        pull.cursorReset = relist !== null;
         if (!(await savePullUnlessCancelled(deps, pull))) {
           return cancelledPull(appliedCount);
         }
@@ -587,6 +647,30 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
   }
 
+  // A final page may answer a cursor past its last record: the server's head.
+  if (pageCursor > pull.meta.cursor) {
+    pull.meta.cursor = pageCursor;
+  }
+  if (relist !== null) {
+    let reconciled: Reconciled;
+    if (relist === 'purged') {
+      reconciled = await dropPurged(deps, pull, listed);
+    } else {
+      reconciled = await repushLost(deps, pull, listed);
+    }
+    appliedCount += pull.purged.size;
+    if (reconciled.kind === 'cancelled') {
+      return cancelledPull(appliedCount);
+    }
+    if (reconciled.kind === 'stalled') {
+      pull.cursorReset = true;
+      if (!(await savePullUnlessCancelled(deps, pull))) {
+        return cancelledPull(appliedCount);
+      }
+      return reconciled;
+    }
+    pull.relistSettled = relist;
+  }
   if (!(await savePullUnlessCancelled(deps, pull))) {
     return cancelledPull(appliedCount);
   }
@@ -595,6 +679,137 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     cursor: `${startCursor} -> ${pull.meta.cursor}`,
   });
   return { kind: 'complete' };
+}
+
+/** The ledger's owed relist, if it names one this build knows. */
+function owedRelist(meta: SyncMeta): Relist | null {
+  if (meta.relistOwed === 'purged' || meta.relistOwed === 'restored') {
+    return meta.relistOwed;
+  }
+  return null;
+}
+
+/** Which relist a refused pull owes: the server purged past this cursor, or was restored below it. */
+function refusedAs(err: unknown): Relist | null {
+  if (!(err instanceof ApiError) || err.status !== 409) {
+    return null;
+  }
+  if (err.code === 'resync_required') {
+    return 'purged';
+  }
+  if (err.code === 'cursor_ahead') {
+    return 'restored';
+  }
+  return null;
+}
+
+type Reconciled = Exclude<PullResult, { kind: 'resynced' }>;
+type Stalled = Extract<PullResult, { kind: 'stalled' }>;
+
+/** A collection's entities for reconciling, or the stall that a failed read must be. */
+async function readForRelist(
+  binding: CollectionBinding
+): Promise<{ local: Record<string, unknown> } | Stalled> {
+  try {
+    return { local: await binding.readAll() };
+  } catch (error) {
+    logger.error(`Sync could not read ${binding.name} to reconcile a full listing`, error);
+    return { kind: 'stalled', collection: binding.name, entityId: '*' };
+  }
+}
+
+/**
+ * After a purge refusal's full listing, deletes the synced entities the server no longer holds; a
+ * dirty one is kept, since its edit may postdate the delete. A failed read or delete stalls.
+ */
+async function dropPurged(
+  deps: CycleDeps,
+  pull: PullState,
+  listed: Set<string>
+): Promise<Reconciled> {
+  let stalled: Stalled | null = null;
+  // Fresh, not the pull's snapshot: an edit made during the round trip must keep its entity.
+  const fresh = await deps.meta.load();
+  for (const binding of deps.bindings) {
+    // A missing key of a collection that never deletes is a peer's build, not a purge.
+    if (binding.deletable === false) {
+      continue;
+    }
+    const read = await readForRelist(binding);
+    if ('kind' in read) {
+      stalled ??= read;
+      continue;
+    }
+    const dirty = new Set(fresh.dirty[binding.name]);
+    for (const entityId of Object.keys(read.local)) {
+      const key = SyncMetadataStore.entityKey(binding.name, entityId);
+      const seq = fresh.seqs[key];
+      const ackedMidPull = seq !== pull.meta.seqs[key];
+      if (seq === undefined || ackedMidPull || listed.has(key) || dirty.has(entityId)) {
+        continue;
+      }
+      // Re-read at the delete itself: the reads above can be far behind an edit that just landed.
+      const now = await deps.meta.load();
+      if (now.dirty[binding.name]?.includes(entityId) || now.hlcs[key] !== fresh.hlcs[key]) {
+        continue;
+      }
+      if (deps.isCancelled()) {
+        return { kind: 'cancelled' };
+      }
+      const res = await binding.writeOne(entityId, null);
+      if (!res.success) {
+        logger.error('Sync could not delete an entity whose server row was purged', {
+          collection: binding.name,
+          entityId,
+          error: res.error,
+        });
+        stalled ??= { kind: 'stalled', collection: binding.name, entityId };
+        continue;
+      }
+      pull.purged.set(key, { collection: binding.name, hlc: fresh.hlcs[key], seq });
+    }
+  }
+  if (pull.purged.size > 0) {
+    // Info, not debug: the one trace of sync deleting local data on inference rather than a record.
+    logger.info(`Sync pull deleted ${pull.purged.size} record(s) the server had purged`, {
+      byCollection: tallyByCollection([...pull.purged.values()].map((p) => p.collection)),
+    });
+  }
+  return stalled ?? { kind: 'complete' };
+}
+
+/**
+ * After a restore refusal's full listing, an entity this device synced that the server no longer
+ * holds was lost in the rollback, so it is marked dirty to push again. Nothing local is deleted.
+ */
+async function repushLost(
+  deps: CycleDeps,
+  pull: PullState,
+  listed: Set<string>
+): Promise<Reconciled> {
+  let stalled: Stalled | null = null;
+  const fresh = await deps.meta.load();
+  let lost = 0;
+  for (const binding of deps.bindings) {
+    const read = await readForRelist(binding);
+    if ('kind' in read) {
+      stalled ??= read;
+      continue;
+    }
+    for (const entityId of Object.keys(read.local)) {
+      const key = SyncMetadataStore.entityKey(binding.name, entityId);
+      // No hlc: the engine never synced it, so the server never held it to lose.
+      if (fresh.hlcs[key] === undefined || listed.has(key)) {
+        continue;
+      }
+      pull.redirtied.set(key, { collection: binding.name, entityId });
+      lost += 1;
+    }
+  }
+  if (lost > 0) {
+    logger.info(`Sync will re-push ${lost} record(s) a server restore lost`);
+  }
+  return stalled ?? { kind: 'complete' };
 }
 
 /** What one pulled record did. `failed` is the write refusing, which parks the pull where it is. */

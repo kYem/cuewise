@@ -83,9 +83,27 @@ export function clockedStore(now: number): { store: D1SyncStore; tick: (ms: numb
   };
 }
 
-export async function getChanges(app: App, token: string, since = '0'): Promise<Response> {
+/** A live row at seq 1 and a tombstone at seq 2 the cron has purged, so the watermark is 2. */
+export async function withPurgedTombstone(userId: string): Promise<void> {
+  const retention = 100_000;
+  const { store, tick } = clockedStore(1_000);
+  await store.applyChanges(userId, [
+    record({ entityId: 'a' }),
+    record({ entityId: 'b', deleted: true }),
+  ]);
+  tick(retention + 1);
+  await store.purgeTombstones(retention);
+}
+
+export async function getChanges(
+  app: App,
+  token: string,
+  since = '0',
+  listing?: string
+): Promise<Response> {
+  const query = listing === undefined ? '' : `&listing=${listing}`;
   return app.request(
-    `/v1/changes?since=${since}`,
+    `/v1/changes?since=${since}${query}`,
     { headers: { Authorization: `Bearer ${token}` } },
     env
   );

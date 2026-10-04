@@ -17,6 +17,7 @@ import { FakeScheduler } from './__fixtures__/fake-scheduler';
 import { NoopStrategy } from './__fixtures__/noop-strategy';
 import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
+import { PULL_PAGE } from './cycle';
 import { SyncEngine, type SyncEngineDeps } from './engine';
 import { RecoveryCodeRequiredError } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
@@ -418,6 +419,106 @@ describe('compare-and-set: the server never regresses an entity', () => {
     await deviceB.engine.syncNow();
     expect((await getGoals()).find((g) => g.id === 'g1')?.text).toBe('A newest');
   });
+});
+
+describe('a device returning after the server purged a delete it never pulled', () => {
+  /** A and B share g1 and g2; B deletes g1 and edits g2, then the server purges the tombstone. */
+  async function purgedWhileAway() {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await setGoals([
+      goalFactory.build({ id: 'g1', text: 'deleted on B' }),
+      goalFactory.build({ id: 'g2', text: 'seed' }),
+    ]);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    await deviceA.engine.syncNow();
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await getBinding('goals').writeOne('g1', null);
+    await deviceB.engine.markDeleted('goals', 'g1');
+    await getBinding('goals').writeOne('g2', goalFactory.build({ id: 'g2', text: 'B newer' }));
+    await deviceB.engine.markMutated('goals', 'g2');
+    await deviceB.engine.syncNow();
+    server.purgeTombstones();
+    return { server, deviceA };
+  }
+
+  it('deletes it too, in the same cycle the server refused its cursor', async () => {
+    const { deviceA } = await purgedWhileAway();
+    useStorage(deviceA);
+
+    await expect(deviceA.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g2']);
+  });
+
+  it('is not refused again once its listing has caught up with the purge', async () => {
+    const { deviceA } = await purgedWhileAway();
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+    const callsBefore = deviceA.apiClient.callOrder.length;
+
+    await expect(deviceA.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+
+    expect(deviceA.apiClient.callOrder.slice(callsBefore)).toEqual(['getChanges']);
+  });
+
+  it('re-creates an entity it edited while away, for every device', async () => {
+    const { server, deviceA } = await purgedWhileAway();
+    useStorage(deviceA);
+    await getBinding('goals').writeOne('g1', goalFactory.build({ id: 'g1', text: 'A kept it' }));
+    await deviceA.engine.markMutated('goals', 'g1');
+
+    await deviceA.engine.syncNow();
+
+    const row = server.rows().find((r) => r.entityId === 'g1');
+    expect(row?.deleted).toBe(false);
+  });
+
+  it('pulls from zero before it pushes, so a stale edit loses to the newer one first', async () => {
+    const { deviceA } = await purgedWhileAway();
+    useStorage(deviceA);
+    await getBinding('goals').writeOne('g2', goalFactory.build({ id: 'g2', text: 'A stale' }));
+    await deviceA.engine.markMutated('goals', 'g2');
+    const callsBefore = deviceA.apiClient.callOrder.length;
+
+    await deviceA.engine.syncNow();
+
+    expect(deviceA.apiClient.callOrder.slice(callsBefore)).toEqual([
+      'getChanges',
+      'getChanges',
+      'pushChanges',
+    ]);
+    expect((await getGoals()).find((g) => g.id === 'g2')?.text).toBe('B newer');
+  });
+});
+
+describe('a listing longer than one page past the purge watermark', () => {
+  it('reaches the end rather than being refused on its second page', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    const goals = Array.from({ length: PULL_PAGE + 1 }, (_, i) =>
+      goalFactory.build({ id: `g${i}` })
+    );
+    await setGoals(goals);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    await deviceA.engine.syncNow();
+    await getBinding('goals').writeOne('g0', null);
+    await deviceA.engine.markDeleted('goals', 'g0');
+    await deviceA.engine.syncNow();
+    server.purgeTombstones();
+    await new SyncMetadataStore(deviceA.kv).update((meta) => {
+      meta.cursor = 1;
+    });
+
+    await expect(deviceA.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
+    // Sealing and listing 501 records several times runs past the 5s default on CI runners.
+  }, 30_000);
 });
 
 describe('settings: an enrolling device claims only the keys it explicitly wrote', () => {
