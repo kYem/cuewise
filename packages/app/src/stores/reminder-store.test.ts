@@ -13,6 +13,7 @@ import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordReminderActivity } from '../services/reminder-activity';
 import { reminderNotification } from '../services/reminder-notifications';
+import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
 import { useReminderStore } from './reminder-store';
 
@@ -21,6 +22,13 @@ vi.mock('../services/reminder-activity', async (importOriginal) => ({
   recordReminderActivity: vi.fn(() => Promise.resolve()),
 }));
 const recordActivity = vi.mocked(recordReminderActivity);
+
+vi.mock('../services/reminder-prompts', () => ({
+  addReminderPrompt: vi.fn(() => Promise.resolve(true)),
+  removeReminderPrompt: vi.fn(() => Promise.resolve(true)),
+}));
+const addPrompt = vi.mocked(addReminderPrompt);
+const removePrompt = vi.mocked(removeReminderPrompt);
 
 // Mock storage functions
 vi.mock('@cuewise/storage', () => ({
@@ -381,6 +389,45 @@ describe('updateReminder keeping recurrence', () => {
   });
 });
 
+describe('answering a reminder from the panel clears its in-app card', () => {
+  const due = reminderFactory.build({ id: 'r1', completed: false, notified: true });
+
+  beforeEach(() => {
+    storageAheadOfStore([due], [due]);
+    setRemindersMock.mockResolvedValue({ success: true });
+  });
+
+  it('when marked done', async () => {
+    await useReminderStore.getState().toggleReminder('r1');
+
+    expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+
+  it('when snoozed', async () => {
+    await useReminderStore.getState().snoozeReminder('r1', 5);
+
+    expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+
+  it('when deleted', async () => {
+    await useReminderStore.getState().deleteReminder('r1');
+
+    expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+
+  it('not when the answer failed to save', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await useReminderStore.getState().snoozeReminder('r1', 5);
+
+    expect(removePrompt).not.toHaveBeenCalled();
+  });
+});
+
 describe('fireDueReminders', () => {
   it('marks past-due active reminders as notified while leaving future ones untouched', async () => {
     const due = reminderFactory.build({
@@ -435,9 +482,9 @@ describe('fireDueReminders', () => {
     expect(setRemindersMock).not.toHaveBeenCalled();
   });
 
-  // `notified` is already persisted by the time these toast, so a collapsed duplicate is a
-  // reminder the user is never told about at all.
-  it('announces both of two due reminders that share the same text', async () => {
+  // `notified` is already persisted by the time these are announced, so a collapsed duplicate is
+  // a reminder the user is never told about at all.
+  it('raises the in-app card for both of two due reminders that share the same text', async () => {
     const due = (id: string) =>
       reminderFactory.build({
         id,
@@ -449,7 +496,42 @@ describe('fireDueReminders', () => {
 
     await useReminderStore.getState().fireDueReminders();
 
-    expect(toastWarning).toHaveBeenCalledTimes(2);
+    expect(addPrompt.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+
+  // The worker can fire the same missed wake while this sweep runs, and its prompt is the newer.
+  it('never replaces a prompt a fire already raised', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: false,
+    });
+    useReminderStore.setState({ reminders: [due] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(addPrompt).toHaveBeenCalledWith('due-1', due.dueDate, {
+      keepFiredSince: expect.any(Date),
+    });
+  });
+
+  it('falls back to a toast for a reminder whose card could not be raised', async () => {
+    addPrompt.mockResolvedValueOnce(false);
+    useReminderStore.setState({
+      reminders: [
+        reminderFactory.build({
+          id: 'due-1',
+          text: 'Stretch',
+          dueDate: new Date(Date.now() - 60_000).toISOString(),
+          notified: false,
+        }),
+      ],
+    });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(toastWarning).toHaveBeenCalledWith('Reminder: Stretch');
   });
 
   // The shipped default log level is 'error', so an info line leaves a reminder that fired but
@@ -512,9 +594,9 @@ describe('fireDueReminders', () => {
       expect(getSettingsMock).not.toHaveBeenCalled();
     });
 
-    // `notified` is persisted before the toasts, so every due reminder must reach the user even
-    // when the notifier is unusable — the toast is the delivery nothing fallible may precede.
-    it('toasts every due reminder before anything that can fail', async () => {
+    // `notified` is persisted before the cards, so every due reminder must reach the user even
+    // when the notifier is unusable — the card is the delivery nothing fallible may precede.
+    it('raises a card for every due reminder before anything that can fail', async () => {
       resetPlatform();
       configurePlatform({ scheduler: fakeScheduler });
       useReminderStore.setState({
@@ -535,7 +617,7 @@ describe('fireDueReminders', () => {
 
       await useReminderStore.getState().fireDueReminders();
 
-      expect(toastWarning).toHaveBeenCalledTimes(2);
+      expect(addPrompt).toHaveBeenCalledTimes(2);
       expect(errorLog).toHaveBeenCalledWith('Error firing due reminders', expect.anything());
     });
   });
@@ -1196,7 +1278,7 @@ describe('reminder activity log', () => {
     expect(recordActivity).toHaveBeenCalledWith({ event: 'cancelled', reminderId: 'gone' });
   });
 
-  it('records each reminder the page announced as a toast', async () => {
+  it('records each reminder the page announced with a card', async () => {
     const due = reminderFactory.build({
       id: 'due-1',
       text: 'Stand up',
@@ -1207,7 +1289,7 @@ describe('reminder activity log', () => {
     await useReminderStore.getState().fireDueReminders();
 
     expect(recordActivity).toHaveBeenCalledWith({
-      event: 'toasted',
+      event: 'prompted',
       reminderId: 'due-1',
       text: 'Stand up',
     });

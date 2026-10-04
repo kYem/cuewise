@@ -285,6 +285,14 @@ describe('resolveReminderNotificationAction', () => {
     });
   });
 
+  it('Snooze reschedules by the length the in-app card picked', () => {
+    const reminder = baseReminder({ recurring: undefined });
+    expect(resolveReminderNotificationAction(reminder, 1, now, 30)).toEqual({
+      type: 'snooze',
+      dueDate: new Date(now.getTime() + 30 * 60_000).toISOString(),
+    });
+  });
+
   it('Snooze dismisses a paused recurring reminder', () => {
     const reminder = baseReminder({ recurring: { frequency: 'daily' }, paused: true });
     expect(resolveReminderNotificationAction(reminder, 1, now)).toEqual({ type: 'dismiss' });

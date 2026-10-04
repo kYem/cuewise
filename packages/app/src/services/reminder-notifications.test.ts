@@ -4,13 +4,28 @@ import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/f
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordReminderActivity } from './reminder-activity';
-import { armMissingReminderAlarms, handleReminderFire } from './reminder-notifications';
+import {
+  armMissingReminderAlarms,
+  handleReminderFire,
+  REMINDER_DONE_BUTTON,
+  REMINDER_SNOOZE_BUTTON,
+  respondToReminder,
+} from './reminder-notifications';
+import { addReminderPrompt, removeReminderPrompt } from './reminder-prompts';
 
 vi.mock('./reminder-activity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./reminder-activity')>()),
   recordReminderActivity: vi.fn(() => Promise.resolve()),
 }));
 const recordActivity = vi.mocked(recordReminderActivity);
+
+vi.mock('./reminder-prompts', () => ({
+  addReminderPrompt: vi.fn(() => Promise.resolve()),
+  removeReminderPrompt: vi.fn(() => Promise.resolve()),
+}));
+const addPrompt = vi.mocked(addReminderPrompt);
+const removePrompt = vi.mocked(removeReminderPrompt);
+const markMutated = vi.fn();
 
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
@@ -46,6 +61,104 @@ beforeEach(() => {
       scheduleAt,
       cancel: async () => {},
     },
+    syncSink: { markMutated, markDeleted: vi.fn() },
+  });
+});
+
+describe('the in-app prompt a fire raises', () => {
+  it('raises a prompt for the reminder that fired', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+
+    await handleReminderFire('reminder-r1');
+
+    expect(addPrompt).toHaveBeenCalledWith('r1', expect.any(String));
+  });
+
+  it('still raises it when the notification could not be shown', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+    notify.mockRejectedValueOnce(new Error('notifications blocked'));
+
+    await handleReminderFire('reminder-r1');
+
+    expect(addPrompt).toHaveBeenCalledWith('r1', expect.any(String));
+  });
+
+  it('raises none for a reminder the fire skips', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: true })]);
+
+    await handleReminderFire('reminder-r1');
+
+    expect(addPrompt).not.toHaveBeenCalled();
+  });
+});
+
+describe('respondToReminder', () => {
+  it('Done completes a one-off, tells sync, and clears its notification and prompt', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+
+    await respondToReminder('r1', REMINDER_DONE_BUTTON);
+
+    expect(setRemindersMock.mock.calls[0][0][0].completed).toBe(true);
+    expect(markMutated).toHaveBeenCalledWith('reminders', 'r1');
+    expect(notifier.clear).toHaveBeenCalledWith('reminder-r1');
+    expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+
+  it('Snooze moves it by the length asked for, tells sync and re-arms its wake', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+    const before = Date.now();
+
+    await respondToReminder('r1', REMINDER_SNOOZE_BUTTON, 30);
+
+    const due = new Date(setRemindersMock.mock.calls[0][0][0].dueDate).getTime();
+    expect(due - before).toBeGreaterThanOrEqual(30 * 60_000);
+    expect(due - before).toBeLessThan(31 * 60_000);
+    expect(markMutated).toHaveBeenCalledWith('reminders', 'r1');
+    expect(scheduleAt).toHaveBeenCalledWith('reminder-r1', new Date(due));
+    expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+
+  it('keeps the prompt when the answer could not be saved, so the card can be answered again', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(respondToReminder('r1', REMINDER_SNOOZE_BUTTON)).resolves.toBe(false);
+
+    expect(removePrompt).not.toHaveBeenCalled();
+  });
+
+  it('records the due date a one-off fire left, for the card to check against', async () => {
+    const due = reminderFactory.build({ id: 'r1', completed: false });
+    getRemindersMock.mockResolvedValue([due]);
+
+    await handleReminderFire('reminder-r1');
+
+    expect(addPrompt).toHaveBeenCalledWith('r1', due.dueDate);
+  });
+
+  it('records the next occurrence a recurring fire advanced to', async () => {
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({ id: 'r2', recurring: { frequency: 'daily' } }),
+    ]);
+
+    await handleReminderFire('reminder-r2');
+
+    const saved = setRemindersMock.mock.calls[0][0][0];
+    expect(addPrompt).toHaveBeenCalledWith('r2', saved.dueDate);
+  });
+
+  it('clears the prompt of a reminder already gone, without writing', async () => {
+    getRemindersMock.mockResolvedValue([]);
+
+    await respondToReminder('r1', REMINDER_DONE_BUTTON);
+
+    expect(setRemindersMock).not.toHaveBeenCalled();
+    expect(removePrompt).toHaveBeenCalledWith('r1');
   });
 });
 

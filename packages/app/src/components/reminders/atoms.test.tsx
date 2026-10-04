@@ -80,7 +80,7 @@ describe('ReminderHeroCard', () => {
 
     expect(screen.getByText('Submit the quarterly report')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '5m' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze 5 minutes' }));
     expect(onSnooze).toHaveBeenCalledWith(5);
   });
 });

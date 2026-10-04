@@ -4,22 +4,14 @@
  */
 
 import type { SyncUiStatus } from '@cuewise/app';
-import { activitySubject, recordReminderActivity } from '@cuewise/app/reminder-activity';
-import { armMissingReminderAlarms, handleReminderFire } from '@cuewise/app/reminder-notifications';
+import { recordReminderActivity } from '@cuewise/app/reminder-activity';
 import {
-  describeThrown,
-  getStorage,
-  isDailyTargetMet,
-  logger,
-  nextReminderDueDate,
-  notifyMutated,
-  type Reminder,
-  recordReminderDone,
-  reminderAlarmId,
-  reminderIdFromAlarm,
-  resolveReminderNotificationAction,
-} from '@cuewise/shared';
-import { ensureSettingsMigrated, getReminders, updateReminders } from '@cuewise/storage';
+  armMissingReminderAlarms,
+  handleReminderFire,
+  respondToReminder,
+} from '@cuewise/app/reminder-notifications';
+import { describeThrown, getStorage, logger, reminderIdFromAlarm } from '@cuewise/shared';
+import { ensureSettingsMigrated, getReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
 import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
 import {
@@ -241,108 +233,11 @@ notifier.onClick(async (notificationId) => {
   }
 });
 
-// Notification action buttons (Done / Snooze 5 min).
+// Notification action buttons (Done / Snooze 5 min), answered exactly as the in-app card answers.
 notifier.onAction(async (notificationId, buttonIndex) => {
   const reminderId = reminderIdFromAlarm(notificationId);
   if (reminderId === null) {
     return;
   }
-  let reminder: Reminder | undefined;
-  try {
-    const reminders = await getReminders();
-    reminder = reminders.find((r) => r.id === reminderId);
-    const action = resolveReminderNotificationAction(reminder, buttonIndex, new Date());
-
-    if (action.type === 'complete') {
-      const { result } = await updateReminders((current) =>
-        current.map((r) => (r.id === reminderId ? { ...r, completed: true } : r))
-      );
-      // Nothing is armed off this one, so there is no wake to withhold — but a Done click that
-      // silently failed to persist would otherwise leave no trace at all.
-      if (result?.success === false) {
-        logger.error('Could not persist the completed reminder', result.error);
-        await recordReminderActivity({
-          event: 'failed',
-          ...subjectOf(reminder, reminderId),
-          detail: 'done: not persisted',
-        });
-      } else if (reminder) {
-        await recordReminderActivity({ event: 'done', ...activitySubject(reminder) });
-      }
-    } else if (action.type === 'count') {
-      const now = new Date();
-      // Counted against the stored copy, inside the write: a pull may have moved it meanwhile.
-      const counted: { reminder: Reminder | null } = { reminder: null };
-      const { result } = await updateReminders((current) =>
-        current.map((r) => {
-          if (r.id !== reminderId) {
-            return r;
-          }
-          const done = recordReminderDone(r, now);
-          // The fire already armed the next nudge; only a met target moves it to tomorrow.
-          counted.reminder = isDailyTargetMet(done, now)
-            ? { ...done, dueDate: nextReminderDueDate(done, now).toISOString() }
-            : done;
-          return counted.reminder;
-        })
-      );
-      if (result?.success === false) {
-        logger.error('Could not persist the counted reminder', result.error);
-        await recordReminderActivity({
-          event: 'failed',
-          ...subjectOf(reminder, reminderId),
-          detail: 'done: not persisted',
-        });
-      } else if (counted.reminder !== null) {
-        notifyMutated('reminders', reminderId);
-        if (isDailyTargetMet(counted.reminder, now)) {
-          await scheduler.scheduleAt(
-            reminderAlarmId(reminderId),
-            new Date(counted.reminder.dueDate)
-          );
-        }
-        await recordReminderActivity({ event: 'done', ...activitySubject(counted.reminder) });
-      }
-    } else if (action.type === 'snooze') {
-      const { result } = await updateReminders((current) =>
-        current.map((r) =>
-          r.id === reminderId
-            ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
-            : r
-        )
-      );
-      // Arming a wake for a dueDate that never persisted fires the reminder at the snoozed time
-      // against its still-overdue stored copy, which notifies all over again.
-      if (result?.success === false) {
-        logger.error('Could not persist the snoozed reminder', result.error);
-        await recordReminderActivity({
-          event: 'failed',
-          ...subjectOf(reminder, reminderId),
-          detail: 'snooze: not persisted',
-        });
-      } else {
-        await scheduler.scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
-        if (reminder) {
-          await recordReminderActivity({
-            event: 'snoozed',
-            ...activitySubject(reminder),
-            detail: `until ${action.dueDate}`,
-          });
-        }
-      }
-    }
-
-    await notifier.clear(notificationId);
-  } catch (error) {
-    logger.error('Error handling reminder notification button click', error);
-    await recordReminderActivity({
-      event: 'failed',
-      ...subjectOf(reminder, reminderId),
-      detail: `button ${buttonIndex}: ${describeThrown(error)}`,
-    });
-  }
+  await respondToReminder(reminderId, buttonIndex);
 });
-
-function subjectOf(reminder: Reminder | undefined, reminderId: string) {
-  return reminder ? activitySubject(reminder) : { reminderId };
-}

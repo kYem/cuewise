@@ -7,14 +7,22 @@ import {
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getRemindersMock, setRemindersMock, recordActivityMock } = vi.hoisted(() => ({
-  getRemindersMock: vi.fn(),
-  setRemindersMock: vi.fn(),
-  recordActivityMock: vi.fn(() => Promise.resolve()),
-}));
+const { getRemindersMock, setRemindersMock, recordActivityMock, addPromptMock, removePromptMock } =
+  vi.hoisted(() => ({
+    getRemindersMock: vi.fn(),
+    setRemindersMock: vi.fn(),
+    recordActivityMock: vi.fn(() => Promise.resolve()),
+    addPromptMock: vi.fn(() => Promise.resolve(true)),
+    removePromptMock: vi.fn(() => Promise.resolve(true)),
+  }));
 vi.mock('@cuewise/app/reminder-activity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@cuewise/app/reminder-activity')>()),
   recordReminderActivity: recordActivityMock,
+}));
+vi.mock('@cuewise/app/reminder-prompts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@cuewise/app/reminder-prompts')>()),
+  addReminderPrompt: addPromptMock,
+  removeReminderPrompt: removePromptMock,
 }));
 vi.mock('@cuewise/storage', () => ({
   getReminders: getRemindersMock,
@@ -273,6 +281,17 @@ describe('background: reminder alarm fires', () => {
       expect(chromeMock.alarms.create).toHaveBeenCalledWith('reminder-r1', expect.any(Object));
     });
   });
+
+  it('raises the in-app card for an open new tab', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+    setRemindersMock.mockResolvedValue({ success: true });
+
+    fireAlarm({ name: 'reminder-r1' });
+
+    await vi.waitFor(() => {
+      expect(addPromptMock).toHaveBeenCalledWith('r1', expect.any(String));
+    });
+  });
 });
 
 describe('background: notification action buttons', () => {
@@ -291,6 +310,17 @@ describe('background: notification action buttons', () => {
       event: 'done',
       reminderId: 'r2',
       text: 'Stretch',
+    });
+  });
+
+  it('clears the in-app card a button answered', async () => {
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r2', completed: false })]);
+    setRemindersMock.mockResolvedValue({ success: true });
+
+    fireButton('reminder-r2', 0);
+
+    await vi.waitFor(() => {
+      expect(removePromptMock).toHaveBeenCalledWith('r2');
     });
   });
 
