@@ -38,6 +38,17 @@ function takeaway(peak: FocusPeak | null): string {
   return `Most focused: ${WEEKDAY_LONG[peak.weekday]} ${peak.dayPart}s`;
 }
 
+/** Edge columns anchor the tooltip inward so it never spills past the card. */
+function tooltipAlign(hour: number): string {
+  if (hour < 4) {
+    return 'left-0';
+  }
+  if (hour > 19) {
+    return 'right-0';
+  }
+  return 'left-1/2 -translate-x-1/2';
+}
+
 interface FocusHeatmapProps {
   /** Sessions per [weekday 0=Sunday][hour 0-23]. */
   data: number[][];
@@ -140,7 +151,10 @@ export const FocusHeatmap: React.FC<FocusHeatmapProps> = ({ data }) => {
                     {isActive ? (
                       <span
                         role="tooltip"
-                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10 whitespace-nowrap rounded-md bg-surface-elevated px-2 py-1 text-xs text-primary shadow-lg border border-border pointer-events-none"
+                        className={cn(
+                          'absolute bottom-full mb-2 z-10 whitespace-nowrap rounded-md bg-surface-elevated px-2 py-1 text-xs text-primary shadow-lg border border-border pointer-events-none',
+                          tooltipAlign(hour)
+                        )}
                       >
                         {label}
                       </span>

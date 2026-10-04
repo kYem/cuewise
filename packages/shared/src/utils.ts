@@ -1364,6 +1364,9 @@ export function dayPartOfHour(hour: number): DayPart {
 /** Monday-first, matching the week the rest of Insights counts. */
 export const FOCUS_WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
+/** Hours before morning belong to the night that began the evening before. */
+const LAST_NIGHT_HOUR = 4;
+
 /**
  * The weekday and part of day with the most sessions, or null below the minimum.
  * Ties go to the earlier weekday, then the earlier part of the day.
@@ -1373,17 +1376,26 @@ export function findFocusPeak(weekdayHourDistribution: number[][]): FocusPeak | 
   if (total < FOCUS_PEAK_MIN_SESSIONS) {
     return null;
   }
+  const counts = weekdayHourDistribution.map(() => ({
+    morning: 0,
+    afternoon: 0,
+    evening: 0,
+    night: 0,
+  }));
+  weekdayHourDistribution.forEach((hours, weekday) => {
+    hours.forEach((sessions, hour) => {
+      const night = (weekday + 6) % 7;
+      const owner = hour <= LAST_NIGHT_HOUR ? night : weekday;
+      counts[owner][dayPartOfHour(hour)] += sessions;
+    });
+  });
   let peak: FocusPeak | null = null;
   let peakCount = 0;
   for (const weekday of FOCUS_WEEKDAY_ORDER) {
     for (const dayPart of DAY_PARTS) {
-      const count = weekdayHourDistribution[weekday].reduce(
-        (sum, sessions, hour) => (dayPartOfHour(hour) === dayPart ? sum + sessions : sum),
-        0
-      );
-      if (count > peakCount) {
+      if (counts[weekday][dayPart] > peakCount) {
         peak = { weekday, dayPart };
-        peakCount = count;
+        peakCount = counts[weekday][dayPart];
       }
     }
   }

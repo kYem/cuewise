@@ -295,6 +295,26 @@ describe('Analytics Utilities', () => {
         dayPart: 'afternoon',
       });
     });
+
+    it('breaks a tie within a day toward the earlier part of it', () => {
+      const sessions = [9, 18].flatMap((hour) =>
+        Array.from({ length: 5 }, (_, i) => workSessionAt(6, hour, i * 5))
+      );
+      const { weekdayHourDistribution } = calculatePomodoroHeatmap(sessions);
+
+      expect(findFocusPeak(weekdayHourDistribution)).toEqual({ weekday: 1, dayPart: 'morning' });
+    });
+
+    it('counts the small hours toward the night that began the evening before', () => {
+      const sessions = [
+        ...Array.from({ length: 4 }, (_, i) => workSessionAt(7, 22, i * 5)),
+        ...Array.from({ length: 4 }, (_, i) => workSessionAt(8, 1, i * 5)),
+        ...Array.from({ length: 5 }, (_, i) => workSessionAt(8, 22, i * 5)),
+      ];
+      const { weekdayHourDistribution } = calculatePomodoroHeatmap(sessions);
+
+      expect(findFocusPeak(weekdayHourDistribution)).toEqual({ weekday: 2, dayPart: 'night' });
+    });
   });
 
   describe('dayPartOfHour', () => {
@@ -303,7 +323,9 @@ describe('Analytics Utilities', () => {
       [5, 'morning'],
       [11, 'morning'],
       [12, 'afternoon'],
+      [16, 'afternoon'],
       [17, 'evening'],
+      [20, 'evening'],
       [21, 'night'],
       [0, 'night'],
     ])('puts %i:00 in the %s', (hour, dayPart) => {
