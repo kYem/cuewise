@@ -1,7 +1,7 @@
 import { logger, type SyncMutationSink } from '@cuewise/shared';
-import type { SyncMutationAck, SyncMutationMessage } from './sync-messages';
+import type { SyncMutationAck, SyncMutationMark } from './sync-messages';
 
-/** Waits before each retry of an unacknowledged mark; the mark is dropped after the last. */
+/** Waits before each retry of an unacknowledged batch; the batch is dropped after the last. */
 export const RELAY_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000];
 
 function isSyncMutationAck(reply: unknown): reply is SyncMutationAck {
@@ -14,78 +14,68 @@ function wait(ms: number): Promise<void> {
   });
 }
 
-/** Page-realm sync sink (ENG-45 option B): relays each mark to the worker, the single sync
- * owner, and retries until the worker acks the ledger write. */
+/** Page-realm sync sink (ENG-45 option B): relays marks to the worker, the single sync owner,
+ * and retries until the worker acks the ledger writes. */
 export class ChromeRuntimeSyncSink implements SyncMutationSink {
-  private readonly queue: SyncMutationMessage[] = [];
+  private pending: SyncMutationMark[] = [];
   private draining = false;
 
   markMutated(collection: string, entityId: string): void {
-    this.enqueue({ kind: 'cuewise-sync-mutation', op: 'mutated', collection, entityId });
+    this.enqueue({ op: 'mutated', collection, entityId });
   }
 
   markDeleted(collection: string, entityId: string): void {
-    this.enqueue({ kind: 'cuewise-sync-mutation', op: 'deleted', collection, entityId });
+    this.enqueue({ op: 'deleted', collection, entityId });
   }
 
   markMutatedBulk(collection: string, entityIds: string[]): void {
-    this.enqueue({ kind: 'cuewise-sync-mutation', op: 'mutatedBulk', collection, entityIds });
+    this.enqueue({ op: 'mutatedBulk', collection, entityIds });
   }
 
-  private enqueue(message: SyncMutationMessage): void {
-    this.queue.push(message);
+  private enqueue(mark: SyncMutationMark): void {
+    this.pending.push(mark);
     if (!this.draining) {
       void this.drain();
     }
   }
 
-  // One mark in flight at a time: a retried edit landing after a later delete would resurrect it.
+  // One batch in flight at a time: a retried edit landing after a later delete would resurrect it.
   private async drain(): Promise<void> {
     this.draining = true;
-    while (this.queue.length > 0) {
-      await this.deliver(this.queue[0]);
-      this.queue.shift();
+    while (this.pending.length > 0) {
+      const marks = this.pending;
+      this.pending = [];
+      await this.deliver(marks);
     }
     this.draining = false;
   }
 
-  private async deliver(message: SyncMutationMessage): Promise<void> {
-    for (const delayMs of RELAY_RETRY_DELAYS_MS) {
-      if (await this.send(message)) {
+  private async deliver(marks: SyncMutationMark[]): Promise<void> {
+    for (let attempt = 0; attempt <= RELAY_RETRY_DELAYS_MS.length; attempt++) {
+      if (attempt > 0) {
+        await wait(RELAY_RETRY_DELAYS_MS[attempt - 1]);
+      }
+      if (await this.send(marks)) {
         return;
       }
-      await wait(delayMs);
     }
-    if (await this.send(message)) {
-      return;
-    }
-    // Error, not warn: the shipped log level is 'error', and this is a dirty mark lost for good.
-    logger.error('Sync mutation relay gave up', {
-      op: message.op,
-      collection: message.collection,
-    });
+    // Error, not warn: the shipped log level is 'error', and these dirty marks are lost for good.
+    logger.error('Sync mutation relay gave up', { marks: marks.length });
   }
 
-  /** True once nothing is left to retry: the worker recorded the mark or refused its shape. */
-  private async send(message: SyncMutationMessage): Promise<boolean> {
+  /** True once nothing is left to retry: the worker recorded the marks or refused the message. */
+  private async send(marks: SyncMutationMark[]): Promise<boolean> {
+    let reply: unknown;
     try {
-      const reply: unknown = await chrome.runtime.sendMessage(message);
-      if (isSyncMutationAck(reply) && (reply.ok || reply.reason === 'malformed')) {
-        return true;
-      }
-      logger.warn('Sync mutation relay not acknowledged', {
-        op: message.op,
-        collection: message.collection,
-        reply,
-      });
+      reply = await chrome.runtime.sendMessage({ kind: 'cuewise-sync-mutation', marks });
     } catch (error) {
       // No receiver yet (the worker is still starting) — the same as no ack.
-      logger.warn('Sync mutation relay failed', {
-        op: message.op,
-        collection: message.collection,
-        error,
-      });
+      reply = error;
     }
+    if (isSyncMutationAck(reply) && (reply.ok || reply.reason === 'malformed')) {
+      return true;
+    }
+    logger.warn('Sync mutation relay not acknowledged', { marks: marks.length, reply });
     return false;
   }
 }

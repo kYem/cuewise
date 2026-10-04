@@ -11,6 +11,10 @@ const runtime = {
 
 const totalRetryMs = RELAY_RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0);
 
+function sentBatches(): unknown[][] {
+  return runtime.sendMessage.mock.calls.map(([message]) => (message as { marks: unknown[] }).marks);
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   (chrome as unknown as { runtime: typeof runtime }).runtime = runtime;
@@ -26,71 +30,65 @@ afterEach(() => {
 });
 
 describe('ChromeRuntimeSyncSink', () => {
-  it('posts a mutated message with the collection and entity id', () => {
-    new ChromeRuntimeSyncSink().markMutated('goals', 'g1');
+  it('relays each kind of mark with its collection and ids', async () => {
+    const sink = new ChromeRuntimeSyncSink();
+
+    sink.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(0);
+    sink.markDeleted('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(0);
+    sink.markMutatedBulk('quotes', ['a', 'b']);
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(runtime.sendMessage).toHaveBeenCalledWith({
       kind: 'cuewise-sync-mutation',
-      op: 'mutated',
-      collection: 'goals',
-      entityId: 'g1',
+      marks: [{ op: 'mutated', collection: 'goals', entityId: 'g1' }],
     });
+    expect(sentBatches()).toEqual([
+      [{ op: 'mutated', collection: 'goals', entityId: 'g1' }],
+      [{ op: 'deleted', collection: 'goals', entityId: 'g1' }],
+      [{ op: 'mutatedBulk', collection: 'quotes', entityIds: ['a', 'b'] }],
+    ]);
   });
 
-  it('posts a deleted message with the collection and entity id', () => {
-    new ChromeRuntimeSyncSink().markDeleted('goals', 'g1');
+  it('sends marks made while a batch is in flight together in the next batch', async () => {
+    const sink = new ChromeRuntimeSyncSink();
 
-    expect(runtime.sendMessage).toHaveBeenCalledWith({
-      kind: 'cuewise-sync-mutation',
-      op: 'deleted',
-      collection: 'goals',
-      entityId: 'g1',
-    });
+    sink.markMutated('goals', 'g1');
+    sink.markMutated('goals', 'g2');
+    sink.markDeleted('goals', 'g3');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(sentBatches()).toEqual([
+      [{ op: 'mutated', collection: 'goals', entityId: 'g1' }],
+      [
+        { op: 'mutated', collection: 'goals', entityId: 'g2' },
+        { op: 'deleted', collection: 'goals', entityId: 'g3' },
+      ],
+    ]);
   });
 
-  it('posts a mutatedBulk message with the collection and entity ids', () => {
-    new ChromeRuntimeSyncSink().markMutatedBulk('quotes', ['a', 'b']);
-
-    expect(runtime.sendMessage).toHaveBeenCalledWith({
-      kind: 'cuewise-sync-mutation',
-      op: 'mutatedBulk',
-      collection: 'quotes',
-      entityIds: ['a', 'b'],
-    });
-  });
-
-  it('retries a failed ack and stops once the worker acks', async () => {
-    runtime.sendMessage.mockResolvedValueOnce(FAILED);
-
-    new ChromeRuntimeSyncSink().markMutated('goals', 'g1');
-    await vi.advanceTimersByTimeAsync(totalRetryMs);
-
-    expect(runtime.sendMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it('retries when no listener answers', async () => {
-    runtime.sendMessage.mockResolvedValueOnce(undefined);
-
-    new ChromeRuntimeSyncSink().markMutated('goals', 'g1');
-    await vi.advanceTimersByTimeAsync(totalRetryMs);
-
-    expect(runtime.sendMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it('retries a rejecting sendMessage (worker still starting) and logs a warning', async () => {
-    runtime.sendMessage.mockRejectedValueOnce(new Error('Receiving end does not exist.'));
+  it.each([
+    ['a failed ack', () => runtime.sendMessage.mockResolvedValueOnce(FAILED)],
+    ['no listener answering', () => runtime.sendMessage.mockResolvedValueOnce(undefined)],
+    [
+      'a rejecting sendMessage',
+      () => runtime.sendMessage.mockRejectedValueOnce(new Error('Receiving end does not exist.')),
+    ],
+  ])('retries after %s and stops once the worker acks', async (_case, failOnce) => {
+    failOnce();
 
     new ChromeRuntimeSyncSink().markMutated('goals', 'g1');
     await vi.advanceTimersByTimeAsync(totalRetryMs);
 
     expect(runtime.sendMessage).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledWith(
-      'Sync mutation relay failed',
-      expect.objectContaining({ op: 'mutated', collection: 'goals' })
+      'Sync mutation relay not acknowledged',
+      expect.objectContaining({ marks: 1 })
     );
   });
 
-  it('does not retry a mark the worker refused as malformed', async () => {
+  it('does not retry a batch the worker refused as malformed', async () => {
     runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'malformed' });
 
     new ChromeRuntimeSyncSink().markMutated('goals', 'g1');
@@ -99,22 +97,18 @@ describe('ChromeRuntimeSyncSink', () => {
     expect(runtime.sendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('gives up after the last retry and moves on to the next mark', async () => {
+  it('gives up after the last retry, logs an error and moves on to the next batch', async () => {
     runtime.sendMessage.mockResolvedValue(FAILED);
     const sink = new ChromeRuntimeSyncSink();
 
     sink.markMutated('goals', 'g1');
+    await vi.advanceTimersByTimeAsync(0);
     sink.markMutated('goals', 'g2');
     await vi.advanceTimersByTimeAsync(totalRetryMs);
 
     expect(runtime.sendMessage).toHaveBeenCalledTimes(RELAY_RETRY_DELAYS_MS.length + 2);
-    expect(runtime.sendMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({ entityId: 'g2' })
-    );
-    expect(logger.error).toHaveBeenCalledWith(
-      'Sync mutation relay gave up',
-      expect.objectContaining({ op: 'mutated', collection: 'goals' })
-    );
+    expect(sentBatches().at(-1)).toEqual([{ op: 'mutated', collection: 'goals', entityId: 'g2' }]);
+    expect(logger.error).toHaveBeenCalledWith('Sync mutation relay gave up', { marks: 1 });
   });
 
   it('holds a later delete until the earlier edit is acked, so a retry cannot undo it', async () => {
@@ -125,8 +119,8 @@ describe('ChromeRuntimeSyncSink', () => {
     sink.markDeleted('goals', 'g1');
     await vi.advanceTimersByTimeAsync(totalRetryMs);
 
-    const ops = runtime.sendMessage.mock.calls.map(([message]) => (message as { op: string }).op);
-    expect(ops).toEqual(['mutated', 'mutated', 'deleted']);
+    const ops = sentBatches().map((marks) => marks.map((mark) => (mark as { op: string }).op));
+    expect(ops).toEqual([['mutated'], ['mutated'], ['deleted']]);
   });
 
   it('sends a mark made after the queue has drained', async () => {

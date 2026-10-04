@@ -180,13 +180,9 @@ if (syncApiBaseUrl) {
     if (ack === undefined) {
       return false;
     }
-    ack.then((reply) => {
-      try {
-        sendResponse(reply);
-      } catch (error) {
-        // The tab closed before the reply, so there is no one left to retry it.
-        logger.debug('Could not answer a sync mutation on a torn-down port', { error });
-      }
+    ack.then(sendResponse).catch((error: unknown) => {
+      // The tab closed before the reply, so there is no one left to retry it.
+      logger.debug('Could not answer a sync mutation on a torn-down port', { error });
     });
     return true;
   });

@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { SyncMutationAck, SyncMutationMessage } from './sync-messages';
+import type { SyncMutationAck, SyncMutationMark } from './sync-messages';
 
 /**
  * Structural subset of SyncEngine the router needs. Unlike SyncMutationSink,
@@ -18,17 +18,24 @@ function hasMutationKind(msg: unknown): msg is Record<string, unknown> {
   return (msg as Record<string, unknown>).kind === 'cuewise-sync-mutation';
 }
 
-function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
-  const candidate = msg as Record<string, unknown>;
-  if (candidate.op !== 'mutated' && candidate.op !== 'deleted' && candidate.op !== 'mutatedBulk') {
+function isSyncMutationMark(mark: unknown): mark is SyncMutationMark {
+  if (typeof mark !== 'object' || mark === null) {
     return false;
   }
-  return typeof candidate.collection === 'string';
+  const candidate = mark as Record<string, unknown>;
+  if (typeof candidate.collection !== 'string') {
+    return false;
+  }
+  if (candidate.op === 'mutatedBulk') {
+    return Array.isArray(candidate.entityIds);
+  }
+  if (candidate.op === 'mutated' || candidate.op === 'deleted') {
+    return typeof candidate.entityId === 'string';
+  }
+  return false;
 }
 
-const MALFORMED: SyncMutationAck = { ok: false, reason: 'malformed' };
-
-/** Routes a page-relayed mark to the SyncEngine and acks once the ledger write settles;
+/** Routes a page-relayed batch of marks to the SyncEngine and acks once the ledger writes settle;
  * undefined for another channel's message (e.g. sync-control), so its own listener replies. */
 export function handleSyncMessage(
   engine: SyncMessageEngine,
@@ -37,51 +44,41 @@ export function handleSyncMessage(
   if (!hasMutationKind(msg)) {
     return undefined;
   }
-  if (!isSyncMutationMessage(msg)) {
-    logger.warn('Ignoring malformed sync-mutation message', { received: typeof msg });
-    return Promise.resolve(MALFORMED);
-  }
-
-  if (msg.op === 'mutatedBulk') {
-    const { entityIds } = msg;
-    if (entityIds === undefined) {
-      logger.warn('Ignoring sync-mutation message: mutatedBulk missing entityIds', {
-        collection: msg.collection,
-      });
-      return Promise.resolve(MALFORMED);
-    }
-    return settle(msg, () => engine.markMutatedBulk(msg.collection, entityIds));
-  }
-
-  const { entityId } = msg;
-  if (entityId === undefined) {
-    logger.warn('Ignoring sync-mutation message: missing entityId', {
-      op: msg.op,
-      collection: msg.collection,
-    });
-    return Promise.resolve(MALFORMED);
-  }
-
-  if (msg.op === 'mutated') {
-    return settle(msg, () => engine.markMutated(msg.collection, entityId));
-  }
-  return settle(msg, () => engine.markDeleted(msg.collection, entityId));
+  return recordMarks(engine, msg.marks);
 }
 
-function settle(
-  msg: SyncMutationMessage,
-  mark: () => Promise<void> | void
-): Promise<SyncMutationAck> {
-  return new Promise<void>((resolve) => {
-    resolve(mark());
-  })
-    .then((): SyncMutationAck => ({ ok: true }))
-    .catch((error: unknown): SyncMutationAck => {
+// In order, stopping at the first failure: the page resends the whole batch, and re-marking
+// the ones that landed only restamps them.
+async function recordMarks(engine: SyncMessageEngine, marks: unknown): Promise<SyncMutationAck> {
+  if (!Array.isArray(marks)) {
+    logger.warn('Ignoring sync-mutation message without marks', { received: typeof marks });
+    return { ok: false, reason: 'malformed' };
+  }
+  for (const mark of marks) {
+    if (!isSyncMutationMark(mark)) {
+      logger.warn('Ignoring malformed sync-mutation mark', { mark });
+      continue;
+    }
+    try {
+      await recordMark(engine, mark);
+    } catch (error) {
       logger.error('Failed to record a relayed sync mutation', {
-        op: msg.op,
-        collection: msg.collection,
+        op: mark.op,
+        collection: mark.collection,
         error,
       });
       return { ok: false, reason: 'error' };
-    });
+    }
+  }
+  return { ok: true };
+}
+
+function recordMark(engine: SyncMessageEngine, mark: SyncMutationMark): Promise<void> | void {
+  if (mark.op === 'mutatedBulk') {
+    return engine.markMutatedBulk(mark.collection, mark.entityIds);
+  }
+  if (mark.op === 'mutated') {
+    return engine.markMutated(mark.collection, mark.entityId);
+  }
+  return engine.markDeleted(mark.collection, mark.entityId);
 }

@@ -4,15 +4,15 @@
  * background over chrome.runtime messaging instead. `kind` lets the background
  * filter these out of any other extension messaging on the same channel.
  */
-export type SyncMutationOp = 'mutated' | 'deleted' | 'mutatedBulk';
+export type SyncMutationMark =
+  | { op: 'mutated' | 'deleted'; collection: string; entityId: string }
+  | { op: 'mutatedBulk'; collection: string; entityIds: string[] };
 
+/** Every mark queued since the last ack, in the order the stores made them. */
 export interface SyncMutationMessage {
   kind: 'cuewise-sync-mutation';
-  op: SyncMutationOp;
-  collection: string;
-  entityId?: string;
-  entityIds?: string[];
+  marks: SyncMutationMark[];
 }
 
-/** The worker's reply, sent only once the dirty mark is in the ledger (or failed to get there). */
+/** The worker's reply, sent only once the dirty marks are in the ledger (or failed to get there). */
 export type SyncMutationAck = { ok: true } | { ok: false; reason: 'malformed' | 'error' };
