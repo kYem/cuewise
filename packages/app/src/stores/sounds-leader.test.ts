@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { youtubePlayer } from '../services/youtube-player';
-import { ambientSoundPlayer } from '../utils/ambient-sounds';
-import { leaderPlayingYoutube, stubYoutubePlayer } from './__fixtures__/sounds-store.fixtures';
+import {
+  leaderPlayingYoutube,
+  persistedAmbientPlayback,
+  stubYoutubePlayer,
+} from './__fixtures__/sounds-store.fixtures';
 import { useSoundsStore } from './sounds-store';
 
 vi.mock('@cuewise/storage', async (importOriginal) => ({
@@ -88,30 +91,20 @@ describe('setIsLeader', () => {
     expect(useSoundsStore.getState().isPaused).toBe(false);
   });
 
-  it('shows ambient paused on taking over, since it sounded only in the tab that left', () => {
+  it('shows ambient paused on taking over when no tab is sounding it any more', () => {
     vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
-    vi.spyOn(ambientSoundPlayer, 'getIsPlaying').mockReturnValue(false);
-    useSoundsStore.setState({
-      activeSource: 'ambient',
-      selectedAmbientSound: 'rain',
-      isPlaying: true,
-    });
+    persistedAmbientPlayback();
 
-    useSoundsStore.getState().setIsLeader(true, { fresh: false });
+    useSoundsStore.getState().setIsLeader(true, { fresh: false, ambientSounding: false });
 
     expect(useSoundsStore.getState()).toMatchObject({ isPlaying: false, isPaused: true });
   });
 
-  it('leaves ambient playing on taking over when it is sounding in this tab', () => {
+  it('leaves ambient playing on taking over while another tab still sounds it', () => {
     vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
-    vi.spyOn(ambientSoundPlayer, 'getIsPlaying').mockReturnValue(true);
-    useSoundsStore.setState({
-      activeSource: 'ambient',
-      selectedAmbientSound: 'rain',
-      isPlaying: true,
-    });
+    persistedAmbientPlayback();
 
-    useSoundsStore.getState().setIsLeader(true, { fresh: false });
+    useSoundsStore.getState().setIsLeader(true, { fresh: false, ambientSounding: true });
 
     expect(useSoundsStore.getState().isPlaying).toBe(true);
   });
@@ -121,7 +114,7 @@ describe('setIsLeader', () => {
     const player = stubYoutubePlayer();
     persistedYoutubePlayback();
 
-    useSoundsStore.getState().setIsLeader(true, { fresh: false });
+    useSoundsStore.getState().setIsLeader(true, { fresh: false, ambientSounding: false });
 
     expect(useSoundsStore.getState().isPlaying).toBe(true);
     await vi.waitFor(() => expect(player.loadPlaylist).toHaveBeenCalled());

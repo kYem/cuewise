@@ -1,6 +1,7 @@
 import { createLogger, LogLevel } from '@cuewise/shared';
 import { useEffect, useRef } from 'react';
 import { useSoundsStore } from '../stores/sounds-store';
+import { isAmbientSoundingAnywhere } from '../utils/ambient-sounds';
 
 const logger = createLogger({
   prefix: '[SoundsLeader]',
@@ -35,9 +36,18 @@ export function useSoundsLeader(): void {
     let aborted = false;
 
     const lead = async (fresh: boolean) => {
+      // Asked before leading, so the store learns it in the same update that makes this tab lead.
+      const ambientSounding = fresh ? false : await isAmbientSoundingAnywhere();
+      if (aborted) {
+        return;
+      }
       logger.debug('Sounds lock acquired! This tab is the sounds leader', { fresh });
       lockHeldRef.current = true;
-      setIsLeader(true, { fresh });
+      if (fresh) {
+        setIsLeader(true, { fresh: true });
+      } else {
+        setIsLeader(true, { fresh: false, ambientSounding });
+      }
 
       // Hold the lock until component unmounts
       await new Promise<void>((resolve) => {

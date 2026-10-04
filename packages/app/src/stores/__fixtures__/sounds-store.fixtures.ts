@@ -71,6 +71,17 @@ export function stubYoutubePlayer(options: StubPlayerOptions = {}): StubbedPlaye
   };
 }
 
+/** Ambient the store says is playing, as a closed or live tab would have left it. */
+export function persistedAmbientPlayback(): void {
+  useSoundsStore.setState({
+    isLeader: false,
+    activeSource: 'ambient',
+    selectedAmbientSound: 'rain',
+    isPlaying: true,
+    isPaused: false,
+  });
+}
+
 export function leaderPlayingYoutube(): void {
   useSoundsStore.setState({
     isLeader: true,

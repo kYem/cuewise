@@ -32,9 +32,8 @@ import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
-interface LeaderOptions {
-  fresh: boolean;
-}
+/** A handover also says whether ambient still sounds in some tab, which only the lock can tell. */
+type LeaderOptions = { fresh: true } | { fresh: false; ambientSounding: boolean };
 
 interface SoundsStore {
   // Sound source (mutually exclusive)
@@ -214,11 +213,11 @@ export const useSoundsStore = create<SoundsStore>()(
         } else if (isLeader && !wasLeader) {
           initYoutubeLeader(set);
 
-          // Resume playback if YouTube was active
           const { activeSource, isPlaying, selectedPlaylistId, playlists } = get();
-          // Ambient sounds only in the tab that started it, which most likely just closed: show it
-          // paused rather than playing, so it can be resumed instead of claiming silence plays.
-          if (activeSource === 'ambient' && isPlaying && !ambientSoundPlayer.getIsPlaying()) {
+          // Ambient plays only in the tab that started it; with no tab sounding it, it closed with
+          // that tab, so show it paused rather than claiming silence plays.
+          const ambientSounding = options?.fresh === false && options.ambientSounding;
+          if (activeSource === 'ambient' && isPlaying && !ambientSounding) {
             set({ isPlaying: false, isPaused: true });
           }
           if (activeSource === 'youtube' && isPlaying && selectedPlaylistId) {
@@ -734,7 +733,7 @@ function discardStalePlayback(): void {
     discard();
     return;
   }
-  if (hydrationFailed) {
+  if (hydrationFailed || cancelPendingDiscard !== null) {
     return;
   }
   // A failed hydration never fires this, and a later successful rehydrate would then wipe real

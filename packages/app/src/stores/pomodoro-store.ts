@@ -17,6 +17,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { chromeLocalStorage } from '../adapters/zustand-chrome-adapter';
+import type { SessionType } from '../utils/pomodoro-styles';
 import { playCompletionSound, playStartSound } from '../utils/sounds';
 import { useCelebrationStore } from './celebration-store';
 import { useFocusModeStore } from './focus-mode-store';
@@ -44,7 +45,6 @@ async function sessionNotificationsEnabled(): Promise<boolean> {
 }
 
 export type TimerStatus = 'idle' | 'running' | 'paused';
-type SessionType = 'work' | 'break' | 'longBreak';
 
 /** Resolve the configured duration (minutes) for a session type. */
 function durationForSession(

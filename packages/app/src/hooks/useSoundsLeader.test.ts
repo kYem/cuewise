@@ -54,7 +54,26 @@ describe('useSoundsLeader', () => {
 
     release();
 
-    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: false }));
+    await waitFor(() =>
+      expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: false, ambientSounding: false })
+    );
+    unmount();
+  });
+
+  it('tells the store ambient still sounds when another tab is playing it', async () => {
+    const release = anotherTabHolds();
+    void navigator.locks.request(
+      'cuewise-ambient-sounding',
+      { mode: 'shared' },
+      () => new Promise<void>(() => {})
+    );
+    const { unmount } = await renderLeader();
+
+    release();
+
+    await waitFor(() =>
+      expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: false, ambientSounding: true })
+    );
     unmount();
   });
 
@@ -62,7 +81,7 @@ describe('useSoundsLeader', () => {
     const { unmount } = await renderLeader({ strict: true });
 
     await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
-    expect(setIsLeader).not.toHaveBeenCalledWith(true, { fresh: false });
+    expect(setIsLeader).not.toHaveBeenCalledWith(true, expect.objectContaining({ fresh: false }));
     unmount();
   });
 

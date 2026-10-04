@@ -1,4 +1,21 @@
-import type { AmbientSoundType } from '@cuewise/shared';
+import { type AmbientSoundType, logger } from '@cuewise/shared';
+
+// Held shared by every tab sounding ambient, so a tab can tell whether any other one still is.
+const AMBIENT_SOUNDING_LOCK = 'cuewise-ambient-sounding';
+
+/** Whether ambient is sounding in any tab, this one included. */
+export function isAmbientSoundingAnywhere(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || navigator.locks === undefined) {
+    return Promise.resolve(ambientSoundPlayer.getIsPlaying());
+  }
+  return navigator.locks
+    .request(AMBIENT_SOUNDING_LOCK, { ifAvailable: true }, async (lock) => lock === null)
+    .catch((error) => {
+      // Unknown, so assume it is: marking live ambient paused would silence it everywhere.
+      logger.error('Could not tell whether ambient is sounding in another tab', error);
+      return true;
+    });
+}
 
 /**
  * Ambient sound generator using Web Audio API
@@ -11,6 +28,38 @@ export class AmbientSoundPlayer {
   private noiseNode: AudioBufferSourceNode | null = null;
   private isPlaying = false;
   private currentSound: AmbientSoundType = 'none';
+  private releaseSoundingClaim: (() => void) | null = null;
+
+  private claimSounding() {
+    if (typeof navigator === 'undefined' || navigator.locks === undefined) {
+      return;
+    }
+    if (this.releaseSoundingClaim !== null) {
+      return;
+    }
+    navigator.locks
+      .request(AMBIENT_SOUNDING_LOCK, { mode: 'shared' }, () => {
+        // A stop that landed before the grant must not leave the claim held for good.
+        if (!this.isPlaying) {
+          return Promise.resolve();
+        }
+        return new Promise<void>((resolve) => {
+          this.releaseSoundingClaim = () => {
+            this.releaseSoundingClaim = null;
+            resolve();
+          };
+        });
+      })
+      .catch((error) => {
+        logger.error('Could not mark ambient as sounding in this tab', error);
+      });
+  }
+
+  private releaseSounding() {
+    if (this.releaseSoundingClaim !== null) {
+      this.releaseSoundingClaim();
+    }
+  }
 
   private initAudioContext() {
     if (!this.audioContext) {
@@ -246,6 +295,7 @@ export class AmbientSoundPlayer {
     this.initAudioContext();
     this.currentSound = soundType;
     this.isPlaying = true;
+    this.claimSounding();
 
     // Set volume (0-100 to 0-1)
     if (this.gainNode) {
@@ -312,6 +362,7 @@ export class AmbientSoundPlayer {
 
       this.isPlaying = false;
       this.currentSound = 'none';
+      this.releaseSounding();
     }, 500);
   }
 
