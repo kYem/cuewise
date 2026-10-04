@@ -4,13 +4,40 @@
  */
 export function createLockManagerMock(): LockManager {
   const chains = new Map<string, Promise<unknown>>();
+  // Held or queued, which is what `ifAvailable` refuses on.
+  const claims = new Map<string, number>();
 
-  const request = (name: string, callback: (lock: unknown) => Promise<unknown>) => {
+  type Callback = (lock: unknown) => Promise<unknown>;
+  const request = (
+    name: string,
+    optionsOrCallback: LockOptions | Callback,
+    maybeCallback?: Callback
+  ) => {
+    let callback = maybeCallback;
+    let options: LockOptions = {};
+    if (typeof optionsOrCallback === 'function') {
+      callback = optionsOrCallback;
+    } else {
+      options = optionsOrCallback;
+    }
+    if (callback === undefined) {
+      return Promise.reject(new TypeError('a lock request needs a callback'));
+    }
+    const run = callback;
+    if (options.ifAvailable === true && (claims.get(name) ?? 0) > 0) {
+      return Promise.resolve().then(() => run(null));
+    }
+
+    claims.set(name, (claims.get(name) ?? 0) + 1);
     const previous = chains.get(name) ?? Promise.resolve();
-    const next = previous.then(
-      () => callback({ name, mode: 'exclusive' }),
-      () => callback({ name, mode: 'exclusive' })
-    );
+    const next = previous
+      .then(
+        () => run({ name, mode: 'exclusive' }),
+        () => run({ name, mode: 'exclusive' })
+      )
+      .finally(() => {
+        claims.set(name, (claims.get(name) ?? 1) - 1);
+      });
     chains.set(
       name,
       next.catch(() => undefined)

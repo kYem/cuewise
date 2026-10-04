@@ -16,6 +16,7 @@ import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { NowPlayingPill } from './components/sounds';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useDayChange } from './hooks/useDayChange';
+import { usePomodoroLeader } from './hooks/usePomodoroLeader';
 import { usePomodoroSounds } from './hooks/usePomodoroSounds';
 import type { NotionHost } from './notion/notion-host';
 import { useBackgroundStore } from './stores/background-store';
@@ -91,6 +92,8 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
   // Goals are day-scoped: refresh Today and roll newly due tasks at midnight.
   useDayChange(() => useGoalStore.getState().handleDayRollover());
 
+  // The timer must tick on every page, or sound that follows it never hears the session end.
+  usePomodoroLeader();
   usePomodoroSounds();
   const pageWithoutSoundControl = !PAGES_WITH_SOUND_CONTROL.has(currentPage);
 

@@ -43,6 +43,7 @@ export function usePomodoroSounds(): void {
   );
   const activeSource = useSoundsStore((state) => state.activeSource);
   const isLeader = useSoundsStore((state) => state.isLeader);
+  const isPlaying = useSoundsStore((state) => state.isPlaying);
   const initSounds = useSoundsStore((state) => state.initialize);
   const resumeSounds = useSoundsStore((state) => state.resume);
   const pauseSounds = useSoundsStore((state) => state.pause);
@@ -79,9 +80,8 @@ export function usePomodoroSounds(): void {
     if (loadFailedRef.current) {
       return;
     }
-    // These follow the timer rather than the user, and they reach whichever tab holds the audio —
-    // so only the tab that owns it may drive them. Any pause in following makes the next look a
-    // first one, so a wish recorded before it can't read as a transition after.
+    // Only the audio leader drives these; any gap in following resets the baseline, so a wish
+    // recorded before it can't read as a transition after.
     if (!isLeader || !musicEnabled || !autoStart || activeSource === 'none') {
       appliedRef.current = null;
       return;
@@ -100,6 +100,10 @@ export function usePomodoroSounds(): void {
     }
 
     if (wanted === 'resume') {
+      // Already sounding somewhere; resume() would start ambient again in this tab too.
+      if (isPlaying) {
+        return;
+      }
       resumeSounds();
     } else if (wanted === 'pause') {
       pauseSounds();
@@ -113,6 +117,7 @@ export function usePomodoroSounds(): void {
     timerError,
     activeSource,
     isLeader,
+    isPlaying,
     musicEnabled,
     autoStart,
     playDuringBreaks,

@@ -1,92 +1,74 @@
-import { createSelectorMock } from '@cuewise/test-utils';
+import { createSelectorMock, installLockManagerMock } from '@cuewise/test-utils';
 import { renderHook, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../stores/sounds-store', () => ({ useSoundsStore: vi.fn() }));
 
+const LOCK_NAME = 'cuewise-sounds-leader';
 const setIsLeader = vi.fn();
+let uninstallLocks: () => void = () => {};
 
-function installLocks(query: () => Promise<LockManagerSnapshot>): void {
-  Object.defineProperty(navigator, 'locks', {
-    configurable: true,
-    value: {
-      query,
-      request: (name: string, callback: (lock: { name: string }) => Promise<void>) =>
-        callback({ name }),
-    },
-  });
+/** Another tab holding the audio; resolves its hold when the returned function is called. */
+function anotherTabHolds(): () => void {
+  let release: () => void = () => {};
+  void navigator.locks.request(
+    LOCK_NAME,
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+  );
+  return () => release();
 }
 
-function heldBy(names: string[]): () => Promise<LockManagerSnapshot> {
-  return () => Promise.resolve({ held: names.map((name) => ({ name })), pending: [] });
-}
-
-/** A fresh module per test, since the probe is cached once per page. */
-async function renderLeader() {
+/** A fresh module per test, since the first grant's answer is remembered once per page. */
+async function renderLeader(options: { strict?: boolean } = {}) {
   vi.resetModules();
   const { useSoundsStore } = await import('../stores/sounds-store');
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock({ setIsLeader }));
   const { useSoundsLeader } = await import('./useSoundsLeader');
-  return renderHook(() => useSoundsLeader());
+  return renderHook(() => useSoundsLeader(), { wrapper: options.strict ? StrictMode : undefined });
 }
 
 describe('useSoundsLeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    uninstallLocks = installLockManagerMock();
   });
 
   afterEach(() => {
-    Reflect.deleteProperty(navigator, 'locks');
+    uninstallLocks();
   });
 
   it('leads fresh when no other tab held the audio', async () => {
-    installLocks(heldBy([]));
-
     const { unmount } = await renderLeader();
 
     await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
     unmount();
   });
 
-  it('takes over, not fresh, when another tab was holding the audio', async () => {
-    installLocks(heldBy(['cuewise-sounds-leader']));
-
+  it('takes over, not fresh, once the tab holding the audio lets go', async () => {
+    const release = anotherTabHolds();
     const { unmount } = await renderLeader();
+    expect(setIsLeader).not.toHaveBeenCalledWith(true, expect.anything());
+
+    release();
 
     await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: false }));
     unmount();
   });
 
-  it('treats a failed probe as a takeover, so playback is kept rather than discarded', async () => {
-    installLocks(() => Promise.reject(new Error('not fully active')));
+  it('stays fresh through a StrictMode remount, which queues behind its own first mount', async () => {
+    const { unmount } = await renderLeader({ strict: true });
 
-    const { unmount } = await renderLeader();
-
-    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: false }));
+    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
+    expect(setIsLeader).not.toHaveBeenCalledWith(true, { fresh: false });
     unmount();
-  });
-
-  it('keeps the first answer across a remount, which would otherwise see its own lock', async () => {
-    const query = vi
-      .fn<() => Promise<LockManagerSnapshot>>()
-      .mockImplementationOnce(heldBy([]))
-      .mockImplementation(heldBy(['cuewise-sounds-leader']));
-    installLocks(query);
-    const first = await renderLeader();
-    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
-    first.unmount();
-    setIsLeader.mockClear();
-
-    const { useSoundsLeader } = await import('./useSoundsLeader');
-    const second = renderHook(() => useSoundsLeader());
-
-    await waitFor(() => expect(setIsLeader).toHaveBeenCalledWith(true, { fresh: true }));
-    expect(query).toHaveBeenCalledTimes(1);
-    second.unmount();
   });
 
   it('leads fresh without Web Locks', async () => {
-    Reflect.deleteProperty(navigator, 'locks');
+    uninstallLocks();
 
     await renderLeader();
 

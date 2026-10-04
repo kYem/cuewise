@@ -1,3 +1,4 @@
+import type { SoundSource } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,7 +11,7 @@ vi.mock('../../stores/sounds-store', () => ({ useSoundsStore: vi.fn() }));
 const togglePlayPause = vi.fn();
 
 function mockSounds(state: {
-  activeSource?: 'none' | 'ambient' | 'youtube';
+  activeSource?: SoundSource;
   isPlaying?: boolean;
   isPaused?: boolean;
 }) {

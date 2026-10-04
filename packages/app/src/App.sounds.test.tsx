@@ -19,9 +19,11 @@ vi.mock('./utils/unsplash', () => ({
   isUnsplashUrl: vi.fn(() => false),
 }));
 vi.mock('./hooks/usePomodoroSounds', () => ({ usePomodoroSounds: vi.fn() }));
+vi.mock('./hooks/usePomodoroLeader', () => ({ usePomodoroLeader: vi.fn() }));
 
 import { installAppRenderStubs } from './__fixtures__/app-render.fixtures';
 import App from './App';
+import { usePomodoroLeader } from './hooks/usePomodoroLeader';
 import { usePomodoroSounds } from './hooks/usePomodoroSounds';
 import { useSoundsStore } from './stores/sounds-store';
 
@@ -39,6 +41,14 @@ describe('App sounds', () => {
     render(<App />);
 
     expect(usePomodoroSounds).toHaveBeenCalled();
+  });
+
+  it('ticks the timer from the app, so a session still ends off the Pomodoro page', () => {
+    window.location.hash = 'quotes';
+
+    render(<App />);
+
+    expect(usePomodoroLeader).toHaveBeenCalled();
   });
 
   it('floats a pause control over a content page while a sound plays', async () => {

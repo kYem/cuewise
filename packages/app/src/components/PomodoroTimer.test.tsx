@@ -1,4 +1,4 @@
-import type { Goal } from '@cuewise/shared';
+import type { Goal, SoundSource } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { usePomodoroSounds } from '../hooks/usePomodoroSounds';
 import { useGoalStore } from '../stores/goal-store';
-import { usePomodoroStore } from '../stores/pomodoro-store';
+import { type SessionType, type TimerStatus, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
 import { PomodoroTimer } from './PomodoroTimer';
@@ -38,12 +38,12 @@ function PomodoroPageInApp({ onPage }: { onPage: boolean }) {
 }
 
 interface MockOptions {
-  sessionType?: 'work' | 'break' | 'longBreak';
-  status?: 'idle' | 'running' | 'paused';
+  sessionType?: SessionType;
+  status?: TimerStatus;
   selectedGoalId?: string | null;
   todayTasks?: Goal[];
   setSelectedGoal?: Mock;
-  activeSource?: 'none' | 'ambient' | 'youtube';
+  activeSource?: SoundSource;
   isSoundsLeader?: boolean;
   isSoundsPlaying?: boolean;
   music?: boolean;

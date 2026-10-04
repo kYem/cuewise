@@ -13,23 +13,11 @@ const logger = createLogger({
 
 const LOCK_NAME = 'cuewise-sounds-leader';
 
-let heldAtFirstAsk: Promise<boolean> | null = null;
-
 /**
- * Asked once per page, before this page queues for the lock: a StrictMode remount would otherwise
- * find the lock held by its own first mount and mistake that for another tab's audio.
+ * Whether this page's first grant found the lock free. Kept per page because a StrictMode remount
+ * queues behind its own first mount, and must not mistake that wait for another tab's audio.
  */
-function anotherTabHeldTheAudio(): Promise<boolean> {
-  heldAtFirstAsk ??= navigator.locks
-    .query()
-    .then((snapshot) => (snapshot.held ?? []).some((lock) => lock.name === LOCK_NAME))
-    .catch((error) => {
-      // Unknown, so assume a handoff: resuming wrongly is audible and pausable, discarding is not.
-      logger.warn('Could not tell whether another tab held the audio', error);
-      return true;
-    });
-  return heldAtFirstAsk;
-}
+let firstGrantWasFree: boolean | null = null;
 
 /**
  * Hook to handle sounds playback leader election
@@ -46,6 +34,26 @@ export function useSoundsLeader(): void {
   useEffect(() => {
     let aborted = false;
 
+    const lead = async (fresh: boolean) => {
+      logger.debug('Sounds lock acquired! This tab is the sounds leader', { fresh });
+      lockHeldRef.current = true;
+      setIsLeader(true, { fresh });
+
+      // Hold the lock until component unmounts
+      await new Promise<void>((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (aborted) {
+            logger.debug('Releasing sounds lock (component unmounted)');
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+
+      lockHeldRef.current = false;
+      setIsLeader(false);
+    };
+
     const requestLeadership = async () => {
       logger.debug('Requesting sounds leadership lock...');
 
@@ -56,31 +64,32 @@ export function useSoundsLeader(): void {
       }
 
       try {
-        const heldElsewhere = anotherTabHeldTheAudio();
+        // Free right now means no tab was holding the audio; a wait means one was, and hands over.
+        const grantedAtOnce = await navigator.locks.request(
+          LOCK_NAME,
+          { ifAvailable: true },
+          async (lock) => {
+            if (!lock) {
+              return false;
+            }
+            firstGrantWasFree ??= true;
+            if (!aborted) {
+              await lead(firstGrantWasFree);
+            }
+            return true;
+          }
+        );
+        if (grantedAtOnce || aborted) {
+          return;
+        }
+
         await navigator.locks.request(LOCK_NAME, async (lock) => {
           if (!lock || aborted) {
             logger.debug('Lock not acquired or aborted');
             return;
           }
-
-          const fresh = !(await heldElsewhere);
-          logger.debug('Sounds lock acquired! This tab is the sounds leader', { fresh });
-          lockHeldRef.current = true;
-          setIsLeader(true, { fresh });
-
-          // Hold the lock until component unmounts
-          await new Promise<void>((resolve) => {
-            const checkInterval = setInterval(() => {
-              if (aborted) {
-                logger.debug('Releasing sounds lock (component unmounted)');
-                clearInterval(checkInterval);
-                resolve();
-              }
-            }, 100);
-          });
-
-          lockHeldRef.current = false;
-          setIsLeader(false);
+          firstGrantWasFree ??= false;
+          await lead(firstGrantWasFree);
         });
       } catch (error) {
         logger.error('Error requesting sounds leadership', error);

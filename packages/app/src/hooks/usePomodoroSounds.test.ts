@@ -35,6 +35,7 @@ interface MockOptions {
   autoStart?: boolean;
   playDuringBreaks?: boolean;
   activeSource?: SoundSource;
+  isPlaying?: boolean;
 }
 
 const sounds = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), initialize: vi.fn() };
@@ -66,6 +67,7 @@ function mockStores(options: MockOptions = {}) {
     createSelectorMock({
       activeSource: options.activeSource ?? 'youtube',
       isLeader: options.isLeader ?? true,
+      isPlaying: options.isPlaying ?? false,
       ...sounds,
     })
   );
@@ -207,6 +209,28 @@ describe('usePomodoroSounds', () => {
     transition({ status: 'running', isLeader: false }, { status: 'idle', isLeader: false });
 
     expect(sounds.stop).not.toHaveBeenCalled();
+  });
+
+  it('does not start a sound already playing in the tab that picked it a second time', () => {
+    transition(
+      { status: 'running', activeSource: 'none' },
+      { status: 'running', activeSource: 'ambient', isPlaying: true }
+    );
+
+    expect(sounds.resume).not.toHaveBeenCalled();
+  });
+
+  it('follows the timer again once a failed load is retried successfully', () => {
+    mockStores({ status: 'running', timerError: 'Failed to load pomodoro data.' });
+    const { rerender } = renderHook(() => usePomodoroSounds());
+    mockStores({ status: 'running', timerLoading: true });
+    rerender();
+    vi.clearAllMocks();
+
+    mockStores({ status: 'running' });
+    rerender();
+
+    expect(sounds.resume).toHaveBeenCalled();
   });
 
   it('keeps following the timer after a later save fails', () => {
