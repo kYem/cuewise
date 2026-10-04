@@ -2,19 +2,12 @@ import { formatTimeRemaining } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Pause, Play, Timer } from 'lucide-react';
 import type React from 'react';
-import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
-import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { getSessionLabel } from '../utils/pomodoro-styles';
 import { PomodoroPipButton } from './PomodoroPipButton';
 
 export const ActivePomodoroWidget: React.FC = () => {
   const { status, sessionType, timeRemaining, pause, resume } = usePomodoroStore();
-
-  // Enable cross-tab synchronization
-  usePomodoroStorageSync();
-
-  // Timer leader election - only one tab/component runs the timer
-  usePomodoroLeader();
 
   // Only show when there's an active session
   if (status === 'idle') {

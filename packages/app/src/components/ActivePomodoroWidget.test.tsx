@@ -5,13 +5,7 @@ import { usePomodoroStore } from '../stores/pomodoro-store';
 import { ActivePomodoroWidget } from './ActivePomodoroWidget';
 import { usePomodoroPip } from './PomodoroPipProvider';
 
-// The widget reads the pomodoro store and runs leader/sync hooks; stub them so
-// the suite can drive the pop-out button in isolation.
-vi.mock('../stores/pomodoro-store', () => ({
-  usePomodoroStore: vi.fn(),
-  usePomodoroStorageSync: vi.fn(),
-}));
-vi.mock('../hooks/usePomodoroLeader', () => ({ usePomodoroLeader: vi.fn() }));
+vi.mock('../stores/pomodoro-store', () => ({ usePomodoroStore: vi.fn() }));
 vi.mock('./PomodoroPipProvider', () => ({ usePomodoroPip: vi.fn() }));
 
 function mockPip(options: { isSupported?: boolean; open?: Mock } = {}) {

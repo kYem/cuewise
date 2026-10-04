@@ -14,10 +14,9 @@ import {
 import type React from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
-import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
 import type { ChromeVariant } from '../utils/chrome-variant';
@@ -184,12 +183,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [showGoalPicker]);
-
-  // Enable cross-tab synchronization
-  usePomodoroStorageSync();
-
-  // Timer leader election - only one tab/component runs the timer
-  usePomodoroLeader();
 
   // Initialize on mount
   useEffect(() => {

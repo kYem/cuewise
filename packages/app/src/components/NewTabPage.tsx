@@ -8,7 +8,7 @@ import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import type { NotionHost } from '../notion/notion-host';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useGoalStore } from '../stores/goal-store';
-import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { preloadImages } from '../utils/image-preload-cache';
@@ -81,9 +81,6 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
   const pomodoroStatus = usePomodoroStore((state) => state.status);
   const pomodoroSessions = usePomodoroStore((state) => state.sessions);
   const goals = useGoalStore((state) => state.goals);
-
-  // Enable cross-tab synchronization for Pomodoro timer
-  usePomodoroStorageSync();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);

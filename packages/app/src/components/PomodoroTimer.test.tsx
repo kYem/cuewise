@@ -26,7 +26,6 @@ vi.mock('../stores/sounds-store', () => ({
 vi.mock('../stores/focus-mode-store', () => ({
   useFocusModeStore: Object.assign(vi.fn(), { getState: () => ({ enterFocusMode: vi.fn() }) }),
 }));
-vi.mock('../hooks/usePomodoroLeader', () => ({ usePomodoroLeader: vi.fn() }));
 vi.mock('../hooks/useSoundsLeader', () => ({ useSoundsLeader: vi.fn() }));
 
 /** The app-level sound host stays mounted while the user navigates the timer's page away. */
