@@ -8,7 +8,7 @@ import {
 } from '@cuewise/shared';
 import { getGoals, setGoals } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
-import { goalFactory } from '@cuewise/test-utils/factories';
+import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   disableAfterFirstWrite,
@@ -1128,6 +1128,18 @@ describe('pullOnce', () => {
       const saved = await metaStore.load();
       expect(saved.relistOwed).toBe('restored');
       expect(saved.cursor).toBe(0);
+    });
+
+    it('still marks the lost entities of a readable collection when another cannot be read', async () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const bindings = defaultBindings();
+      await requireBinding(bindings, 'quotes').writeOne('q1', quoteFactory.build({ id: 'q1' }));
+      await seedLocalHlc(metaStore, 'quotes', 'q1', OLDER_HLC);
+      failReadsAfterFirst(requireBinding(bindings, 'goals'));
+
+      await pullOnce(makeDeps({ bindings }));
+
+      expect((await metaStore.load()).dirty.quotes).toEqual(['q1']);
     });
 
     it('restarts a restore relist at 0 when a listed record cannot be written', async () => {

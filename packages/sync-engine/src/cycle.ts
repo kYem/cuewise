@@ -153,7 +153,7 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
   for (const { collection, entityId } of pull.redirtied.values()) {
     markDirty(fresh, collection, entityId);
   }
-  // A purged key's entity was still held here, so it was never one of the ledger's tombstones.
+  // A purged key's entity was still held here, so the engine never tombstoned it.
   for (const [key, judged] of pull.purged) {
     // Moved since it was judged: an edit or an ack owns the key now, not the purge.
     if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
