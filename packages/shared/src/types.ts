@@ -623,7 +623,16 @@ export interface PomodoroHeatmapData {
   hourlyDistribution: Record<number, number>; // hour (0-23) -> count
   dailyDistribution: Record<string, number>; // YYYY-MM-DD -> count
   weekdayDistribution: Record<number, number>; // 0=Sunday, 6=Saturday -> count
+  weekdayHourDistribution: number[][]; // [weekday 0=Sunday][hour 0-23] -> count
   productiveHours: number[]; // Top 3 most productive hours
+}
+
+export type DayPart = 'morning' | 'afternoon' | 'evening' | 'night';
+
+/** The weekday and part of day holding the most focus sessions. */
+export interface FocusPeak {
+  weekday: number; // 0=Sunday, 6=Saturday
+  dayPart: DayPart;
 }
 
 // Complete analytics data

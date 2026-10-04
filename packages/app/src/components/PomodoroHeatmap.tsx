@@ -4,6 +4,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@cuewise/ui';
 import { Clock } from 'lucide-react';
 import type React from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from 'recharts';
+import { INTENSITY_COLORS, intensityLevel } from './heatmap-intensity';
 
 interface PomodoroHeatmapProps {
   data: PomodoroHeatmapData;
@@ -18,37 +19,13 @@ const chartConfig: ChartConfig = {
   },
 };
 
-// Color intensity levels for heatmap (using CSS custom properties)
-const INTENSITY_COLORS = {
-  none: 'var(--color-surface-variant)',
-  low: 'var(--color-primary-200)',
-  medium: 'var(--color-primary-300)',
-  high: 'var(--color-primary-400)',
-  peak: 'var(--color-primary-600)',
-} as const;
-
 export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
   // Find max values for scaling
   const maxHourly = Math.max(...Object.values(data.hourlyDistribution), 1);
   const maxWeekday = Math.max(...Object.values(data.weekdayDistribution), 1);
 
-  // Get color intensity based on value
-  const getColorIntensity = (value: number, max: number): string => {
-    if (value === 0) {
-      return INTENSITY_COLORS.none;
-    }
-    const intensity = (value / max) * 100;
-    if (intensity < 25) {
-      return INTENSITY_COLORS.low;
-    }
-    if (intensity < 50) {
-      return INTENSITY_COLORS.medium;
-    }
-    if (intensity < 75) {
-      return INTENSITY_COLORS.high;
-    }
-    return INTENSITY_COLORS.peak;
-  };
+  const getColorIntensity = (value: number, max: number): string =>
+    INTENSITY_COLORS[intensityLevel(value, max)];
 
   // Format hour for display (12h format)
   const formatHour = (hour: number): string => {

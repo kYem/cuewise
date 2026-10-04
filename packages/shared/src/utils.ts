@@ -39,7 +39,9 @@ import {
 import type {
   AdvancedAnalytics,
   DailyDataPoint,
+  DayPart,
   ExportData,
+  FocusPeak,
   Goal,
   GoalCompletionRate,
   GoalProgress,
@@ -1298,6 +1300,7 @@ export function calculatePomodoroHeatmap(sessions: PomodoroSession[]): PomodoroH
   const hourlyDistribution: Record<number, number> = {};
   const dailyDistribution: Record<string, number> = {};
   const weekdayDistribution: Record<number, number> = {};
+  const weekdayHourDistribution = Array.from({ length: 7 }, () => new Array<number>(24).fill(0));
 
   // Initialize all hours (0-23)
   for (let i = 0; i < 24; i++) {
@@ -1320,6 +1323,7 @@ export function calculatePomodoroHeatmap(sessions: PomodoroSession[]): PomodoroH
     hourlyDistribution[hour] = (hourlyDistribution[hour] || 0) + 1;
     weekdayDistribution[weekday] = (weekdayDistribution[weekday] || 0) + 1;
     dailyDistribution[dateStr] = (dailyDistribution[dateStr] || 0) + 1;
+    weekdayHourDistribution[weekday][hour] += 1;
   });
 
   // Find top 3 most productive hours
@@ -1334,8 +1338,68 @@ export function calculatePomodoroHeatmap(sessions: PomodoroSession[]): PomodoroH
     hourlyDistribution,
     dailyDistribution,
     weekdayDistribution,
+    weekdayHourDistribution,
     productiveHours,
   };
+}
+
+/** Fewer focus sessions than this is too little to call a pattern. */
+export const FOCUS_PEAK_MIN_SESSIONS = 10;
+
+export const DAY_PARTS: DayPart[] = ['morning', 'afternoon', 'evening', 'night'];
+
+export function dayPartOfHour(hour: number): DayPart {
+  if (hour >= 5 && hour < 12) {
+    return 'morning';
+  }
+  if (hour >= 12 && hour < 17) {
+    return 'afternoon';
+  }
+  if (hour >= 17 && hour < 21) {
+    return 'evening';
+  }
+  return 'night';
+}
+
+/** Monday-first, matching the week the rest of Insights counts. */
+export const FOCUS_WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** Hours before morning belong to the night that began the evening before. */
+const LAST_NIGHT_HOUR = 4;
+
+/**
+ * The weekday and part of day with the most sessions, or null below the minimum.
+ * Ties go to the earlier weekday, then the earlier part of the day.
+ */
+export function findFocusPeak(weekdayHourDistribution: number[][]): FocusPeak | null {
+  const total = weekdayHourDistribution.flat().reduce((sum, count) => sum + count, 0);
+  if (total < FOCUS_PEAK_MIN_SESSIONS) {
+    return null;
+  }
+  const counts = weekdayHourDistribution.map(() => ({
+    morning: 0,
+    afternoon: 0,
+    evening: 0,
+    night: 0,
+  }));
+  weekdayHourDistribution.forEach((hours, weekday) => {
+    hours.forEach((sessions, hour) => {
+      const night = (weekday + 6) % 7;
+      const owner = hour <= LAST_NIGHT_HOUR ? night : weekday;
+      counts[owner][dayPartOfHour(hour)] += sessions;
+    });
+  });
+  let peak: FocusPeak | null = null;
+  let peakCount = 0;
+  for (const weekday of FOCUS_WEEKDAY_ORDER) {
+    for (const dayPart of DAY_PARTS) {
+      if (counts[weekday][dayPart] > peakCount) {
+        peak = { weekday, dayPart };
+        peakCount = counts[weekday][dayPart];
+      }
+    }
+  }
+  return peak;
 }
 
 /**
