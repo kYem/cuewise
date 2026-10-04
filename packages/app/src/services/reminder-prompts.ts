@@ -77,16 +77,19 @@ async function updatePrompts(
 }
 
 /**
- * Raises the card for a reminder that just fired, replacing any earlier prompt for it. `ifAbsent`
- * leaves an existing one alone: a catch-up sweep must not overwrite the fire that beat it there.
+ * Raises the card for a reminder that just fired, replacing any earlier prompt for it.
+ * `keepNewerFire` keeps one raised since `dueDate` came due: a catch-up sweep must not overwrite
+ * the fire that beat it there, but must still replace a prompt left from before an edit.
  */
 export function addReminderPrompt(
   reminderId: string,
   dueDate: string,
-  { firedAt = new Date(), ifAbsent = false }: { firedAt?: Date; ifAbsent?: boolean } = {}
+  { firedAt = new Date(), keepNewerFire = false }: { firedAt?: Date; keepNewerFire?: boolean } = {}
 ): Promise<boolean> {
   return updatePrompts((prompts) => {
-    if (ifAbsent && prompts.some((p) => p.reminderId === reminderId)) {
+    const raisedSinceDue = (p: ReminderPrompt) =>
+      p.reminderId === reminderId && Date.parse(p.firedAt) >= Date.parse(dueDate);
+    if (keepNewerFire && prompts.some(raisedSinceDue)) {
       return prompts;
     }
     return [

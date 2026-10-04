@@ -35,12 +35,26 @@ describe('reminder prompts', () => {
     ]);
   });
 
-  it('leaves an existing prompt alone when asked to add only where none is', async () => {
-    await addReminderPrompt('r1', 'from-the-fire');
+  it('keeps a prompt the fire raised since this occurrence came due', async () => {
+    await addReminderPrompt('r1', '2026-10-05T09:00:00.000Z', {
+      firedAt: new Date('2026-10-04T09:00:02.000Z'),
+    });
 
-    await addReminderPrompt('r1', 'from-the-sweep', { ifAbsent: true });
+    await addReminderPrompt('r1', DUE, { keepNewerFire: true });
 
-    expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual(['from-the-fire']);
+    expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual([
+      '2026-10-05T09:00:00.000Z',
+    ]);
+  });
+
+  it('still replaces a prompt left from before the occurrence came due', async () => {
+    await addReminderPrompt('r1', '2026-10-04T08:00:00.000Z', {
+      firedAt: new Date('2026-10-04T08:00:01.000Z'),
+    });
+
+    await addReminderPrompt('r1', DUE, { keepNewerFire: true });
+
+    expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual([DUE]);
   });
 
   it('drops only the answered reminder', async () => {
