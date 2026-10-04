@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleSyncMessage, type SyncMessageEngine } from './handle-sync-message';
 
 function fakeEngine(): SyncMessageEngine {
@@ -10,16 +10,22 @@ function fakeEngine(): SyncMessageEngine {
   };
 }
 
+const MUTATED_GOAL = {
+  kind: 'cuewise-sync-mutation',
+  op: 'mutated',
+  collection: 'goals',
+  entityId: 'g1',
+};
+
 describe('handleSyncMessage', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('routes a mutated message to markMutated with the collection and entity id', () => {
     const engine = fakeEngine();
 
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'mutated',
-      collection: 'goals',
-      entityId: 'g1',
-    });
+    handleSyncMessage(engine, MUTATED_GOAL);
 
     expect(engine.markMutated).toHaveBeenCalledWith('goals', 'g1');
     expect(engine.markDeleted).not.toHaveBeenCalled();
@@ -53,11 +59,53 @@ describe('handleSyncMessage', () => {
     expect(engine.markMutatedBulk).toHaveBeenCalledWith('quotes', ['a', 'b']);
   });
 
+  it('acks ok only once the ledger write resolves', async () => {
+    const engine = fakeEngine();
+    let finishWrite = () => {};
+    vi.mocked(engine.markMutated).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      })
+    );
+    let acked = false;
+
+    const ack = handleSyncMessage(engine, MUTATED_GOAL)?.then((reply) => {
+      acked = true;
+      return reply;
+    });
+    await Promise.resolve();
+    expect(acked).toBe(false);
+
+    finishWrite();
+    await expect(ack).resolves.toEqual({ ok: true });
+  });
+
+  it('acks an error when the ledger write rejects', async () => {
+    const engine = fakeEngine();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(engine.markDeleted).mockRejectedValueOnce(new Error('QUOTA_BYTES quota exceeded'));
+
+    const ack = handleSyncMessage(engine, { ...MUTATED_GOAL, op: 'deleted' });
+
+    await expect(ack).resolves.toEqual({ ok: false, reason: 'error' });
+  });
+
+  it('acks malformed for a sync-mutation message it cannot route', async () => {
+    const engine = fakeEngine();
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const ack = handleSyncMessage(engine, { kind: 'cuewise-sync-mutation', op: 'mutated' });
+
+    await expect(ack).resolves.toEqual({ ok: false, reason: 'malformed' });
+  });
+
   it('silently ignores a message with a different kind (e.g. sync-control) and never calls the engine', () => {
     const engine = fakeEngine();
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-    handleSyncMessage(engine, { kind: 'cuewise-sync-control', op: 'enable' });
+    expect(
+      handleSyncMessage(engine, { kind: 'cuewise-sync-control', op: 'enable' })
+    ).toBeUndefined();
 
     expect(engine.markMutated).not.toHaveBeenCalled();
     expect(engine.markDeleted).not.toHaveBeenCalled();

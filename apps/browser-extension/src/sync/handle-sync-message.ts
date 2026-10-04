@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { SyncMutationMessage } from './sync-messages';
+import type { SyncMutationAck, SyncMutationMessage } from './sync-messages';
 
 /**
  * Structural subset of SyncEngine the router needs. Unlike SyncMutationSink,
@@ -26,42 +26,65 @@ function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
   return typeof candidate.collection === 'string';
 }
 
+const MALFORMED: SyncMutationAck = { ok: false, reason: 'malformed' };
+
 /**
  * Routes a page-relayed sync-mutation message (ENG-45 option B) to the background's
- * SyncEngine. A message on a different channel (e.g. sync-control) is silently ignored;
- * only a message that claims the mutation kind but has a bad op/collection shape warns.
+ * SyncEngine and resolves its ack once the ledger write settles. Answers undefined for a
+ * message on another channel (e.g. sync-control) so that channel's listener replies instead.
  */
-export function handleSyncMessage(engine: SyncMessageEngine, msg: unknown): void {
+export function handleSyncMessage(
+  engine: SyncMessageEngine,
+  msg: unknown
+): Promise<SyncMutationAck> | undefined {
   if (!hasMutationKind(msg)) {
-    return;
+    return undefined;
   }
   if (!isSyncMutationMessage(msg)) {
     logger.warn('Ignoring malformed sync-mutation message', { received: typeof msg });
-    return;
+    return Promise.resolve(MALFORMED);
   }
 
   if (msg.op === 'mutatedBulk') {
-    if (msg.entityIds === undefined) {
+    const { entityIds } = msg;
+    if (entityIds === undefined) {
       logger.warn('Ignoring sync-mutation message: mutatedBulk missing entityIds', {
         collection: msg.collection,
       });
-      return;
+      return Promise.resolve(MALFORMED);
     }
-    void engine.markMutatedBulk(msg.collection, msg.entityIds);
-    return;
+    return settle(msg, () => engine.markMutatedBulk(msg.collection, entityIds));
   }
 
-  if (msg.entityId === undefined) {
+  const { entityId } = msg;
+  if (entityId === undefined) {
     logger.warn('Ignoring sync-mutation message: missing entityId', {
       op: msg.op,
       collection: msg.collection,
     });
-    return;
+    return Promise.resolve(MALFORMED);
   }
 
   if (msg.op === 'mutated') {
-    void engine.markMutated(msg.collection, msg.entityId);
-  } else {
-    void engine.markDeleted(msg.collection, msg.entityId);
+    return settle(msg, () => engine.markMutated(msg.collection, entityId));
   }
+  return settle(msg, () => engine.markDeleted(msg.collection, entityId));
+}
+
+function settle(
+  msg: SyncMutationMessage,
+  mark: () => Promise<void> | void
+): Promise<SyncMutationAck> {
+  return new Promise<void>((resolve) => {
+    resolve(mark());
+  })
+    .then((): SyncMutationAck => ({ ok: true }))
+    .catch((error: unknown): SyncMutationAck => {
+      logger.error('Failed to record a relayed sync mutation', {
+        op: msg.op,
+        collection: msg.collection,
+        error,
+      });
+      return { ok: false, reason: 'error' };
+    });
 }

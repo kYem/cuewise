@@ -13,3 +13,6 @@ export interface SyncMutationMessage {
   entityId?: string;
   entityIds?: string[];
 }
+
+/** The worker's reply, sent only once the dirty mark is in the ledger (or failed to get there). */
+export type SyncMutationAck = { ok: true } | { ok: false; reason: 'malformed' | 'error' };
