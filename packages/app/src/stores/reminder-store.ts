@@ -670,10 +670,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       logger.error('Fired due reminders', { count: dueNow.length });
 
       // Cards first: `notified` is already persisted, so nothing fallible may sit between that
-      // write and the one delivery a page without a background host is guaranteed to make. A card
-      // that could not be stored falls back to the plain toast, so that delivery still happens.
+      // write and the one delivery a page without a background host is guaranteed to make.
       for (const r of dueNow) {
-        if (await addReminderPrompt(r.id)) {
+        if (await addReminderPrompt(r.id, r.dueDate)) {
           await recordReminderActivity({ event: 'prompted', ...activitySubject(r) });
         } else {
           useToastStore.getState().warning(`Reminder: ${r.text}`);

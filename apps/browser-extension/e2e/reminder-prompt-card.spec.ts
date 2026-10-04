@@ -36,8 +36,8 @@ test('a fired reminder raises the in-app card, and Done answers it', async () =>
   const reminderId = await findReminderId(session.worker, REMINDER_TEXT);
   await waitForEvent(session.worker, reminderId, 'fired', (FIRE_IN_SECONDS + 20) * 1000);
 
-  const card = page.getByRole('alert');
-  await expect(card).toContainText(REMINDER_TEXT);
+  const card = page.getByRole('region', { name: REMINDER_TEXT });
+  await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Done' }).click();
 
   await expect(card).toBeHidden();

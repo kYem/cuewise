@@ -84,7 +84,7 @@ test('a reminder is armed, fired, snoozed, re-armed after an update, and complet
   expect(fired.realm).toBe('worker');
 
   step('snooze it 5m from the page');
-  await page.getByRole('button', { name: '5m', exact: true }).click();
+  await page.getByRole('button', { name: 'Snooze 5 minutes' }).click();
   await waitForEvent(first.worker, reminderId, 'cancelled', 5_000);
   await first.context.close();
 

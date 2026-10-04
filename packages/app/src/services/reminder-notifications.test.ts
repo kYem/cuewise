@@ -71,7 +71,7 @@ describe('the in-app prompt a fire raises', () => {
 
     await handleReminderFire('reminder-r1');
 
-    expect(addPrompt).toHaveBeenCalledWith('r1');
+    expect(addPrompt).toHaveBeenCalledWith('r1', expect.any(String));
   });
 
   it('still raises it when the notification could not be shown', async () => {
@@ -81,7 +81,7 @@ describe('the in-app prompt a fire raises', () => {
 
     await handleReminderFire('reminder-r1');
 
-    expect(addPrompt).toHaveBeenCalledWith('r1');
+    expect(addPrompt).toHaveBeenCalledWith('r1', expect.any(String));
   });
 
   it('raises none for a reminder the fire skips', async () => {
@@ -117,6 +117,39 @@ describe('respondToReminder', () => {
     expect(markMutated).toHaveBeenCalledWith('reminders', 'r1');
     expect(scheduleAt).toHaveBeenCalledWith('reminder-r1', new Date(due));
     expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+
+  it('keeps the prompt when the answer could not be saved, so the card can be answered again', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getRemindersMock.mockResolvedValue([reminderFactory.build({ id: 'r1', completed: false })]);
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'full' },
+    });
+
+    await expect(respondToReminder('r1', REMINDER_SNOOZE_BUTTON)).resolves.toBe(false);
+
+    expect(removePrompt).not.toHaveBeenCalled();
+  });
+
+  it('records the due date a one-off fire left, for the card to check against', async () => {
+    const due = reminderFactory.build({ id: 'r1', completed: false });
+    getRemindersMock.mockResolvedValue([due]);
+
+    await handleReminderFire('reminder-r1');
+
+    expect(addPrompt).toHaveBeenCalledWith('r1', due.dueDate);
+  });
+
+  it('records the next occurrence a recurring fire advanced to', async () => {
+    getRemindersMock.mockResolvedValue([
+      recurringReminderFactory.build({ id: 'r2', recurring: { frequency: 'daily' } }),
+    ]);
+
+    await handleReminderFire('reminder-r2');
+
+    const saved = setRemindersMock.mock.calls[0][0][0];
+    expect(addPrompt).toHaveBeenCalledWith('r2', saved.dueDate);
   });
 
   it('clears the prompt of a reminder already gone, without writing', async () => {

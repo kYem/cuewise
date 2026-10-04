@@ -151,12 +151,17 @@ export function RecurrencePauseControl({ reminder, onPauseToggle }: RecurrencePa
 interface ReminderSnoozeRowProps {
   onSnooze: (minutes: number) => void;
   state?: ReminderState;
+  disabled?: boolean;
 }
 
 const SNOOZE_OPTIONS = [5, 15, 30] as const;
 
 /** "Snooze" label + 5/15/30m buttons, tinted by the state accent. */
-export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRowProps) {
+export function ReminderSnoozeRow({
+  onSnooze,
+  state = 'soon',
+  disabled = false,
+}: ReminderSnoozeRowProps) {
   const styles = REMINDER_STATE_STYLES[state];
 
   return (
@@ -170,6 +175,8 @@ export function ReminderSnoozeRow({ onSnooze, state = 'soon' }: ReminderSnoozeRo
           key={minutes}
           type="button"
           onClick={() => onSnooze(minutes)}
+          disabled={disabled}
+          aria-label={`Snooze ${minutes} minutes`}
           className={cn(
             'px-2.5 py-1 rounded-full text-xs font-semibold border transition hover:brightness-110',
             styles.chip.bg,

@@ -1,7 +1,7 @@
 // Fired reminders still waiting for an answer on this device, for the in-app card. Device-local:
 // each device fires its own wakes, so a prompt raised here must not appear anywhere else.
 
-import { getStorage, logger } from '@cuewise/shared';
+import { getStorage, logger, type Reminder } from '@cuewise/shared';
 import { withCollectionLock } from '@cuewise/storage';
 
 export const REMINDER_PROMPTS_KEY = 'reminderPrompts';
@@ -10,6 +10,8 @@ const REMINDER_PROMPTS_LIMIT = 20;
 export interface ReminderPrompt {
   reminderId: string;
   firedAt: string;
+  /** The due date the fire left behind; a reminder answered or edited anywhere moves off it. */
+  dueDate: string;
 }
 
 function isPrompt(value: unknown): value is ReminderPrompt {
@@ -17,7 +19,11 @@ function isPrompt(value: unknown): value is ReminderPrompt {
     return false;
   }
   const prompt = value as Partial<ReminderPrompt>;
-  return typeof prompt.reminderId === 'string' && typeof prompt.firedAt === 'string';
+  return (
+    typeof prompt.reminderId === 'string' &&
+    typeof prompt.firedAt === 'string' &&
+    typeof prompt.dueDate === 'string'
+  );
 }
 
 /** Null when the read itself failed; an unreadable or malformed stored value reads as none. */
@@ -71,11 +77,23 @@ async function updatePrompts(
 }
 
 /** Raises the card for a reminder that just fired, replacing any earlier prompt for it. */
-export function addReminderPrompt(reminderId: string, firedAt = new Date()): Promise<boolean> {
+export function addReminderPrompt(
+  reminderId: string,
+  dueDate: string,
+  firedAt = new Date()
+): Promise<boolean> {
   return updatePrompts((prompts) => [
     ...prompts.filter((p) => p.reminderId !== reminderId),
-    { reminderId, firedAt: firedAt.toISOString() },
+    { reminderId, firedAt: firedAt.toISOString(), dueDate },
   ]);
+}
+
+/** Whether the reminder still waits on the answer this prompt asks for. */
+export function promptIsLive(prompt: ReminderPrompt, reminder: Reminder | undefined): boolean {
+  if (reminder === undefined || reminder.completed || reminder.paused === true) {
+    return false;
+  }
+  return reminder.dueDate === prompt.dueDate;
 }
 
 export function removeReminderPrompt(reminderId: string): Promise<boolean> {

@@ -1,5 +1,4 @@
-import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -8,39 +7,30 @@ import {
   respondToReminder,
 } from '../../services/reminder-notifications';
 import { removeReminderPrompt } from '../../services/reminder-prompts';
-import { useReminderPromptStore } from '../../stores/reminder-prompt-store';
 import { useReminderStore } from '../../stores/reminder-store';
+import { useToastStore } from '../../stores/toast-store';
+import {
+  firedReminders,
+  setTabVisibility,
+  stretch,
+  water,
+} from '../__fixtures__/reminder-prompt-card.fixtures';
 import { ReminderPromptCard } from './ReminderPromptCard';
 
 vi.mock('../../services/reminder-notifications', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/reminder-notifications')>()),
-  respondToReminder: vi.fn(() => Promise.resolve()),
+  respondToReminder: vi.fn(() => Promise.resolve(true)),
 }));
 vi.mock('../../services/reminder-prompts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/reminder-prompts')>()),
-  removeReminderPrompt: vi.fn(() => Promise.resolve()),
+  removeReminderPrompt: vi.fn(() => Promise.resolve(true)),
 }));
 const respond = vi.mocked(respondToReminder);
 const removePrompt = vi.mocked(removeReminderPrompt);
 
-const stretch = reminderFactory.build({ id: 'r1', text: 'Stretch', completed: false });
-const water = recurringReminderFactory.build({
-  id: 'r2',
-  text: 'Drink water',
-  recurring: { frequency: 'daily' },
-});
-
-function showPrompts(ids: string[]): void {
-  useReminderPromptStore.setState({
-    prompts: ids.map((reminderId) => ({ reminderId, firedAt: '2026-10-04T09:00:00.000Z' })),
-    initialize: async () => {},
-  });
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
-  useReminderStore.setState({ reminders: [stretch, water] });
+  setTabVisibility('visible');
 });
 
 afterEach(() => {
@@ -49,15 +39,16 @@ afterEach(() => {
 
 describe('ReminderPromptCard', () => {
   it('shows the reminder that fired', () => {
-    showPrompts(['r1']);
+    firedReminders(stretch);
 
     render(<ReminderPromptCard />);
 
+    expect(screen.getByRole('region', { name: 'Stretch' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Stretch');
   });
 
   it('names the cadence of a recurring reminder', () => {
-    showPrompts(['r2']);
+    firedReminders(water);
 
     render(<ReminderPromptCard />);
 
@@ -65,34 +56,47 @@ describe('ReminderPromptCard', () => {
   });
 
   it('shows one card at a time, the oldest prompt first', () => {
-    showPrompts(['r2', 'r1']);
+    firedReminders(water, stretch);
 
     render(<ReminderPromptCard />);
 
-    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getAllByRole('region')).toHaveLength(1);
     expect(screen.getByRole('alert')).toHaveTextContent('Drink water');
   });
 
-  it('stays out of a tab that is not in front of the user', () => {
-    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
-    showPrompts(['r1']);
-
+  it('stays out of a background tab, and appears once the tab is shown', () => {
+    setTabVisibility('hidden');
+    firedReminders(stretch);
     render(<ReminderPromptCard />);
-
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    act(() => setTabVisibility('visible'));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Stretch');
   });
 
   it('steps aside while the bell panel is open', () => {
-    showPrompts(['r1']);
+    firedReminders(stretch);
 
     render(<ReminderPromptCard hidden />);
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows nothing for a reminder that is gone or already done', () => {
-    useReminderStore.setState({ reminders: [{ ...stretch, completed: true }] });
-    showPrompts(['r1', 'gone']);
+  it('lapses once the reminder was answered or moved somewhere else', () => {
+    firedReminders(water);
+    useReminderStore.setState({
+      reminders: [{ ...water, dueDate: '2030-01-01T09:00:00.000Z' }],
+    });
+
+    render(<ReminderPromptCard />);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('lapses for a reminder paused since it fired', () => {
+    firedReminders(water);
+    useReminderStore.setState({ reminders: [{ ...water, paused: true }] });
 
     render(<ReminderPromptCard />);
 
@@ -100,7 +104,7 @@ describe('ReminderPromptCard', () => {
   });
 
   it('answers Done the way the notification does', async () => {
-    showPrompts(['r1']);
+    firedReminders(stretch);
     render(<ReminderPromptCard />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Done' }));
@@ -109,21 +113,52 @@ describe('ReminderPromptCard', () => {
   });
 
   it('snoozes by the length picked', async () => {
-    showPrompts(['r1']);
+    firedReminders(stretch);
     render(<ReminderPromptCard />);
 
-    await userEvent.click(screen.getByRole('button', { name: '15m' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Snooze 15 minutes' }));
 
     expect(respond).toHaveBeenCalledWith('r1', REMINDER_SNOOZE_BUTTON, 15);
   });
 
+  it('takes no second answer while the first is still saving', async () => {
+    respond.mockImplementationOnce(() => new Promise(() => {}));
+    firedReminders(stretch);
+    render(<ReminderPromptCard />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(screen.getByRole('button', { name: 'Snooze 5 minutes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Dismiss reminder' })).toBeDisabled();
+  });
+
+  it('says so when the answer could not be saved', async () => {
+    respond.mockResolvedValueOnce(false);
+    const error = vi.spyOn(useToastStore.getState(), 'error');
+    firedReminders(stretch);
+    render(<ReminderPromptCard />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(error).toHaveBeenCalledWith('Could not update the reminder. Please try again.');
+  });
+
   it('dismisses the card without answering the reminder', async () => {
-    showPrompts(['r1']);
+    firedReminders(stretch);
     render(<ReminderPromptCard />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss reminder' }));
 
     expect(removePrompt).toHaveBeenCalledWith('r1');
     expect(respond).not.toHaveBeenCalled();
+  });
+
+  it('dismisses on Escape from inside the card', () => {
+    firedReminders(stretch);
+    render(<ReminderPromptCard />);
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Done' }), { key: 'Escape' });
+
+    expect(removePrompt).toHaveBeenCalledWith('r1');
   });
 });
