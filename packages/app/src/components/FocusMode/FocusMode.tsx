@@ -6,7 +6,7 @@ import {
   selectBackgroundDim,
   useSettingsStore,
 } from '../../stores/settings-store';
-import { SoundsMiniPlayer } from '../sounds';
+import { NowPlayingPill, SoundsMiniPlayer } from '../sounds';
 import { BackgroundImage } from './BackgroundImage';
 import { FocusModeControls } from './FocusModeControls';
 import { FocusModeGoal } from './FocusModeGoal';
@@ -80,12 +80,9 @@ export function FocusMode() {
         <FocusModeControls onExit={exitFocusMode} />
       </div>
 
-      {/* Music Mini Player - Floating in top-left */}
-      {settings.pomodoroMusicEnabled && (
-        <div className="absolute top-4 left-4 z-20">
-          <SoundsMiniPlayer />
-        </div>
-      )}
+      <div className="absolute top-4 left-4 z-20">
+        {settings.pomodoroMusicEnabled ? <SoundsMiniPlayer /> : <NowPlayingPill />}
+      </div>
     </div>
   );
 

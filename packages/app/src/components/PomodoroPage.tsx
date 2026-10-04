@@ -25,7 +25,7 @@ export const PomodoroPage: React.FC = () => {
   const pomodoroMusicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
   const pomodoroCompanion = useSettingsStore((state) => state.settings.pomodoroCompanion);
   const initCalendar = useCalendarStore((state) => state.initialize);
-  // Hides the mini player: FocusMode renders its own.
+  // Hides the page's sound control: FocusMode renders its own.
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
 
