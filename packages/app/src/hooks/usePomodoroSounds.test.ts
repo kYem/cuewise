@@ -11,6 +11,7 @@ import {
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
 import type { SessionType } from '../utils/pomodoro-styles';
+import { useAmbientLiveness } from './useAmbientLiveness';
 import { usePomodoroSounds } from './usePomodoroSounds';
 import { useSoundsLeader } from './useSoundsLeader';
 
@@ -24,6 +25,7 @@ vi.mock('../stores/sounds-store', () => ({
   useSoundsStorageSync: vi.fn(),
 }));
 vi.mock('./useSoundsLeader', () => ({ useSoundsLeader: vi.fn() }));
+vi.mock('./useAmbientLiveness', () => ({ useAmbientLiveness: vi.fn() }));
 
 interface MockOptions {
   status?: TimerStatus;
@@ -87,12 +89,13 @@ describe('usePomodoroSounds', () => {
     vi.clearAllMocks();
   });
 
-  it('runs the sounds election and both storage syncs', () => {
+  it('runs the sounds election, the ambient liveness check and both storage syncs', () => {
     mockStores();
 
     renderHook(() => usePomodoroSounds());
 
     expect(useSoundsLeader).toHaveBeenCalled();
+    expect(useAmbientLiveness).toHaveBeenCalled();
     expect(useSoundsStorageSync).toHaveBeenCalled();
     expect(usePomodoroStorageSync).toHaveBeenCalled();
   });
