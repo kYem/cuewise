@@ -1,5 +1,18 @@
 # @cuewise/storage
 
+## 1.26.0
+
+### Patch Changes
+
+- 48ddcba: Reminders fire more reliably, and Settings can send a test notification.
+- 48ddcba: Cloud sync, concept cards and background photos are more reliable.
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [1e93525]
+  - @cuewise/shared@1.26.0
+
 ## 1.25.1
 
 ### Patch Changes

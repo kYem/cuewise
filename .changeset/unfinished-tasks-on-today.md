@@ -1,8 +1,0 @@
----
-'@cuewise/browser-extension': minor
-'@cuewise/macos': minor
-'@cuewise/app': minor
-'@cuewise/shared': minor
----
-
-Today's Focus shows unfinished tasks from earlier days, with Move all to today.

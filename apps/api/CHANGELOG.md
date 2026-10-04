@@ -1,5 +1,20 @@
 # @cuewise/api
 
+## 0.3.0
+
+### Minor Changes
+
+- 48ddcba: Cloud sync, concept cards and background photos are more reliable.
+
+### Patch Changes
+
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [1e93525]
+  - @cuewise/shared@1.26.0
+
 ## 0.2.1
 
 ### Patch Changes
