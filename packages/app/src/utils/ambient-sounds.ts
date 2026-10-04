@@ -1,6 +1,6 @@
 import { type AmbientSoundType, logger } from '@cuewise/shared';
 
-// Held shared by every tab sounding ambient, so a tab can tell whether any other one still is.
+// Held shared by every tab sounding ambient, so any tab can ask whether one still is.
 const AMBIENT_SOUNDING_LOCK = 'cuewise-ambient-sounding';
 
 /** Whether ambient is sounding in any tab, this one included. */

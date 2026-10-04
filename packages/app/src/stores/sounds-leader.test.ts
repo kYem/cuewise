@@ -35,6 +35,7 @@ function endHydration(error?: Error): void {
 
 describe('setIsLeader', () => {
   afterEach(() => {
+    endHydration(new Error('cancels any pending discard'));
     endHydration();
     useSoundsStore.setState(useSoundsStore.getInitialState());
   });
@@ -151,6 +152,21 @@ describe('setIsLeader', () => {
     useSoundsStore.getState().setIsLeader(true, { fresh: true });
 
     expect(onFinish).toHaveBeenCalled();
+  });
+
+  it('waits to discard once when leading fresh again before hydration lands', () => {
+    vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'hasHydrated').mockReturnValue(false);
+    const onFinish = vi
+      .spyOn(useSoundsStore.persist, 'onFinishHydration')
+      .mockImplementation(() => () => {});
+    stubYoutubePlayer();
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: true });
+    useSoundsStore.getState().setIsLeader(false);
+    useSoundsStore.getState().setIsLeader(true, { fresh: true });
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
   });
 
   it('does not wait to discard at all when hydration failed before this tab led', () => {

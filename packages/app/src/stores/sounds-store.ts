@@ -32,7 +32,7 @@ import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
-/** A handover also says whether ambient still sounds in some tab, which only the lock can tell. */
+/** A handover also says whether ambient still sounds in some tab (`isAmbientSoundingAnywhere`). */
 type LeaderOptions = { fresh: true } | { fresh: false; ambientSounding: boolean };
 
 interface SoundsStore {
