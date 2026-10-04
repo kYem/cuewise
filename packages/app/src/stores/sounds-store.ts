@@ -72,6 +72,8 @@ interface SoundsStore {
     (isLeader: true, options: LeaderOptions): void;
     (isLeader: false): void;
   };
+  /** No tab sounds the ambient the store says is playing, so show it paused instead. */
+  markAmbientSilent: () => void;
 
   // Unified playback actions
   playAmbient: (sound: AmbientSoundType) => void;
@@ -214,11 +216,10 @@ export const useSoundsStore = create<SoundsStore>()(
           initYoutubeLeader(set);
 
           const { activeSource, isPlaying, selectedPlaylistId, playlists } = get();
-          // Ambient plays only in the tab that started it; with no tab sounding it, it closed with
-          // that tab, so show it paused rather than claiming silence plays.
+          // Ambient plays only in the tab that started it, so it may have closed with that tab.
           const ambientSounding = options?.fresh === false && options.ambientSounding;
-          if (activeSource === 'ambient' && isPlaying && !ambientSounding) {
-            set({ isPlaying: false, isPaused: true });
+          if (!ambientSounding) {
+            get().markAmbientSilent();
           }
           if (activeSource === 'youtube' && isPlaying && selectedPlaylistId) {
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
@@ -249,6 +250,13 @@ export const useSoundsStore = create<SoundsStore>()(
           youtubePlayer.destroy();
           set({ isYoutubeReady: false });
           logger.info('This tab is no longer the sounds leader');
+        }
+      },
+
+      markAmbientSilent: () => {
+        const { activeSource, isPlaying } = get();
+        if (activeSource === 'ambient' && isPlaying) {
+          set({ isPlaying: false, isPaused: true });
         }
       },
 

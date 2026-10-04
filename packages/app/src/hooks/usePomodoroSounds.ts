@@ -6,6 +6,7 @@ import {
 } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
+import { useAmbientLiveness } from './useAmbientLiveness';
 import { useSoundsLeader } from './useSoundsLeader';
 
 type TimerSound = 'resume' | 'pause' | 'stop';
@@ -58,6 +59,7 @@ export function usePomodoroSounds(): void {
 
   usePomodoroStorageSync();
   useSoundsLeader();
+  useAmbientLiveness();
   // Must be mounted wherever the election runs, or the elected tab never hears another tab's write.
   useSoundsStorageSync();
 
