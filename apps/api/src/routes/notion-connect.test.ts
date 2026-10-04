@@ -314,7 +314,7 @@ describe('GET /v1/integrations/notion/callback', () => {
 
     const res = await createApp({
       notionClientFactory: () => stubNotionClient({ revokeToken }),
-      storeFactory: () => new FailingWriteStore('mintAuthCode'),
+      storeFactory: () => new FailingWriteStore('parkProviderGrant'),
     }).request(callbackUrl(state), {}, notionEnv());
 
     expect(await res.text()).toContain('error=server_error');
@@ -811,7 +811,7 @@ describe('POST /v1/integrations/notion/claim', () => {
     await expect(store.getProviderConnection(userId, 'notion')).resolves.toBeNull();
   });
 
-  it('refuses a sign-in code presented as a grant', async () => {
+  it('refuses a sign-in code presented as a grant, without burning it', async () => {
     const { headers, store } = await signedInWithoutNotion();
     const signInCode = await store.mintAuthCode(
       { provider: 'google', providerSub: 'g-1' },
@@ -821,6 +821,7 @@ describe('POST /v1/integrations/notion/claim', () => {
     const res = await claim(signInCode, headers);
 
     expect(res.status).toBe(400);
+    await expect(store.consumeAuthCode(signInCode)).resolves.not.toBeNull();
   });
 
   it('keeps the chosen table across a reconnect, and replaces the tokens', async () => {
@@ -855,8 +856,7 @@ describe('POST /v1/integrations/notion/claim', () => {
 });
 
 describe('a parked grant cannot be redeemed as a sign-in', () => {
-  it('POST /v1/auth/token refuses it and revokes the grant, since its code is now burned', async () => {
-    const warnSpy = spyOnLoggerWarn();
+  it('POST /v1/auth/token does not know its code, which stays claimable', async () => {
     const revokeToken = vi.fn(async () => undefined);
     const code = await parkedCode();
 
@@ -876,12 +876,9 @@ describe('a parked grant cannot be redeemed as a sign-in', () => {
     );
 
     expect(res.status).toBe(401);
-    expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
-    expect(warnSpy).toHaveBeenCalledWith(
-      'auth-code exchange presented a parked notion grant as a google sign-in'
-    );
+    expect(revokeToken).not.toHaveBeenCalled();
     await expect(claim(code, (await signedInWithoutNotion()).headers)).resolves.toMatchObject({
-      status: 400,
+      status: 200,
     });
   });
 });
@@ -969,7 +966,7 @@ describe('unclaimed parked grants', () => {
 
     expect(retry).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken).toHaveBeenCalledWith(TEST_ACCESS_TOKEN);
-    expect(await clocked.listExpiredParkedGrants(62_000 + DAY_IN_MS, 10)).toEqual([]);
+    expect(await clocked.listExpiredParkedGrants('notion', 62_000 + DAY_IN_MS, 10)).toEqual([]);
   });
 
   it('counts a token Notion already refuses as revoked and drops it', async () => {
@@ -988,7 +985,7 @@ describe('unclaimed parked grants', () => {
     );
 
     expect(sweep).toEqual({ swept: 1, revoked: 1, failed: 0, abandoned: 0, halted: false });
-    expect(await clocked.listExpiredParkedGrants(62_000, 10)).toEqual([]);
+    expect(await clocked.listExpiredParkedGrants('notion', 62_000, 10)).toEqual([]);
   });
 
   it('abandons a grant still unrevokable a week after it expired, loudly', async () => {
@@ -1014,7 +1011,7 @@ describe('unclaimed parked grants', () => {
       'Gave up revoking an unclaimed Notion grant; it may still be live at Notion',
       { codeHash: expect.any(String), expiresAt: 61_000, workspace: 'Acme' }
     );
-    expect(await clocked.listExpiredParkedGrants(now, 10)).toEqual([]);
+    expect(await clocked.listExpiredParkedGrants('notion', now, 10)).toEqual([]);
   });
 
   it('still retries a grant one tick short of the give-up window', async () => {
@@ -1083,7 +1080,7 @@ describe('unclaimed parked grants', () => {
     );
 
     const neverAttempted = await env.DB.prepare(
-      'SELECT COUNT(*) AS count FROM auth_codes WHERE revoke_attempted_at IS NULL'
+      'SELECT COUNT(*) AS count FROM parked_provider_grants WHERE revoke_attempted_at IS NULL'
     ).first<{ count: number }>();
     expect(neverAttempted?.count).toBe(0);
   });
@@ -1110,7 +1107,7 @@ describe('unclaimed parked grants', () => {
       'Stopped the parked-grant sweep: grants keep failing to decrypt',
       { unreadable: 3 }
     );
-    expect(await clocked.listExpiredParkedGrants(62_000, 50)).toHaveLength(3);
+    expect(await clocked.listExpiredParkedGrants('notion', 62_000, 50)).toHaveLength(3);
   });
 
   it('does not halt for one unreadable grant among readable ones', async () => {
@@ -1148,7 +1145,7 @@ describe('unclaimed parked grants', () => {
     );
 
     expect(sweep.revoked).toBe(40);
-    expect(await clocked.listExpiredParkedGrants(62_000, 50)).toHaveLength(5);
+    expect(await clocked.listExpiredParkedGrants('notion', 62_000, 50)).toHaveLength(5);
   });
 
   it('sweeps nothing on a malformed key, rather than reporting grants it never tried', async () => {
@@ -1168,7 +1165,7 @@ describe('unclaimed parked grants', () => {
     expect(sweep).toEqual({ swept: 0, revoked: 0, failed: 0, abandoned: 0, halted: false });
     expect(revokeToken).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(await clocked.listExpiredParkedGrants(62_000, 50)).toHaveLength(1);
+    expect(await clocked.listExpiredParkedGrants('notion', 62_000, 50)).toHaveLength(1);
   });
 
   it('leaves an unexpired parked grant alone', async () => {

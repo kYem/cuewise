@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { record } from './__fixtures__/api-test-helpers.fixtures';
+import { mintParkedGrant } from './__fixtures__/notion.fixtures';
 import { hashSessionToken } from './crypto-utils';
 import { D1SyncStore } from './d1-store';
 
@@ -55,6 +56,18 @@ describe('D1SyncStore concurrency', () => {
     );
 
     const [a, b] = await Promise.all([store.consumeAuthCode(code), store.consumeAuthCode(code)]);
+
+    expect([a, b].filter((result) => result !== null)).toHaveLength(1);
+  });
+
+  it('two concurrent consumeParkedGrant calls on the same code: exactly one resolves non-null', async () => {
+    const store = new D1SyncStore(env.DB);
+    const code = await mintParkedGrant(store);
+
+    const [a, b] = await Promise.all([
+      store.consumeParkedGrant('notion', code),
+      store.consumeParkedGrant('notion', code),
+    ]);
 
     expect([a, b].filter((result) => result !== null)).toHaveLength(1);
   });
