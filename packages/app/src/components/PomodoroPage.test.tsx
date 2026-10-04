@@ -56,6 +56,7 @@ vi.mock('./sounds', () => ({
   SoundsMiniPlayer: ({ variant }: { variant?: string }) => (
     <div data-testid="sounds-mini-player" data-variant={variant} />
   ),
+  NowPlayingPill: () => <div data-testid="now-playing-pill" />,
 }));
 
 const initCalendar = vi.fn();
@@ -154,6 +155,26 @@ describe('PomodoroPage - companion selection', () => {
     expect(screen.getByTestId('quote-display')).toBeInTheDocument();
     expect(screen.queryByTestId('calendar-strip')).not.toBeInTheDocument();
     expect(initCalendar).not.toHaveBeenCalled();
+  });
+});
+
+describe('PomodoroPage - sound control', () => {
+  it('shows the full player while focus music is on', () => {
+    setup('quote', false, { pomodoroMusicEnabled: true });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('sounds-mini-player')).toBeInTheDocument();
+    expect(screen.queryByTestId('now-playing-pill')).not.toBeInTheDocument();
+  });
+
+  it('keeps a pause control for a sound still playing once focus music is off', () => {
+    setup('quote', false, { pomodoroMusicEnabled: false });
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('now-playing-pill')).toBeInTheDocument();
+    expect(screen.queryByTestId('sounds-mini-player')).not.toBeInTheDocument();
   });
 });
 

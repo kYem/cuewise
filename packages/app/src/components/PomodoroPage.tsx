@@ -11,7 +11,7 @@ import { FocusMode } from './FocusMode';
 import { PageHeader } from './PageHeader';
 import { PomodoroTimer } from './PomodoroTimer';
 import { QuoteDisplay } from './QuoteDisplay';
-import { SoundsMiniPlayer } from './sounds';
+import { NowPlayingPill, SoundsMiniPlayer } from './sounds';
 
 // top-20 clears PageHeader, which is 4.5rem tall once a plain theme makes it opaque.
 const PLAYER_OFFSET = 'fixed top-20 left-4 z-50';
@@ -86,16 +86,22 @@ export const PomodoroPage: React.FC = () => {
     companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
   }
 
+  // App floats no pill on this page, so with focus music off a sound still playing needs this one.
+  let soundControl: React.ReactNode = null;
+  if (!isFocusModeActive) {
+    soundControl = pomodoroMusicEnabled ? (
+      <SoundsMiniPlayer variant={chromeVariant} />
+    ) : (
+      <NowPlayingPill />
+    );
+  }
+
   return (
     <div className="min-h-screen w-full relative">
       <div className="relative z-10">
         <PageHeader currentPage="pomodoro" />
 
-        {pomodoroMusicEnabled && !isFocusModeActive && (
-          <div className={PLAYER_OFFSET}>
-            <SoundsMiniPlayer variant={chromeVariant} />
-          </div>
-        )}
+        {soundControl !== null && <div className={PLAYER_OFFSET}>{soundControl}</div>}
 
         <div className="flex flex-col lg:flex-row gap-density-lg items-center justify-center min-h-[calc(100vh-12rem)] px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex-shrink-0">
