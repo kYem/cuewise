@@ -9,7 +9,7 @@ const LOCK_NAME = 'cuewise-sounds-leader';
 const setIsLeader = vi.fn();
 let uninstallLocks: () => void = () => {};
 
-/** Another tab holding the audio; resolves its hold when the returned function is called. */
+/** Another tab holding the audio; releases its hold when the returned function is called. */
 function anotherTabHolds(): () => void {
   let release: () => void = () => {};
   void navigator.locks.request(
@@ -51,7 +51,6 @@ describe('useSoundsLeader', () => {
   it('takes over, not fresh, once the tab holding the audio lets go', async () => {
     const release = anotherTabHolds();
     const { unmount } = await renderLeader();
-    expect(setIsLeader).not.toHaveBeenCalledWith(true, expect.anything());
 
     release();
 

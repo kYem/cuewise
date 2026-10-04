@@ -55,6 +55,7 @@ export function usePomodoroSounds(): void {
   // stop sound following the timer for the rest of the tab.
   const loadFailedRef = useRef(false);
   const wasLoadingRef = useRef(true);
+  const wasLeaderRef = useRef(false);
 
   usePomodoroStorageSync();
   useSoundsLeader();
@@ -80,9 +81,16 @@ export function usePomodoroSounds(): void {
     if (loadFailedRef.current) {
       return;
     }
+    if (!isLeader) {
+      wasLeaderRef.current = false;
+      appliedRef.current = null;
+      return;
+    }
+    const justBecameLeader = !wasLeaderRef.current;
+    wasLeaderRef.current = true;
     // Only the audio leader drives these; any gap in following resets the baseline, so a wish
     // recorded before it can't read as a transition after.
-    if (!isLeader || !musicEnabled || !autoStart || activeSource === 'none') {
+    if (!musicEnabled || !autoStart || activeSource === 'none') {
       appliedRef.current = null;
       return;
     }
@@ -93,15 +101,16 @@ export function usePomodoroSounds(): void {
     if (wanted === previous) {
       return;
     }
-    // A first look is not a transition: an idle timer must not silence a sound just picked or
-    // just handed over, while a running session should still bring its music in.
+    // A first look is not a transition: a timer that isn't running must not silence a sound just
+    // picked or handed over, while a running session should still bring its music in.
     if (previous === null && wanted !== 'resume') {
       return;
     }
 
     if (wanted === 'resume') {
-      // Already sounding somewhere; resume() would start ambient again in this tab too.
-      if (isPlaying) {
+      // A sound picked elsewhere is already playing there, and resume() would start ambient here
+      // too. On taking over, though, a playing ambient most likely died with the tab that left.
+      if (isPlaying && !(justBecameLeader && activeSource === 'ambient')) {
         return;
       }
       resumeSounds();

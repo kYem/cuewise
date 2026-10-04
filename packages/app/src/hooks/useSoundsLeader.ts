@@ -64,7 +64,8 @@ export function useSoundsLeader(): void {
       }
 
       try {
-        // Free right now means no tab was holding the audio; a wait means one was, and hands over.
+        // Free right now means no tab was holding the audio; a wait means another tab held or
+        // claimed it first, and hands over.
         const grantedAtOnce = await navigator.locks.request(
           LOCK_NAME,
           { ifAvailable: true },

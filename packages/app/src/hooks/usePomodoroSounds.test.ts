@@ -220,6 +220,21 @@ describe('usePomodoroSounds', () => {
     expect(sounds.resume).not.toHaveBeenCalled();
   });
 
+  it('restarts ambient on taking over, since it most likely died with the tab that left', () => {
+    transition(
+      { status: 'running', activeSource: 'ambient', isPlaying: true, isLeader: false },
+      { status: 'running', activeSource: 'ambient', isPlaying: true, isLeader: true }
+    );
+
+    expect(sounds.resume).toHaveBeenCalled();
+  });
+
+  it('lets a pause from the pill stick through a running session', () => {
+    transition({ status: 'running', isPlaying: true }, { status: 'running', isPlaying: false });
+
+    expect(sounds.resume).not.toHaveBeenCalled();
+  });
+
   it('follows the timer again once a failed load is retried successfully', () => {
     mockStores({ status: 'running', timerError: 'Failed to load pomodoro data.' });
     const { rerender } = renderHook(() => usePomodoroSounds());

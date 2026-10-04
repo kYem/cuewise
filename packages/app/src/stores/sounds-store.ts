@@ -32,6 +32,10 @@ import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { observableStorage, safeSubscribe } from './storage-changes';
 import { useToastStore } from './toast-store';
 
+interface LeaderOptions {
+  fresh: boolean;
+}
+
 interface SoundsStore {
   // Sound source (mutually exclusive)
   activeSource: SoundSource;
@@ -66,7 +70,7 @@ interface SoundsStore {
   initialize: () => Promise<void>;
   setIsLeader: {
     /** `fresh`: no tab held the audio before this one, so any persisted playback is stale. */
-    (isLeader: true, options: { fresh: boolean }): void;
+    (isLeader: true, options: LeaderOptions): void;
     (isLeader: false): void;
   };
 
@@ -199,7 +203,7 @@ export const useSoundsStore = create<SoundsStore>()(
         }
       },
 
-      setIsLeader: (isLeader: boolean, options?: { fresh: boolean }) => {
+      setIsLeader: (isLeader: boolean, options?: LeaderOptions) => {
         const wasLeader = get().isLeader;
         set({ isLeader });
 
@@ -617,9 +621,11 @@ export const useSoundsStore = create<SoundsStore>()(
         isPaused: state.isPaused,
       }),
       onRehydrateStorage: () => (_state, error) => {
+        hydrationFailed = false;
         if (error) {
           logger.error('Could not load the saved sounds state', error);
           // The store keeps its stopped defaults, so there is nothing stale left to discard.
+          hydrationFailed = true;
           if (cancelPendingDiscard !== null) {
             cancelPendingDiscard();
           }
@@ -708,6 +714,7 @@ async function findPlaylist(
 }
 
 let cancelPendingDiscard: (() => void) | null = null;
+let hydrationFailed = false;
 
 /** Nothing is playing in a session no tab was leading, whatever the last closed tab persisted. */
 function discardStalePlayback(): void {
@@ -720,6 +727,9 @@ function discardStalePlayback(): void {
 
   if (useSoundsStore.persist.hasHydrated()) {
     discard();
+    return;
+  }
+  if (hydrationFailed) {
     return;
   }
   // A failed hydration never fires this, and a later successful rehydrate would then wipe real

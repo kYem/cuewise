@@ -16,8 +16,22 @@ function persistedYoutubePlayback(): void {
   useSoundsStore.setState({ isLeader: false });
 }
 
+/** Ends a hydration the way zustand's persist reports it to the store. */
+function endHydration(error?: Error): void {
+  const onRehydrate = useSoundsStore.persist.getOptions().onRehydrateStorage;
+  if (onRehydrate === undefined) {
+    throw new Error('the sounds store must watch its hydration');
+  }
+  const afterHydration = onRehydrate(useSoundsStore.getState());
+  if (afterHydration === undefined) {
+    throw new Error('the sounds store must hear how hydration ended');
+  }
+  afterHydration(useSoundsStore.getState(), error);
+}
+
 describe('setIsLeader', () => {
   afterEach(() => {
+    endHydration();
     useSoundsStore.setState(useSoundsStore.getInitialState());
   });
 
@@ -75,16 +89,20 @@ describe('setIsLeader', () => {
     stubYoutubePlayer();
     useSoundsStore.getState().setIsLeader(true, { fresh: true });
 
-    const onRehydrate = useSoundsStore.persist.getOptions().onRehydrateStorage;
-    if (onRehydrate === undefined) {
-      throw new Error('the sounds store must watch its hydration');
-    }
-    const afterHydration = onRehydrate(useSoundsStore.getState());
-    if (afterHydration === undefined) {
-      throw new Error('the sounds store must hear how hydration ended');
-    }
-    afterHydration(undefined, new Error('storage unavailable'));
+    endHydration(new Error('storage unavailable'));
 
     expect(listening).toBe(false);
+  });
+
+  it('does not wait to discard at all when hydration failed before this tab led', () => {
+    vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'hasHydrated').mockReturnValue(false);
+    const onFinish = vi.spyOn(useSoundsStore.persist, 'onFinishHydration');
+    stubYoutubePlayer();
+    endHydration(new Error('storage unavailable'));
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: true });
+
+    expect(onFinish).not.toHaveBeenCalled();
   });
 });
