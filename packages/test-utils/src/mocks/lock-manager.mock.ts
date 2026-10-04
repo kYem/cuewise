@@ -1,6 +1,6 @@
 /**
- * A LockManager good enough for exclusive holds (`withLock`) and `ifAvailable` (leader election). jsdom ships none,
- * so without this the Chrome adapter's locking cannot be exercised anywhere.
+ * A LockManager good enough for exclusive holds (`withLock`) and `ifAvailable` (leader election).
+ * jsdom ships none, so without this the Chrome adapter's locking cannot be exercised anywhere.
  */
 export function createLockManagerMock(): LockManager {
   const chains = new Map<string, Promise<unknown>>();

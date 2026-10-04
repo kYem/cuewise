@@ -29,6 +29,7 @@ import { useSoundsStore } from './stores/sounds-store';
 
 describe('App sounds', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     installAppRenderStubs();
   });
 
@@ -38,6 +39,8 @@ describe('App sounds', () => {
   });
 
   it('follows the timer from the app, not from any one page', () => {
+    window.location.hash = 'quotes';
+
     render(<App />);
 
     expect(usePomodoroSounds).toHaveBeenCalled();

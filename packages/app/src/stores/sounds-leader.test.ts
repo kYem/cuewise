@@ -94,6 +94,21 @@ describe('setIsLeader', () => {
     expect(listening).toBe(false);
   });
 
+  it('waits to discard again once a later hydration has succeeded', () => {
+    vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'hasHydrated').mockReturnValue(false);
+    const onFinish = vi
+      .spyOn(useSoundsStore.persist, 'onFinishHydration')
+      .mockImplementation(() => () => {});
+    stubYoutubePlayer();
+    endHydration(new Error('storage unavailable'));
+    endHydration();
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: true });
+
+    expect(onFinish).toHaveBeenCalled();
+  });
+
   it('does not wait to discard at all when hydration failed before this tab led', () => {
     vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
     vi.spyOn(useSoundsStore.persist, 'hasHydrated').mockReturnValue(false);

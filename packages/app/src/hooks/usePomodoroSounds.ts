@@ -81,6 +81,8 @@ export function usePomodoroSounds(): void {
     if (loadFailedRef.current) {
       return;
     }
+    // Only the audio leader drives these; any gap in following resets the baseline, so a wish
+    // recorded before it can't read as a transition after.
     if (!isLeader) {
       wasLeaderRef.current = false;
       appliedRef.current = null;
@@ -88,8 +90,6 @@ export function usePomodoroSounds(): void {
     }
     const justBecameLeader = !wasLeaderRef.current;
     wasLeaderRef.current = true;
-    // Only the audio leader drives these; any gap in following resets the baseline, so a wish
-    // recorded before it can't read as a transition after.
     if (!musicEnabled || !autoStart || activeSource === 'none') {
       appliedRef.current = null;
       return;
@@ -101,8 +101,8 @@ export function usePomodoroSounds(): void {
     if (wanted === previous) {
       return;
     }
-    // A first look is not a transition: a timer that isn't running must not silence a sound just
-    // picked or handed over, while a running session should still bring its music in.
+    // A first look is not a transition: only a wish to play acts on it, so a sound just picked or
+    // handed over isn't paused or stopped.
     if (previous === null && wanted !== 'resume') {
       return;
     }

@@ -94,6 +94,11 @@ export function useSoundsLeader(): void {
         });
       } catch (error) {
         logger.error('Error requesting sounds leadership', error);
+        // The lock is gone with the throw, so this tab must stop claiming the audio too.
+        if (lockHeldRef.current) {
+          lockHeldRef.current = false;
+          setIsLeader(false);
+        }
       }
     };
 

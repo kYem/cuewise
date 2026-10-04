@@ -7,7 +7,7 @@ interface NowPlayingPillProps {
   className?: string;
 }
 
-/** Play/pause for a sound that outlived the Pomodoro page. */
+/** Play/pause for the active sound on pages without the full mini player. */
 export const NowPlayingPill: React.FC<NowPlayingPillProps> = ({ className }) => {
   const activeSource = useSoundsStore((state) => state.activeSource);
   const isPlaying = useSoundsStore((state) => state.isPlaying);

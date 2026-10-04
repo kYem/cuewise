@@ -229,6 +229,15 @@ describe('usePomodoroSounds', () => {
     expect(sounds.resume).toHaveBeenCalled();
   });
 
+  it('leaves a handed-over playlist to the handover, which already resumes it', () => {
+    transition(
+      { status: 'running', activeSource: 'youtube', isPlaying: true, isLeader: false },
+      { status: 'running', activeSource: 'youtube', isPlaying: true, isLeader: true }
+    );
+
+    expect(sounds.resume).not.toHaveBeenCalled();
+  });
+
   it('lets a pause from the pill stick through a running session', () => {
     transition({ status: 'running', isPlaying: true }, { status: 'running', isPlaying: false });
 
