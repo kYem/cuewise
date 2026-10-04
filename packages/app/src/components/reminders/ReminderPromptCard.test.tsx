@@ -75,12 +75,20 @@ describe('ReminderPromptCard', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Stretch');
   });
 
-  it('steps aside while the bell panel is open', () => {
+  it('steps aside for a one-off while the bell panel lists it', () => {
     firedReminders(stretch);
 
-    render(<ReminderPromptCard hidden />);
+    render(<ReminderPromptCard panelOpen />);
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('stays for a recurring reminder, which the open panel shows only as upcoming', () => {
+    firedReminders(water);
+
+    render(<ReminderPromptCard panelOpen />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Drink water');
   });
 
   it('lapses once the reminder was answered or moved somewhere else', () => {
@@ -153,12 +161,16 @@ describe('ReminderPromptCard', () => {
     expect(respond).not.toHaveBeenCalled();
   });
 
-  it('dismisses on Escape from inside the card', () => {
+  it('dismisses on Escape from inside the card, and keeps that Escape from a modal behind it', () => {
+    const modalEscape = vi.fn();
+    document.addEventListener('keydown', modalEscape);
     firedReminders(stretch);
     render(<ReminderPromptCard />);
 
     fireEvent.keyDown(screen.getByRole('button', { name: 'Done' }), { key: 'Escape' });
 
     expect(removePrompt).toHaveBeenCalledWith('r1');
+    expect(modalEscape).not.toHaveBeenCalled();
+    document.removeEventListener('keydown', modalEscape);
   });
 });

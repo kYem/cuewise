@@ -500,6 +500,20 @@ describe('fireDueReminders', () => {
     expect(toastWarning).not.toHaveBeenCalled();
   });
 
+  // The worker can fire the same missed wake while this sweep runs, and its prompt is the newer.
+  it('never replaces a prompt a fire already raised', async () => {
+    const due = reminderFactory.build({
+      id: 'due-1',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      notified: false,
+    });
+    useReminderStore.setState({ reminders: [due] });
+
+    await useReminderStore.getState().fireDueReminders();
+
+    expect(addPrompt).toHaveBeenCalledWith('due-1', due.dueDate, { ifAbsent: true });
+  });
+
   it('falls back to a toast for a reminder whose card could not be raised', async () => {
     addPrompt.mockResolvedValueOnce(false);
     useReminderStore.setState({

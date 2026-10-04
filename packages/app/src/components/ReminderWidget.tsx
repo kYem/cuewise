@@ -231,7 +231,7 @@ export const ReminderWidget: React.FC = () => {
         )}
       </div>
 
-      <ReminderPromptCard rightPosition={rightPosition} hidden={isExpanded} />
+      <ReminderPromptCard rightPosition={rightPosition} panelOpen={isExpanded} />
 
       {/* Add Reminder Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Reminder">

@@ -15,7 +15,7 @@ beforeEach(() => {
 
 describe('useReminderPromptStore', () => {
   it('loads the prompts already waiting on this device', async () => {
-    await addReminderPrompt('r1', DUE, new Date(DUE));
+    await addReminderPrompt('r1', DUE, { firedAt: new Date(DUE) });
 
     await useReminderPromptStore.getState().initialize();
 

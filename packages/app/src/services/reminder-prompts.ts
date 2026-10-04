@@ -76,16 +76,24 @@ async function updatePrompts(
   }
 }
 
-/** Raises the card for a reminder that just fired, replacing any earlier prompt for it. */
+/**
+ * Raises the card for a reminder that just fired, replacing any earlier prompt for it. `ifAbsent`
+ * leaves an existing one alone: a catch-up sweep must not overwrite the fire that beat it there.
+ */
 export function addReminderPrompt(
   reminderId: string,
   dueDate: string,
-  firedAt = new Date()
+  { firedAt = new Date(), ifAbsent = false }: { firedAt?: Date; ifAbsent?: boolean } = {}
 ): Promise<boolean> {
-  return updatePrompts((prompts) => [
-    ...prompts.filter((p) => p.reminderId !== reminderId),
-    { reminderId, firedAt: firedAt.toISOString(), dueDate },
-  ]);
+  return updatePrompts((prompts) => {
+    if (ifAbsent && prompts.some((p) => p.reminderId === reminderId)) {
+      return prompts;
+    }
+    return [
+      ...prompts.filter((p) => p.reminderId !== reminderId),
+      { reminderId, firedAt: firedAt.toISOString(), dueDate },
+    ];
+  });
 }
 
 /** Whether the reminder still waits on the answer this prompt asks for. */

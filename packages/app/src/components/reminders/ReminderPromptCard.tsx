@@ -37,8 +37,11 @@ function promptToShow(
 interface ReminderPromptCardProps {
   /** Tailwind `right-*` class matching the bell's, which moves when the theme switcher shows. */
   rightPosition?: string;
-  /** The open bell panel already shows the reminder, so the card steps aside meanwhile. */
-  hidden?: boolean;
+  /**
+   * An open bell panel lists a fired one-off under Needs response, so its card steps aside. A
+   * recurring one has already moved to its next occurrence there, so its card stays.
+   */
+  panelOpen?: boolean;
 }
 
 /**
@@ -47,7 +50,7 @@ interface ReminderPromptCardProps {
  */
 export function ReminderPromptCard({
   rightPosition = 'right-4',
-  hidden = false,
+  panelOpen = false,
 }: ReminderPromptCardProps) {
   const prompts = useReminderPromptStore((state) => state.prompts);
   const initialize = useReminderPromptStore((state) => state.initialize);
@@ -62,10 +65,13 @@ export function ReminderPromptCard({
   }, [initialize]);
 
   const shown = promptToShow(prompts, reminders);
-  if (hidden || !visible || shown === null) {
+  if (!visible || shown === null) {
     return null;
   }
   const { prompt, reminder } = shown;
+  if (panelOpen && !reminder.recurring) {
+    return null;
+  }
 
   // A failed save keeps the prompt, so the card stays to be answered again.
   const answer = async (reply: () => Promise<boolean>) => {
@@ -87,6 +93,8 @@ export function ReminderPromptCard({
       aria-labelledby={textId}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
+          // Kept from the modal listening on document, which would close as well.
+          event.stopPropagation();
           dismiss();
         }
       }}

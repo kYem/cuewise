@@ -17,7 +17,7 @@ afterEach(() => {
 
 describe('reminder prompts', () => {
   it('records a fired reminder with the time it fired and the due date it left', async () => {
-    await addReminderPrompt('r1', DUE, new Date('2026-10-04T09:00:05.000Z'));
+    await addReminderPrompt('r1', DUE, { firedAt: new Date('2026-10-04T09:00:05.000Z') });
 
     expect(await readReminderPrompts()).toEqual([
       { reminderId: 'r1', firedAt: '2026-10-04T09:00:05.000Z', dueDate: DUE },
@@ -25,14 +25,22 @@ describe('reminder prompts', () => {
   });
 
   it('keeps one prompt per reminder, from its latest fire', async () => {
-    await addReminderPrompt('r1', DUE, new Date('2026-10-04T09:00:00.000Z'));
-    await addReminderPrompt('r2', DUE, new Date('2026-10-04T09:01:00.000Z'));
-    await addReminderPrompt('r1', DUE, new Date('2026-10-04T10:00:00.000Z'));
+    await addReminderPrompt('r1', DUE, { firedAt: new Date('2026-10-04T09:00:00.000Z') });
+    await addReminderPrompt('r2', DUE, { firedAt: new Date('2026-10-04T09:01:00.000Z') });
+    await addReminderPrompt('r1', DUE, { firedAt: new Date('2026-10-04T10:00:00.000Z') });
 
     expect((await readReminderPrompts()).map((p) => [p.reminderId, p.firedAt])).toEqual([
       ['r2', '2026-10-04T09:01:00.000Z'],
       ['r1', '2026-10-04T10:00:00.000Z'],
     ]);
+  });
+
+  it('leaves an existing prompt alone when asked to add only where none is', async () => {
+    await addReminderPrompt('r1', 'from-the-fire');
+
+    await addReminderPrompt('r1', 'from-the-sweep', { ifAbsent: true });
+
+    expect((await readReminderPrompts()).map((p) => p.dueDate)).toEqual(['from-the-fire']);
   });
 
   it('drops only the answered reminder', async () => {
