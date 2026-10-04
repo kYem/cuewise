@@ -27,6 +27,7 @@ import {
 import { create } from 'zustand';
 import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
 import { armMissingReminderAlarms, reminderNotification } from '../services/reminder-notifications';
+import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
 import { createStaleLatch, createStorageObserver, sameEntities } from './storage-changes';
 import { useToastStore } from './toast-store';
 
@@ -369,6 +370,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyMutated('reminders', reminderId);
+      await removeReminderPrompt(reminderId);
 
       if (done.outcome === 'advanced') {
         // Only (re)arm an alarm when the reminder is active; a paused one must not fire.
@@ -418,6 +420,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyDeleted('reminders', reminderId);
+      await removeReminderPrompt(reminderId);
 
       // Cancel alarm
       await clearReminderAlarm(reminderId);
@@ -537,6 +540,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         return;
       }
       notifyMutated('reminders', reminderId);
+      await removeReminderPrompt(reminderId);
       if (snoozed.paused !== true) {
         await clearReminderAlarm(reminderId);
         await armReminderAlarm(reminderId, newDueDate.getTime());
@@ -665,11 +669,16 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       // reminder that fired but never reached the user would otherwise leave no trace.
       logger.error('Fired due reminders', { count: dueNow.length });
 
-      // Toasts first: `notified` is already persisted, so nothing fallible may sit between that
-      // write and the one delivery a page without a background host is guaranteed to make.
+      // Cards first: `notified` is already persisted, so nothing fallible may sit between that
+      // write and the one delivery a page without a background host is guaranteed to make. A card
+      // that could not be stored falls back to the plain toast, so that delivery still happens.
       for (const r of dueNow) {
-        useToastStore.getState().warning(`Reminder: ${r.text}`);
-        await recordReminderActivity({ event: 'toasted', ...activitySubject(r) });
+        if (await addReminderPrompt(r.id)) {
+          await recordReminderActivity({ event: 'prompted', ...activitySubject(r) });
+        } else {
+          useToastStore.getState().warning(`Reminder: ${r.text}`);
+          await recordReminderActivity({ event: 'toasted', ...activitySubject(r) });
+        }
       }
 
       // No background worker to raise the OS notification, so deliver it here via the port.

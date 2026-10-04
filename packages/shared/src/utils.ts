@@ -2254,7 +2254,8 @@ export type ReminderNotificationAction =
 export function resolveReminderNotificationAction(
   reminder: Reminder | undefined,
   buttonIndex: number,
-  now: Date
+  now: Date,
+  snoozeMinutes = REMINDER_SNOOZE_MINUTES
 ): ReminderNotificationAction {
   if (!reminder) {
     return { type: 'dismiss' };
@@ -2277,7 +2278,7 @@ export function resolveReminderNotificationAction(
     }
     return {
       type: 'snooze',
-      dueDate: new Date(now.getTime() + REMINDER_SNOOZE_MINUTES * 60_000).toISOString(),
+      dueDate: new Date(now.getTime() + snoozeMinutes * 60_000).toISOString(),
     };
   }
   return { type: 'dismiss' };

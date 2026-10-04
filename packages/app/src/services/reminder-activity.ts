@@ -14,6 +14,7 @@ export type ReminderActivityEvent =
   | 'fired'
   | 'skipped'
   | 'toasted'
+  | 'prompted'
   | 'done'
   | 'snoozed'
   | 'reconciled'

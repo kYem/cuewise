@@ -7,15 +7,21 @@ import {
   describeThrown,
   getNotifier,
   getScheduler,
+  isDailyTargetMet,
   logger,
   type NotifyOptions,
   nextReminderDueDate,
+  notifyMutated,
+  REMINDER_SNOOZE_MINUTES,
   type Reminder,
+  recordReminderDone,
   reminderAlarmId,
   reminderIdFromAlarm,
+  resolveReminderNotificationAction,
 } from '@cuewise/shared';
 import { getReminders, updateReminders } from '@cuewise/storage';
 import { activitySubject, recordReminderActivity } from './reminder-activity';
+import { addReminderPrompt, removeReminderPrompt } from './reminder-prompts';
 
 export interface ReminderAlarmReconcile {
   pending: number;
@@ -168,6 +174,8 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       ...(notifyFailure === null ? [] : [`notify: ${notifyFailure}`]),
       ...(nextDueDate !== null ? [`next ${nextDueDate.toISOString()}`] : []),
     ];
+    // Raised even when the notification failed: then the in-app card is the only prompt left.
+    await addReminderPrompt(reminderId);
     await recordReminderActivity({
       event: notifyFailure === null ? 'fired' : 'failed',
       ...activitySubject(reminder),
@@ -179,6 +187,127 @@ export async function handleReminderFire(alarmId: string): Promise<void> {
       event: 'failed',
       ...(reminder ? activitySubject(reminder) : { reminderId }),
       detail: `${step}: ${describeThrown(error)}`,
+    });
+  }
+}
+
+/** Button indexes shared by the notification and the in-app card. */
+export const REMINDER_DONE_BUTTON = 0;
+export const REMINDER_SNOOZE_BUTTON = 1;
+
+function subjectOf(reminder: Reminder | undefined, reminderId: string) {
+  return reminder ? activitySubject(reminder) : { reminderId };
+}
+
+/**
+ * Answers a fired reminder from its notification's buttons or the in-app card, so both behave the
+ * same. Clears the notification and the card's prompt either way.
+ */
+export async function respondToReminder(
+  reminderId: string,
+  buttonIndex: number,
+  snoozeMinutes = REMINDER_SNOOZE_MINUTES
+): Promise<void> {
+  let reminder: Reminder | undefined;
+  try {
+    const reminders = await getReminders();
+    reminder = reminders.find((r) => r.id === reminderId);
+    const action = resolveReminderNotificationAction(
+      reminder,
+      buttonIndex,
+      new Date(),
+      snoozeMinutes
+    );
+
+    if (action.type === 'complete') {
+      const { result } = await updateReminders((current) =>
+        current.map((r) => (r.id === reminderId ? { ...r, completed: true } : r))
+      );
+      // Nothing is armed off this one, so there is no wake to withhold — but a Done click that
+      // silently failed to persist would otherwise leave no trace at all.
+      if (result?.success === false) {
+        logger.error('Could not persist the completed reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'done: not persisted',
+        });
+      } else if (reminder) {
+        notifyMutated('reminders', reminderId);
+        await recordReminderActivity({ event: 'done', ...activitySubject(reminder) });
+      }
+    } else if (action.type === 'count') {
+      const now = new Date();
+      // Counted against the stored copy, inside the write: a pull may have moved it meanwhile.
+      const counted: { reminder: Reminder | null } = { reminder: null };
+      const { result } = await updateReminders((current) =>
+        current.map((r) => {
+          if (r.id !== reminderId) {
+            return r;
+          }
+          const done = recordReminderDone(r, now);
+          // The fire already armed the next nudge; only a met target moves it to tomorrow.
+          counted.reminder = isDailyTargetMet(done, now)
+            ? { ...done, dueDate: nextReminderDueDate(done, now).toISOString() }
+            : done;
+          return counted.reminder;
+        })
+      );
+      if (result?.success === false) {
+        logger.error('Could not persist the counted reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'done: not persisted',
+        });
+      } else if (counted.reminder !== null) {
+        notifyMutated('reminders', reminderId);
+        if (isDailyTargetMet(counted.reminder, now)) {
+          await getScheduler().scheduleAt(
+            reminderAlarmId(reminderId),
+            new Date(counted.reminder.dueDate)
+          );
+        }
+        await recordReminderActivity({ event: 'done', ...activitySubject(counted.reminder) });
+      }
+    } else if (action.type === 'snooze') {
+      const { result } = await updateReminders((current) =>
+        current.map((r) =>
+          r.id === reminderId
+            ? { ...r, dueDate: action.dueDate, notified: false, completed: false }
+            : r
+        )
+      );
+      // Arming a wake for a dueDate that never persisted fires the reminder at the snoozed time
+      // against its still-overdue stored copy, which notifies all over again.
+      if (result?.success === false) {
+        logger.error('Could not persist the snoozed reminder', result.error);
+        await recordReminderActivity({
+          event: 'failed',
+          ...subjectOf(reminder, reminderId),
+          detail: 'snooze: not persisted',
+        });
+      } else {
+        notifyMutated('reminders', reminderId);
+        await getScheduler().scheduleAt(reminderAlarmId(reminderId), new Date(action.dueDate));
+        if (reminder) {
+          await recordReminderActivity({
+            event: 'snoozed',
+            ...activitySubject(reminder),
+            detail: `until ${action.dueDate}`,
+          });
+        }
+      }
+    }
+
+    await getNotifier().clear(reminderAlarmId(reminderId));
+    await removeReminderPrompt(reminderId);
+  } catch (error) {
+    logger.error('Error answering a reminder', error);
+    await recordReminderActivity({
+      event: 'failed',
+      ...subjectOf(reminder, reminderId),
+      detail: `button ${buttonIndex}: ${describeThrown(error)}`,
     });
   }
 }

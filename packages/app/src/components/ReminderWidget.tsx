@@ -18,6 +18,7 @@ import {
   NotificationsBlockedHint,
   type ReminderPanelProps,
 } from './reminders';
+import { ReminderPromptCard } from './reminders/ReminderPromptCard';
 
 /**
  * Floating reminder widget in the bottom-right corner. The bell expands the
@@ -229,6 +230,8 @@ export const ReminderWidget: React.FC = () => {
           </div>
         )}
       </div>
+
+      <ReminderPromptCard rightPosition={rightPosition} hidden={isExpanded} />
 
       {/* Add Reminder Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Reminder">

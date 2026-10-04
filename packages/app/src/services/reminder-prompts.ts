@@ -1,0 +1,83 @@
+// Fired reminders still waiting for an answer on this device, for the in-app card. Device-local:
+// each device fires its own wakes, so a prompt raised here must not appear anywhere else.
+
+import { getStorage, logger } from '@cuewise/shared';
+import { withCollectionLock } from '@cuewise/storage';
+
+export const REMINDER_PROMPTS_KEY = 'reminderPrompts';
+const REMINDER_PROMPTS_LIMIT = 20;
+
+export interface ReminderPrompt {
+  reminderId: string;
+  firedAt: string;
+}
+
+function isPrompt(value: unknown): value is ReminderPrompt {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const prompt = value as Partial<ReminderPrompt>;
+  return typeof prompt.reminderId === 'string' && typeof prompt.firedAt === 'string';
+}
+
+/** Null when the read itself failed; an unreadable or malformed stored value reads as none. */
+async function readStoredPrompts(): Promise<ReminderPrompt[] | null> {
+  const stored = await getStorage().getMany([REMINDER_PROMPTS_KEY], 'local');
+  if (stored === null) {
+    return null;
+  }
+  const slot = stored[REMINDER_PROMPTS_KEY];
+  if (!slot?.readable || !Array.isArray(slot.value)) {
+    return [];
+  }
+  return slot.value.filter(isPrompt);
+}
+
+/** The prompts as stored, oldest first. Rejects on a failed read rather than answering none. */
+export async function readReminderPrompts(): Promise<ReminderPrompt[]> {
+  const prompts = await readStoredPrompts();
+  if (prompts === null) {
+    throw new Error('Could not read the reminder prompts');
+  }
+  return prompts;
+}
+
+/**
+ * Never throws: a prompt is a convenience on top of the notification, not the reminder itself.
+ * Answers whether the change was stored.
+ */
+async function updatePrompts(
+  mutate: (prompts: ReminderPrompt[]) => ReminderPrompt[]
+): Promise<boolean> {
+  try {
+    return await withCollectionLock('reminderPrompts', async () => {
+      const current = await readStoredPrompts();
+      // A failed read must not become a list holding only this change.
+      if (current === null) {
+        logger.error('Could not read the reminder prompts; change dropped');
+        return false;
+      }
+      const next = mutate(current).slice(-REMINDER_PROMPTS_LIMIT);
+      const result = await getStorage().set(REMINDER_PROMPTS_KEY, next, 'local');
+      if (!result.success) {
+        logger.warn('Could not update the reminder prompts', { error: result.error });
+      }
+      return result.success;
+    });
+  } catch (error) {
+    logger.error('Could not update the reminder prompts', error);
+    return false;
+  }
+}
+
+/** Raises the card for a reminder that just fired, replacing any earlier prompt for it. */
+export function addReminderPrompt(reminderId: string, firedAt = new Date()): Promise<boolean> {
+  return updatePrompts((prompts) => [
+    ...prompts.filter((p) => p.reminderId !== reminderId),
+    { reminderId, firedAt: firedAt.toISOString() },
+  ]);
+}
+
+export function removeReminderPrompt(reminderId: string): Promise<boolean> {
+  return updatePrompts((prompts) => prompts.filter((p) => p.reminderId !== reminderId));
+}

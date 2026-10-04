@@ -1,14 +1,17 @@
 import { rmSync } from 'node:fs';
 import type { ReminderActivityEntry } from '@cuewise/app/reminder-activity';
-import { expect, test, type Worker } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
+  addReminderFromPage,
   buildExtension,
   bumpManifestVersion,
   copyDist,
+  findReminderId,
   launchExtension,
   openNewTab,
   readActivity,
   tempProfileDir,
+  waitForEvent,
 } from './extension-harness';
 
 // ENG-124: asserted through the activity log the extension leaves behind, then printed as the
@@ -32,41 +35,6 @@ test.afterAll(() => {
 
 function launch() {
   return launchExtension({ extensionDir, profileDir });
-}
-
-// The form parses `${date}T${time}` as local time, and the time input accepts seconds.
-function localDateAndTime(when: Date): { date: string; time: string } {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const date = `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
-  const time = `${pad(when.getHours())}:${pad(when.getMinutes())}:${pad(when.getSeconds())}`;
-  return { date, time };
-}
-
-async function findReminderId(worker: Worker, text: string): Promise<string> {
-  let id: string | undefined;
-  await expect(async () => {
-    id = await worker.evaluate(async (wanted) => {
-      const { reminders = [] } = await chrome.storage.local.get('reminders');
-      return (reminders as { id: string; text: string }[]).find((r) => r.text === wanted)?.id;
-    }, text);
-    expect(id, `reminder "${text}" was not saved`).toBeDefined();
-  }).toPass({ timeout: 5_000 });
-  return id as string;
-}
-
-async function waitForEvent(
-  worker: Worker,
-  reminderId: string,
-  event: ReminderActivityEntry['event'],
-  timeout: number
-): Promise<ReminderActivityEntry> {
-  let found: ReminderActivityEntry | undefined;
-  await expect(async () => {
-    const log = await readActivity(worker);
-    found = log.find((e) => e.reminderId === reminderId && e.event === event);
-    expect(found).toBeDefined();
-  }).toPass({ timeout });
-  return found as ReminderActivityEntry;
 }
 
 function eventsInOrder(log: ReminderActivityEntry[], expected: string[]): boolean {
@@ -100,14 +68,7 @@ test('a reminder is armed, fired, snoozed, re-armed after an update, and complet
   const first = await launch();
   const page = await openNewTab(first);
   step(`add "${REMINDER_TEXT}" due in ${FIRE_IN_SECONDS}s from the page`);
-  await page.getByRole('button', { name: /reminders\. Click to expand/ }).click();
-  await page.getByRole('button', { name: 'Add reminder' }).click();
-  await page.getByRole('button', { name: 'Custom' }).click();
-  const { date, time } = localDateAndTime(new Date(Date.now() + FIRE_IN_SECONDS * 1000));
-  await page.locator('#reminder-text').fill(REMINDER_TEXT);
-  await page.locator('#reminder-date').fill(date);
-  await page.locator('#reminder-time').fill(time);
-  await page.getByRole('dialog').getByRole('button', { name: 'Add reminder' }).click();
+  await addReminderFromPage(page, REMINDER_TEXT, FIRE_IN_SECONDS);
 
   const reminderId = await findReminderId(first.worker, REMINDER_TEXT);
   step('wait for the page to arm it');
