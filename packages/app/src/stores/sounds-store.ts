@@ -720,7 +720,7 @@ async function findPlaylist(
 let cancelPendingDiscard: (() => void) | null = null;
 let hydrationFailed = false;
 
-/** Nothing is playing in a session no tab was leading, whatever the last closed tab persisted. */
+/** Nothing is playing or paused in a session no tab was leading, whatever the last tab persisted. */
 function discardStalePlayback(): void {
   const discard = () => {
     const { isPlaying, isPaused } = useSoundsStore.getState();

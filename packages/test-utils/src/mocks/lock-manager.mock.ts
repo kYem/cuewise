@@ -1,5 +1,6 @@
 /**
- * A LockManager good enough for exclusive holds (`withLock`) and `ifAvailable` (leader election).
+ * A LockManager good enough for exclusive holds (`withLock`) and `ifAvailable` (leader election);
+ * `mode: 'shared'` is granted as exclusive, so two shared holders queue rather than overlap.
  * jsdom ships none, so without this the Chrome adapter's locking cannot be exercised anywhere.
  */
 export function createLockManagerMock(): LockManager {

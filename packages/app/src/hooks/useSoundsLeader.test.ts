@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../stores/sounds-store', () => ({ useSoundsStore: vi.fn() }));
 
 const LOCK_NAME = 'cuewise-sounds-leader';
-const setIsLeader = vi.fn();
+// Fresh per test: a finished test's lock hold lets go up to 100ms late, into the mock it captured.
+let setIsLeader = vi.fn();
 let uninstallLocks: () => void = () => {};
 
 /** Another tab holding the audio; releases its hold when the returned function is called. */
@@ -33,7 +34,7 @@ async function renderLeader(options: { strict?: boolean } = {}) {
 
 describe('useSoundsLeader', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    setIsLeader = vi.fn();
     uninstallLocks = installLockManagerMock();
   });
 

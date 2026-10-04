@@ -59,6 +59,12 @@ describe('isAmbientSoundingAnywhere', () => {
     await expect(isAmbientSoundingAnywhere()).resolves.toBe(false);
   });
 
+  it('answers yes when it cannot ask, since pausing live ambient would silence it everywhere', async () => {
+    vi.spyOn(navigator.locks, 'request').mockRejectedValue(new Error('not fully active'));
+
+    await expect(isAmbientSoundingAnywhere()).resolves.toBe(true);
+  });
+
   it('falls back to this tab alone without Web Locks', async () => {
     uninstallLocks();
 
