@@ -59,6 +59,26 @@ describe('isAmbientSoundingAnywhere', () => {
     await expect(isAmbientSoundingAnywhere()).resolves.toBe(false);
   });
 
+  it('lets go of a claim granted only after the player had already stopped', async () => {
+    let releaseHold: () => void = () => {};
+    void navigator.locks.request(
+      'cuewise-ambient-sounding',
+      () =>
+        new Promise<void>((resolve) => {
+          releaseHold = resolve;
+        })
+    );
+    const player = silentPlayer();
+    player.play('rain');
+    player.stop();
+    await vi.advanceTimersByTimeAsync(500);
+
+    releaseHold();
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(isAmbientSoundingAnywhere()).resolves.toBe(false);
+  });
+
   it('answers yes when it cannot ask, since pausing live ambient would silence it everywhere', async () => {
     vi.spyOn(navigator.locks, 'request').mockRejectedValue(new Error('not fully active'));
 
