@@ -193,3 +193,34 @@ export function createHeatmapTestSessions(): PomodoroSession[] {
 
   return sessions;
 }
+
+/** A local-time work session at `hour` on 2026-07-{day} (the 6th is a Monday). */
+export function workSessionAt(day: number, hour: number, minute = 0): PomodoroSession {
+  const startedAt = new Date(2026, 6, day, hour, minute);
+  return {
+    id: `session-${day}-${hour}-${minute}`,
+    startedAt: startedAt.toISOString(),
+    completedAt: new Date(startedAt.getTime() + 25 * 60 * 1000).toISOString(),
+    interrupted: false,
+    duration: 25,
+    type: 'work',
+  };
+}
+
+/** Twelve sessions: six on Tuesday morning, the rest spread so no other block reaches three. */
+export function createTuesdayMorningSessions(): PomodoroSession[] {
+  return [
+    workSessionAt(7, 8),
+    workSessionAt(7, 9),
+    workSessionAt(7, 9, 30),
+    workSessionAt(7, 10),
+    workSessionAt(7, 10, 30),
+    workSessionAt(7, 11),
+    workSessionAt(6, 14),
+    workSessionAt(6, 15),
+    workSessionAt(8, 9),
+    workSessionAt(9, 19),
+    workSessionAt(10, 22),
+    workSessionAt(11, 13),
+  ];
+}

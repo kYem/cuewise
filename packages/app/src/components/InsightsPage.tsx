@@ -21,6 +21,7 @@ import { useInsightsStore } from '../stores/insights-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptInsights } from './ConceptInsights';
 import { ExportControls } from './ExportControls';
+import { FocusHeatmap } from './FocusHeatmap';
 import { GoalCompletionChart } from './GoalCompletionChart';
 import { ImportControls } from './ImportControls';
 import { PageHeader } from './PageHeader';
@@ -270,6 +271,10 @@ export const InsightsPage: React.FC = () => {
                 </p>
               </div>
             </div>
+
+            {analytics ? (
+              <FocusHeatmap data={analytics.pomodoroHeatmap.weekdayHourDistribution} />
+            ) : null}
 
             {/* Category Heatmap */}
             <div className="bg-surface rounded-xl shadow-lg p-8 mb-8">

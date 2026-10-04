@@ -4,6 +4,8 @@ import {
   createTestGoals,
   createTestPomodoroSessions,
   createTrendTestGoals,
+  createTuesdayMorningSessions,
+  workSessionAt,
 } from './__fixtures__/analytics.fixtures';
 import {
   calculateAdvancedAnalytics,
@@ -13,11 +15,14 @@ import {
   calculatePomodoroHeatmap,
   calculateWeeklyTrends,
   countFocusSessionsToday,
+  dayPartOfHour,
   exportDailyTrendsCSV,
   exportGoalsCSV,
   exportMonthlyTrendsCSV,
   exportPomodoroSessionsCSV,
   exportWeeklyTrendsCSV,
+  FOCUS_PEAK_MIN_SESSIONS,
+  findFocusPeak,
 } from './utils';
 
 // The fixtures build goals/sessions relative to "now"; on a Monday, "yesterday" falls outside
@@ -228,6 +233,81 @@ describe('Analytics Utilities', () => {
       // When empty, still returns top 3 hours but all with 0 count
       expect(heatmap.productiveHours).toHaveLength(3);
       expect(Object.values(heatmap.hourlyDistribution).every((v) => v === 0)).toBe(true);
+    });
+
+    describe('weekdayHourDistribution', () => {
+      it('counts each session under the local weekday and hour it completed', () => {
+        const { weekdayHourDistribution } = calculatePomodoroHeatmap([
+          workSessionAt(7, 9),
+          workSessionAt(7, 9, 20),
+          workSessionAt(7, 23, 50),
+        ]);
+
+        expect(weekdayHourDistribution[2][9]).toBe(2);
+        expect(weekdayHourDistribution[3][0]).toBe(1);
+      });
+
+      it('counts only completed work sessions', () => {
+        const { weekdayHourDistribution } = calculatePomodoroHeatmap(createTestPomodoroSessions());
+
+        expect(weekdayHourDistribution.flat().reduce((sum, count) => sum + count, 0)).toBe(4);
+      });
+
+      it('is a 7 × 24 grid of zeros with no sessions', () => {
+        const { weekdayHourDistribution } = calculatePomodoroHeatmap([]);
+
+        expect(weekdayHourDistribution).toHaveLength(7);
+        expect(weekdayHourDistribution.every((hours) => hours.length === 24)).toBe(true);
+        expect(weekdayHourDistribution.flat().every((count) => count === 0)).toBe(true);
+      });
+    });
+  });
+
+  describe('findFocusPeak', () => {
+    it('names the weekday and part of day with the most sessions', () => {
+      const { weekdayHourDistribution } = calculatePomodoroHeatmap(createTuesdayMorningSessions());
+
+      expect(findFocusPeak(weekdayHourDistribution)).toEqual({ weekday: 2, dayPart: 'morning' });
+    });
+
+    it('declines to name a peak below the minimum number of sessions', () => {
+      const sessions = createTuesdayMorningSessions().slice(0, FOCUS_PEAK_MIN_SESSIONS - 1);
+      const { weekdayHourDistribution } = calculatePomodoroHeatmap(sessions);
+
+      expect(findFocusPeak(weekdayHourDistribution)).toBeNull();
+    });
+
+    it('names a peak from the minimum number of sessions on', () => {
+      const sessions = createTuesdayMorningSessions().slice(0, FOCUS_PEAK_MIN_SESSIONS);
+      const { weekdayHourDistribution } = calculatePomodoroHeatmap(sessions);
+
+      expect(findFocusPeak(weekdayHourDistribution)).not.toBeNull();
+    });
+
+    it('breaks a tie toward the earlier weekday, Monday first', () => {
+      const sessions = [5, 6].flatMap((day) =>
+        Array.from({ length: 5 }, (_, i) => workSessionAt(day, 14, i * 5))
+      );
+      const { weekdayHourDistribution } = calculatePomodoroHeatmap(sessions);
+
+      expect(findFocusPeak(weekdayHourDistribution)).toEqual({
+        weekday: 1,
+        dayPart: 'afternoon',
+      });
+    });
+  });
+
+  describe('dayPartOfHour', () => {
+    it.each([
+      [4, 'night'],
+      [5, 'morning'],
+      [11, 'morning'],
+      [12, 'afternoon'],
+      [17, 'evening'],
+      [21, 'night'],
+      [0, 'night'],
+    ])('puts %i:00 in the %s', (hour, dayPart) => {
+      expect(dayPartOfHour(hour)).toBe(dayPart);
     });
   });
 
