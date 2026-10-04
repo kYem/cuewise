@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { youtubePlayer } from '../services/youtube-player';
+import { ambientSoundPlayer } from '../utils/ambient-sounds';
 import { leaderPlayingYoutube, stubYoutubePlayer } from './__fixtures__/sounds-store.fixtures';
 import { useSoundsStore } from './sounds-store';
 
@@ -63,6 +64,56 @@ describe('setIsLeader', () => {
     finishHydration();
 
     expect(useSoundsStore.getState().isPlaying).toBe(false);
+  });
+
+  it('still brings the YouTube player up when leading fresh', () => {
+    const initialize = vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'hasHydrated').mockReturnValue(true);
+    stubYoutubePlayer();
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: true });
+
+    expect(initialize).toHaveBeenCalled();
+  });
+
+  it('drops a pause a fresh session inherited from the last closed tab', () => {
+    vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'hasHydrated').mockReturnValue(true);
+    stubYoutubePlayer();
+    persistedYoutubePlayback();
+    useSoundsStore.setState({ isPlaying: false, isPaused: true });
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: true });
+
+    expect(useSoundsStore.getState().isPaused).toBe(false);
+  });
+
+  it('shows ambient paused on taking over, since it sounded only in the tab that left', () => {
+    vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(ambientSoundPlayer, 'getIsPlaying').mockReturnValue(false);
+    useSoundsStore.setState({
+      activeSource: 'ambient',
+      selectedAmbientSound: 'rain',
+      isPlaying: true,
+    });
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: false });
+
+    expect(useSoundsStore.getState()).toMatchObject({ isPlaying: false, isPaused: true });
+  });
+
+  it('leaves ambient playing on taking over when it is sounding in this tab', () => {
+    vi.spyOn(youtubePlayer, 'initialize').mockImplementation(() => {});
+    vi.spyOn(ambientSoundPlayer, 'getIsPlaying').mockReturnValue(true);
+    useSoundsStore.setState({
+      activeSource: 'ambient',
+      selectedAmbientSound: 'rain',
+      isPlaying: true,
+    });
+
+    useSoundsStore.getState().setIsLeader(true, { fresh: false });
+
+    expect(useSoundsStore.getState().isPlaying).toBe(true);
   });
 
   it('restarts playback handed over by a tab that was holding it', async () => {

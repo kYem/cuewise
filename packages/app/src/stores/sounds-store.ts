@@ -216,6 +216,11 @@ export const useSoundsStore = create<SoundsStore>()(
 
           // Resume playback if YouTube was active
           const { activeSource, isPlaying, selectedPlaylistId, playlists } = get();
+          // Ambient sounds only in the tab that started it, which most likely just closed: show it
+          // paused rather than playing, so it can be resumed instead of claiming silence plays.
+          if (activeSource === 'ambient' && isPlaying && !ambientSoundPlayer.getIsPlaying()) {
+            set({ isPlaying: false, isPaused: true });
+          }
           if (activeSource === 'youtube' && isPlaying && selectedPlaylistId) {
             const playlist = playlists.find((p) => p.id === selectedPlaylistId);
             if (playlist?.firstVideoId) {
@@ -624,7 +629,7 @@ export const useSoundsStore = create<SoundsStore>()(
         hydrationFailed = false;
         if (error) {
           logger.error('Could not load the saved sounds state', error);
-          // A failed first load leaves the stopped defaults, so nothing stale is left to discard.
+          // A failed hydration installs nothing, so there is no persisted playback to discard.
           hydrationFailed = true;
           if (cancelPendingDiscard !== null) {
             cancelPendingDiscard();

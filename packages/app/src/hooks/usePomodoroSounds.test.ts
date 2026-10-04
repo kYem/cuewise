@@ -4,13 +4,13 @@ import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  type SessionType,
   type TimerStatus,
   usePomodoroStorageSync,
   usePomodoroStore,
 } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
+import type { SessionType } from '../utils/pomodoro-styles';
 import { usePomodoroSounds } from './usePomodoroSounds';
 import { useSoundsLeader } from './useSoundsLeader';
 
@@ -220,10 +220,10 @@ describe('usePomodoroSounds', () => {
     expect(sounds.resume).not.toHaveBeenCalled();
   });
 
-  it('restarts ambient on taking over, since it most likely died with the tab that left', () => {
+  it('restarts ambient on taking over once the handover has shown it paused', () => {
     transition(
       { status: 'running', activeSource: 'ambient', isPlaying: true, isLeader: false },
-      { status: 'running', activeSource: 'ambient', isPlaying: true, isLeader: true }
+      { status: 'running', activeSource: 'ambient', isPlaying: false, isLeader: true }
     );
 
     expect(sounds.resume).toHaveBeenCalled();

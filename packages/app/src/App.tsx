@@ -46,7 +46,7 @@ type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 /** Pages built around the photo. Opt-in, so a page added later dims it and hides its chrome. */
 const PHOTO_FORWARD_PAGES: ReadonlySet<Page> = new Set(['home', 'pomodoro']);
 
-/** Home has it in its nav row and Pomodoro has the full mini player; the rest get it floating. */
+/** Home has the NowPlayingPill in its nav row and Pomodoro the full mini player; others float it. */
 const PAGES_WITH_SOUND_CONTROL: ReadonlySet<Page> = new Set(['home', 'pomodoro']);
 const FLOATING_PLAYER = 'fixed bottom-4 left-4 z-40';
 

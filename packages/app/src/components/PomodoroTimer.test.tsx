@@ -7,9 +7,10 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { usePomodoroSounds } from '../hooks/usePomodoroSounds';
 import { useGoalStore } from '../stores/goal-store';
-import { type SessionType, type TimerStatus, usePomodoroStore } from '../stores/pomodoro-store';
+import { type TimerStatus, usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
+import type { SessionType } from '../utils/pomodoro-styles';
 import { PomodoroTimer } from './PomodoroTimer';
 
 vi.mock('../stores/pomodoro-store', () => ({
