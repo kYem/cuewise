@@ -38,8 +38,8 @@ interface HasId {
   id: string;
 }
 
-// Collections already reported: readAll runs once per pulled record, so logging on every call
-// buries the stall diagnostics it sits beside.
+// Collections already reported: readAll runs on every pull page and push, so logging on every
+// call buries the stall diagnostics it sits beside.
 const reportedUnusableCollections = new Set<string>();
 
 /**

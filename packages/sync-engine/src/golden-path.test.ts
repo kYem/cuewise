@@ -517,8 +517,7 @@ describe('a listing longer than one page past the purge watermark', () => {
     });
 
     await expect(deviceA.engine.syncNow()).resolves.toEqual({ kind: 'synced' });
-    // Sealing and listing 501 records several times runs past the 5s default on CI runners.
-  }, 30_000);
+  });
 });
 
 describe('settings: an enrolling device claims only the keys it explicitly wrote', () => {

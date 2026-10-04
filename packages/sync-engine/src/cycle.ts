@@ -64,6 +64,38 @@ interface PullState {
   relistSettled: Relist | null;
   /** This path re-pushes over what it could not read, so no host hears an item was skipped. */
   repairsQuarantined: boolean;
+  /** Each collection as last read, kept current with this pull's own writes. */
+  local: LocalCopies;
+}
+
+/**
+ * One read of a collection serves every record a page resolves against it; re-reading per record
+ * made a page of N records cost N full reads. The pull's own writes are mirrored in.
+ */
+class LocalCopies {
+  private readonly byCollection = new Map<string, Record<string, unknown>>();
+
+  async of(binding: CollectionBinding): Promise<Record<string, unknown>> {
+    const held = this.byCollection.get(binding.name);
+    if (held !== undefined) {
+      return held;
+    }
+    const read = await binding.readAll();
+    this.byCollection.set(binding.name, read);
+    return read;
+  }
+
+  wrote(collection: string, entityId: string, entity: unknown | null): void {
+    const held = this.byCollection.get(collection);
+    if (held === undefined) {
+      return;
+    }
+    if (entity === null) {
+      delete held[entityId];
+    } else {
+      held[entityId] = entity;
+    }
+  }
 }
 
 type Relist = NonNullable<SyncMeta['relistOwed']>;
@@ -80,6 +112,7 @@ function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
     relistRaised: null,
     relistSettled: null,
     repairsQuarantined,
+    local: new LocalCopies(),
   };
 }
 
@@ -622,6 +655,8 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
     pageSize = result.records.length;
     pageCursor = result.cursor;
+    // Re-read per page, so an edit landing mid-listing is seen within one page of it.
+    pull.local = new LocalCopies();
 
     for (const rec of result.records) {
       if (deps.isCancelled()) {
@@ -893,8 +928,7 @@ async function resolveAndApply(
     return { kind: 'unknown-collection' };
   }
 
-  const all = await binding.readAll();
-  const localEntity = all[rec.entityId];
+  const localEntity = (await pull.local.of(binding))[rec.entityId];
   const localHlc = meta.hlcs[key];
   // No hlc means this key is unknown to the engine (e.g. legacy pre-sync data) even if an
   // entity exists locally — treat it as null so incoming always wins, per union-migration intent.
@@ -931,6 +965,7 @@ async function resolveAndApply(
     });
     return { kind: 'failed' };
   }
+  pull.local.wrote(rec.collection, rec.entityId, resolution.body.entity);
   meta.hlcs[key] = resolution.body.hlc;
   pull.applied.add(key);
   pull.redirtied.delete(key);
