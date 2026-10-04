@@ -253,7 +253,7 @@ export const useSoundsStore = create<SoundsStore>()(
       },
 
       playAmbient: (sound: AmbientSoundType) => {
-        const { activeSource, isLeader, ambientVolume } = get();
+        const { activeSource, isLeader, ambientVolume, selectedAmbientSound, isPlaying } = get();
 
         // Stop YouTube if it's playing
         if (activeSource === 'youtube' && isLeader) {
@@ -269,8 +269,9 @@ export const useSoundsStore = create<SoundsStore>()(
             isPaused: false,
           });
         } else {
-          // If same sound is already playing, just stop it (toggle behavior)
-          if (ambientSoundPlayer.getCurrentSound() === sound && ambientSoundPlayer.getIsPlaying()) {
+          // Read from the store, not this tab's player: the sound may be playing in another tab,
+          // which stops its copy when it sees nothing is selected.
+          if (activeSource === 'ambient' && selectedAmbientSound === sound && isPlaying) {
             ambientSoundPlayer.stop();
             set({
               activeSource: 'none',
