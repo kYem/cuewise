@@ -15,7 +15,7 @@ export class FakeTransport implements SyncTransport {
   legacyPushResponse = false;
   /** Canned server-side records for getChanges to page through, sorted by seq. */
   pullRecords: SyncRecord[] = [];
-  /** The cursor a final page answers instead of its last seq, as a server raising it to its last seq. */
+  /** The cursor a final page answers instead of its last record's seq, as a server raising it to `last_seq`. */
   finalPageCursor: number | null = null;
   /** Thrown by EVERY getChanges call until reset — a persistently failing transport. */
   getChangesError: Error | null = null;
