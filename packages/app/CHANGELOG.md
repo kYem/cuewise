@@ -1,5 +1,27 @@
 # @cuewise/app
 
+## 1.24.0
+
+### Minor Changes
+
+- 48ddcba: Save a selection from any page as a concept or quote: right-click, the toolbar icon, or Alt+Shift+C.
+- 1e93525: Today's Focus shows unfinished tasks from earlier days, with Move all to today.
+
+### Patch Changes
+
+- 48ddcba: Interval reminders can keep to active hours and stop after a daily target.
+- 48ddcba: Reminders fire more reliably, and Settings can send a test notification.
+- 48ddcba: Cloud sync, concept cards and background photos are more reliable.
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [48ddcba]
+- Updated dependencies [1e93525]
+  - @cuewise/shared@1.26.0
+  - @cuewise/storage@1.26.0
+  - @cuewise/sync-engine@0.4.0
+  - @cuewise/ui@1.26.0
+
 ## 1.23.2
 
 ### Patch Changes
