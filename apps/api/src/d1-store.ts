@@ -24,6 +24,7 @@ import {
   type KeyEnvelopeRecord,
   PAIRING_TTL_MS,
   type PairingForRequester,
+  type ParkedCodeHash,
   type ParkedGrant,
   type PendingPairing,
   type ProviderConnection,
@@ -95,15 +96,10 @@ interface ProviderConnectionRow {
 
 function toProviderConnection(row: ProviderConnectionRow): ProviderConnection {
   return {
+    ...toSealedGrant(row),
     provider: row.provider,
-    ciphertext: row.ciphertext,
-    iv: row.iv,
-    refreshCiphertext: row.refresh_ciphertext,
-    refreshIv: row.refresh_iv,
-    workspace: row.workspace,
     dataSourceId: row.data_source_id,
     dataSourceName: row.data_source_name,
-    tokenFingerprint: row.token_fingerprint,
     completionProperty: row.completion_property,
   };
 }
@@ -388,20 +384,20 @@ export class D1SyncStore implements SyncStore {
       .bind(provider, now, now, limit)
       .all<SealedGrantRow & { code_hash: string; expires_at: number }>();
     return res.results.map((row) => ({
-      codeHash: row.code_hash,
+      codeHash: row.code_hash as ParkedCodeHash,
       expiresAt: row.expires_at,
       grant: toSealedGrant(row),
     }));
   }
 
-  async markParkedGrantAttempted(codeHash: string, now: number): Promise<void> {
+  async markParkedGrantAttempted(codeHash: ParkedCodeHash, now: number): Promise<void> {
     await this.db
       .prepare('UPDATE parked_provider_grants SET revoke_attempted_at = ? WHERE code_hash = ?')
       .bind(now, codeHash)
       .run();
   }
 
-  async deleteParkedGrant(codeHash: string): Promise<void> {
+  async deleteParkedGrant(codeHash: ParkedCodeHash): Promise<void> {
     await this.db
       .prepare('DELETE FROM parked_provider_grants WHERE code_hash = ?')
       .bind(codeHash)

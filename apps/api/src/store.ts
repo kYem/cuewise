@@ -53,8 +53,11 @@ export interface ParkedGrant {
   codeChallenge: string;
 }
 
+/** A parked code's stored hash; branded so the raw code the client holds cannot stand in for it. */
+export type ParkedCodeHash = string & { readonly __brand: 'ParkedCodeHash' };
+
 export interface ExpiredParkedGrant {
-  codeHash: string;
+  codeHash: ParkedCodeHash;
   expiresAt: number;
   grant: SealedGrant;
 }
@@ -158,8 +161,8 @@ export interface SyncStore {
     now: number,
     limit: number
   ): Promise<ExpiredParkedGrant[]>;
-  markParkedGrantAttempted(codeHash: string, now: number): Promise<void>;
-  deleteParkedGrant(codeHash: string): Promise<void>;
+  markParkedGrantAttempted(codeHash: ParkedCodeHash, now: number): Promise<void>;
+  deleteParkedGrant(codeHash: ParkedCodeHash): Promise<void>;
   // A row whose `baseSeq` is stale is refused and answered under `conflicts` as the current row;
   // the rest land under `applied`. Throws StorageQuotaExceededError past the per-user record cap.
   applyChanges(userId: string, changes: PushRecord[]): Promise<ServerPushResponse>;

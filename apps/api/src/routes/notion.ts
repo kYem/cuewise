@@ -748,10 +748,10 @@ export function registerNotionRoutes(
       logger.warn('Notion claim with an unknown, expired, or already-used code', { userId });
       return problem('provider_claim_invalid');
     }
-    const grant = consumed.grant;
+    const { grant, codeChallenge } = consumed;
     // Burned before verifying, like the sign-in bounces: a wrong verifier kills the code, and the
     // grant it parked can never be claimed now, so it must not stay live at Notion.
-    if ((await sha256Base64Url(codeVerifier)) !== consumed.codeChallenge) {
+    if ((await sha256Base64Url(codeVerifier)) !== codeChallenge) {
       logger.warn('Notion claim failed the PKCE verifier check', { userId });
       await revokeSealed(client(c.env), grant, c.env, userId);
       return problem('provider_claim_invalid');
