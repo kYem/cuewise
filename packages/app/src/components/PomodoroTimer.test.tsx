@@ -1,28 +1,41 @@
 import type { Goal } from '@cuewise/shared';
-import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
+import { createSelectorMock } from '@cuewise/test-utils';
 import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
+import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { usePomodoroSounds } from '../hooks/usePomodoroSounds';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
 import { PomodoroTimer } from './PomodoroTimer';
 
-// The timer pulls from five stores plus leader/sync hooks; stub them all so the
-// suite can drive the goal-picker behaviour in isolation.
 vi.mock('../stores/pomodoro-store', () => ({
   usePomodoroStore: vi.fn(),
   usePomodoroStorageSync: vi.fn(),
 }));
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
 vi.mock('../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
-vi.mock('../stores/sounds-store', () => ({ useSoundsStore: vi.fn() }));
+vi.mock('../stores/sounds-store', () => ({
+  useSoundsStore: vi.fn(),
+  useSoundsStorageSync: vi.fn(),
+}));
 vi.mock('../stores/focus-mode-store', () => ({
   useFocusModeStore: Object.assign(vi.fn(), { getState: () => ({ enterFocusMode: vi.fn() }) }),
 }));
 vi.mock('../hooks/usePomodoroLeader', () => ({ usePomodoroLeader: vi.fn() }));
+vi.mock('../hooks/useSoundsLeader', () => ({ useSoundsLeader: vi.fn() }));
+
+/** The app-level sound host stays mounted while the user navigates the timer's page away. */
+function PomodoroPageInApp({ onPage }: { onPage: boolean }) {
+  usePomodoroSounds();
+  if (!onPage) {
+    return null;
+  }
+  return <PomodoroTimer />;
+}
 
 interface MockOptions {
   sessionType?: 'work' | 'break' | 'longBreak';
@@ -52,6 +65,8 @@ function mockStores(options: MockOptions = {}) {
     consecutiveWorkSessions: 0,
     longBreakInterval: 4,
     selectedGoalId: options.selectedGoalId ?? null,
+    isLoading: false,
+    error: null,
     initialize: vi.fn(),
     start: vi.fn(),
     pause: vi.fn(),
@@ -77,11 +92,15 @@ function mockStores(options: MockOptions = {}) {
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(goalState));
   // focusModeEnabled: false keeps the focus button (and its store call) out of the tree.
   vi.mocked(useSettingsStore).mockImplementation(
-    createSettingsStoreMock({
-      focusModeEnabled: false,
+    createSelectorMock({
+      settings: {
+        ...defaultSettings,
+        focusModeEnabled: false,
+        pomodoroMusicEnabled: options.music ?? false,
+        pomodoroMusicAutoStart: options.autoStart ?? false,
+      },
       updateSettings,
-      pomodoroMusicEnabled: options.music ?? false,
-      pomodoroMusicAutoStart: options.autoStart ?? false,
+      initialize: vi.fn(),
     })
   );
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
@@ -106,10 +125,12 @@ describe('PomodoroTimer - leaving the page', () => {
       isSoundsPlaying: true,
       status: 'running',
     });
-    const { unmount } = render(<PomodoroTimer />);
+    const { rerender } = render(<PomodoroPageInApp onPage />);
+    expect(screen.getByTestId('pomodoro-timer-card')).toBeInTheDocument();
 
-    unmount();
+    rerender(<PomodoroPageInApp onPage={false} />);
 
+    expect(screen.queryByTestId('pomodoro-timer-card')).toBeNull();
     expect(soundsState.stop).not.toHaveBeenCalled();
     expect(soundsState.pause).not.toHaveBeenCalled();
   });

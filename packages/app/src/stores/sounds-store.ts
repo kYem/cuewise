@@ -64,8 +64,11 @@ interface SoundsStore {
 
   // Actions
   initialize: () => Promise<void>;
-  /** `fresh`: no tab held the audio before this one, so any persisted playback is stale. */
-  setIsLeader: (isLeader: boolean, options?: { fresh?: boolean }) => void;
+  setIsLeader: {
+    /** `fresh`: no tab held the audio before this one, so any persisted playback is stale. */
+    (isLeader: true, options: { fresh: boolean }): void;
+    (isLeader: false): void;
+  };
 
   // Unified playback actions
   playAmbient: (sound: AmbientSoundType) => void;
@@ -196,11 +199,11 @@ export const useSoundsStore = create<SoundsStore>()(
         }
       },
 
-      setIsLeader: (isLeader, options = {}) => {
+      setIsLeader: (isLeader: boolean, options?: { fresh: boolean }) => {
         const wasLeader = get().isLeader;
         set({ isLeader });
 
-        if (isLeader && !wasLeader && options.fresh) {
+        if (isLeader && !wasLeader && options?.fresh) {
           initYoutubeLeader(set);
           discardStalePlayback();
           logger.info('This tab is now the sounds leader');

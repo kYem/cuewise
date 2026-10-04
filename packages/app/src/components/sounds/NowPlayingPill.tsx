@@ -7,7 +7,7 @@ interface NowPlayingPillProps {
   className?: string;
 }
 
-/** Off the Pomodoro page, the one place a sound that outlived it can be paused. */
+/** Off the Pomodoro page, the only direct control for a sound that outlived it. */
 export const NowPlayingPill: React.FC<NowPlayingPillProps> = ({ className }) => {
   const activeSource = useSoundsStore((state) => state.activeSource);
   const isPlaying = useSoundsStore((state) => state.isPlaying);

@@ -1140,3 +1140,27 @@ describe('initialize against a concurrent write', () => {
     expect(useSettingsStore.getState().settings.colorTheme).toBe('forest');
   });
 });
+
+describe('initialize sharing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    seedStorage();
+  });
+
+  it('reads storage once for callers that overlap', async () => {
+    await Promise.all([
+      useSettingsStore.getState().initialize(),
+      useSettingsStore.getState().initialize(),
+    ]);
+
+    expect(storage.getSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads storage again once the shared load has settled', async () => {
+    await useSettingsStore.getState().initialize();
+
+    await useSettingsStore.getState().initialize();
+
+    expect(storage.getSettings).toHaveBeenCalledTimes(2);
+  });
+});

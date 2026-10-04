@@ -23,8 +23,11 @@ function anotherTabHeldTheAudio(): Promise<boolean> {
   heldAtFirstAsk ??= navigator.locks
     .query()
     .then((snapshot) => (snapshot.held ?? []).some((lock) => lock.name === LOCK_NAME))
-    // A failed probe must not reject the lock callback, or the fallback would claim leadership.
-    .catch(() => false);
+    .catch((error) => {
+      // Unknown, so assume a handoff: resuming wrongly is audible and pausable, discarding is not.
+      logger.warn('Could not tell whether another tab held the audio', error);
+      return true;
+    });
   return heldAtFirstAsk;
 }
 
@@ -45,6 +48,12 @@ export function useSoundsLeader(): void {
 
     const requestLeadership = async () => {
       logger.debug('Requesting sounds leadership lock...');
+
+      if (navigator.locks === undefined) {
+        logger.warn('Using fallback (no Web Locks) - assuming leader');
+        setIsLeader(true, { fresh: true });
+        return;
+      }
 
       try {
         const heldElsewhere = anotherTabHeldTheAudio();
@@ -75,11 +84,6 @@ export function useSoundsLeader(): void {
         });
       } catch (error) {
         logger.error('Error requesting sounds leadership', error);
-        // Fallback: assume leader if Web Locks not supported
-        if (!aborted) {
-          logger.warn('Using fallback (no Web Locks) - assuming leader');
-          setIsLeader(true, { fresh: true });
-        }
       }
     };
 

@@ -52,7 +52,7 @@ describe('setIsLeader', () => {
     stubYoutubePlayer();
     persistedYoutubePlayback();
 
-    useSoundsStore.getState().setIsLeader(true);
+    useSoundsStore.getState().setIsLeader(true, { fresh: false });
 
     expect(useSoundsStore.getState().isPlaying).toBe(true);
   });

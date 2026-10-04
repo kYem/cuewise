@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
-import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
+import {
+  type TimerStatus,
+  usePomodoroStorageSync,
+  usePomodoroStore,
+} from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStorageSync, useSoundsStore } from '../stores/sounds-store';
 import { useSoundsLeader } from './useSoundsLeader';
 
 type TimerSound = 'resume' | 'pause' | 'stop';
-
-type TimerStatus = ReturnType<typeof usePomodoroStore.getState>['status'];
 
 function soundForTimer(
   status: TimerStatus,
@@ -31,6 +33,7 @@ export function usePomodoroSounds(): void {
   const sessionType = usePomodoroStore((state) => state.sessionType);
   // Until initialize() has recovered it, status is whatever the last closed tab persisted.
   const isTimerLoading = usePomodoroStore((state) => state.isLoading);
+  const timerFailedToLoad = usePomodoroStore((state) => state.error !== null);
   const initTimer = usePomodoroStore((state) => state.initialize);
   const initSettings = useSettingsStore((state) => state.initialize);
   const musicEnabled = useSettingsStore((state) => state.settings.pomodoroMusicEnabled);
@@ -53,7 +56,7 @@ export function usePomodoroSounds(): void {
   // Must be mounted wherever the election runs, or the elected tab never hears another tab's write.
   useSoundsStorageSync();
 
-  // Any page can win the audio, and Insights/Quotes/Goals/Concepts load neither store themselves.
+  // Any page can win the audio, and Insights/Quotes/Goals/Concepts load none of these themselves.
   useEffect(() => {
     initTimer();
     initSettings();
@@ -67,15 +70,24 @@ export function usePomodoroSounds(): void {
       appliedRef.current = null;
       return;
     }
-    if (!musicEnabled || !autoStart || isTimerLoading || activeSource === 'none') {
+    if (!musicEnabled || !autoStart || isTimerLoading || timerFailedToLoad) {
+      return;
+    }
+    if (activeSource === 'none') {
       return;
     }
 
     const wanted = soundForTimer(status, sessionType === 'work', playDuringBreaks);
-    if (wanted === appliedRef.current) {
+    const previous = appliedRef.current;
+    appliedRef.current = wanted;
+    if (wanted === previous) {
       return;
     }
-    appliedRef.current = wanted;
+    // A first look is not a transition: an idle timer must not silence a sound just picked or
+    // just handed over, while a running session should still bring its music in.
+    if (previous === null && wanted !== 'resume') {
+      return;
+    }
 
     if (wanted === 'resume') {
       resumeSounds();
@@ -88,6 +100,7 @@ export function usePomodoroSounds(): void {
     status,
     sessionType,
     isTimerLoading,
+    timerFailedToLoad,
     activeSource,
     isLeader,
     musicEnabled,

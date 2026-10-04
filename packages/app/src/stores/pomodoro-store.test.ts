@@ -428,6 +428,17 @@ describe('Pomodoro Store - Auto-Start Breaks', () => {
       const state = usePomodoroStore.getState();
       expect(state.timeRemaining).toBe(originalTimeRemaining - 10); // Adjusted by ~10 seconds
     });
+
+    it('toasts a failed load once for callers that overlap', async () => {
+      vi.mocked(storage.getSettings).mockRejectedValue(new Error('storage unavailable'));
+
+      await Promise.all([
+        usePomodoroStore.getState().initialize(),
+        usePomodoroStore.getState().initialize(),
+      ]);
+
+      expect(toastError).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

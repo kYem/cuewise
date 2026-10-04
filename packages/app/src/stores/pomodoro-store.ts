@@ -43,7 +43,7 @@ async function sessionNotificationsEnabled(): Promise<boolean> {
   }
 }
 
-type TimerStatus = 'idle' | 'running' | 'paused';
+export type TimerStatus = 'idle' | 'running' | 'paused';
 type SessionType = 'work' | 'break' | 'longBreak';
 
 /** Resolve the configured duration (minutes) for a session type. */
@@ -102,6 +102,8 @@ interface PomodoroStore {
   switchToWork: () => void;
 }
 
+let initializing: Promise<void> | null = null;
+
 export const usePomodoroStore = create<PomodoroStore>()(
   persist(
     (set, get) => ({
@@ -126,38 +128,101 @@ export const usePomodoroStore = create<PomodoroStore>()(
       startSound: 'gentle',
       completionSound: 'gentle',
 
-      initialize: async () => {
-        try {
-          set({ isLoading: true, error: null });
+      initialize: () => {
+        // Shared while in flight: the app-level sounds hook and the page both load the timer, and
+        // a failed load should toast once.
+        initializing ??= (async () => {
+          try {
+            set({ isLoading: true, error: null });
 
-          // Load settings and sessions (state is auto-hydrated by Zustand persist)
-          const [settings, sessions] = await Promise.all([getSettings(), getPomodoroSessions()]);
+            // Load settings and sessions (state is auto-hydrated by Zustand persist)
+            const [settings, sessions] = await Promise.all([getSettings(), getPomodoroSessions()]);
 
-          const workDuration = settings.pomodoroWorkDuration;
-          const breakDuration = settings.pomodoroBreakDuration;
-          const longBreakDuration = settings.pomodoroLongBreakDuration;
-          const longBreakInterval = settings.pomodoroLongBreakInterval;
-          const ambientSound = settings.pomodoroAmbientSound;
-          const ambientVolume = settings.pomodoroAmbientVolume;
-          const startSound = settings.pomodoroStartSound;
-          const completionSound = settings.pomodoroCompletionSound;
+            const workDuration = settings.pomodoroWorkDuration;
+            const breakDuration = settings.pomodoroBreakDuration;
+            const longBreakDuration = settings.pomodoroLongBreakDuration;
+            const longBreakInterval = settings.pomodoroLongBreakInterval;
+            const ambientSound = settings.pomodoroAmbientSound;
+            const ambientVolume = settings.pomodoroAmbientVolume;
+            const startSound = settings.pomodoroStartSound;
+            const completionSound = settings.pomodoroCompletionSound;
 
-          // Check if timer was running when all tabs closed
-          const { status, timeRemaining, lastTickTime } = get();
-          logger.debug('Initialize', { status, timeRemaining, lastTickTime });
+            // Check if timer was running when all tabs closed
+            const { status, timeRemaining, lastTickTime } = get();
+            logger.debug('Initialize', { status, timeRemaining, lastTickTime });
 
-          if (status === 'running' && lastTickTime && timeRemaining > 0) {
-            const now = Date.now();
-            const elapsedSeconds = Math.floor((now - lastTickTime) / 1000);
+            if (status === 'running' && lastTickTime && timeRemaining > 0) {
+              const now = Date.now();
+              const elapsedSeconds = Math.floor((now - lastTickTime) / 1000);
 
-            // Check if timer is ACTIVELY being ticked by another component/tab
-            // If lastTickTime is within 2 seconds, another component has the Web Lock
-            // and is managing the timer - don't interfere with its state
-            const isActivelyTicking = now - lastTickTime < 2000;
+              // Check if timer is ACTIVELY being ticked by another component/tab
+              // If lastTickTime is within 2 seconds, another component has the Web Lock
+              // and is managing the timer - don't interfere with its state
+              const isActivelyTicking = now - lastTickTime < 2000;
 
-            if (isActivelyTicking) {
-              logger.debug('Timer actively ticking, skipping recovery adjustment');
-              // Timer is already being managed - just load settings, don't modify timer state
+              if (isActivelyTicking) {
+                logger.debug('Timer actively ticking, skipping recovery adjustment');
+                // Timer is already being managed - just load settings, don't modify timer state
+                set({
+                  workDuration,
+                  breakDuration,
+                  longBreakDuration,
+                  longBreakInterval,
+                  ambientSound,
+                  ambientVolume,
+                  startSound,
+                  completionSound,
+                  sessions,
+                  isLoading: false,
+                });
+              } else {
+                // Timer was running but tabs were closed - apply recovery logic
+                const adjustedTimeRemaining = Math.max(0, timeRemaining - elapsedSeconds);
+                logger.debug('Timer was running, applying recovery', {
+                  elapsed: elapsedSeconds,
+                  adjusted: adjustedTimeRemaining,
+                });
+
+                if (adjustedTimeRemaining === 0) {
+                  logger.debug('Timer expired, completing session');
+                  // Timer expired while tabs were closed
+                  set({
+                    workDuration,
+                    breakDuration,
+                    longBreakDuration,
+                    longBreakInterval,
+                    ambientSound,
+                    ambientVolume,
+                    startSound,
+                    completionSound,
+                    sessions,
+                    isLoading: false,
+                    timeRemaining: 0,
+                  });
+                  // Complete the session (recovery: don't celebrate on cold start)
+                  get().completeSession({ isRecovery: true });
+                } else {
+                  logger.debug('Timer still has time, resuming with adjusted time');
+                  // Timer still has time left - resume with adjusted time
+                  set({
+                    workDuration,
+                    breakDuration,
+                    longBreakDuration,
+                    longBreakInterval,
+                    ambientSound,
+                    ambientVolume,
+                    startSound,
+                    completionSound,
+                    sessions,
+                    isLoading: false,
+                    timeRemaining: adjustedTimeRemaining,
+                    lastTickTime: now, // Update to current time
+                  });
+                }
+              }
+            } else {
+              logger.debug('No active timer to resume');
+              // No running timer or timer was paused
               set({
                 workDuration,
                 breakDuration,
@@ -170,73 +235,17 @@ export const usePomodoroStore = create<PomodoroStore>()(
                 sessions,
                 isLoading: false,
               });
-            } else {
-              // Timer was running but tabs were closed - apply recovery logic
-              const adjustedTimeRemaining = Math.max(0, timeRemaining - elapsedSeconds);
-              logger.debug('Timer was running, applying recovery', {
-                elapsed: elapsedSeconds,
-                adjusted: adjustedTimeRemaining,
-              });
-
-              if (adjustedTimeRemaining === 0) {
-                logger.debug('Timer expired, completing session');
-                // Timer expired while tabs were closed
-                set({
-                  workDuration,
-                  breakDuration,
-                  longBreakDuration,
-                  longBreakInterval,
-                  ambientSound,
-                  ambientVolume,
-                  startSound,
-                  completionSound,
-                  sessions,
-                  isLoading: false,
-                  timeRemaining: 0,
-                });
-                // Complete the session (recovery: don't celebrate on cold start)
-                get().completeSession({ isRecovery: true });
-              } else {
-                logger.debug('Timer still has time, resuming with adjusted time');
-                // Timer still has time left - resume with adjusted time
-                set({
-                  workDuration,
-                  breakDuration,
-                  longBreakDuration,
-                  longBreakInterval,
-                  ambientSound,
-                  ambientVolume,
-                  startSound,
-                  completionSound,
-                  sessions,
-                  isLoading: false,
-                  timeRemaining: adjustedTimeRemaining,
-                  lastTickTime: now, // Update to current time
-                });
-              }
             }
-          } else {
-            logger.debug('No active timer to resume');
-            // No running timer or timer was paused
-            set({
-              workDuration,
-              breakDuration,
-              longBreakDuration,
-              longBreakInterval,
-              ambientSound,
-              ambientVolume,
-              startSound,
-              completionSound,
-              sessions,
-              isLoading: false,
-            });
+          } catch (error) {
+            logger.error('Error initializing pomodoro store', error);
+            const errorMessage = 'Failed to load pomodoro data. Please refresh the page.';
+            set({ error: errorMessage, isLoading: false });
+            useToastStore.getState().error(errorMessage);
           }
-        } catch (error) {
-          logger.error('Error initializing pomodoro store', error);
-          const errorMessage = 'Failed to load pomodoro data. Please refresh the page.';
-          set({ error: errorMessage, isLoading: false });
-          useToastStore.getState().error(errorMessage);
-        }
+        })().finally(() => {
+          initializing = null;
+        });
+        return initializing;
       },
 
       reloadSettings: async () => {
