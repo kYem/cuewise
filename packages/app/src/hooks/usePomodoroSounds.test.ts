@@ -73,7 +73,7 @@ function mockStores(options: MockOptions = {}) {
   );
 }
 
-/** Renders with `from`, then moves to `to` with the mocks cleared, so only the move's calls count. */
+/** Renders with `from`, then moves to `to` with mocks cleared, so only the move's calls count. */
 function transition(from: MockOptions, to: MockOptions) {
   mockStores(from);
   const { rerender } = renderHook(() => usePomodoroSounds());

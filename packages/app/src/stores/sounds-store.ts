@@ -624,7 +624,7 @@ export const useSoundsStore = create<SoundsStore>()(
         hydrationFailed = false;
         if (error) {
           logger.error('Could not load the saved sounds state', error);
-          // The store keeps its stopped defaults, so there is nothing stale left to discard.
+          // A failed first load leaves the stopped defaults, so nothing stale is left to discard.
           hydrationFailed = true;
           if (cancelPendingDiscard !== null) {
             cancelPendingDiscard();

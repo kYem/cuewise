@@ -66,6 +66,17 @@ describe('useSoundsLeader', () => {
     unmount();
   });
 
+  it('drops its claim when leading throws, since the lock went with the throw', async () => {
+    setIsLeader.mockImplementationOnce(() => {
+      throw new Error('player failed');
+    });
+
+    const { unmount } = await renderLeader();
+
+    await waitFor(() => expect(setIsLeader).toHaveBeenLastCalledWith(false));
+    unmount();
+  });
+
   it('leads fresh without Web Locks', async () => {
     uninstallLocks();
 
