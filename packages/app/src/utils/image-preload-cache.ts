@@ -67,6 +67,8 @@ async function storedLoadState(url: string): Promise<'loaded' | 'loading' | 'dea
 interface ResolvedBackground {
   url: string | null;
   stillLoading: boolean;
+  /** Freshly picked, so the owner persists it; a superseded pick must not reach storage. */
+  picked: boolean;
 }
 
 /**
@@ -78,18 +80,28 @@ async function resolveDailyBackground(category: FocusImageCategory): Promise<Res
   if (stored) {
     const state = await storedLoadState(stored.url);
     if (state !== 'dead') {
-      return { url: stored.url, stillLoading: state === 'loading' };
+      return { url: stored.url, stillLoading: state === 'loading', picked: false };
     }
   }
 
   try {
     const url = await loadImageWithFallback(category);
-    await setDailyBackground(url, category);
-    return { url, stillLoading: false };
+    return { url, stillLoading: false, picked: true };
   } catch (error) {
     // error, not warn: at the shipped level this is the only trace a blocked CDN leaves.
     logger.error('No background image could be loaded; showing the solid fallback', error);
-    return { url: null, stillLoading: false };
+    return { url: null, stillLoading: false, picked: false };
+  }
+}
+
+async function pickFreshBackground(category: FocusImageCategory): Promise<ResolvedBackground> {
+  try {
+    const url = await loadImageWithFallback(category);
+    return { url, stillLoading: false, picked: true };
+  } catch (error) {
+    // error, not warn: this is a user-initiated click, and warn is invisible by default.
+    logger.error('Could not load a new background; keeping the current one', error);
+    return { url: null, stillLoading: false, picked: false };
   }
 }
 
@@ -118,7 +130,7 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
   const promise = resolveDailyBackground(category);
   inFlight = { category, promise };
   try {
-    const { url, stillLoading } = await promise;
+    const { url, stillLoading, picked } = await promise;
     if (!ownsResolve(promise)) {
       return;
     }
@@ -128,6 +140,9 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
     // After the cache write, so a fast failure cannot be overwritten by the URL it just dropped.
     if (url !== null && stillLoading) {
       forgetIfHung(url);
+    }
+    if (url !== null && picked) {
+      await setDailyBackground(url, category);
     }
   } finally {
     if (ownsResolve(promise)) {
@@ -148,17 +163,25 @@ export async function refreshBackground(category: FocusImageCategory): Promise<s
     return null;
   }
 
+  // Claimed like a daily resolve, so an older one landing later cannot overwrite this pick
+  // and a concurrent preloadImages awaits it instead of picking a rival.
+  const promise = pickFreshBackground(category);
+  inFlight = { category, promise };
   try {
-    const url = await loadImageWithFallback(category);
-    await setDailyBackground(url, category);
+    const { url } = await promise;
+    // Superseded or failed: null tells App to leave the current background.
+    if (url === null || !ownsResolve(promise)) {
+      return null;
+    }
     cache.category = category;
     cache.currentUrl = url;
     cache.isInitialized = true;
+    await setDailyBackground(url, category);
     return url;
-  } catch (error) {
-    // error, not warn: this is a user-initiated click, and warn is invisible by default.
-    logger.error('Could not load a new background; keeping the current one', error);
-    return null;
+  } finally {
+    if (ownsResolve(promise)) {
+      inFlight = null;
+    }
   }
 }
 
