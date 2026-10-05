@@ -4,4 +4,4 @@
 '@cuewise/macos': patch
 ---
 
-Leaving the Pomodoro page stops its sound, so none keeps playing where you can't pause it.
+Leaving the Pomodoro page now stops its sound.

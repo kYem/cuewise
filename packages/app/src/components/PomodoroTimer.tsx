@@ -206,8 +206,8 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
   // Enable cross-tab synchronization
   usePomodoroStorageSync();
 
-  // Leaving the page stops its sound whatever the auto-start mode. Declared before the leader hook
-  // because cleanups run in order, and resigning first would hide that this tab holds YouTube.
+  // Must precede useSoundsLeader: cleanups run in order, and resigning first clears isLeader,
+  // so YouTube this tab holds would keep playing.
   useEffect(() => {
     return () => {
       stopSoundsHere();

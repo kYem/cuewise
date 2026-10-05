@@ -4,7 +4,7 @@ import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect } from 'react';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
@@ -104,6 +104,10 @@ function mockStores(options: MockOptions = {}) {
 describe('PomodoroTimer - sounds', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.mocked(useSoundsLeader).mockReset();
   });
 
   it('mounts the sounds storage sync', () => {
@@ -230,7 +234,6 @@ describe('PomodoroTimer - sounds', () => {
 
     const { unmount } = render(<PomodoroTimer />);
     unmount();
-    vi.mocked(useSoundsLeader).mockReset();
 
     expect(order).toEqual(['stopHere', 'resign']);
   });
