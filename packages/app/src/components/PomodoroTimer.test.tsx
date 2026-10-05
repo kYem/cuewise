@@ -3,7 +3,9 @@ import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils
 import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -204,6 +206,33 @@ describe('PomodoroTimer - sounds', () => {
     unmount();
 
     expect(soundsState.stopHere).toHaveBeenCalled();
+  });
+
+  it('stops this tab’s sound on leaving before it resigns the sounds lead', () => {
+    const order: string[] = [];
+    const stopHere = vi.fn(() => {
+      order.push('stopHere');
+    });
+    mockStores({
+      music: true,
+      autoStart: false,
+      activeSource: 'youtube',
+      status: 'running',
+      soundsActions: { pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), stopHere },
+    });
+    vi.mocked(useSoundsLeader).mockImplementation(() => {
+      useEffect(() => {
+        return () => {
+          order.push('resign');
+        };
+      }, []);
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
+    unmount();
+    vi.mocked(useSoundsLeader).mockReset();
+
+    expect(order).toEqual(['stopHere', 'resign']);
   });
 });
 

@@ -72,7 +72,7 @@ interface SoundsStore {
   pause: () => void;
   resume: () => void;
   stop: () => void;
-  /** Stops only what this tab is sounding, so another tab's Pomodoro keeps its sound. */
+  /** Stops only if this tab holds the audio, so a tab that isn't sounding can't silence another. */
   stopHere: () => void;
   togglePlayPause: () => void;
 
