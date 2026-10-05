@@ -178,6 +178,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
   const pauseSounds = useSoundsStore((state) => state.pause);
   const resumeSounds = useSoundsStore((state) => state.resume);
   const stopSounds = useSoundsStore((state) => state.stop);
+  const stopSoundsHere = useSoundsStore((state) => state.stopHere);
   const initSounds = useSoundsStore((state) => state.initialize);
   const getActiveSourceName = useSoundsStore((state) => state.getActiveSourceName);
 
@@ -273,6 +274,14 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
     pauseSounds,
     stopSounds,
   ]);
+
+  // Sound belongs to this page: leaving it stops it whatever the auto-start mode, so no page is
+  // left playing a sound it has no control for.
+  useEffect(() => {
+    return () => {
+      stopSoundsHere();
+    };
+  }, [stopSoundsHere]);
 
   const progress = totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
 

@@ -72,6 +72,8 @@ interface SoundsStore {
   pause: () => void;
   resume: () => void;
   stop: () => void;
+  /** Stops only what this tab is sounding, so another tab's Pomodoro keeps its sound. */
+  stopHere: () => void;
   togglePlayPause: () => void;
 
   // Volume controls
@@ -401,6 +403,17 @@ export const useSoundsStore = create<SoundsStore>()(
           isPaused: false,
           isYoutubeLoading: false,
         });
+      },
+
+      stopHere: () => {
+        const { activeSource, isLeader, isPlaying } = get();
+        // The player reports playing through its fade-out; stopping it again there can cut off
+        // the next sound.
+        const ambientHere = activeSource === 'ambient' && ambientSoundPlayer.getIsPlaying();
+        const youtubeHere = activeSource === 'youtube' && isLeader;
+        if (isPlaying && (ambientHere || youtubeHere)) {
+          get().stop();
+        }
       },
 
       togglePlayPause: () => {

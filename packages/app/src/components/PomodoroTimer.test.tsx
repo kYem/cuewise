@@ -37,9 +37,10 @@ interface MockOptions {
   activeSource?: 'none' | 'ambient' | 'youtube';
   isSoundsLeader?: boolean;
   /** Passed in when a test re-mocks across a rerender and needs the same spies to survive it. */
-  soundsActions?: { pause: Mock; resume: Mock; stop: Mock };
+  soundsActions?: { pause: Mock; resume: Mock; stop: Mock; stopHere: Mock };
   /** The shared settings fixture disables music, which short-circuits the timer's sounds effect. */
   music?: boolean;
+  autoStart?: boolean;
 }
 
 function mockStores(options: MockOptions = {}) {
@@ -67,7 +68,12 @@ function mockStores(options: MockOptions = {}) {
     reloadSettings,
   };
   const goalState = { todayTasks: options.todayTasks ?? [], initialize: vi.fn() };
-  const soundsActions = options.soundsActions ?? { pause: vi.fn(), resume: vi.fn(), stop: vi.fn() };
+  const soundsActions = options.soundsActions ?? {
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+    stopHere: vi.fn(),
+  };
   const soundsState = {
     activeSource: options.activeSource ?? 'none',
     isPlaying: false,
@@ -85,6 +91,7 @@ function mockStores(options: MockOptions = {}) {
       focusModeEnabled: false,
       updateSettings,
       pomodoroMusicEnabled: options.music ?? false,
+      pomodoroMusicAutoStart: options.autoStart ?? true,
     })
   );
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
@@ -135,7 +142,7 @@ describe('PomodoroTimer - sounds', () => {
   it('takes them over once this tab wins the election', () => {
     // Leadership is won asynchronously, so every tab's first render is a non-leader render — the
     // effect has to re-run on the flip or no tab ever drives sounds.
-    const soundsActions = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn() };
+    const soundsActions = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), stopHere: vi.fn() };
     const playing = {
       music: true,
       activeSource: 'youtube',
@@ -179,6 +186,24 @@ describe('PomodoroTimer - sounds', () => {
 
     expect(soundsState.resume).not.toHaveBeenCalled();
     expect(soundsState.stop).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    true,
+    false,
+  ])('stops what this tab plays on leaving mid-session, with auto-start %s', (autoStart) => {
+    const { soundsState } = mockStores({
+      music: true,
+      autoStart,
+      activeSource: 'ambient',
+      status: 'running',
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
+    expect(soundsState.stopHere).not.toHaveBeenCalled();
+    unmount();
+
+    expect(soundsState.stopHere).toHaveBeenCalled();
   });
 });
 
