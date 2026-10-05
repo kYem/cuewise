@@ -1,0 +1,35 @@
+---
+interface Props {
+  faqs: { q: string; a: string }[];
+}
+
+const { faqs } = Astro.props;
+
+const faqJsonLd = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+}).replace(/</g, '\\u003c');
+---
+
+<script type="application/ld+json" set:html={faqJsonLd} />
+<section class="section-pad" style="padding-top:0;" id="faq">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="kicker">FAQ</p>
+      <h2 class="section-title">Common questions</h2>
+    </div>
+    {faqs.map(({ q, a }) => (
+      <details class="faq-item glass reveal">
+        <summary>{q}</summary>
+        <div class="faq-body">
+          <p>{a}</p>
+        </div>
+      </details>
+    ))}
+  </div>
+</section>
