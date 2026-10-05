@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import type { SyncMutationMessage } from './sync-messages';
+import { isSyncMutationMark, type SyncMutationAck, type SyncMutationMark } from './sync-messages';
 
 /**
  * Structural subset of SyncEngine the router needs. Unlike SyncMutationSink,
@@ -18,50 +18,84 @@ function hasMutationKind(msg: unknown): msg is Record<string, unknown> {
   return (msg as Record<string, unknown>).kind === 'cuewise-sync-mutation';
 }
 
-function isSyncMutationMessage(msg: unknown): msg is SyncMutationMessage {
-  const candidate = msg as Record<string, unknown>;
-  if (candidate.op !== 'mutated' && candidate.op !== 'deleted' && candidate.op !== 'mutatedBulk') {
-    return false;
+/** Routes a page-relayed batch of marks to the SyncEngine and acks once the ledger writes settle;
+ * undefined for another channel's message (e.g. sync-control), so its own listener replies. */
+export function handleSyncMessage(
+  engine: SyncMessageEngine,
+  msg: unknown
+): Promise<SyncMutationAck> | undefined {
+  if (!hasMutationKind(msg)) {
+    return undefined;
   }
-  return typeof candidate.collection === 'string';
+  return recordMarks(engine, msg.marks);
 }
 
-/**
- * Routes a page-relayed sync-mutation message (ENG-45 option B) to the background's
- * SyncEngine. A message on a different channel (e.g. sync-control) is silently ignored;
- * only a message that claims the mutation kind but has a bad op/collection shape warns.
- */
-export function handleSyncMessage(engine: SyncMessageEngine, msg: unknown): void {
-  if (!hasMutationKind(msg)) {
-    return;
+// In order, stopping at the first failure: the page resends the whole batch, and re-marking
+// the ones that landed only restamps them.
+async function recordMarks(engine: SyncMessageEngine, marks: unknown): Promise<SyncMutationAck> {
+  if (!Array.isArray(marks)) {
+    logger.warn('Ignoring sync-mutation message without marks', { received: typeof marks });
+    return { ok: false, reason: 'malformed' };
   }
-  if (!isSyncMutationMessage(msg)) {
-    logger.warn('Ignoring malformed sync-mutation message', { received: typeof msg });
-    return;
-  }
-
-  if (msg.op === 'mutatedBulk') {
-    if (msg.entityIds === undefined) {
-      logger.warn('Ignoring sync-mutation message: mutatedBulk missing entityIds', {
-        collection: msg.collection,
+  for (const mark of coalesce(marks.filter(isRecordable))) {
+    try {
+      await recordMark(engine, mark);
+    } catch (error) {
+      logger.error('Failed to record a relayed sync mutation', {
+        op: mark.op,
+        collection: mark.collection,
+        error,
       });
-      return;
+      return { ok: false, reason: 'error' };
     }
-    void engine.markMutatedBulk(msg.collection, msg.entityIds);
-    return;
   }
+  return { ok: true };
+}
 
-  if (msg.entityId === undefined) {
-    logger.warn('Ignoring sync-mutation message: missing entityId', {
-      op: msg.op,
-      collection: msg.collection,
-    });
-    return;
+function isRecordable(mark: unknown): mark is SyncMutationMark {
+  if (isSyncMutationMark(mark)) {
+    return true;
   }
+  logger.warn('Ignoring malformed sync-mutation mark', { mark });
+  return false;
+}
 
-  if (msg.op === 'mutated') {
-    void engine.markMutated(msg.collection, msg.entityId);
-  } else {
-    void engine.markDeleted(msg.collection, msg.entityId);
+function mutatedIds(mark: SyncMutationMark): string[] | undefined {
+  if (mark.op === 'mutatedBulk') {
+    return mark.entityIds;
   }
+  if (mark.op === 'mutated') {
+    return [mark.entityId];
+  }
+  return undefined;
+}
+
+// A run of edits to one collection becomes one bulk mark: one ledger write instead of one per edit.
+function coalesce(marks: SyncMutationMark[]): SyncMutationMark[] {
+  const merged: SyncMutationMark[] = [];
+  for (const mark of marks) {
+    const last = merged.at(-1);
+    const ids = mutatedIds(mark);
+    const lastIds = last === undefined ? undefined : mutatedIds(last);
+    if (ids !== undefined && lastIds !== undefined && last?.collection === mark.collection) {
+      merged[merged.length - 1] = {
+        op: 'mutatedBulk',
+        collection: mark.collection,
+        entityIds: [...lastIds, ...ids],
+      };
+      continue;
+    }
+    merged.push(mark);
+  }
+  return merged;
+}
+
+function recordMark(engine: SyncMessageEngine, mark: SyncMutationMark): Promise<void> | void {
+  if (mark.op === 'mutatedBulk') {
+    return engine.markMutatedBulk(mark.collection, mark.entityIds);
+  }
+  if (mark.op === 'mutated') {
+    return engine.markMutated(mark.collection, mark.entityId);
+  }
+  return engine.markDeleted(mark.collection, mark.entityId);
 }

@@ -1,5 +1,5 @@
 import { logger } from '@cuewise/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSyncMessage, type SyncMessageEngine } from './handle-sync-message';
 
 function fakeEngine(): SyncMessageEngine {
@@ -10,131 +10,129 @@ function fakeEngine(): SyncMessageEngine {
   };
 }
 
+function batch(...marks: unknown[]) {
+  return { kind: 'cuewise-sync-mutation', marks };
+}
+
+const MUTATED_GOAL = { op: 'mutated', collection: 'goals', entityId: 'g1' };
+const DELETED_GOAL = { op: 'deleted', collection: 'goals', entityId: 'g1' };
+const MUTATED_QUOTES = { op: 'mutatedBulk', collection: 'quotes', entityIds: ['a', 'b'] };
+
 describe('handleSyncMessage', () => {
-  it('routes a mutated message to markMutated with the collection and entity id', () => {
-    const engine = fakeEngine();
+  beforeEach(() => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+  });
 
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'mutated',
-      collection: 'goals',
-      entityId: 'g1',
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('routes each mark to the matching engine call, in order', async () => {
+    const engine = fakeEngine();
+    const calls: string[] = [];
+    vi.mocked(engine.markMutated).mockImplementation(() => {
+      calls.push('mutated');
+    });
+    vi.mocked(engine.markDeleted).mockImplementation(() => {
+      calls.push('deleted');
+    });
+    vi.mocked(engine.markMutatedBulk).mockImplementation(() => {
+      calls.push('mutatedBulk');
     });
 
+    await handleSyncMessage(engine, batch(MUTATED_GOAL, MUTATED_QUOTES, DELETED_GOAL));
+
+    expect(calls).toEqual(['mutated', 'mutatedBulk', 'deleted']);
     expect(engine.markMutated).toHaveBeenCalledWith('goals', 'g1');
-    expect(engine.markDeleted).not.toHaveBeenCalled();
-    expect(engine.markMutatedBulk).not.toHaveBeenCalled();
-  });
-
-  it('routes a deleted message to markDeleted with the collection and entity id', () => {
-    const engine = fakeEngine();
-
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'deleted',
-      collection: 'goals',
-      entityId: 'g1',
-    });
-
-    expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
-    expect(engine.markMutated).not.toHaveBeenCalled();
-  });
-
-  it('routes a mutatedBulk message to markMutatedBulk with the collection and entity ids', () => {
-    const engine = fakeEngine();
-
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'mutatedBulk',
-      collection: 'quotes',
-      entityIds: ['a', 'b'],
-    });
-
     expect(engine.markMutatedBulk).toHaveBeenCalledWith('quotes', ['a', 'b']);
+    expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
   });
 
-  it('silently ignores a message with a different kind (e.g. sync-control) and never calls the engine', () => {
+  it('merges a run of edits to one collection into one bulk write, keeping deletes in place', async () => {
     const engine = fakeEngine();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-    handleSyncMessage(engine, { kind: 'cuewise-sync-control', op: 'enable' });
+    await handleSyncMessage(
+      engine,
+      batch(
+        MUTATED_GOAL,
+        { op: 'mutatedBulk', collection: 'goals', entityIds: ['g2', 'g3'] },
+        DELETED_GOAL,
+        { op: 'mutated', collection: 'goals', entityId: 'g4' }
+      )
+    );
 
-    expect(engine.markMutated).not.toHaveBeenCalled();
-    expect(engine.markDeleted).not.toHaveBeenCalled();
-    expect(engine.markMutatedBulk).not.toHaveBeenCalled();
-    expect(warnSpy).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(engine.markMutatedBulk).toHaveBeenCalledExactlyOnceWith('goals', ['g1', 'g2', 'g3']);
+    expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
+    expect(engine.markMutated).toHaveBeenCalledExactlyOnceWith('goals', 'g4');
   });
 
-  it('warns on a genuinely malformed sync-mutation message (unrecognised op)', () => {
+  it('acks ok only once the ledger write resolves', async () => {
     const engine = fakeEngine();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    let finishWrite = () => {};
+    vi.mocked(engine.markMutated).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      })
+    );
+    let acked = false;
 
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'not-a-real-op',
-      collection: 'goals',
+    const ack = handleSyncMessage(engine, batch(MUTATED_GOAL))?.then((reply) => {
+      acked = true;
+      return reply;
     });
-
-    expect(engine.markMutated).not.toHaveBeenCalled();
-    expect(engine.markDeleted).not.toHaveBeenCalled();
-    expect(engine.markMutatedBulk).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
-  });
-
-  it('ignores a message missing collection and never calls the engine', () => {
-    const engine = fakeEngine();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-    handleSyncMessage(engine, { kind: 'cuewise-sync-mutation', op: 'mutated', entityId: 'g1' });
-
-    expect(engine.markMutated).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
-  });
-
-  it('ignores a mutated message missing entityId and never calls the engine', () => {
-    const engine = fakeEngine();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'mutated',
-      collection: 'goals',
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
     });
+    expect(acked).toBe(false);
 
-    expect(engine.markMutated).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    finishWrite();
+    await expect(ack).resolves.toEqual({ ok: true });
   });
 
-  it('ignores a mutatedBulk message missing entityIds and never calls the engine', () => {
+  it('acks an error and stops at the first ledger write that rejects', async () => {
     const engine = fakeEngine();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(engine.markMutated).mockRejectedValueOnce(new Error('QUOTA_BYTES quota exceeded'));
 
-    handleSyncMessage(engine, {
-      kind: 'cuewise-sync-mutation',
-      op: 'mutatedBulk',
-      collection: 'quotes',
-    });
+    const ack = handleSyncMessage(engine, batch(MUTATED_GOAL, DELETED_GOAL));
 
-    expect(engine.markMutatedBulk).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
-  });
-
-  it('silently ignores a non-object message (e.g. null or a primitive) and never calls the engine', () => {
-    const engine = fakeEngine();
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-    handleSyncMessage(engine, null);
-    handleSyncMessage(engine, 'not-a-message');
-
-    expect(engine.markMutated).not.toHaveBeenCalled();
+    await expect(ack).resolves.toEqual({ ok: false, reason: 'error' });
     expect(engine.markDeleted).not.toHaveBeenCalled();
+  });
+
+  it('acks malformed for a mutation message without a marks list', async () => {
+    await expect(
+      handleSyncMessage(fakeEngine(), { kind: 'cuewise-sync-mutation', op: 'mutated' })
+    ).resolves.toEqual({ ok: false, reason: 'malformed' });
+  });
+
+  it.each([
+    { op: 'not-a-real-op', collection: 'goals' },
+    { op: 'mutated', entityId: 'g1' },
+    { op: 'mutated', collection: 'goals' },
+    { op: 'mutatedBulk', collection: 'quotes' },
+    null,
+  ])('skips and warns on a malformed mark (%o) but records the rest', async (mark) => {
+    const engine = fakeEngine();
+
+    const ack = handleSyncMessage(engine, batch(mark, DELETED_GOAL));
+
+    await expect(ack).resolves.toEqual({ ok: true });
+    expect(engine.markMutated).not.toHaveBeenCalled();
     expect(engine.markMutatedBulk).not.toHaveBeenCalled();
-    expect(warnSpy).not.toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it.each([
+    { kind: 'cuewise-sync-control', op: 'enable' },
+    null,
+    'not-a-message',
+  ])('leaves another channel’s message (%o) to its own listener', (msg) => {
+    const engine = fakeEngine();
+
+    expect(handleSyncMessage(engine, msg)).toBeUndefined();
+    expect(engine.markMutated).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

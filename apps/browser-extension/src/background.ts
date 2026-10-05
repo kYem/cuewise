@@ -175,8 +175,16 @@ if (syncApiBaseUrl) {
   // service-worker realm is the single sync owner) instead of holding its own
   // SyncEngine. Writes made in this realm itself (captures, notification Done counts) reach the
   // SW's own sink, which createSyncEngine registered.
-  chrome.runtime.onMessage.addListener((msg) => {
-    handleSyncMessage(syncEngine, msg);
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    const ack = handleSyncMessage(syncEngine, msg);
+    if (ack === undefined) {
+      return false;
+    }
+    ack.then(sendResponse).catch((error: unknown) => {
+      // The tab closed before the reply, so there is no one left to retry it.
+      logger.debug('Could not answer a sync mutation on a torn-down port', { error });
+    });
+    return true;
   });
 
   // ENG-45 Task 10: the page-realm enable-sync UI control channel. Ignores non-control
