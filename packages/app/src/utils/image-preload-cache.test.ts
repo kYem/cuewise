@@ -278,6 +278,7 @@ describe('concurrent daily resolution', () => {
     await nature;
 
     expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
+    expect(mockSetDaily).not.toHaveBeenCalledWith('https://img/nature', 'nature');
   });
 
   it('does not let a finished resolve unregister a newer one still in flight', async () => {
@@ -433,6 +434,61 @@ describe('a refresh superseded by a category change', () => {
     await expect(refreshed).resolves.toBeNull();
     expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
     expect(mockSetDaily).not.toHaveBeenCalledWith('https://img/nature', 'nature');
+  });
+});
+
+describe('a category change while a refresh waits on the daily resolve', () => {
+  let releaseNature: (url: string) => void = () => undefined;
+  let releaseOcean: (url: string) => void = () => undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+    mockGetDaily.mockResolvedValue(null);
+    mockLoadFallback.mockImplementation(
+      (category: string) =>
+        new Promise<string>((resolve) => {
+          if (category === 'nature') {
+            releaseNature = resolve;
+          } else {
+            releaseOcean = resolve;
+          }
+        })
+    );
+  });
+
+  it('gives up the refresh so the new category still resolves', async () => {
+    const nature = preloadImages('nature');
+    await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(1));
+    const refreshed = refreshBackground('nature');
+    const ocean = preloadImages('ocean');
+    const seen = preloadImages('ocean').then(() => getPreloadedCurrentUrl('ocean'));
+    await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(2));
+    releaseNature('https://img/nature');
+    releaseOcean('https://img/ocean');
+    await Promise.all([nature, ocean]);
+
+    await expect(refreshed).resolves.toBeNull();
+    await expect(seen).resolves.toBe('https://img/ocean');
+    expect(mockLoadFallback).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the new category in the cache when it lands before the wait ends', async () => {
+    const nature = preloadImages('nature');
+    await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(1));
+    const refreshed = refreshBackground('nature');
+    const ocean = preloadImages('ocean');
+    await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(2));
+    releaseOcean('https://img/ocean');
+    await ocean;
+    releaseNature('https://img/nature');
+    await nature;
+
+    await expect(refreshed).resolves.toBeNull();
+    expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
+    expect(mockSetDaily).toHaveBeenLastCalledWith('https://img/ocean', 'ocean');
   });
 });
 

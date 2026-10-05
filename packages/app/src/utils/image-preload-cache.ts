@@ -24,6 +24,13 @@ export function getCustomBackgroundOverride(): string | null {
 }
 
 let inFlight: { category: FocusImageCategory; promise: Promise<ResolvedBackground> } | null = null;
+// Bumped on every claim, so a refresh can tell a newer caller took over while it waited.
+let claimCount = 0;
+
+function claim(category: FocusImageCategory, promise: Promise<ResolvedBackground>): void {
+  inFlight = { category, promise };
+  claimCount += 1;
+}
 
 /** The newest resolve owns the cache; an older one landing later must not write or unregister. */
 function ownsResolve(promise: Promise<ResolvedBackground>): boolean {
@@ -128,7 +135,7 @@ export async function preloadImages(category: FocusImageCategory): Promise<void>
   }
 
   const promise = resolveDailyBackground(category);
-  inFlight = { category, promise };
+  claim(category, promise);
   try {
     const { url, stillLoading, picked } = await promise;
     if (!ownsResolve(promise)) {
@@ -165,13 +172,18 @@ export async function refreshBackground(category: FocusImageCategory): Promise<s
 
   // Superseding a running resolve would leave its waiters reading an unwritten cache.
   if (inFlight !== null && inFlight.category === category) {
+    const claimsBeforeWait = claimCount;
     await inFlight.promise;
+    // A category change or custom image during the wait is newer intent than this click.
+    if (claimCount !== claimsBeforeWait || customOverride !== null) {
+      return null;
+    }
   }
 
   // Claimed like a daily resolve, so a concurrent preloadImages awaits it instead of
   // picking a rival, and a category change supersedes it.
   const promise = pickFreshBackground(category);
-  inFlight = { category, promise };
+  claim(category, promise);
   try {
     const { url } = await promise;
     // Superseded or failed: null tells App to leave the current background.
