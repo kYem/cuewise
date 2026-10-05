@@ -7,9 +7,14 @@ import {
   storedValue,
 } from '@cuewise/shared';
 
-/** Map-backed KeyValueStore for tests; writes and removes succeed unless told to fail. */
+/** Map-backed KeyValueStore for tests; reads, writes and removes succeed unless told to fail. */
 export function createInMemoryKeyValueStore(
-  opts: { failWrites?: boolean; failRemoves?: boolean; supportsSync?: boolean } = {}
+  opts: {
+    failReads?: boolean;
+    failWrites?: boolean;
+    failRemoves?: boolean;
+    supportsSync?: boolean;
+  } = {}
 ): KeyValueStore & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
 
@@ -43,7 +48,10 @@ export function createInMemoryKeyValueStore(
       data.delete(`${area}:${key}`);
       return true;
     },
-    async getMany(keys: string[], area: StorageArea): Promise<StoredValues> {
+    async getMany(keys: string[], area: StorageArea): Promise<StoredValues | null> {
+      if (opts.failReads === true) {
+        return null;
+      }
       const result: StoredValues = {};
       for (const key of keys) {
         const value = data.get(`${area}:${key}`);

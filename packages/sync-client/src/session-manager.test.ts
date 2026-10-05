@@ -4,6 +4,7 @@ import {
   createRecordingScheduler,
 } from './__fixtures__/ports.fixtures';
 import { SessionManager, SYNC_SESSION_KEY } from './session-manager';
+import { StorageReadError } from './storage-read-error';
 import { armSyncPull, SYNC_PULL_WAKE_ID } from './sync-schedule';
 
 describe('SessionManager', () => {
@@ -58,6 +59,14 @@ describe('SessionManager', () => {
 
     await manager.saveToken('session-token-123');
     expect(await manager.clear()).toBe(true);
+  });
+
+  it('refuses a failed read rather than reporting no token', async () => {
+    const store = createInMemoryKeyValueStore({ failReads: true });
+    store.data.set(`local:${SYNC_SESSION_KEY}`, 'session-token-123');
+    const manager = new SessionManager(store);
+
+    await expect(manager.getToken()).rejects.toBeInstanceOf(StorageReadError);
   });
 
   it('saveToken propagates a failed StorageResult to the caller', async () => {

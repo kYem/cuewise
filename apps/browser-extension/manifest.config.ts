@@ -1,5 +1,6 @@
 import { defineManifest } from '@crxjs/vite-plugin';
 import { loadEnv } from 'vite';
+import { devHostPermissions } from './manifest/dev-host-permissions';
 import pkg from './package.json';
 
 export default defineManifest(async (env) => {
@@ -39,9 +40,8 @@ export default defineManifest(async (env) => {
   // Cuewise API for dynamic content loading and YouTube proxy page
   const hostPermissions: string[] = ['https://images.unsplash.com/*', 'https://*.cuewise.app/*'];
 
-  // Add host_permissions for dev server in development mode only
   if (env.mode !== 'production') {
-    hostPermissions.push('http://localhost:5173/*');
+    hostPermissions.push(...devHostPermissions(viteEnv.VITE_SYNC_API_BASE_URL ?? ''));
   }
 
   // contextMenus/activeTab/scripting carry no install warning, so an update neither re-prompts nor

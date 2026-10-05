@@ -16,7 +16,7 @@ import {
   logger,
   type SyncRecord,
 } from '@cuewise/shared';
-import { ApiError } from '@cuewise/sync-client';
+import { ApiError, StorageReadError } from '@cuewise/sync-client';
 
 export const SYNC_DATA_KEY = 'syncDataKey';
 /** Every account key this device has set aside, by userId, so returning to one needs no code. */
@@ -106,7 +106,7 @@ function decodeDataKey(b64: string): DataKey {
 async function readSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | null> {
   const stored = await keyStore.getMany([key], 'local');
   if (stored === null) {
-    throw new Error(`could not read ${key}`);
+    throw new StorageReadError(key);
   }
   const entry = stored[key];
   if (entry === undefined) {
@@ -119,13 +119,13 @@ async function readSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | nu
 }
 
 /**
- * A parked or unbound slot that is stored but unreadable is logged and dropped: refusing would
- * block every sign-in, and nothing can read it back. A failed read still throws.
+ * A slot that is stored but unreadable is logged and dropped: refusing would block every sign-in,
+ * and nothing can read it back. A failed read still throws.
  */
-async function readSetAsideSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | null> {
+async function readDroppingUnreadable<T>(keyStore: KeyValueStore, key: string): Promise<T | null> {
   const stored = await keyStore.getMany([key], 'local');
   if (stored === null) {
-    throw new Error(`could not read ${key}`);
+    throw new StorageReadError(key);
   }
   const entry = stored[key];
   if (entry === undefined || entry.readable) {
@@ -155,11 +155,15 @@ export async function persistDataKey(
   await writeSlot(keyStore, SYNC_DATA_KEY, { keyId, dkB64: encodeDataKey(dk), userId });
 }
 
-/** Reads back what `initOrEnrollKey` persisted, for callers (e.g. `start()`) that need the DK directly. */
+/**
+ * Reads back what `initOrEnrollKey` persisted, for callers (e.g. `start()`) that need the DK
+ * directly. A failed read throws `StorageReadError`; an unreadable key is dropped, so the device
+ * asks for the recovery code and enrolling finds the slot free.
+ */
 export async function loadPersistedDataKey(
   keyStore: KeyValueStore
 ): Promise<{ dk: DataKey; keyId: string; userId?: string } | null> {
-  const persisted = await keyStore.get<PersistedDataKey>(SYNC_DATA_KEY, 'local');
+  const persisted = await readDroppingUnreadable<PersistedDataKey>(keyStore, SYNC_DATA_KEY);
   if (persisted === null) {
     return null;
   }
@@ -206,7 +210,8 @@ export async function setAsideDataKey(keyStore: KeyValueStore): Promise<SetAside
     logger.warn('Cloud sync set aside a data key with no account; a pulled record must prove it');
     await writeSlot(keyStore, SYNC_UNBOUND_DATA_KEY, key);
   } else {
-    const parked = (await readSetAsideSlot<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
+    const parked =
+      (await readDroppingUnreadable<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
     parked[userId] = key;
     await writeSlot(keyStore, SYNC_PARKED_DATA_KEYS, parked);
   }
@@ -252,7 +257,7 @@ async function restoreHeldKey(
   await setAsideDataKey(deps.keyStore);
 
   const parked =
-    (await readSetAsideSlot<ParkedDataKeys>(deps.keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
+    (await readDroppingUnreadable<ParkedDataKeys>(deps.keyStore, SYNC_PARKED_DATA_KEYS)) ?? {};
   const own = parked[userId];
   if (own !== undefined) {
     // Without `enabled`: the ledger is not this account's until this activation finishes again.
@@ -260,7 +265,7 @@ async function restoreHeldKey(
     return resolved(own, userId);
   }
 
-  const unbound = await readSetAsideSlot<StoredKey>(deps.keyStore, SYNC_UNBOUND_DATA_KEY);
+  const unbound = await readDroppingUnreadable<StoredKey>(deps.keyStore, SYNC_UNBOUND_DATA_KEY);
   if (unbound !== null && (await opensAccountRecords(deps.transport, unbound))) {
     const proven = { keyId: unbound.keyId, dkB64: unbound.dkB64 };
     await writeSlot(deps.keyStore, SYNC_DATA_KEY, { ...proven, userId });
@@ -396,9 +401,9 @@ export async function checkForLostDataKey(deps: KeyLifecycleDeps): Promise<LostK
 
 /** Whether this device keeps any key it set aside, whichever account it belongs to. */
 export async function holdsSetAsideKeys(keyStore: KeyValueStore): Promise<boolean> {
-  const parked = await readSetAsideSlot<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS);
+  const parked = await readDroppingUnreadable<ParkedDataKeys>(keyStore, SYNC_PARKED_DATA_KEYS);
   if (parked !== null && Object.keys(parked).length > 0) {
     return true;
   }
-  return (await readSetAsideSlot<StoredKey>(keyStore, SYNC_UNBOUND_DATA_KEY)) !== null;
+  return (await readDroppingUnreadable<StoredKey>(keyStore, SYNC_UNBOUND_DATA_KEY)) !== null;
 }

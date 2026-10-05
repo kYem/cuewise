@@ -161,6 +161,79 @@ describe('D1SyncStore records', () => {
     expect(countRow.count).toBe(2);
   });
 
+  it('lets an account at the cap update a record it already has', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota-update');
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b' }),
+      record({ entityId: 'c' }),
+    ]);
+
+    const { applied } = await store.applyChanges(userId, [
+      record({ entityId: 'a', ciphertext: 'edited' }),
+    ]);
+
+    expect(applied.map((r) => r.entityId)).toEqual(['a']);
+  });
+
+  it('lets an account at the cap delete a record it already has', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota-delete');
+    await store.applyChanges(userId, [
+      record({ entityId: 'a' }),
+      record({ entityId: 'b' }),
+      record({ entityId: 'c' }),
+    ]);
+
+    const { applied } = await store.applyChanges(userId, [
+      record({ entityId: 'b', deleted: true }),
+    ]);
+
+    expect(applied.map((r) => r.entityId)).toEqual(['b']);
+  });
+
+  it('counts only the new records in a push that mixes existing and new near the cap', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota-mixed');
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
+
+    const { applied } = await store.applyChanges(userId, [
+      record({ entityId: 'a', ciphertext: 'edited' }),
+      record({ entityId: 'b', ciphertext: 'edited' }),
+      record({ entityId: 'c' }),
+    ]);
+
+    expect(applied).toHaveLength(3);
+  });
+
+  it('still refuses a mixed push whose new records would pass the cap', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota-mixed-over');
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
+
+    await expect(
+      store.applyChanges(userId, [
+        record({ entityId: 'a', ciphertext: 'edited' }),
+        record({ entityId: 'c' }),
+        record({ entityId: 'd' }),
+      ])
+    ).rejects.toBeInstanceOf(StorageQuotaExceededError);
+  });
+
+  it('counts an entity pushed twice in one batch once', async () => {
+    const store = cappedStore();
+    const userId = await newUser(store, 'u-quota-dup');
+    await store.applyChanges(userId, [record({ entityId: 'a' }), record({ entityId: 'b' })]);
+
+    const { applied } = await store.applyChanges(userId, [
+      record({ entityId: 'c' }),
+      record({ entityId: 'c', ciphertext: 'again' }),
+    ]);
+
+    expect(applied.map((r) => r.entityId)).toEqual(['c', 'c']);
+  });
+
   it('purgeTombstones deletes only tombstones older than the retention window, keeping live rows', async () => {
     const retention = 100_000;
     const { store, tick } = clockedStore(1_000);

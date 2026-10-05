@@ -2,7 +2,10 @@ import { logger } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { problemResponse, stubFetch } from './__fixtures__/fetch.fixtures';
 import { wire } from './__fixtures__/pairing.fixtures';
+import { createInMemoryKeyValueStore } from './__fixtures__/ports.fixtures';
 import { ApiClient } from './api-client';
+import { SessionManager } from './session-manager';
+import { StorageReadError } from './storage-read-error';
 import type { PushRecord } from './types';
 
 const BASE_URL = 'https://api.cuewise.app';
@@ -33,6 +36,19 @@ describe('ApiClient', () => {
     expect(calls[0].init.method).toBe('GET');
     const headers = new Headers(calls[0].init.headers);
     expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('sends nothing when the session token could not be read', async () => {
+    const { fetchFn, calls } = stubFetch([{ status: 200, body: { records: [], cursor: 0 } }]);
+    const session = new SessionManager(createInMemoryKeyValueStore({ failReads: true }));
+    const client = new ApiClient({
+      baseUrl: BASE_URL,
+      getToken: () => session.getToken(),
+      fetchFn,
+    });
+
+    await expect(client.getChanges(0)).rejects.toBeInstanceOf(StorageReadError);
+    expect(calls).toHaveLength(0);
   });
 
   it('marks a page of a listing from 0 so the server serves it past the purge watermark', async () => {
