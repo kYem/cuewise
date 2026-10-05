@@ -2817,6 +2817,25 @@ describe('SyncEngine.start / stop', () => {
     expect(await device.kv.get(SYNC_SESSION_KEY, 'local')).not.toBeNull();
   });
 
+  it('asks for the recovery code over a data key it cannot decode, and enrolls with it', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const recoveryCode = device.onRecoveryCode.mock.calls[0][0] as string;
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.unreadableKey = SYNC_DATA_KEY;
+    const restarted = restart(device);
+
+    await restarted.start();
+    expect(restarted.getStatus()).toBe('needs_enroll');
+
+    device.kv.unreadableKey = null;
+    await restarted.resumeEnrollWithCode(recoveryCode);
+
+    expect(restarted.getStatus()).toBe('active');
+  });
+
   it('stops polling a keyless device, since only a recovery code can change its state', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
