@@ -16,7 +16,7 @@ import {
   logger,
   type SyncRecord,
 } from '@cuewise/shared';
-import { ApiError } from '@cuewise/sync-client';
+import { ApiError, StorageReadError } from '@cuewise/sync-client';
 
 export const SYNC_DATA_KEY = 'syncDataKey';
 /** Every account key this device has set aside, by userId, so returning to one needs no code. */
@@ -106,7 +106,7 @@ function decodeDataKey(b64: string): DataKey {
 async function readSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | null> {
   const stored = await keyStore.getMany([key], 'local');
   if (stored === null) {
-    throw new Error(`could not read ${key}`);
+    throw new StorageReadError(key);
   }
   const entry = stored[key];
   if (entry === undefined) {
@@ -125,7 +125,7 @@ async function readSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | nu
 async function readSetAsideSlot<T>(keyStore: KeyValueStore, key: string): Promise<T | null> {
   const stored = await keyStore.getMany([key], 'local');
   if (stored === null) {
-    throw new Error(`could not read ${key}`);
+    throw new StorageReadError(key);
   }
   const entry = stored[key];
   if (entry === undefined || entry.readable) {
@@ -155,11 +155,14 @@ export async function persistDataKey(
   await writeSlot(keyStore, SYNC_DATA_KEY, { keyId, dkB64: encodeDataKey(dk), userId });
 }
 
-/** Reads back what `initOrEnrollKey` persisted, for callers (e.g. `start()`) that need the DK directly. */
+/**
+ * Reads back what `initOrEnrollKey` persisted, for callers (e.g. `start()`) that need the DK
+ * directly. Null only when no key is stored; a failed read throws `StorageReadError`.
+ */
 export async function loadPersistedDataKey(
   keyStore: KeyValueStore
 ): Promise<{ dk: DataKey; keyId: string; userId?: string } | null> {
-  const persisted = await keyStore.get<PersistedDataKey>(SYNC_DATA_KEY, 'local');
+  const persisted = await readSlot<PersistedDataKey>(keyStore, SYNC_DATA_KEY);
   if (persisted === null) {
     return null;
   }

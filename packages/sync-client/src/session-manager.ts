@@ -1,4 +1,5 @@
 import type { KeyValueStore, StorageResult } from '@cuewise/shared';
+import { StorageReadError } from './storage-read-error';
 
 export const SYNC_SESSION_KEY = 'syncSession';
 
@@ -9,8 +10,17 @@ export const SYNC_SESSION_KEY = 'syncSession';
 export class SessionManager {
   constructor(private store: KeyValueStore) {}
 
+  /** Null only when no token is stored; a failed read throws, or its 401 would end a live session. */
   async getToken(): Promise<string | null> {
-    return this.store.get<string>(SYNC_SESSION_KEY, 'local');
+    const stored = await this.store.getMany([SYNC_SESSION_KEY], 'local');
+    if (stored === null) {
+      throw new StorageReadError(SYNC_SESSION_KEY);
+    }
+    const entry = stored[SYNC_SESSION_KEY];
+    if (entry === undefined || !entry.readable) {
+      return null;
+    }
+    return entry.value as string;
   }
 
   async isSignedIn(): Promise<boolean> {

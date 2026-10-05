@@ -10,6 +10,7 @@ import { getGoals, setGoals } from '@cuewise/storage';
 import {
   ApiError,
   SessionManager,
+  StorageReadError,
   SYNC_PULL_WAKE_ID,
   SYNC_SESSION_KEY,
 } from '@cuewise/sync-client';
@@ -1320,6 +1321,22 @@ describe('SyncEngine.syncNow', () => {
       expect(outcome.error).toBe(serverError);
     }
     expect(device.engine.getLastSyncedAt()).toBe(5_000);
+  });
+
+  it('reports a session that could not be read as a device failure, keeping the session', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(device.apiClient, 'getChanges').mockRejectedValue(
+      new StorageReadError(SYNC_SESSION_KEY)
+    );
+
+    const outcome = await device.engine.syncNow();
+
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'device' });
+    expect(device.engine.getStatus()).toBe('active');
+    expect(await device.kv.get(SYNC_SESSION_KEY, 'local')).not.toBeNull();
   });
 
   it('reports a pull that stopped on a failed local write as a device failure, without stamping', async () => {
@@ -2781,8 +2798,23 @@ describe('SyncEngine.start / stop', () => {
 
     expect(restarted.getStatus()).toBe('needs_enroll');
     expect(errorSpy).toHaveBeenCalledWith(
-      "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
+      "Cloud sync is enabled but this device's data key is gone; it will not sync until it reconnects"
     );
+  });
+
+  it('reports a data key it could not read as an error, not a lost key', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.failGetManyForKey = SYNC_DATA_KEY;
+    const restarted = restart(device);
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('error');
+    expect(await device.kv.get(SYNC_SESSION_KEY, 'local')).not.toBeNull();
   });
 
   it('stops polling a keyless device, since only a recovery code can change its state', async () => {
@@ -2852,14 +2884,15 @@ describe('SyncEngine.start / stop', () => {
     // Self-heal reads the key first and finds it; the disable then lands in loadPersistedDataKey's
     // own read, so start() resumes to find the key gone with a matching epoch unless it re-checks.
     let selfHealDone = false;
-    const realGet = device.kv.get.bind(device.kv);
-    vi.spyOn(device.kv, 'get').mockImplementation(async (key, area) => {
-      if (key === SYNC_DATA_KEY && selfHealDone) {
+    const realGetMany = device.kv.getMany.bind(device.kv);
+    vi.spyOn(device.kv, 'getMany').mockImplementation(async (keys, area) => {
+      const readsKey = keys.includes(SYNC_DATA_KEY);
+      if (readsKey && selfHealDone) {
         await restarted.disableSync();
-        return realGet(key, area);
+        return realGetMany(keys, area);
       }
-      const value = await realGet(key, area);
-      if (key === SYNC_DATA_KEY) {
+      const value = await realGetMany(keys, area);
+      if (readsKey) {
         selfHealDone = true;
       }
       return value;

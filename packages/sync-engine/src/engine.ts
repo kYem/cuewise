@@ -1628,7 +1628,19 @@ export class SyncEngine {
       logger.error(`Cloud sync could not check its data key: ${describeThrown(err)}`, err);
     }
 
-    const persisted = await loadPersistedDataKey(this.deps.keyStore);
+    let persisted: Awaited<ReturnType<typeof loadPersistedDataKey>>;
+    try {
+      persisted = await loadPersistedDataKey(this.deps.keyStore);
+    } catch (err) {
+      if (this.startSuperseded(epoch)) {
+        await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'was disabled while starting');
+        return;
+      }
+      // A device fault, not a lost key: asking for the recovery code would be wrong.
+      logger.error(`Cloud sync could not read its data key: ${describeThrown(err)}`, err);
+      this.setStatus('error');
+      return;
+    }
     if (this.startSuperseded(epoch)) {
       // checkForLostDataKey may have restored a set-aside key after the disable removed it.
       await this.rollbackKey(SYNC_DATA_KEY, 'its data key', 'was disabled while starting');
@@ -1652,10 +1664,9 @@ export class SyncEngine {
     }
     if (persisted === null) {
       // The enabled flag outlived the key, so nothing syncs and every later wake is a no-op that
-      // re-arms itself. "could not be read" rather than "is gone": a transient read failure lands
-      // here too, and the adapter reports both as null.
+      // re-arms itself. A failed read never lands here; it is caught above.
       logger.error(
-        "Cloud sync is enabled but this device's data key could not be read; it will not sync until it reconnects"
+        "Cloud sync is enabled but this device's data key is gone; it will not sync until it reconnects"
       );
       // Not signed_out: the session may be fine, so the UI must ask for the recovery code.
       this.setStatus('needs_enroll');
