@@ -27,6 +27,7 @@ const rows: ComparisonRow[] = [
     aspect: 'Backgrounds',
     them: 'Unsplash, GIPHY, your own images, colours and gradients',
     us: 'Curated daily photos, your own image, swap any time',
+    winner: 'them',
   },
   {
     aspect: 'Widgets',
@@ -48,7 +49,7 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Focus timer',
-    them: 'None (a work-hours countdown)',
+    them: 'Work-hours countdown only',
     us: 'Full Pomodoro with history and heatmaps',
     winner: 'us',
   },
@@ -108,7 +109,7 @@ const faqs = [
 
 <Base
   title="Cuewise vs Tabliss — a maintained Tabliss alternative (2026)"
-  description="Tabliss hasn't been updated since 2022. Compare it with Cuewise: goals, Pomodoro, reminders, insights and working quotes — free and open source."
+  description="Tabliss's store builds date from 2022. Compare it with Cuewise: goals, Pomodoro, reminders, insights and working quotes — free and open source."
 >
   <main>
 
@@ -124,8 +125,8 @@ const faqs = [
         </div>
         <h1>Cuewise vs Tabliss</h1>
         <p class="hero-sub">
-          Tabliss was the classic free new tab for years — and it still runs. But it hasn't had an update since 2022,
-          and parts of it have quietly stopped working. Here's how it compares with Cuewise in 2026.
+          Tabliss was the classic free new tab for years — and it still runs. But its store builds haven't changed since 2022,
+          and parts of it have stopped working. Here's how it compares with Cuewise in 2026.
         </p>
         <div class="hero-cta">
           <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
@@ -181,8 +182,7 @@ const faqs = [
           <p>
             <strong>A light touch.</strong> Tabliss asks for a single permission, storage, which Chrome installs without a
             warning. Cuewise also asks for notifications and alarms (for reminders and the timer), access to Unsplash and cuewise.app
-            (for photos and weather), and page access when you save
-            a selection — reasonable for what it does, but more than Tabliss needs.
+            (for photos and weather), and a context-menu entry with page access for saving a selection — reasonable for what it does, but more than Tabliss needs.
           </p>
           <p>
             <strong>Reach.</strong> Tabliss runs on Firefox — where it's still a Recommended extension — as well as Chrome, Edge
@@ -203,8 +203,7 @@ const faqs = [
           <p>
             Mostly because things stop working and nothing changes. Tabliss's quote categories came from a third-party API that
             went paid, so most of them no longer load. Some Unsplash topics it offered were retired, so those backgrounds come
-            back random. These are small breaks, but they've been reported and left open — that's what dormant software looks
-            like.
+            back random. These are small breaks, but they've been reported and left open.
           </p>
           <p>
             The other reason is wanting more from the new tab. Cuewise keeps the calm — a photo, a quote, the time — and adds a

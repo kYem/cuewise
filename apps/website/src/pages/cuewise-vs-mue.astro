@@ -72,7 +72,12 @@ const rows: ComparisonRow[] = [
     us: 'Google Calendar agenda (read-only, optional)',
     winner: 'us',
   },
-  { aspect: 'Sync', them: 'None', us: 'Optional end-to-end encrypted cloud sync', winner: 'us' },
+  {
+    aspect: 'Sync',
+    them: 'Settings file export only',
+    us: 'Optional end-to-end encrypted cloud sync',
+    winner: 'us',
+  },
   {
     aspect: 'Permissions at install',
     them: 'Search only',
@@ -81,7 +86,7 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Crash reports',
-    them: 'Sent to Sentry',
+    them: 'Sent to Sentry unless offline mode is on',
     us: 'None sent',
     winner: 'us',
   },
@@ -94,7 +99,7 @@ const faqs = [
   },
   {
     q: 'Is Mue still maintained?',
-    a: 'Yes, in bursts. It shipped 7.6.0 in January 2026 and 7.6.1 on GitHub in April, and an 8.0 branch is in progress. Its Edge build lags behind — it is still on 7.1.1 from June 2024.',
+    a: 'Yes. It shipped 7.6.0 in January 2026 and 7.6.1 on GitHub in April 2026. Its Edge build is still on 7.1.1 from June 2024.',
   },
   {
     q: 'Does Mue collect any data?',
@@ -150,7 +155,7 @@ const faqs = [
               <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             </div>
             <h3>Cuewise: the productivity side</h3>
-            <p>A full Pomodoro, goals with history, reminders and insights — Momentum's productivity side, much of it behind Plus, free.</p>
+            <p>A full Pomodoro, goals with history, reminders and insights — Momentum's productivity side, much of which needs Plus there, free here.</p>
           </div>
 
           <div class="feat glass reveal">
@@ -191,8 +196,8 @@ const faqs = [
           <p>
             <strong>A lighter footprint.</strong> On Chrome, Mue asks only for the search permission. Cuewise also asks for
             storage, notifications and alarms (for reminders and the timer), access to Unsplash and cuewise.app (for photos
-            and weather), and page access when you save a selection. Mue also
-            has an offline mode that blocks every outside request.
+            and weather), and a context-menu entry with page access for saving a selection. Mue
+            also has an offline mode that blocks every outside request.
           </p>
         </div>
       </div>
@@ -203,15 +208,15 @@ const faqs = [
         <div class="content-card glass reveal">
           <h2>Why pick Cuewise instead</h2>
           <p>
-            Mue copies what Momentum looks like; Cuewise rebuilds its productivity side. Mue has no focus timer, and its
-            stats are a count of tabs opened. Cuewise has a full Pomodoro with session history, and Insights turns it into
+            Mue recreates Momentum's look; Cuewise rebuilds its productivity side. Mue has no focus timer, and its
+            stats are a tab counter and achievements. Cuewise has a full Pomodoro with session history, and Insights turns it into
             focus trends and a heatmap of the hours and weekdays you focus most.
           </p>
           <p>
             Around that sit the tools that make a new tab a habit: Today's Focus, where unfinished goals carry forward instead
             of disappearing; reminders that repeat on your schedule; spaced-repetition cards for what you're learning; ambient
             sounds and focus music; and a read-only Google Calendar agenda. And if you use more than one computer, Cuewise's
-            optional sync is end-to-end encrypted — Mue has no sync at all.
+            optional sync is end-to-end encrypted — Mue offers a settings file you export and import by hand.
           </p>
           <p>
             Also weighing <a href="/cuewise-vs-bonjourr/">Bonjourr</a> or <a href="/cuewise-vs-tabliss/">Tabliss</a>? See the
