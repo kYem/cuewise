@@ -163,8 +163,13 @@ export async function refreshBackground(category: FocusImageCategory): Promise<s
     return null;
   }
 
-  // Claimed like a daily resolve, so an older one landing later cannot overwrite this pick
-  // and a concurrent preloadImages awaits it instead of picking a rival.
+  // Superseding a running resolve would leave its waiters reading an unwritten cache.
+  if (inFlight !== null && inFlight.category === category) {
+    await inFlight.promise;
+  }
+
+  // Claimed like a daily resolve, so a concurrent preloadImages awaits it instead of
+  // picking a rival, and a category change supersedes it.
   const promise = pickFreshBackground(category);
   inFlight = { category, promise };
   try {

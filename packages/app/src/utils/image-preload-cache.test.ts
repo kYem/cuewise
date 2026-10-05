@@ -324,26 +324,115 @@ describe('a refresh racing a daily resolve', () => {
       .mockResolvedValueOnce('https://img/refreshed');
   });
 
-  it('keeps the refreshed photo when the older resolve lands last', async () => {
+  it('keeps the refreshed photo when the daily resolve lands after the click', async () => {
     const daily = preloadImages('nature');
     await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(1));
-    const refreshed = await refreshBackground('nature');
+    const refreshed = refreshBackground('nature');
     releaseDaily('https://img/daily');
     await daily;
 
-    expect(refreshed).toBe('https://img/refreshed');
+    await expect(refreshed).resolves.toBe('https://img/refreshed');
     expect(getPreloadedCurrentUrl('nature')).toBe('https://img/refreshed');
   });
 
-  it('does not persist the superseded pick over the refreshed one', async () => {
+  it('persists the refreshed pick last, so the next tab opens on it', async () => {
     const daily = preloadImages('nature');
     await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(1));
-    await refreshBackground('nature');
+    const refreshed = refreshBackground('nature');
     releaseDaily('https://img/daily');
-    await daily;
+    await Promise.all([daily, refreshed]);
 
-    expect(mockSetDaily).toHaveBeenCalledTimes(1);
-    expect(mockSetDaily).toHaveBeenCalledWith('https://img/refreshed', 'nature');
+    expect(mockSetDaily).toHaveBeenLastCalledWith('https://img/refreshed', 'nature');
+  });
+});
+
+describe('a refresh clicked while callers wait on the daily resolve', () => {
+  let releaseDaily: (url: string) => void = () => undefined;
+  let releaseRefresh: (url: string) => void = () => undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+    mockGetDaily.mockResolvedValue(null);
+    mockLoadFallback
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            releaseDaily = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            releaseRefresh = resolve;
+          })
+      );
+  });
+
+  it('gives the waiting caller the daily photo while the refresh is still loading', async () => {
+    const daily = preloadImages('nature');
+    await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(1));
+    const seen = preloadImages('nature').then(() => getPreloadedCurrentUrl('nature'));
+    const refreshed = refreshBackground('nature');
+    releaseDaily('https://img/daily');
+
+    await expect(seen).resolves.toBe('https://img/daily');
+    await vi.waitFor(() => expect(mockLoadFallback).toHaveBeenCalledTimes(2));
+    releaseRefresh('https://img/refreshed');
+    await Promise.all([daily, refreshed]);
+  });
+});
+
+describe('a refresh that fails', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    mockSetDaily.mockResolvedValue({ success: true });
+    mockGetDaily.mockResolvedValue(null);
+    mockLoadFallback
+      .mockRejectedValueOnce(new Error('all failed'))
+      .mockResolvedValueOnce('https://img/daily');
+  });
+
+  it('frees the slot so the next daily resolve runs', async () => {
+    await refreshBackground('nature');
+    await preloadImages('nature');
+
+    expect(getPreloadedCurrentUrl('nature')).toBe('https://img/daily');
+  });
+});
+
+describe('a refresh superseded by a category change', () => {
+  let releaseRefresh: (url: string) => void = () => undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearPreloadCache();
+    setCustomBackgroundOverride(null);
+    mockSetDaily.mockResolvedValue({ success: true });
+    mockGetDaily.mockResolvedValue(null);
+    mockLoadFallback.mockImplementation((category: string) => {
+      if (category === 'nature') {
+        return new Promise<string>((resolve) => {
+          releaseRefresh = resolve;
+        });
+      }
+      return Promise.resolve('https://img/ocean');
+    });
+  });
+
+  it('returns null and leaves the newer category in the cache and storage', async () => {
+    const refreshed = refreshBackground('nature');
+    await preloadImages('ocean');
+    releaseRefresh('https://img/nature');
+
+    await expect(refreshed).resolves.toBeNull();
+    expect(getPreloadedCurrentUrl('ocean')).toBe('https://img/ocean');
+    expect(mockSetDaily).not.toHaveBeenCalledWith('https://img/nature', 'nature');
   });
 });
 
@@ -383,12 +472,13 @@ describe('two refreshes in quick succession', () => {
       .mockResolvedValueOnce('https://img/second');
   });
 
-  it('returns null for the superseded one so the screen keeps the newer photo', async () => {
+  it('runs them in order, so the later click ends up on screen', async () => {
     const first = refreshBackground('nature');
-    await refreshBackground('nature');
+    const second = refreshBackground('nature');
     releaseFirst('https://img/first');
 
-    await expect(first).resolves.toBeNull();
+    await expect(first).resolves.toBe('https://img/first');
+    await expect(second).resolves.toBe('https://img/second');
     expect(getPreloadedCurrentUrl('nature')).toBe('https://img/second');
   });
 });
