@@ -72,6 +72,8 @@ interface SoundsStore {
   pause: () => void;
   resume: () => void;
   stop: () => void;
+  /** Stops only audio this tab is playing, so a tab that isn't sounding can't silence another. */
+  stopHere: () => void;
   togglePlayPause: () => void;
 
   // Volume controls
@@ -401,6 +403,17 @@ export const useSoundsStore = create<SoundsStore>()(
           isPaused: false,
           isYoutubeLoading: false,
         });
+      },
+
+      stopHere: () => {
+        const { activeSource, isLeader, isPlaying } = get();
+        const ambientHere = activeSource === 'ambient' && ambientSoundPlayer.getIsPlaying();
+        const youtubeHere = activeSource === 'youtube' && isLeader;
+        // Gated on the store too: the player still reports playing through a fade-out, and a
+        // second stop() then cuts off the next sound.
+        if (isPlaying && (ambientHere || youtubeHere)) {
+          get().stop();
+        }
       },
 
       togglePlayPause: () => {

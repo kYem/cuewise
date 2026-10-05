@@ -178,6 +178,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
   const pauseSounds = useSoundsStore((state) => state.pause);
   const resumeSounds = useSoundsStore((state) => state.resume);
   const stopSounds = useSoundsStore((state) => state.stop);
+  const stopSoundsHere = useSoundsStore((state) => state.stopHere);
   const initSounds = useSoundsStore((state) => state.initialize);
   const getActiveSourceName = useSoundsStore((state) => state.getActiveSourceName);
 
@@ -204,6 +205,14 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
 
   // Enable cross-tab synchronization
   usePomodoroStorageSync();
+
+  // Must precede useSoundsLeader: cleanups run in order, and resigning first clears isLeader,
+  // so YouTube this tab holds would keep playing.
+  useEffect(() => {
+    return () => {
+      stopSoundsHere();
+    };
+  }, [stopSoundsHere]);
 
   // Timer leader election - only one tab/component runs the timer
   usePomodoroLeader();

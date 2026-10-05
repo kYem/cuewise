@@ -3,7 +3,9 @@ import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils
 import { completedGoalFactory, goalFactory } from '@cuewise/test-utils/factories';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { useEffect } from 'react';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -37,9 +39,10 @@ interface MockOptions {
   activeSource?: 'none' | 'ambient' | 'youtube';
   isSoundsLeader?: boolean;
   /** Passed in when a test re-mocks across a rerender and needs the same spies to survive it. */
-  soundsActions?: { pause: Mock; resume: Mock; stop: Mock };
+  soundsActions?: { pause: Mock; resume: Mock; stop: Mock; stopHere: Mock };
   /** The shared settings fixture disables music, which short-circuits the timer's sounds effect. */
   music?: boolean;
+  autoStart?: boolean;
 }
 
 function mockStores(options: MockOptions = {}) {
@@ -67,7 +70,12 @@ function mockStores(options: MockOptions = {}) {
     reloadSettings,
   };
   const goalState = { todayTasks: options.todayTasks ?? [], initialize: vi.fn() };
-  const soundsActions = options.soundsActions ?? { pause: vi.fn(), resume: vi.fn(), stop: vi.fn() };
+  const soundsActions = options.soundsActions ?? {
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+    stopHere: vi.fn(),
+  };
   const soundsState = {
     activeSource: options.activeSource ?? 'none',
     isPlaying: false,
@@ -85,6 +93,7 @@ function mockStores(options: MockOptions = {}) {
       focusModeEnabled: false,
       updateSettings,
       pomodoroMusicEnabled: options.music ?? false,
+      pomodoroMusicAutoStart: options.autoStart ?? true,
     })
   );
   vi.mocked(useSoundsStore).mockImplementation(createSelectorMock(soundsState));
@@ -95,6 +104,10 @@ function mockStores(options: MockOptions = {}) {
 describe('PomodoroTimer - sounds', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.mocked(useSoundsLeader).mockReset();
   });
 
   it('mounts the sounds storage sync', () => {
@@ -135,7 +148,7 @@ describe('PomodoroTimer - sounds', () => {
   it('takes them over once this tab wins the election', () => {
     // Leadership is won asynchronously, so every tab's first render is a non-leader render — the
     // effect has to re-run on the flip or no tab ever drives sounds.
-    const soundsActions = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn() };
+    const soundsActions = { pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), stopHere: vi.fn() };
     const playing = {
       music: true,
       activeSource: 'youtube',
@@ -179,6 +192,50 @@ describe('PomodoroTimer - sounds', () => {
 
     expect(soundsState.resume).not.toHaveBeenCalled();
     expect(soundsState.stop).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    true,
+    false,
+  ])('stops what this tab plays on leaving mid-session, with auto-start %s', (autoStart) => {
+    const { soundsState } = mockStores({
+      music: true,
+      autoStart,
+      activeSource: 'ambient',
+      status: 'running',
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
+    expect(soundsState.stopHere).not.toHaveBeenCalled();
+    unmount();
+
+    expect(soundsState.stopHere).toHaveBeenCalled();
+  });
+
+  it('stops this tab’s sound on leaving before it resigns the sounds lead', () => {
+    const order: string[] = [];
+    const stopHere = vi.fn(() => {
+      order.push('stopHere');
+    });
+    mockStores({
+      music: true,
+      autoStart: false,
+      activeSource: 'youtube',
+      status: 'running',
+      soundsActions: { pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), stopHere },
+    });
+    vi.mocked(useSoundsLeader).mockImplementation(() => {
+      useEffect(() => {
+        return () => {
+          order.push('resign');
+        };
+      }, []);
+    });
+
+    const { unmount } = render(<PomodoroTimer />);
+    unmount();
+
+    expect(order).toEqual(['stopHere', 'resign']);
   });
 });
 
