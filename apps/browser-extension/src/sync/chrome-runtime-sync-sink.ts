@@ -1,5 +1,5 @@
 import { logger, type SyncMutationSink } from '@cuewise/shared';
-import type { SyncMutationAck, SyncMutationMark } from './sync-messages';
+import type { SyncMutationAck, SyncMutationMark, SyncMutationMessage } from './sync-messages';
 
 /** Waits before each retry of an unacknowledged batch; the batch is dropped after the last. */
 export const RELAY_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000];
@@ -67,7 +67,10 @@ export class ChromeRuntimeSyncSink implements SyncMutationSink {
   private async send(marks: SyncMutationMark[]): Promise<boolean> {
     let reply: unknown;
     try {
-      reply = await chrome.runtime.sendMessage({ kind: 'cuewise-sync-mutation', marks });
+      reply = await chrome.runtime.sendMessage({
+        kind: 'cuewise-sync-mutation',
+        marks,
+      } satisfies SyncMutationMessage);
     } catch (error) {
       // No receiver yet (the worker is still starting) — the same as no ack.
       reply = error;

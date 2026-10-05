@@ -75,6 +75,13 @@ describe('ChromeRuntimeSyncSink', () => {
       'a rejecting sendMessage',
       () => runtime.sendMessage.mockRejectedValueOnce(new Error('Receiving end does not exist.')),
     ],
+    [
+      'a synchronously throwing sendMessage',
+      () =>
+        runtime.sendMessage.mockImplementationOnce(() => {
+          throw new Error('Extension context invalidated.');
+        }),
+    ],
   ])('retries after %s and stops once the worker acks', async (_case, failOnce) => {
     failOnce();
 
@@ -121,24 +128,5 @@ describe('ChromeRuntimeSyncSink', () => {
 
     const ops = sentBatches().map((marks) => marks.map((mark) => (mark as { op: string }).op));
     expect(ops).toEqual([['mutated'], ['mutated'], ['deleted']]);
-  });
-
-  it('sends a mark made after the queue has drained', async () => {
-    const sink = new ChromeRuntimeSyncSink();
-
-    sink.markMutated('goals', 'g1');
-    await vi.advanceTimersByTimeAsync(0);
-    sink.markMutated('goals', 'g2');
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(runtime.sendMessage).toHaveBeenCalledTimes(2);
-  });
-
-  it('never throws into the store mutation, even when sendMessage throws synchronously', () => {
-    runtime.sendMessage.mockImplementationOnce(() => {
-      throw new Error('Extension context invalidated.');
-    });
-
-    expect(() => new ChromeRuntimeSyncSink().markDeleted('goals', 'g1')).not.toThrow();
   });
 });

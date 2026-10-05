@@ -49,6 +49,24 @@ describe('handleSyncMessage', () => {
     expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
   });
 
+  it('merges a run of edits to one collection into one bulk write, keeping deletes in place', async () => {
+    const engine = fakeEngine();
+
+    await handleSyncMessage(
+      engine,
+      batch(
+        MUTATED_GOAL,
+        { op: 'mutatedBulk', collection: 'goals', entityIds: ['g2', 'g3'] },
+        DELETED_GOAL,
+        { op: 'mutated', collection: 'goals', entityId: 'g4' }
+      )
+    );
+
+    expect(engine.markMutatedBulk).toHaveBeenCalledExactlyOnceWith('goals', ['g1', 'g2', 'g3']);
+    expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
+    expect(engine.markMutated).toHaveBeenCalledExactlyOnceWith('goals', 'g4');
+  });
+
   it('acks ok only once the ledger write resolves', async () => {
     const engine = fakeEngine();
     let finishWrite = () => {};
