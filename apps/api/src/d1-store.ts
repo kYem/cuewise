@@ -438,18 +438,7 @@ export class D1SyncStore implements SyncStore {
     const ts = this.now();
     const n = changes.length;
     if (n > 0) {
-      // Conservative pre-check: treats every pushed record as a potential new row. Racy against a
-      // concurrent push (both can pass near the cap), but the overshoot is bounded by one batch.
-      const countRow = await this.db
-        .prepare('SELECT COUNT(*) AS count FROM records WHERE user_id = ?')
-        .bind(userId)
-        .first<{ count: number }>();
-      const existing = countRow === null ? 0 : countRow.count;
-      if (existing + n > this.maxRecordsPerUser) {
-        throw new StorageQuotaExceededError(
-          `push of ${n} records would exceed the ${this.maxRecordsPerUser}-record per-user cap`
-        );
-      }
+      await this.assertWithinRecordCap(userId, changes);
     }
     const stmts: D1PreparedStatement[] = [];
     // Reserve all N seqs in one write; guarded so a no-op push (n=0) issues no write at all.
@@ -516,6 +505,41 @@ export class D1SyncStore implements SyncStore {
       });
     }
     return { cursor: tail.results[0].last_seq, applied, conflicts };
+  }
+
+  // Only rows a push would add count, so an account at the cap can still update and delete. Racy
+  // against a concurrent push (both can pass near the cap), but the overshoot is bounded by one batch.
+  private async assertWithinRecordCap(userId: string, changes: PushRecord[]): Promise<void> {
+    const countRow = await this.db
+      .prepare('SELECT COUNT(*) AS count FROM records WHERE user_id = ?')
+      .bind(userId)
+      .first<{ count: number }>();
+    const existing = countRow === null ? 0 : countRow.count;
+    const keys = new Map<string, PushRecord>();
+    for (const change of changes) {
+      keys.set(`${change.collection}\u0000${change.entityId}`, change);
+    }
+    const distinct = [...keys.values()];
+    if (existing + distinct.length <= this.maxRecordsPerUser) {
+      return;
+    }
+    let present = 0;
+    for (let start = 0; start < distinct.length; start += CONFLICT_LOOKUP_CHUNK) {
+      const chunk = distinct.slice(start, start + CONFLICT_LOOKUP_CHUNK);
+      const where = chunk.map(() => '(collection = ? AND entity_id = ?)').join(' OR ');
+      const binds = chunk.flatMap((change) => [change.collection, change.entityId]);
+      const row = await this.db
+        .prepare(`SELECT COUNT(*) AS count FROM records WHERE user_id = ? AND (${where})`)
+        .bind(userId, ...binds)
+        .first<{ count: number }>();
+      present += row === null ? 0 : row.count;
+    }
+    const added = distinct.length - present;
+    if (existing + added > this.maxRecordsPerUser) {
+      throw new StorageQuotaExceededError(
+        `push of ${added} new records would exceed the ${this.maxRecordsPerUser}-record per-user cap`
+      );
+    }
   }
 
   // Read after the batch, so a row can be newer than what refused the push; the client's re-push
