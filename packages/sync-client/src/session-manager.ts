@@ -10,7 +10,10 @@ export const SYNC_SESSION_KEY = 'syncSession';
 export class SessionManager {
   constructor(private store: KeyValueStore) {}
 
-  /** Null only when no token is stored; a failed read throws, or its 401 would end a live session. */
+  /**
+   * Null when no usable token is stored. A failed read throws instead, or the unauthenticated
+   * request's 401 would end a live session; an unreadable token can never authenticate anyway.
+   */
   async getToken(): Promise<string | null> {
     const stored = await this.store.getMany([SYNC_SESSION_KEY], 'local');
     if (stored === null) {
