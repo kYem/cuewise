@@ -25,7 +25,7 @@ const { competitor, rows } = Astro.props;
           <tbody>
             {rows.map((row) => (
               <tr>
-                <td set:html={row.aspect} />
+                <th scope="row" set:html={row.aspect} />
                 <td>
                   <span class:list={{ 'vs-win': row.winner === 'them' }} set:html={row.them} />
                 </td>

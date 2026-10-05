@@ -893,7 +893,10 @@ footer {
   color: #fff;
   font-size: 15px;
 }
-.vs-table td:first-child {
+.vs-table td:first-child,
+.vs-table tbody th {
+  font-family: inherit;
+  font-size: inherit;
   font-weight: 600;
   color: #fff;
 }
