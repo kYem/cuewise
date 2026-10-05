@@ -527,11 +527,15 @@ runs one reminder through add → fire → snooze → update → done and prints
 
 ### Working on Linear Tickets
 
-Several agents work this board at once, so **claim** a ticket before writing code — otherwise two sessions silently build the same branch. Claiming is the `in-flight` label plus **In Progress** plus a comment naming the branch; Linear has no field for a local session, so the label is the claim and the comment says who holds it. Drop the label when the PR opens or the work is abandoned.
+Several agents work this board at once, so **claim** a ticket before writing code — otherwise two sessions silently build the same branch. Claiming is the `in-flight` label plus **In Progress** plus a comment saying which agent session runs it. Linear has no field for a local session, so the label is the claim and the comment says who holds it. Drop the label when the PR opens or the work is abandoned.
+
+```
+Running in agent session <$CLAUDE_CODE_SESSION_ID> on <hostname -s>, branch `kes/eng-101-...`
+```
 
 Two traps: `in-flight` is deliberately outside the `Pickup` group, because a Linear label group is single-select and nesting it there would strip `agent-with-review`. And `save_issue.labels` replaces rather than appends, so pass the full set.
 
-Before claiming, check nobody else holds it — an existing `in-flight`, or In Progress with no branch, means another session owns it. A claim whose branch has no commits is stale; check `git branch -a` before taking it over.
+Before claiming, check nobody else holds it — an existing `in-flight`, or In Progress with no branch, means another session owns it. A claim whose branch has no commits is stale; check `git branch -a` before taking it over, and name the session you replaced in your own claim comment.
 
 Branch from the ticket's own `gitBranchName` (e.g. `kes/eng-101-...`); on a `claude/...` branch the PR description must say `Fixes ENG-101` so it links back. On opening the PR, attach it to the ticket if the GitHub integration hasn't.
 
