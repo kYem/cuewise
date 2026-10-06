@@ -363,6 +363,17 @@ describe('BridgeSyncController: enable', () => {
     }
   });
 
+  it('persists dev creds when sign-in answers needs-code, so a paired enroll can reconnect', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'needs-code' });
+    const controller = new BridgeSyncController();
+
+    await controller.enable('acc-1', 'Device A');
+
+    expect(storageMock.set).toHaveBeenCalledWith({
+      [LAST_SYNC_CREDS_KEY]: { provider: 'dev', accountId: 'acc-1', deviceName: 'Device A' },
+    });
+  });
+
   it('does not persist creds on a non-ok response', async () => {
     runtime.sendMessage.mockResolvedValueOnce({
       ok: false,
@@ -424,12 +435,13 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     }
   });
 
-  it('persists the google provider when sign-in answers needs-code, so a paired enrol can reconnect', async () => {
+  it('persists the google provider when sign-in answers needs-code, so a paired enroll can reconnect', async () => {
     runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'needs-code' });
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
 
-    await controller.enableWithGoogle('Device A');
+    const result = await controller.enableWithGoogle('Device A');
 
+    expect(result).toEqual({ ok: false, reason: 'needs-code' });
     expect(storageMock.set).toHaveBeenCalledWith({
       [LAST_SYNC_CREDS_KEY]: { provider: 'google', deviceName: 'Device A' },
     });
@@ -600,11 +612,16 @@ describe('BridgeSyncController: reconnect', () => {
     storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'google', deviceName: 'Device A' };
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
 
-    const result = await controller.reconnect('Device A');
+    const result = await controller.reconnect('Panel name');
 
     expect(identity.launchWebAuthFlow).toHaveBeenCalled();
     expect(runtime.sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ op: 'enable', provider: 'google', credential: 'fake.jwt.token' })
+      expect.objectContaining({
+        op: 'enable',
+        provider: 'google',
+        credential: 'fake.jwt.token',
+        deviceName: 'Device A',
+      })
     );
     expect(runtime.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ op: 'reconnect' })

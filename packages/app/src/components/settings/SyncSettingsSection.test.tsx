@@ -2241,6 +2241,23 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.getByLabelText('Device name')).toHaveValue('This device');
   });
 
+  it('passes the derived device name to reconnect, for a device with no saved sign-in', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+      configurable: true,
+    });
+    const controller = new FakeSyncController();
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    await waitFor(() =>
+      expect(controller.calls).toContainEqual({ method: 'reconnect', args: ['Mac', undefined] })
+    );
+  });
+
   it('shows a toast error when controller.regenerateRecoveryCode() rejects', async () => {
     const user = userEvent.setup();
     const controller = new FakeSyncController();

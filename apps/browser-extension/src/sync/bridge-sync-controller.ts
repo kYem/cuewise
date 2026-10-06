@@ -45,7 +45,7 @@ export interface BridgeSyncControllerOptions {
   googleClientId?: string;
 }
 
-// A needs-code answer is a finished sign-in: pairing can complete the enrol without coming back here.
+// needs-code is a finished sign-in, and pairing completes the enroll without returning here.
 function signedIn(response: EnableResult): boolean {
   if (response.ok) {
     return true;
@@ -103,8 +103,8 @@ export class BridgeSyncController implements SyncController {
       return { ok: false, reason: 'error' };
     }
     if (signedIn(response)) {
-      // Persist inside a guard: a storage failure must not turn a successful enroll into a
-      // rejection or lose the one-shot recovery code — log and still return the ok response.
+      // Persist inside a guard: a storage failure must not turn a sign-in into a rejection or
+      // lose the one-shot recovery code — log and still return the response.
       try {
         await this.persistCreds({ provider: 'dev', accountId, deviceName });
       } catch (error) {
@@ -114,8 +114,8 @@ export class BridgeSyncController implements SyncController {
     return response;
   }
 
-  // NEVER logs/persists the id token — it rides straight into the relayed message. On success the
-  // provider (not the token) is persisted so reconnect can re-auth via Google.
+  // NEVER logs/persists the id token — it rides straight into the relayed message. Once signed in,
+  // the provider (not the token) is persisted so reconnect can re-auth via Google.
   async enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
     // Empty string is the "unset" value of the Vite env var (matches manifest.config.ts), so a
     // truthy check — not `=== undefined` — is what actually gates an unconfigured build.
@@ -221,8 +221,8 @@ export class BridgeSyncController implements SyncController {
         return { ok: false, reason: 'error', detail: NO_SAVED_SIGN_IN_DETAIL };
       }
       if (creds.provider === 'google') {
-        // Google can't silently re-auth — re-run the OAuth flow. The data key is already on this
-        // device, so no code is needed; a supplied code re-enrolls after reconnect.
+        // Google can't silently re-auth, so re-run OAuth. A device still without its data key
+        // answers needs-code again, and a supplied code enrolls it.
         return await this.enableWithGoogle(creds.deviceName, recoveryCode);
       }
       // provider 'dev' or absent (a pre-`provider` record): silent re-auth needs the stored id.

@@ -220,7 +220,7 @@ function enableFailureMessage(result: Extract<EnableResult, { ok: false }>): str
   if (result.reason === 'auth') {
     return "Couldn't verify your account — please try again.";
   }
-  if (result.detail === NO_SAVED_SIGN_IN_DETAIL) {
+  if (result.reason === 'error' && result.detail === NO_SAVED_SIGN_IN_DETAIL) {
     return 'This device has no saved sign-in — disconnect, then turn sync on again.';
   }
   return 'Something went wrong enabling sync — please try again.';

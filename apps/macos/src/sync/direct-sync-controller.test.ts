@@ -882,12 +882,19 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     const device = createDevice(server);
     useStorage(device);
     const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
-    const { controller } = buildRealController(device, driver);
+    const { controller, engine } = buildRealController(device, driver);
     await controller.enableWithGoogle('MacBook');
+    const enableSyncSpy = vi.spyOn(engine, 'enableSync');
 
     const result = await controller.reconnect('Device A');
 
     expect(result.ok).toBe(true);
+    expect(enableSyncSpy).toHaveBeenCalledWith(
+      'google',
+      'one-time-x',
+      'MacBook',
+      expect.objectContaining({ recoveryCode: undefined })
+    );
     expect(calls).toHaveLength(2);
     const firstChallenge = new URL(calls[0]).searchParams.get('code_challenge');
     const secondChallenge = new URL(calls[1]).searchParams.get('code_challenge');

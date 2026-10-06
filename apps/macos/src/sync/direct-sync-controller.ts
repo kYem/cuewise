@@ -181,7 +181,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     const raw = await deps.keyStore.get<unknown>(LAST_SYNC_CREDS_KEY, 'local');
     const creds = toLastSyncCreds(raw);
     if (raw !== null && raw !== undefined && creds === null) {
-      // Present-but-rejected is worth a trace ("reconnect says no account" debugging);
+      // Present-but-rejected is worth a trace, since reconnect then falls back to Google sign-in;
       // metadata only — the record can carry dev's accountId credential.
       logger.warn('Saved sync credentials record was malformed; treating it as absent');
     }
@@ -214,8 +214,8 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     return { ok: false, reason: 'error', detail };
   }
 
-  // Runs an enable/enroll engine op, then builds the EnableResult from the post-call status and
-  // persists creds on success (spec §4/§0-E4). A 401 during initial sync returns rather than throws.
+  // Runs an enable/enroll engine op and builds the EnableResult from the post-call status; persists
+  // creds on success or needs-code (spec §4/§0-E4). A 401 in initial sync returns, never throws.
   async function runEnable(
     op: () => Promise<void>,
     creds: LastSyncCreds,
@@ -226,7 +226,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       await op();
     } catch (err) {
       const failure = mapEnableError(err, trace);
-      // Needs-code is a finished sign-in, and pairing can complete the enrol without coming back.
+      // Needs-code is a finished sign-in, and pairing completes the enroll without coming back.
       if (failure.reason === 'needs-code') {
         await persistCreds(creds);
       }
@@ -437,7 +437,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
           return googleFlow(deviceName, recoveryCode);
         }
         if (creds.provider === 'google') {
-          // Google can't silently re-auth; the DK is already on device, so a fresh OAuth suffices.
+          // Google can't silently re-auth; re-run OAuth (needs-code if this device has no DK yet).
           return googleFlow(creds.deviceName, recoveryCode);
         }
         // No code = silent re-auth via persisted DK (E2); a code enrolls this device after reconnect.
