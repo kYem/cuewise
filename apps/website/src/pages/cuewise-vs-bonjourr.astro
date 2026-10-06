@@ -1,0 +1,230 @@
+---
+import ComparisonTable from '../components/ComparisonTable.astro';
+import FaqSection from '../components/FaqSection.astro';
+import FinalCta from '../components/FinalCta.astro';
+import Base from '../layouts/Base.astro';
+import type { ComparisonRow } from '../lib/comparison';
+import { SITE } from '../lib/site';
+
+const rows: ComparisonRow[] = [
+  { aspect: 'Price', them: 'Free, donation-funded', us: 'Free — every feature' },
+  { aspect: 'Open source', them: 'GPL-3.0', us: 'MIT' },
+  { aspect: 'Account required', them: 'Never', us: 'Only if you opt into sync' },
+  {
+    aspect: 'Browsers',
+    them: 'Chrome, Firefox, Edge, Brave, Vivaldi; Safari as a web homepage',
+    us: 'Chrome, Edge, Brave',
+    winner: 'them',
+  },
+  { aspect: 'Languages', them: '40+', us: 'English', winner: 'them' },
+  {
+    aspect: 'Look &amp; customization',
+    them: 'Many clock faces, custom CSS &amp; fonts, movable widgets, video backgrounds',
+    us: '4 themes incl. Glass, 3 density modes, daily photos or your own image',
+    winner: 'them',
+  },
+  {
+    aspect: 'Tasks &amp; goals',
+    them: 'Checkboxes inside a single note',
+    us: "Today's Focus with subtasks, history and unfinished-task carry-over",
+    winner: 'us',
+  },
+  {
+    aspect: 'Focus timer',
+    them: 'Pomodoro with today / week / month counts',
+    us: 'Pomodoro with custom intervals, session history and heatmaps',
+    winner: 'us',
+  },
+  {
+    aspect: 'Analytics',
+    them: 'None beyond Pomodoro counts',
+    us: 'Streaks, charts, Pomodoro heatmaps',
+    winner: 'us',
+  },
+  {
+    aspect: 'Quotes',
+    them: 'Six built-in sources, or your own list',
+    us: '10 categories, favorites, collections, custom quotes, CSV import',
+    winner: 'us',
+  },
+  { aspect: 'Reminders', them: 'None', us: 'Repeating reminders with active hours', winner: 'us' },
+  {
+    aspect: 'Learning &amp; recall',
+    them: 'None',
+    us: 'Spaced-repetition concept cards on the new tab',
+    winner: 'us',
+  },
+  {
+    aspect: 'Sounds',
+    them: 'Pomodoro alarm',
+    us: 'Ambient soundscapes + YouTube focus music',
+    winner: 'us',
+  },
+  {
+    aspect: 'Calendar',
+    them: 'None',
+    us: 'Google Calendar agenda (read-only, optional)',
+    winner: 'us',
+  },
+  {
+    aspect: 'Search, links &amp; weather',
+    them: 'Search bar, link groups with bookmark import, weather',
+    us: 'Quick links and weather; no search bar',
+    winner: 'them',
+  },
+  {
+    aspect: 'Sync',
+    them: 'Your browser’s sync, a GitHub Gist, or a settings file',
+    us: 'Optional end-to-end encrypted cloud sync',
+  },
+  {
+    aspect: 'Permissions at install',
+    them: 'Storage only',
+    us: 'Storage, notifications, alarms, context menu, active-tab and scripting access, plus Unsplash and cuewise.app',
+    winner: 'them',
+  },
+];
+
+const faqs = [
+  {
+    q: 'Is Cuewise or Bonjourr better?',
+    a: 'They do different jobs. Bonjourr is a calm, beautiful start page: a clock, a background, a few widgets. Cuewise is a small productivity system on the new tab: goals with history, a Pomodoro with heatmaps, reminders, insights and spaced-repetition cards. If you want the new tab to stay out of your way, pick Bonjourr; if you want it to help you plan and focus, pick Cuewise.',
+  },
+  {
+    q: 'Does Bonjourr work in Safari?',
+    a: 'Not as an extension anymore — its Safari app was discontinued in May 2026. On a Mac you can set the web version, online.bonjourr.fr, as your Safari homepage. Cuewise does not support Safari.',
+  },
+  {
+    q: 'Can I move my Bonjourr setup to Cuewise?',
+    a: "There's no importer. Quick links and custom quotes take a minute to re-add, and Cuewise can bulk-import quotes from a CSV file.",
+  },
+  {
+    q: 'Do Bonjourr and Cuewise collect my data?',
+    a: "Neither needs an account and both state that they don't collect what you create. Both fetch weather through their own servers so your browser never talks to a weather company. Cuewise's optional sync is end-to-end encrypted, so its server stores only ciphertext.",
+  },
+];
+---
+
+<Base
+  title="Cuewise vs Bonjourr — productivity or minimalism? (2026)"
+  description="Cuewise vs Bonjourr: goals, Pomodoro history, reminders and insights against Bonjourr's minimalist design, browser support and customization."
+>
+  <main>
+
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="3" x2="12" y2="21"/>
+            <path d="M3 9l9-7 9 7"/>
+            <path d="M9 22V12h6v10"/>
+          </svg>
+          An honest comparison
+        </div>
+        <h1>Cuewise vs Bonjourr</h1>
+        <p class="hero-sub">
+          Both are free, open source and need no account. Bonjourr is a beautiful, minimal start page;
+          Cuewise turns the new tab into a calm place to plan and focus. Here's how they compare in 2026.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+            Add Cuewise — Free
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">At a glance</p>
+          <h2 class="section-title">The short version</h2>
+        </div>
+        <div class="feat-grid">
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#10B981,#059669)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h3>Cuewise: a system, not a page</h3>
+            <p>Goals that carry over, a Pomodoro that keeps history, reminders, insights and spaced-repetition cards — the new tab helps you plan the day, not just greet it.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#8B5CF6,#6d28d9)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <h3>Bonjourr: calm by design</h3>
+            <p>A gorgeous clock, time-of-day backgrounds and just enough widgets. Deep customization down to your own CSS, in 40+ languages.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#06B6D4,#0891b2)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>Both private &amp; free</h3>
+            <p>Open source, no account, no paid tier. The difference is how much you want your new tab to do.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <ComparisonTable competitor="Bonjourr" rows={rows} />
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>Where Bonjourr is stronger</h2>
+          <p>
+            <strong>Design and customization.</strong> Bonjourr is one of the best-looking new tabs there is, and it lets you
+            shape it down to the detail: a dozen clock faces and hand styles, video backgrounds that follow the time of day,
+            movable widgets, your own fonts and custom CSS. Cuewise offers four themes and three density modes — tasteful, but
+            nowhere near that range.
+          </p>
+          <p>
+            <strong>Reach.</strong> Bonjourr runs on Chrome, Firefox, Edge, Brave and Vivaldi, works in Safari as a web homepage,
+            and is translated into more than 40 languages. Cuewise is Chromium-only and English-only today.
+          </p>
+          <p>
+            <strong>A lighter footprint.</strong> Bonjourr asks for storage at install and nothing else until you turn on a
+            feature that needs more. Cuewise also asks for notifications and alarms (for reminders and the timer), access to Unsplash and cuewise.app
+            (for photos and weather), and a context-menu entry with page access for saving a selection — reasonable for what it does, but more than Bonjourr needs.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>Why pick Cuewise instead</h2>
+          <p>
+            Bonjourr's to-do is a set of checkboxes inside a single note, and its Pomodoro shows how many sessions you did today,
+            this week and this month. That's deliberate — minimalism is the point — but it stops where a productivity habit starts.
+          </p>
+          <p>
+            Cuewise keeps going. Today's Focus holds goals with subtasks, and anything you didn't finish shows up the next day
+            under Unfinished, with one click to move it all to today. The Pomodoro keeps every session, so Insights can show your focus trends and the hours
+            and weekdays you focus most, alongside your goal streaks. Reminders nudge you on a schedule, concept cards resurface what you're
+            learning when it's due, and a read-only Google Calendar agenda can sit beside your goals.
+          </p>
+          <p>
+            Both are local-first. If you want your setup on more than one machine, Bonjourr uses your browser's sync or a GitHub
+            Gist; Cuewise has its own optional sync, end-to-end encrypted so the server never sees what's inside.
+          </p>
+          <p>
+            Also weighing <a href="/cuewise-vs-tabliss/">Tabliss</a> or <a href="/cuewise-vs-mue/">Mue</a>? See the
+            <a href="/momentum-alternatives/">full roundup of Momentum alternatives</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <FaqSection faqs={faqs} />
+
+    <FinalCta />
+
+  </main>
+</Base>

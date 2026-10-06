@@ -1,0 +1,227 @@
+---
+import ComparisonTable from '../components/ComparisonTable.astro';
+import FaqSection from '../components/FaqSection.astro';
+import FinalCta from '../components/FinalCta.astro';
+import Base from '../layouts/Base.astro';
+import type { ComparisonRow } from '../lib/comparison';
+import { SITE } from '../lib/site';
+
+const rows: ComparisonRow[] = [
+  { aspect: 'Price', them: 'Free', us: 'Free — every feature' },
+  { aspect: 'Open source', them: 'GPL-3.0', us: 'MIT' },
+  { aspect: 'Account required', them: 'Never', us: 'Only if you opt into sync' },
+  {
+    aspect: 'Last update',
+    them: 'April 2022 (store builds); no code changes since January 2024',
+    us: 'Regular releases',
+    winner: 'us',
+  },
+  {
+    aspect: 'Browsers',
+    them: 'Chrome, Firefox, Edge, plus a web version',
+    us: 'Chrome, Edge, Brave',
+    winner: 'them',
+  },
+  { aspect: 'Languages', them: '40+', us: 'English', winner: 'them' },
+  {
+    aspect: 'Backgrounds',
+    them: 'Unsplash, GIPHY, your own images, colors and gradients',
+    us: 'Curated daily photos, your own image, swap any time',
+    winner: 'them',
+  },
+  {
+    aspect: 'Widgets',
+    them: 'Clocks incl. a literature clock, search box, links, notes, to-dos, weather, custom CSS and more',
+    us: "Quick links, weather, notes, Today's Focus, calendar agenda",
+    winner: 'them',
+  },
+  {
+    aspect: 'Quotes',
+    them: 'Most built-in sources stopped loading after the quote API went paid',
+    us: '10 categories, favorites, collections, custom quotes, CSV import',
+    winner: 'us',
+  },
+  {
+    aspect: 'Tasks &amp; goals',
+    them: 'Simple to-do list',
+    us: 'Goals with subtasks, history and unfinished-task carry-over',
+    winner: 'us',
+  },
+  {
+    aspect: 'Focus timer',
+    them: 'Work-hours countdown only',
+    us: 'Full Pomodoro with history and heatmaps',
+    winner: 'us',
+  },
+  { aspect: 'Analytics', them: 'None', us: 'Streaks, charts, focus heatmaps', winner: 'us' },
+  { aspect: 'Reminders', them: 'None', us: 'Repeating reminders with active hours', winner: 'us' },
+  {
+    aspect: 'Learning &amp; recall',
+    them: 'None',
+    us: 'Spaced-repetition concept cards',
+    winner: 'us',
+  },
+  {
+    aspect: 'Sounds',
+    them: 'None',
+    us: 'Ambient soundscapes + YouTube focus music',
+    winner: 'us',
+  },
+  {
+    aspect: 'Sync',
+    them: 'None of its own',
+    us: 'Optional end-to-end encrypted cloud sync',
+    winner: 'us',
+  },
+  {
+    aspect: 'Permissions at install',
+    them: 'Storage only — no install warning',
+    us: 'Storage, notifications, alarms, context menu, active-tab and scripting access, plus Unsplash and cuewise.app',
+    winner: 'them',
+  },
+  {
+    aspect: 'Crash reports',
+    them: 'Always sent to Sentry, no opt-out',
+    us: 'None sent',
+    winner: 'us',
+  },
+];
+
+const faqs = [
+  {
+    q: 'Is Tabliss still maintained?',
+    a: "Not actively. The Chrome, Firefox and Edge builds were last updated in April 2022, and the last code change on GitHub was January 2024. Issues are still being filed, but none have been fixed since. It still installs and runs today — its Chrome build already uses Manifest V3 — but don't expect fixes when something it depends on breaks.",
+  },
+  {
+    q: "Why don't Tabliss quotes load anymore?",
+    a: 'Most of its quote categories came from the They Said So API, which went paid. Users reported the breakage in 2025 and it has not been fixed. Cuewise ships its own quote library, so nothing depends on a third-party quote service.',
+  },
+  {
+    q: 'Does Tabliss collect any data?',
+    a: "It needs no account and keeps your settings in the browser. Its privacy policy does note one exception: release builds send error reports to Sentry, and there's no setting to turn that off. Cuewise sends no crash or usage reports.",
+  },
+  {
+    q: 'Can I keep my Tabliss setup when switching?',
+    a: "There's no importer. Quick links and to-dos take a minute to re-add, and Cuewise can bulk-import quotes from a CSV file.",
+  },
+];
+---
+
+<Base
+  title="Cuewise vs Tabliss — a maintained Tabliss alternative (2026)"
+  description="Tabliss's store builds date from 2022. Compare it with Cuewise: goals, Pomodoro, reminders, insights and working quotes — free and open source."
+>
+  <main>
+
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="3" x2="12" y2="21"/>
+            <path d="M3 9l9-7 9 7"/>
+            <path d="M9 22V12h6v10"/>
+          </svg>
+          An honest comparison
+        </div>
+        <h1>Cuewise vs Tabliss</h1>
+        <p class="hero-sub">
+          Tabliss was the classic free new tab for years — and it still runs. But its store builds haven't changed since 2022,
+          and parts of it have stopped working. Here's how it compares with Cuewise in 2026.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+            Add Cuewise — Free
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">At a glance</p>
+          <h2 class="section-title">The short version</h2>
+        </div>
+        <div class="feat-grid">
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#8B5CF6,#6d28d9)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <h3>Maintained</h3>
+            <p>Tabliss's store builds date from April 2022. Cuewise ships regular releases, so when a browser or a service changes underneath it, the breakage gets fixed.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#10B981,#059669)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h3>Built for focus</h3>
+            <p>Goals with history, a full Pomodoro, reminders and insights — where Tabliss offers a to-do list and no focus timer.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#06B6D4,#0891b2)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>Same values</h3>
+            <p>Both are free, open source and need no account. Tabliss is lighter and runs on Firefox; Cuewise does more.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <ComparisonTable competitor="Tabliss" rows={rows} />
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>Where Tabliss is stronger</h2>
+          <p>
+            <strong>A light touch.</strong> Tabliss asks for a single permission, storage, which Chrome installs without a
+            warning. Cuewise also asks for notifications and alarms (for reminders and the timer), access to Unsplash and cuewise.app
+            (for photos and weather), and a context-menu entry with page access for saving a selection — reasonable for what it does, but more than Tabliss needs.
+          </p>
+          <p>
+            <strong>Reach.</strong> Tabliss runs on Firefox — where it's still a Recommended extension — as well as Chrome, Edge
+            and the web, in more than 40 languages. Cuewise is Chromium-only and English-only today.
+          </p>
+          <p>
+            <strong>Playful widgets.</strong> A literature clock that tells the time in book quotes, GIPHY backgrounds, a search
+            box, custom CSS: Tabliss has a wider spread of small, fun widgets than Cuewise.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>Why people switch</h2>
+          <p>
+            Mostly because things stop working and nothing changes. Most of Tabliss's quote categories came from a third-party
+            API that went paid, and they no longer load. Some Unsplash topics it offered were retired, so those backgrounds come
+            back random. These are small breaks, but they've been reported and left open.
+          </p>
+          <p>
+            The other reason is wanting more from the new tab. Cuewise keeps the calm — a photo, a quote, the time — and adds a
+            daily focus list that carries unfinished work forward, a Pomodoro that remembers your sessions, insights into when
+            you actually focus, reminders, and spaced-repetition cards for what you're learning. Its quotes ship with the
+            extension, so they don't depend on anyone's API.
+          </p>
+          <p>
+            Also weighing <a href="/cuewise-vs-bonjourr/">Bonjourr</a> or <a href="/cuewise-vs-mue/">Mue</a>? See the
+            <a href="/momentum-alternatives/">full roundup of Momentum alternatives</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <FaqSection faqs={faqs} />
+
+    <FinalCta />
+
+  </main>
+</Base>

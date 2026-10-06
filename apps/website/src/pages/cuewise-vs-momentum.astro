@@ -1,7 +1,89 @@
 ---
+import ComparisonTable from '../components/ComparisonTable.astro';
+import FaqSection from '../components/FaqSection.astro';
 import FinalCta from '../components/FinalCta.astro';
 import Base from '../layouts/Base.astro';
+import type { ComparisonRow } from '../lib/comparison';
 import { SITE } from '../lib/site';
+
+const rows: ComparisonRow[] = [
+  {
+    aspect: 'Price',
+    them: 'Free tier + Plus ~$40/year',
+    us: 'Free forever — every feature',
+    winner: 'us',
+  },
+  {
+    aspect: 'Goal management',
+    them: 'A daily focus and a basic to-do list; more lists on Plus',
+    us: 'Goals, objectives &amp; subtasks, history, transfers',
+    winner: 'us',
+  },
+  {
+    aspect: 'Quote system',
+    them: 'Daily random quote',
+    us: '10 categories, favorites, custom quotes, collections',
+    winner: 'us',
+  },
+  {
+    aspect: 'Timer',
+    them: 'Focus Mode limited each day; Pomodoro and unlimited focus on Plus',
+    us: 'Full Pomodoro: custom intervals, history, heatmaps',
+    winner: 'us',
+  },
+  {
+    aspect: 'Analytics',
+    them: 'Free Focus Stats; connected metrics on Plus',
+    us: 'Free: goal streaks, focus charts, Pomodoro heatmaps',
+    winner: 'us',
+  },
+  {
+    aspect: 'Learning &amp; recall',
+    them: 'No equivalent',
+    us: 'Built-in spaced repetition on the new tab — active recall, grading, ten starter packs',
+    winner: 'us',
+  },
+  {
+    aspect: 'Themes',
+    them: 'Dark and light free; fonts, colors and Photo Match on Plus',
+    us: '4 free themes incl. Glass + 3 density modes',
+    winner: 'us',
+  },
+  {
+    aspect: 'Sounds',
+    them: 'Soundscapes, Spotify and YouTube on Plus',
+    us: 'Free ambient soundscapes + YouTube focus music',
+    winner: 'us',
+  },
+  {
+    aspect: 'Backgrounds',
+    them: 'Curated daily photos; custom images on Plus',
+    us: 'Daily photos, your own image, swap any time — all free',
+    winner: 'us',
+  },
+  {
+    aspect: 'Integrations',
+    them: 'Google &amp; Outlook Calendar free; Todoist and other task apps on Plus',
+    us: 'Google Calendar agenda (read-only, free, off until you connect it)',
+    winner: 'them',
+  },
+  {
+    aspect: 'Storage sync',
+    them: 'Free with an account',
+    us: 'Optional, end-to-end encrypted',
+  },
+  {
+    aspect: 'Open source',
+    them: 'Proprietary',
+    us: `MIT — code on <a href="${SITE.githubUrl}" target="_blank" rel="noopener noreferrer">GitHub</a>`,
+    winner: 'us',
+  },
+  {
+    aspect: 'Account required',
+    them: 'Optional; needed for sync and Plus',
+    us: 'Only if you opt into sync',
+  },
+];
 
 const faqs = [
   {
@@ -21,26 +103,14 @@ const faqs = [
     a: 'Yes — Cuewise runs on any Chromium browser: Chrome, Edge, Brave and others. Firefox support is on the roadmap.',
   },
 ];
-
-const faqJsonLd = JSON.stringify({
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: faqs.map(({ q, a }) => ({
-    '@type': 'Question',
-    name: q,
-    acceptedAnswer: { '@type': 'Answer', text: a },
-  })),
-}).replace(/</g, '\\u003c');
 ---
 
 <Base
   title="Cuewise vs Momentum — the free, open-source alternative (2026)"
   description="Looking for a free Momentum alternative? Compare Cuewise vs Momentum: goals, Pomodoro, quotes, analytics, themes, privacy — free and open source."
 >
-  <script type="application/ld+json" set:html={faqJsonLd} slot="head" />
   <main>
 
-    <!-- 1. Page Hero -->
     <section class="page-hero">
       <div class="wrap">
         <div class="eyebrow">
@@ -65,7 +135,6 @@ const faqJsonLd = JSON.stringify({
       </div>
     </section>
 
-    <!-- 2. Verdict cards -->
     <section class="section-pad">
       <div class="wrap">
         <div class="section-head reveal">
@@ -79,7 +148,7 @@ const faqJsonLd = JSON.stringify({
               <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             </div>
             <h3>Free forever</h3>
-            <p>Momentum's best features sit behind Plus at ~$40/year. Every Cuewise feature — analytics, themes, soundscapes — is free, with no premium tier waiting to appear.</p>
+            <p>Momentum's Pomodoro, sounds and most customization sit behind Plus at ~$40/year. Every Cuewise feature — Pomodoro, themes, soundscapes — is free, with no premium tier waiting to appear.</p>
           </div>
 
           <div class="feat glass reveal">
@@ -87,7 +156,7 @@ const faqJsonLd = JSON.stringify({
               <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             </div>
             <h3>Deeper productivity tools</h3>
-            <p>Full goal history with subtasks, a complete Pomodoro with heatmaps, and a quote library you can curate — where Momentum offers a single main-focus to-do.</p>
+            <p>Full goal history with subtasks, a complete Pomodoro with heatmaps, and a quote library you can curate — where Momentum's free tier offers a daily focus and a basic to-do list.</p>
           </div>
 
           <div class="feat glass reveal">
@@ -102,94 +171,8 @@ const faqJsonLd = JSON.stringify({
       </div>
     </section>
 
-    <!-- 3. Comparison table -->
-    <section class="section-pad" style="padding-top:0;">
-      <div class="wrap">
-        <div class="content-card glass reveal">
-          <h2>Feature by feature</h2>
-          <div class="vs-table-wrap">
-            <table class="vs-table">
-              <thead>
-                <tr>
-                  <th>Aspect</th>
-                  <th>Momentum</th>
-                  <th>Cuewise</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Price</td>
-                  <td>Free tier + Plus ~$40/year</td>
-                  <td><span class="vs-win">Free forever — every feature</span></td>
-                </tr>
-                <tr>
-                  <td>Goal management</td>
-                  <td>Single main-focus to-do</td>
-                  <td><span class="vs-win">Goals, objectives &amp; subtasks, history, transfers</span></td>
-                </tr>
-                <tr>
-                  <td>Quote system</td>
-                  <td>Daily random quote</td>
-                  <td><span class="vs-win">10 categories, favorites, custom quotes, collections</span></td>
-                </tr>
-                <tr>
-                  <td>Timer</td>
-                  <td>Basic focus timer with sounds</td>
-                  <td><span class="vs-win">Full Pomodoro: custom intervals, history, heatmaps</span></td>
-                </tr>
-                <tr>
-                  <td>Analytics</td>
-                  <td>Plus only (paid)</td>
-                  <td><span class="vs-win">Free: streaks, charts, insights</span></td>
-                </tr>
-                <tr>
-                  <td>Learning &amp; recall</td>
-                  <td>No equivalent</td>
-                  <td><span class="vs-win">Built-in spaced repetition on the new tab — active recall, grading, ten starter packs</span></td>
-                </tr>
-                <tr>
-                  <td>Themes</td>
-                  <td>Paid customization</td>
-                  <td><span class="vs-win">4 free themes incl. Glass + 3 density modes</span></td>
-                </tr>
-                <tr>
-                  <td>Sounds</td>
-                  <td>Focus sounds</td>
-                  <td><span class="vs-win">Free ambient soundscapes + YouTube focus music</span></td>
-                </tr>
-                <tr>
-                  <td>Backgrounds</td>
-                  <td>Curated daily photos; custom images on Plus</td>
-                  <td><span class="vs-win">Daily photos, your own image, swap any time — all free</span></td>
-                </tr>
-                <tr>
-                  <td>Integrations</td>
-                  <td><span class="vs-win">Calendar, Todoist &amp; more (paid)</span></td>
-                  <td>None yet — by design, zero permission creep</td>
-                </tr>
-                <tr>
-                  <td>Storage sync</td>
-                  <td>Paid feature</td>
-                  <td><span class="vs-win">Optional end-to-end encrypted cloud sync</span></td>
-                </tr>
-                <tr>
-                  <td>Open source</td>
-                  <td>Proprietary</td>
-                  <td><span class="vs-win">MIT — code on <a href={SITE.githubUrl} target="_blank" rel="noopener noreferrer">GitHub</a></span></td>
-                </tr>
-                <tr>
-                  <td>Account required</td>
-                  <td>For sync and Plus</td>
-                  <td><span class="vs-win">Only if you opt into sync</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
+    <ComparisonTable competitor="Momentum" rows={rows} />
 
-    <!-- 4. Where Momentum is stronger -->
     <section class="section-pad" style="padding-top:0;">
       <div class="wrap">
         <div class="content-card glass reveal">
@@ -201,33 +184,31 @@ const faqJsonLd = JSON.stringify({
           </p>
           <p>
             <strong>Polish and brand maturity.</strong> Momentum has been refining its product since 2013, and that decade of iteration shows in every animation, every transition, and every design choice.
-            With over three million users and a deeply established ecosystem, it carries a level of brand trust and UI maturity that a newer product simply hasn't had time to build yet.
+            With two million Chrome users (Momentum counts over three million across browsers) and a deeply established ecosystem, it carries a level of brand trust and UI maturity that a newer product simply hasn't had time to build yet.
           </p>
           <p>
-            <strong>Third-party integrations.</strong> Momentum connects with Google Calendar, Todoist, and a number of other productivity services through its Plus plan.
-            If your workflow depends on seeing calendar events or syncing tasks from an external app directly on the new tab, Momentum's integration layer is more developed — and if those integrations are essential to you, it is the stronger pick today.
+            <strong>Third-party integrations.</strong> Momentum shows your Google or Outlook calendar for free, and connects with Todoist and a number of other task apps through its Plus plan.
+            If your workflow depends on syncing tasks from an external app onto the new tab, Momentum's integration layer is more developed (Cuewise stops at a read-only Google Calendar agenda), and if those integrations are essential to you, Momentum is the stronger pick today.
           </p>
         </div>
       </div>
     </section>
 
-    <!-- 5. Why people switch -->
     <section class="section-pad" style="padding-top:0;">
       <div class="wrap">
         <div class="content-card glass reveal">
           <h2>Why people switch</h2>
           <p>People move away from Momentum for a handful of recurring reasons, and none of them are about quality.</p>
           <p>
-            The most common is the gradual migration of features behind the Plus paywall. Functionality that once shipped free — custom backgrounds, integrations, customization options — has moved into the paid tier over time.
-            For people who never opted in expecting a subscription, finding a feature behind a paywall they didn't sign up for feels like a change in the deal.
+            The most common is the Plus paywall: the Pomodoro, unlimited focus time, sounds, custom backgrounds and task-app integrations all need a subscription.
           </p>
           <p>
             A related frustration is paying an ongoing subscription for software whose core experience runs in your browser tab.
             When an extension's entire value lives in your own browser tab — pulling from your own stored data — the case for a recurring fee becomes harder to justify, especially against free and open-source alternatives.
           </p>
           <p>
-            The third driver is data residency. Momentum's sync features necessarily involve your data passing through external servers in readable form.
-            Cuewise is local-first: with sync off (the default), your goals, notes, and focus sessions stay entirely on your own device — no cloud account, no server, no third party.
+            The third driver is data residency. Momentum's sync keeps your dashboard on its servers.
+            Cuewise is local-first: with sync off (the default), your goals, notes, and focus sessions stay entirely on your own device — no cloud account, and none of it is sent to a server or a third party.
             And if you do want sync, Cuewise's is end-to-end encrypted, so the server only ever holds ciphertext it cannot read.
           </p>
           <p>Cuewise's answer is simple: everything free, everything local, and code you can read.</p>
@@ -236,46 +217,8 @@ const faqJsonLd = JSON.stringify({
       </div>
     </section>
 
-    <!-- 6. FAQ -->
-    <section class="section-pad" style="padding-top:0;" id="faq">
-      <div class="wrap">
-        <div class="section-head reveal">
-          <p class="kicker">FAQ</p>
-          <h2 class="section-title">Common questions</h2>
-        </div>
+    <FaqSection faqs={faqs} />
 
-        <details class="faq-item glass reveal">
-          <summary>Is Cuewise really a free Momentum alternative?</summary>
-          <div class="faq-body">
-            <p>Yes — every Cuewise feature is free forever. Cuewise is MIT-licensed open source; there is no premium tier to upsell. If you've been paying for Momentum Plus, everything comparable in Cuewise costs nothing.</p>
-          </div>
-        </details>
-
-        <details class="faq-item glass reveal">
-          <summary>Does Cuewise have daily background photos like Momentum?</summary>
-          <div class="faq-body">
-            <p>Yes — the Glass theme and Focus Mode show a fresh curated photo daily (nature, forest, ocean, mountains, minimal, dark), you can set your own image as the background, and you can swap the current photo any time. Momentum's curation is still excellent — but its custom photos are a Plus feature, and in Cuewise they're free.</p>
-          </div>
-        </details>
-
-        <details class="faq-item glass reveal">
-          <summary>Can I import my Momentum to-dos?</summary>
-          <div class="faq-body">
-            <p>There's no direct importer yet. Cuewise goals take seconds to add — and you can bulk-import custom quotes via CSV if you've been collecting favorites.</p>
-          </div>
-        </details>
-
-        <details class="faq-item glass reveal">
-          <summary>Does Cuewise work on Edge or Brave?</summary>
-          <div class="faq-body">
-            <p>Yes — Cuewise runs on any Chromium browser: Chrome, Edge, Brave and others. Firefox support is on the roadmap.</p>
-          </div>
-        </details>
-
-      </div>
-    </section>
-
-    <!-- 7. Final CTA -->
     <FinalCta />
 
   </main>

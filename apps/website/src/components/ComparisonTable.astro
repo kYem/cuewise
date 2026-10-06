@@ -1,0 +1,42 @@
+---
+import type { ComparisonRow } from '../lib/comparison';
+
+interface Props {
+  competitor: string;
+  rows: ComparisonRow[];
+}
+
+const { competitor, rows } = Astro.props;
+---
+
+<section class="section-pad" style="padding-top:0;">
+  <div class="wrap">
+    <div class="content-card glass reveal">
+      <h2>Feature by feature</h2>
+      <div class="vs-table-wrap">
+        <table class="vs-table">
+          <thead>
+            <tr>
+              <th>Aspect</th>
+              <th>{competitor}</th>
+              <th>Cuewise</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr>
+                <th scope="row" set:html={row.aspect} />
+                <td>
+                  <span class:list={{ 'vs-win': row.winner === 'them' }} set:html={row.them} />
+                </td>
+                <td>
+                  <span class:list={{ 'vs-win': row.winner === 'us' }} set:html={row.us} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

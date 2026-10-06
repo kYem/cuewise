@@ -1,0 +1,234 @@
+---
+import ComparisonTable from '../components/ComparisonTable.astro';
+import FaqSection from '../components/FaqSection.astro';
+import FinalCta from '../components/FinalCta.astro';
+import Base from '../layouts/Base.astro';
+import type { ComparisonRow } from '../lib/comparison';
+import { SITE } from '../lib/site';
+
+const rows: ComparisonRow[] = [
+  { aspect: 'Price', them: 'Free, sponsor-funded', us: 'Free — every feature' },
+  { aspect: 'Open source', them: 'BSD-3-Clause', us: 'MIT' },
+  { aspect: 'Account required', them: 'Never', us: 'Only if you opt into sync' },
+  {
+    aspect: 'Browsers',
+    them: 'Chrome, Firefox, Edge (an older build), Whale',
+    us: 'Chrome, Edge, Brave',
+    winner: 'them',
+  },
+  { aspect: 'Languages', them: '30+ translations', us: 'English', winner: 'them' },
+  {
+    aspect: 'Backgrounds',
+    them: 'Photo packs, Unsplash, Pexels, video, your own images, photo map and credits',
+    us: 'Curated daily photos, your own image, swap any time',
+    winner: 'them',
+  },
+  {
+    aspect: 'Marketplace',
+    them: 'Community photo packs, quote packs and presets',
+    us: 'None',
+    winner: 'them',
+  },
+  {
+    aspect: 'Quotes',
+    them: 'From marketplace packs or your own list',
+    us: '10 built-in categories, favorites, collections, custom quotes, CSV import',
+    winner: 'us',
+  },
+  {
+    aspect: 'Tasks &amp; goals',
+    them: 'Simple to-do list and notes',
+    us: 'Goals with subtasks, history and unfinished-task carry-over, plus notes',
+    winner: 'us',
+  },
+  {
+    aspect: 'Focus timer',
+    them: 'None',
+    us: 'Full Pomodoro with history and heatmaps',
+    winner: 'us',
+  },
+  {
+    aspect: 'Analytics',
+    them: 'A tab counter and achievements',
+    us: 'Streaks, charts, focus heatmaps',
+    winner: 'us',
+  },
+  { aspect: 'Reminders', them: 'None', us: 'Repeating reminders with active hours', winner: 'us' },
+  {
+    aspect: 'Learning &amp; recall',
+    them: 'None',
+    us: 'Spaced-repetition concept cards',
+    winner: 'us',
+  },
+  {
+    aspect: 'Sounds',
+    them: 'None',
+    us: 'Ambient soundscapes + YouTube focus music',
+    winner: 'us',
+  },
+  {
+    aspect: 'Calendar',
+    them: 'None',
+    us: 'Google Calendar agenda (read-only, optional)',
+    winner: 'us',
+  },
+  {
+    aspect: 'Sync',
+    them: 'Settings file export only',
+    us: 'Optional end-to-end encrypted cloud sync',
+    winner: 'us',
+  },
+  {
+    aspect: 'Permissions at install',
+    them: 'Search only',
+    us: 'Storage, notifications, alarms, context menu, active-tab and scripting access, plus Unsplash and cuewise.app',
+    winner: 'them',
+  },
+  {
+    aspect: 'Crash reports',
+    them: 'Sent to Sentry unless offline mode is on',
+    us: 'None sent',
+    winner: 'us',
+  },
+];
+
+const faqs = [
+  {
+    q: 'Is Mue a good Momentum alternative?',
+    a: "If you want Momentum's look for free, yes — a photo, a greeting, a clock and a quote, plus a marketplace of community photo and quote packs. If you want Momentum's productivity side — a focus timer, goals, stats — Mue has no timer, just a simple to-do list, and only a tab counter and achievements for stats; Cuewise has all three.",
+  },
+  {
+    q: 'Is Mue still maintained?',
+    a: 'Yes. It shipped 7.6.0 in January 2026 and 7.6.1 on GitHub in April 2026. Its Edge build is still on 7.1.1 from June 2024.',
+  },
+  {
+    q: 'Does Mue collect any data?',
+    a: 'It needs no account and keeps your settings in the browser. It does fetch photos, weather and marketplace items from its own API — weather sends your city or coordinates — and it reports errors to Sentry. An offline mode blocks all of those requests. Cuewise sends no crash or usage reports.',
+  },
+  {
+    q: 'Can I bring my Mue quotes to Cuewise?',
+    a: 'Not directly, but Cuewise imports custom quotes from a CSV file, so you can paste the list you kept in Mue into a spreadsheet and bring it over in one go. Quick links take a minute to re-add.',
+  },
+];
+---
+
+<Base
+  title="Cuewise vs Mue — which Momentum alternative? (2026)"
+  description="Compare Cuewise vs Mue: Mue's Momentum-style look and marketplace against Cuewise's goals, Pomodoro, reminders and insights. Both free and open source."
+>
+  <main>
+
+    <section class="page-hero">
+      <div class="wrap">
+        <div class="eyebrow">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="3" x2="12" y2="21"/>
+            <path d="M3 9l9-7 9 7"/>
+            <path d="M9 22V12h6v10"/>
+          </svg>
+          An honest comparison
+        </div>
+        <h1>Cuewise vs Mue</h1>
+        <p class="hero-sub">
+          Both are free, open-source answers to Momentum. Mue recreates its look, with a marketplace of photo and quote packs;
+          Cuewise rebuilds its productivity side — and gives it away. Here's how they compare in 2026.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+            Add Cuewise — Free
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">At a glance</p>
+          <h2 class="section-title">The short version</h2>
+        </div>
+        <div class="feat-grid">
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#10B981,#059669)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h3>Cuewise: the productivity side</h3>
+            <p>A full Pomodoro, goals with history, reminders and insights — Momentum's productivity side, much of which needs Plus there, free here.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#8B5CF6,#6d28d9)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <h3>Mue: the look, and a marketplace</h3>
+            <p>Momentum's photo-greeting-quote layout, with community packs of photos, quotes and presets to make it your own.</p>
+          </div>
+
+          <div class="feat glass reveal">
+            <div class="feat-icon" style="background:linear-gradient(135deg,#06B6D4,#0891b2)">
+              <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h3>Both free &amp; open</h3>
+            <p>No account, no paid tier, code you can read. Mue also runs on Firefox; Cuewise adds optional encrypted sync.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <ComparisonTable competitor="Mue" rows={rows} />
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>Where Mue is stronger</h2>
+          <p>
+            <strong>Backgrounds and the marketplace.</strong> Mue draws from its own photo library, Unsplash, Pexels and
+            community photo packs, plays video backgrounds, and shows where each photo was taken on a map. Its marketplace adds
+            quote packs and whole preset looks. Cuewise's backgrounds — a curated daily photo or your own image — are simpler.
+          </p>
+          <p>
+            <strong>Reach.</strong> Mue runs on Firefox and Whale as well as Chrome and Edge, with more than 30 translations.
+            Cuewise is Chromium-only and English-only today.
+          </p>
+          <p>
+            <strong>A lighter footprint.</strong> On Chrome, Mue asks only for the search permission. Cuewise asks for
+            storage, notifications and alarms (for reminders and the timer), access to Unsplash and cuewise.app (for photos
+            and weather), and a context-menu entry with page access for saving a selection. Mue
+            also has an offline mode that blocks every outside request.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad" style="padding-top:0;">
+      <div class="wrap">
+        <div class="content-card glass reveal">
+          <h2>Why pick Cuewise instead</h2>
+          <p>
+            Mue recreates Momentum's look; Cuewise rebuilds its productivity side. Mue has no focus timer, and its
+            stats are a tab counter and achievements. Cuewise has a full Pomodoro with session history, and Insights turns it into
+            focus trends and a heatmap of the hours and weekdays you focus most.
+          </p>
+          <p>
+            Around that sit the tools that make a new tab a habit: Today's Focus, where unfinished goals carry forward instead
+            of disappearing; reminders that repeat on your schedule; spaced-repetition cards for what you're learning; ambient
+            sounds and focus music; and a read-only Google Calendar agenda. And if you use more than one computer, Cuewise's
+            optional sync is end-to-end encrypted — Mue offers a settings file you export and import by hand.
+          </p>
+          <p>
+            Also weighing <a href="/cuewise-vs-bonjourr/">Bonjourr</a> or <a href="/cuewise-vs-tabliss/">Tabliss</a>? See the
+            <a href="/momentum-alternatives/">full roundup of Momentum alternatives</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <FaqSection faqs={faqs} />
+
+    <FinalCta />
+
+  </main>
+</Base>
