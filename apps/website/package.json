@@ -11,6 +11,7 @@
     "type-check": "astro check",
     "clean": "rm -rf dist .astro",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "promo": "node promo/render.mts"

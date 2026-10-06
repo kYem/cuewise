@@ -1,10 +1,14 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, mergeConfig } from 'vitest/config';
+import { sharedConfig } from '../../vitest.shared';
 
-export default defineConfig({
-  test: {
-    environment: 'node',
-    setupFiles: ['./vitest.setup.ts'],
-    // Spies on globals (crypto.subtle) must not outlive a failed test — same net as apps/api.
-    restoreMocks: true,
-  },
-});
+export default mergeConfig(
+  sharedConfig,
+  defineConfig({
+    test: {
+      environment: 'node',
+      setupFiles: ['./vitest.setup.ts'],
+      // Spies on globals (crypto.subtle) must not outlive a failed test — same net as apps/api.
+      restoreMocks: true,
+    },
+  })
+);

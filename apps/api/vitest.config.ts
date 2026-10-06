@@ -3,6 +3,7 @@ import path from 'node:path';
 // and the config helpers moved off the /config subpath onto the package root.
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers';
 import { defineConfig } from 'vitest/config';
+import { sharedCoverage } from '../../vitest.shared';
 
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(path.join(__dirname, 'migrations'));
@@ -21,6 +22,8 @@ export default defineConfig(async () => {
       // Restores spies (e.g. logger.warn/error) before each test runs, not after — functionally
       // beforeEach(vi.restoreAllMocks). A mock set in a file's last test is never auto-restored.
       restoreMocks: true,
+      // workerd has no node:inspector, which v8 coverage needs.
+      coverage: { ...sharedCoverage, provider: 'istanbul' },
     },
   };
 });
