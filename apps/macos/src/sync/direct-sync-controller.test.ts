@@ -13,13 +13,15 @@ import { fakeControlSurface } from '@cuewise/sync-engine/src/__fixtures__/fake-c
 import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  fakeOAuthDriver,
+  hangingOAuthDriver,
+  unusedDriver,
+} from '../platform/__fixtures__/oauth-driver.fixtures';
+import {
   BASE_URL,
   buildRealController,
   corruptChecksum,
   createDevice,
-  fakeOAuthDriver,
-  hangingOAuthDriver,
-  unusedDriver,
   useStorage,
 } from './__fixtures__/direct-sync-controller.fixtures';
 import {

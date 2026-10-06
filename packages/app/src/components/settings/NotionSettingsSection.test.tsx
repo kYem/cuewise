@@ -3,6 +3,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  cancellableNotionHost,
   connectedWithoutTable,
   connectedWithTable,
   fakeNotionHost,
@@ -10,11 +11,13 @@ import {
 import { useNotionStore } from '../../stores/notion-store';
 import { renderNotionSection } from './__fixtures__/notion-settings.fixtures';
 
+const warningToast = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
-  useToastStore: { getState: () => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }) },
+  useToastStore: { getState: () => ({ error: vi.fn(), warning: warningToast, success: vi.fn() }) },
 }));
 
 beforeEach(() => {
+  warningToast.mockClear();
   useNotionStore.setState({ view: { status: 'loading' }, busy: false });
 });
 
@@ -118,6 +121,26 @@ describe('Notion settings', () => {
 
     expect(host.api.getNotionConnection).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Connecting…' })).toBeDisabled();
+  });
+
+  it('cancels a connect quietly when the host can abandon one', async () => {
+    const user = userEvent.setup();
+    const host = cancellableNotionHost();
+    renderNotionSection(host);
+    await user.click(await screen.findByRole('button', { name: 'Connect Notion' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(await screen.findByRole('button', { name: 'Connect Notion' })).toBeInTheDocument();
+    expect(warningToast).not.toHaveBeenCalled();
+  });
+
+  it('offers no Cancel during a connect when the host cannot abandon one', () => {
+    useNotionStore.setState({ view: { status: 'connecting' }, busy: true });
+
+    renderNotionSection(fakeNotionHost());
+
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
   });
 
   it('counts a session that still needs its recovery code as signed in', async () => {

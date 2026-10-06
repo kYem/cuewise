@@ -13,6 +13,7 @@ vi.mock('@tauri-apps/plugin-deep-link', () => ({
 
 import { createTauriOAuthDriver, OAuthCancelledError } from './oauth-driver';
 
+const AUTH_PREFIX = 'cuewise://auth';
 const START_URL = 'https://api.test/v1/auth/google/start?return_uri=cuewise%3A%2F%2Fauth';
 
 interface ListenerHarness {
@@ -59,7 +60,7 @@ afterEach(() => {
 describe('createTauriOAuthDriver', () => {
   it('opens the start URL and resolves with the first cuewise://auth callback, then unsubscribes', async () => {
     const listener = armListener();
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
     await flush();
 
     listener.emit(['cuewise://auth?code=one-time-x']);
@@ -71,7 +72,7 @@ describe('createTauriOAuthDriver', () => {
 
   it('ignores deep links outside cuewise://auth and still resolves on a later matching one', async () => {
     const listener = armListener();
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
     await flush();
 
     listener.emit(['cuewise://settings']);
@@ -80,9 +81,20 @@ describe('createTauriOAuthDriver', () => {
     await expect(authorize).resolves.toBe('cuewise://auth?code=late');
   });
 
+  it('ignores a callback under another driver prefix', async () => {
+    const listener = armListener();
+    const authorize = createTauriOAuthDriver('cuewise://notion').authorize(START_URL);
+    await flush();
+
+    listener.emit(['cuewise://auth?code=sync-code']);
+    listener.emit(['cuewise://notion?code=notion-code']);
+
+    await expect(authorize).resolves.toBe('cuewise://notion?code=notion-code');
+  });
+
   it('settles only once when two matching callbacks arrive', async () => {
     const listener = armListener();
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
     await flush();
 
     listener.emit(['cuewise://auth?code=first']);
@@ -99,7 +111,7 @@ describe('createTauriOAuthDriver', () => {
     listener.stop.mockImplementation(() => {
       throw new Error('plugin torn down');
     });
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
     await flush();
 
     listener.emit(['cuewise://auth?code=x']);
@@ -109,7 +121,7 @@ describe('createTauriOAuthDriver', () => {
 
   it('cancel() rejects the pending flow with OAuthCancelledError and unsubscribes', async () => {
     const listener = armListener();
-    const driver = createTauriOAuthDriver();
+    const driver = createTauriOAuthDriver(AUTH_PREFIX);
     const authorize = driver.authorize(START_URL);
     await flush();
 
@@ -121,7 +133,7 @@ describe('createTauriOAuthDriver', () => {
 
   it('a stale cancel() after a settled flow does not poison the next authorize()', async () => {
     const listener = armListener();
-    const driver = createTauriOAuthDriver();
+    const driver = createTauriOAuthDriver(AUTH_PREFIX);
 
     const first = driver.authorize(START_URL);
     await flush();
@@ -138,7 +150,7 @@ describe('createTauriOAuthDriver', () => {
 
   it('rejects after the callback timeout and unsubscribes the listener', async () => {
     const listener = armListener();
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
     await flush();
 
     vi.advanceTimersByTime(300_000);
@@ -162,7 +174,7 @@ describe('createTauriOAuthDriver', () => {
     );
     openMock.mockRejectedValue(new Error('no browser available'));
 
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
     await expect(authorize).rejects.toThrow('no browser available');
 
     resolveRegistration(stop);
@@ -175,7 +187,7 @@ describe('createTauriOAuthDriver', () => {
     // Keep open() pending so the registration failure is the only settle path.
     openMock.mockReturnValue(new Promise(() => {}));
 
-    const authorize = createTauriOAuthDriver().authorize(START_URL);
+    const authorize = createTauriOAuthDriver(AUTH_PREFIX).authorize(START_URL);
 
     await expect(authorize).rejects.toThrow('deep-link plugin unavailable');
   });

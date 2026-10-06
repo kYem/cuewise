@@ -39,6 +39,7 @@ export function returnedWith(query: Record<string, string>): string {
 
 export interface FakeNotionHost extends NotionHost {
   readonly api: { [K in keyof NotionApi]: ReturnType<typeof vi.fn<NotionApi[K]>> };
+  readonly authorize: ReturnType<typeof vi.fn<NotionHost['authorize']>>;
 }
 
 /** Not connected yet; consent returns a code, and the workspace shares one table. */
@@ -57,9 +58,27 @@ export function fakeNotionHost(
   };
   return {
     api,
-    authorize: vi.fn(async (start: (returnUri: string) => Promise<string>) => {
+    authorize: vi.fn<NotionHost['authorize']>(async (start) => {
       await start(NOTION_RETURN_URI);
       return redirect;
     }),
   };
+}
+
+export interface CancellableNotionHost extends FakeNotionHost {
+  readonly cancel: ReturnType<typeof vi.fn<() => void>>;
+}
+
+/** Consent stays open until `cancel()`, which makes the pending authorize() answer null. */
+export function cancellableNotionHost(): CancellableNotionHost {
+  const host = fakeNotionHost();
+  let abandon: () => void = () => undefined;
+  host.authorize.mockImplementation(
+    (start) =>
+      new Promise((resolve) => {
+        abandon = () => resolve(null);
+        void start(NOTION_RETURN_URI);
+      })
+  );
+  return { ...host, cancel: vi.fn(() => abandon()) };
 }
