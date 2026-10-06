@@ -23,6 +23,7 @@ import {
   AUTH_CANCELLED_DETAIL,
   isCancelledEnable,
   LAST_CYCLE_UNAVAILABLE,
+  NO_SAVED_SIGN_IN_DETAIL,
   useSyncController,
 } from '../../sync/sync-controller';
 import { formatMillisAgo } from '../../utils/reminder-date-utils';
@@ -218,6 +219,9 @@ function enableFailureMessage(result: Extract<EnableResult, { ok: false }>): str
   }
   if (result.reason === 'auth') {
     return "Couldn't verify your account — please try again.";
+  }
+  if (result.reason === 'error' && result.detail === NO_SAVED_SIGN_IN_DETAIL) {
+    return 'This device has no saved sign-in — disconnect, then turn sync on again.';
   }
   return 'Something went wrong enabling sync — please try again.';
 }
@@ -614,7 +618,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const handleReconnect = async () => {
     setIsReconnecting(true);
     try {
-      const result = await controller.reconnect();
+      const result = await controller.reconnect(deviceName);
       await routeEnableResult(result, 'reconnect');
     } catch (error) {
       logger.error('Cloud sync reconnect failed', error);
@@ -630,7 +634,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     let result: EnableResult;
     try {
       if (enrollSource === 'reconnect') {
-        result = await controller.reconnect(code);
+        result = await controller.reconnect(deviceName, code);
       } else if (enrollSource === 'google') {
         if (controller.enrollWithCode) {
           // ENG-65: finish the enroll against the still-live session — no second browser bounce.

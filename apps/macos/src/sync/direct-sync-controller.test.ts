@@ -274,8 +274,9 @@ describe('createDirectSyncController: enable()', () => {
     useStorage(deviceB);
     const { controller: controllerB } = buildRealController(deviceB);
 
-    await controllerB.enable('cred-b', 'Device B');
+    const result = await controllerB.enable('cred-b', 'Device B', 'CW1-NOT-A-CODE');
 
+    expect(result).toMatchObject({ ok: false, reason: 'bad-code' });
     expect(await deviceB.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toBeNull();
   });
 
@@ -386,7 +387,7 @@ describe('createDirectSyncController: reconnect()', () => {
     device.apiClient.rejectAllWith401 = false;
     const enableSyncSpy = vi.spyOn(engine, 'enableSync');
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', {
       recoveryCode: undefined,
@@ -409,7 +410,7 @@ describe('createDirectSyncController: reconnect()', () => {
     );
     const enableSyncSpy = vi.spyOn(engine, 'enableSync');
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(enableSyncSpy).toHaveBeenCalledWith('dev', 'cred-a', 'Device A', {
       recoveryCode: undefined,
@@ -418,36 +419,42 @@ describe('createDirectSyncController: reconnect()', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('treats a malformed persisted creds record as no creds instead of launching a broken flow', async () => {
+  it('signs in with Google under the given device name when a malformed record is stored', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
-    const { controller } = buildRealController(device);
-    // A google record missing deviceName (corrupted / future-version): must fail at load.
+    const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller } = buildRealController(device, driver);
     await device.kv.set(LAST_SYNC_CREDS_KEY, { provider: 'google' }, 'local');
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('MacBook');
 
-    expect(result).toEqual({
-      ok: false,
-      reason: 'error',
-      detail: 'No saved sync account on this device',
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(await device.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toEqual({
+      provider: 'google',
+      deviceName: 'MacBook',
     });
   });
 
-  it('returns an error result when no creds were ever persisted', async () => {
+  it('signs in with Google under the given device name when no creds were ever persisted', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
     useStorage(device);
-    const { controller } = buildRealController(device);
+    const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
+    const { controller, engine } = buildRealController(device, driver);
+    const enableSyncSpy = vi.spyOn(engine, 'enableSync');
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('MacBook');
 
-    expect(result).toEqual({
-      ok: false,
-      reason: 'error',
-      detail: 'No saved sync account on this device',
-    });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(enableSyncSpy).toHaveBeenCalledWith(
+      'google',
+      'one-time-x',
+      'MacBook',
+      expect.objectContaining({ recoveryCode: undefined })
+    );
   });
 });
 
@@ -838,6 +845,11 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     expect(first).toEqual({ ok: false, reason: 'needs-code' });
     const exchangesAfterSignIn = deviceB.apiClient.exchangeCount;
 
+    expect(await deviceB.kv.get(LAST_SYNC_CREDS_KEY, 'local')).toEqual({
+      provider: 'google',
+      deviceName: 'MacBook',
+    });
+
     const result = await controller.enrollWithCode?.('MacBook', enableA.recoveryCode);
 
     expect(result).toEqual({ ok: true, recoveryCode: undefined });
@@ -870,12 +882,19 @@ describe('createDirectSyncController: enableWithGoogle()', () => {
     const device = createDevice(server);
     useStorage(device);
     const { driver, calls } = fakeOAuthDriver(`${GOOGLE_RETURN_URI}?code=one-time-x`);
-    const { controller } = buildRealController(device, driver);
+    const { controller, engine } = buildRealController(device, driver);
     await controller.enableWithGoogle('MacBook');
+    const enableSyncSpy = vi.spyOn(engine, 'enableSync');
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(result.ok).toBe(true);
+    expect(enableSyncSpy).toHaveBeenCalledWith(
+      'google',
+      'one-time-x',
+      'MacBook',
+      expect.objectContaining({ recoveryCode: undefined })
+    );
     expect(calls).toHaveLength(2);
     const firstChallenge = new URL(calls[0]).searchParams.get('code_challenge');
     const secondChallenge = new URL(calls[1]).searchParams.get('code_challenge');

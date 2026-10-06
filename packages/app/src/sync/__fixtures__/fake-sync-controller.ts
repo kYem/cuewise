@@ -310,8 +310,8 @@ export class FakeSyncController implements SyncController {
     return this.googleAvailable;
   }
 
-  async reconnect(recoveryCode?: string): Promise<EnableResult> {
-    this.calls.push({ method: 'reconnect', args: [recoveryCode] });
+  async reconnect(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
+    this.calls.push({ method: 'reconnect', args: [deviceName, recoveryCode] });
     this.maybeFail('reconnect');
     const next = this.reconnectResults.shift();
     if (next !== undefined) {

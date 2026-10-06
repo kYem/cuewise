@@ -64,6 +64,9 @@ export type EnableResult =
  */
 export const AUTH_CANCELLED_DETAIL = 'cancelled';
 
+/** EnableResult.detail beside `reason:'error'`: no saved sign-in and no Google sign-in to run. */
+export const NO_SAVED_SIGN_IN_DETAIL = 'no-saved-sign-in';
+
 /**
  * Whether a failed enable was the user's own doing. Reads the reason, not just the detail: an
  * `error` detail is a thrown message, and one reading "cancelled" would silence a real failure.
@@ -147,7 +150,8 @@ export interface SyncController {
   enableWithGoogle(deviceName: string, recoveryCode?: string): Promise<EnableResult>;
   /** Whether Google sign-in is available on this host/build; the UI hides the button when false. */
   canEnableWithGoogle(): boolean;
-  reconnect(recoveryCode?: string): Promise<EnableResult>;
+  /** Replays this device's saved sign-in; with none saved, signs in with Google as `deviceName`. */
+  reconnect(deviceName: string, recoveryCode?: string): Promise<EnableResult>;
   disable(): Promise<void>;
   regenerateRecoveryCode(): Promise<string>;
   syncNow(): Promise<SyncNowResult>;

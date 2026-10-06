@@ -40,6 +40,7 @@ export {
   asSyncUiStatus,
   buildSyncDetails,
   LAST_CYCLE_UNAVAILABLE,
+  NO_SAVED_SIGN_IN_DETAIL,
   SyncControllerContext,
   useSyncController,
 } from './sync/sync-controller';
