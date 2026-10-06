@@ -13,16 +13,14 @@ export class OAuthCancelledError extends Error {
 /** Runs one system-browser OAuth round-trip; the seam DirectSyncController tests fake. */
 export interface OAuthDriver {
   /**
-   * Opens startUrl in the system browser and resolves with the first cuewise://auth
-   * callback URL delivered to the app. Rejects on timeout or if the browser can't open.
+   * Opens startUrl in the system browser and resolves with the first callback URL under the
+   * driver's prefix delivered to the app. Rejects on timeout or if the browser can't open.
    */
   authorize(startUrl: string): Promise<string>;
   /** Rejects the pending authorize() with OAuthCancelledError; a no-op when none is pending. */
   cancel(): void;
 }
 
-// Only the auth callback path counts; stray deep links to other cuewise:// paths are ignored.
-const CALLBACK_PREFIX = 'cuewise://auth';
 // Generous: the user may be picking an account / typing a password in the browser.
 const CALLBACK_TIMEOUT_MS = 300_000;
 
@@ -34,11 +32,11 @@ function toError(err: unknown): Error {
 }
 
 /**
- * Production driver over the Tauri shell + deep-link plugins. The one-shot listener only
- * exists while a flow is pending, so a stale cuewise://auth arriving outside a flow is
- * dropped on the floor — and the PKCE verifier for it died with that flow anyway.
+ * Production driver over the Tauri shell + deep-link plugins. Only deep links under
+ * `callbackPrefix` count, and the one-shot listener only exists while a flow is pending, so a
+ * stale callback arriving outside a flow is dropped — its PKCE verifier died with that flow anyway.
  */
-export function createTauriOAuthDriver(): OAuthDriver {
+export function createTauriOAuthDriver(callbackPrefix: string): OAuthDriver {
   // The serialize() mutex in DirectSyncController guarantees at most one flow at a time, so a
   // single slot is enough; settle-once makes a stale/double cancel a harmless no-op. (A cancel
   // in the sub-millisecond gap before authorize() registers is not closed here — the UI only
@@ -82,7 +80,7 @@ export function createTauriOAuthDriver(): OAuthDriver {
         }, CALLBACK_TIMEOUT_MS);
 
         onOpenUrl((urls) => {
-          const callback = urls.find((url) => url.startsWith(CALLBACK_PREFIX));
+          const callback = urls.find((url) => url.startsWith(callbackPrefix));
           if (callback !== undefined) {
             settle(() => resolve(callback));
           }

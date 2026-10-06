@@ -1,5 +1,5 @@
-import type { SyncController } from '@cuewise/app';
-import { PomodoroPipProvider, useToastStore } from '@cuewise/app';
+import type { NotionHost, SyncController } from '@cuewise/app';
+import { isNotionEnabled, PomodoroPipProvider, useToastStore } from '@cuewise/app';
 import { handleReminderFire } from '@cuewise/app/reminder-notifications';
 import '@cuewise/app/styles.css';
 import { configurePlatform, logger } from '@cuewise/shared';
@@ -10,11 +10,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppWrapper } from './AppWrapper';
 import { GlowOverlay } from './glow/GlowOverlay';
+import { createTauriNotionHost, NOTION_RETURN_URI } from './notion/tauri-notion-host';
 import { NoopScheduler, TauriNotifier, TauriScheduler, WebNotifier } from './platform';
 import { installExternalLinks } from './platform/external-links';
 import { createTauriOAuthDriver } from './platform/oauth-driver';
 import { initPosture } from './posture/posture-controller';
-import { createDirectSyncController } from './sync/direct-sync-controller';
+import { createDirectSyncController, GOOGLE_RETURN_URI } from './sync/direct-sync-controller';
 import { startFocusSync } from './sync/focus-sync';
 import { TrayStatusBridge } from './tray/TrayStatusBridge';
 
@@ -65,6 +66,7 @@ if (window.location.hash === '#glow') {
   // resume/self-heal a session that was enabled some other way (e.g. devtools).
   const syncApiBaseUrl = import.meta.env.VITE_SYNC_API_BASE_URL;
   let syncController: SyncController | null = null;
+  let notionHost: NotionHost | undefined;
   if (syncApiBaseUrl) {
     // E4: construct the controller WITH the engine — DirectSyncController wires its own
     // trampoline callbacks into createSyncEngine, so it (not main.tsx) owns onStatus/etc.
@@ -72,7 +74,7 @@ if (window.location.hash === '#glow') {
       baseUrl: syncApiBaseUrl,
       keyStore: storage,
       scheduler,
-      oauthDriver: createTauriOAuthDriver(),
+      oauthDriver: createTauriOAuthDriver(GOOGLE_RETURN_URI),
       // Native HTTP inside Tauri — webview fetch is blocked by the production CSP + API CORS.
       fetchFn: inTauri ? tauriFetch : undefined,
       toast: (message) => useToastStore.getState().warning(message),
@@ -87,6 +89,15 @@ if (window.location.hash === '#glow') {
       logger.error('Sync engine failed to start', error);
     });
     startFocusSync(controller);
+    // Notion rides the same Cuewise session as sync, so it is offered only where sync is.
+    if (isNotionEnabled()) {
+      notionHost = createTauriNotionHost({
+        baseUrl: syncApiBaseUrl,
+        keyStore: storage,
+        oauthDriver: createTauriOAuthDriver(NOTION_RETURN_URI),
+        fetchFn: inTauri ? tauriFetch : undefined,
+      });
+    }
   }
 
   // Restore posture tracking if it was left on last session (macOS-only, opt-in).
@@ -98,7 +109,7 @@ if (window.location.hash === '#glow') {
     <React.StrictMode>
       <PomodoroPipProvider>
         {inTauri ? <TrayStatusBridge /> : null}
-        <AppWrapper syncController={syncController} />
+        <AppWrapper syncController={syncController} notionHost={notionHost} />
       </PomodoroPipProvider>
     </React.StrictMode>
   );

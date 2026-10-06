@@ -5,6 +5,8 @@ interface ImportMetaEnv {
   // default; when set it enables the Cloud Sync settings section and self-heals/resumes
   // a session enabled some other way (e.g. devtools). Never set in production.
   readonly VITE_SYNC_API_BASE_URL?: string;
+  // Notion's public client id; Notion is offered only when it and the sync base URL are set.
+  readonly VITE_NOTION_CLIENT_ID?: string;
 }
 
 // Compile-time constants injected via this app's vite `define` — also referenced
