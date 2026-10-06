@@ -382,9 +382,16 @@ pnpm --filter @cuewise/browser-extension test
 # Watch mode
 pnpm --filter @cuewise/browser-extension test:watch
 
-# With coverage
+# With coverage (one package, or every package plus a summary table)
 pnpm --filter @cuewise/browser-extension test:coverage
+pnpm exec turbo run test:coverage && node scripts/coverage-summary.mts
 ```
+
+PRs run plain `test`; pushes to main run `test:coverage` in its place, so every package with a `test`
+script needs a `test:coverage` too (the summary step fails otherwise, on PRs as well). Coverage is
+reported, not gated: main's per-package totals land in the job summary and the HTML report is a
+downloadable artifact. `apps/api` uses Istanbul, since workerd has
+no `node:inspector` for V8 coverage.
 
 ## Common Gotchas
 

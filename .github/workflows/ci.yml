@@ -77,9 +77,26 @@ jobs:
           TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
           TURBO_SCM_HEAD: HEAD
 
+      # Main runs the same suites with coverage; PRs skip it to keep feedback fast.
       - name: Verify all (main)
         if: github.event_name != 'pull_request'
-        run: pnpm exec turbo run type-check test build
+        run: pnpm exec turbo run type-check test:coverage build
+
+      # Runs on PRs too: it fails if a package has `test` but no `test:coverage`, which main would skip.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: node scripts/coverage-summary.mts
+
+      - name: Upload coverage report
+        if: ${{ github.event_name != 'pull_request' && !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/*/coverage/
+            packages/*/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Decide whether the macOS app changed, and how much of it, so each downstream
   # job only runs when its own surface is touched. `native` is narrow (only what

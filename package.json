@@ -29,6 +29,7 @@
     "@commitlint/cli": "^20.2.0",
     "@commitlint/config-conventional": "^20.2.0",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "husky": "^9.1.7",
     "tsx": "^4.23.12",
     "turbo": "catalog:",

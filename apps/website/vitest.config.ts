@@ -8,6 +8,8 @@ export default mergeConfig(
       // e2e/ holds Playwright specs (*.spec.ts) plus unit-testable helpers (*.test.ts);
       // only the latter are Vitest's.
       include: ['functions/**/*.test.ts', 'e2e/**/*.test.ts'],
+      // mergeConfig concatenates arrays, so this adds to the shared src/** include.
+      coverage: { include: ['functions/**/*.ts'] },
     },
   })
 );
