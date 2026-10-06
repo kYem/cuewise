@@ -15,7 +15,7 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Goal management',
-    them: 'Single main-focus to-do',
+    them: 'A daily focus and a basic to-do list; more lists on Plus',
     us: 'Goals, objectives &amp; subtasks, history, transfers',
     winner: 'us',
   },
@@ -27,14 +27,14 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Timer',
-    them: 'Basic focus timer with sounds',
+    them: 'Focus Mode limited each day; Pomodoro and unlimited focus on Plus',
     us: 'Full Pomodoro: custom intervals, history, heatmaps',
     winner: 'us',
   },
   {
     aspect: 'Analytics',
-    them: 'Plus only (paid)',
-    us: 'Free: streaks, charts, insights',
+    them: 'Free Focus Stats; connected metrics on Plus',
+    us: 'Free: goal streaks, focus charts, Pomodoro heatmaps',
     winner: 'us',
   },
   {
@@ -45,13 +45,13 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Themes',
-    them: 'Paid customization',
+    them: 'Dark and light free; fonts, colors and Photo Match on Plus',
     us: '4 free themes incl. Glass + 3 density modes',
     winner: 'us',
   },
   {
     aspect: 'Sounds',
-    them: 'Focus sounds',
+    them: 'Soundscapes, Spotify and YouTube on Plus',
     us: 'Free ambient soundscapes + YouTube focus music',
     winner: 'us',
   },
@@ -63,15 +63,14 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Integrations',
-    them: 'Calendar, Todoist &amp; more (paid)',
+    them: 'Google &amp; Outlook Calendar free; Todoist and other task apps on Plus',
     us: 'Google Calendar agenda (read-only, free, off until you connect it)',
     winner: 'them',
   },
   {
     aspect: 'Storage sync',
-    them: 'Paid feature',
-    us: 'Optional end-to-end encrypted cloud sync',
-    winner: 'us',
+    them: 'Free with an account',
+    us: 'Optional, end-to-end encrypted',
   },
   {
     aspect: 'Open source',
@@ -81,9 +80,8 @@ const rows: ComparisonRow[] = [
   },
   {
     aspect: 'Account required',
-    them: 'For sync and Plus',
+    them: 'Optional; needed for sync and Plus',
     us: 'Only if you opt into sync',
-    winner: 'us',
   },
 ];
 
@@ -150,7 +148,7 @@ const faqs = [
               <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             </div>
             <h3>Free forever</h3>
-            <p>Momentum's best features sit behind Plus at ~$40/year. Every Cuewise feature — analytics, themes, soundscapes — is free, with no premium tier waiting to appear.</p>
+            <p>Momentum's Pomodoro, sounds and most customization sit behind Plus at ~$40/year. Every Cuewise feature — Pomodoro, themes, soundscapes — is free, with no premium tier waiting to appear.</p>
           </div>
 
           <div class="feat glass reveal">
@@ -158,7 +156,7 @@ const faqs = [
               <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             </div>
             <h3>Deeper productivity tools</h3>
-            <p>Full goal history with subtasks, a complete Pomodoro with heatmaps, and a quote library you can curate — where Momentum offers a single main-focus to-do.</p>
+            <p>Full goal history with subtasks, a complete Pomodoro with heatmaps, and a quote library you can curate — where Momentum's free tier offers a daily focus and a basic to-do list.</p>
           </div>
 
           <div class="feat glass reveal">
@@ -189,7 +187,7 @@ const faqs = [
             With over three million users and a deeply established ecosystem, it carries a level of brand trust and UI maturity that a newer product simply hasn't had time to build yet.
           </p>
           <p>
-            <strong>Third-party integrations.</strong> Momentum connects with Todoist and a number of other productivity services through its Plus plan.
+            <strong>Third-party integrations.</strong> Momentum shows your Google or Outlook calendar for free, and connects with Todoist and a number of other task apps through its Plus plan.
             If your workflow depends on syncing tasks from an external app onto the new tab, Momentum's integration layer is more developed (Cuewise stops at a read-only Google Calendar agenda), and if those integrations are essential to you, Momentum is the stronger pick today.
           </p>
         </div>
@@ -202,16 +200,15 @@ const faqs = [
           <h2>Why people switch</h2>
           <p>People move away from Momentum for a handful of recurring reasons, and none of them are about quality.</p>
           <p>
-            The most common is the gradual migration of features behind the Plus paywall. Functionality that once shipped free — custom backgrounds, integrations, customization options — has moved into the paid tier over time.
-            For people who never opted in expecting a subscription, finding a feature behind a paywall they didn't sign up for feels like a change in the deal.
+            The most common is the Plus paywall: the Pomodoro, unlimited focus time, sounds, custom backgrounds and task-app integrations all need a subscription.
           </p>
           <p>
             A related frustration is paying an ongoing subscription for software whose core experience runs in your browser tab.
             When an extension's entire value lives in your own browser tab — pulling from your own stored data — the case for a recurring fee becomes harder to justify, especially against free and open-source alternatives.
           </p>
           <p>
-            The third driver is data residency. Momentum's sync features necessarily involve your data passing through external servers in readable form.
-            Cuewise is local-first: with sync off (the default), your goals, notes, and focus sessions stay entirely on your own device — no cloud account, no server, no third party.
+            The third driver is data residency. Momentum's sync keeps your dashboard on its servers.
+            Cuewise is local-first: with sync off (the default), your goals, notes, and focus sessions stay entirely on your own device — no cloud account, and none of it is sent to a server or a third party.
             And if you do want sync, Cuewise's is end-to-end encrypted, so the server only ever holds ciphertext it cannot read.
           </p>
           <p>Cuewise's answer is simple: everything free, everything local, and code you can read.</p>
