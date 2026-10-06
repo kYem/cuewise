@@ -170,6 +170,35 @@ describe('connect', () => {
     expect(warningToast).toHaveBeenCalledWith("Connecting Notion didn't complete.");
   });
 
+  it('goes back quietly when the user cancels from the app', async () => {
+    useNotionStore.setState({ view: { status: 'disconnected' } });
+    const host = { ...fakeNotionHost(null), cancel: vi.fn() };
+    host.authorize.mockImplementation(async () => {
+      useNotionStore.getState().cancelConnect(host);
+      return null;
+    });
+
+    await useNotionStore.getState().connect(host);
+
+    expect(host.cancel).toHaveBeenCalledTimes(1);
+    expect(useNotionStore.getState().view).toEqual({ status: 'disconnected' });
+    expect(warningToast).not.toHaveBeenCalled();
+  });
+
+  it('reports a consent flow that failed, and goes back', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    useNotionStore.setState({ view: { status: 'disconnected' } });
+    const host = fakeNotionHost();
+    const thrown = new Error('Timed out waiting for the sign-in callback');
+    host.authorize.mockRejectedValue(thrown);
+
+    await useNotionStore.getState().connect(host);
+
+    expect(errorSpy).toHaveBeenCalledWith("Couldn't connect Notion.", thrown);
+    expect(errorToast).toHaveBeenCalledWith("Couldn't connect Notion.");
+    expect(useNotionStore.getState().view).toEqual({ status: 'disconnected' });
+  });
+
   it('claims nothing when Notion returned an error other than a decline', async () => {
     vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     useNotionStore.setState({ view: { status: 'disconnected' } });

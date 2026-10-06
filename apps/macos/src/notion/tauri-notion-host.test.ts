@@ -43,9 +43,22 @@ describe('createTauriNotionHost', () => {
     const redirect = host.authorize(async () => AUTHORIZE_URL);
     await driver.waitForPending();
 
-    host.cancel?.();
+    host.cancel();
 
     await expect(redirect).resolves.toBeNull();
+  });
+
+  it('opens no browser when the user cancels while consent is still being started', async () => {
+    const fake = fakeOAuthDriver(RETURNED);
+    const host = hostOver(fake.driver);
+
+    const redirect = await host.authorize(async () => {
+      host.cancel();
+      return AUTHORIZE_URL;
+    });
+
+    expect(redirect).toBeNull();
+    expect(fake.calls).toEqual([]);
   });
 
   it('rethrows a consent flow that failed, so the store can report it', async () => {

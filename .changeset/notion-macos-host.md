@@ -1,4 +1,5 @@
 ---
+'@cuewise/app': minor
 '@cuewise/macos': minor
 ---
 

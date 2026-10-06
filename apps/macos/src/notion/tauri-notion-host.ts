@@ -17,18 +17,27 @@ export interface CreateTauriNotionHostOptions {
 }
 
 /** Notion over the sync engine's session, never clearing it: the engine owns auth loss. */
-export function createTauriNotionHost(opts: CreateTauriNotionHostOptions): NotionHost {
+export function createTauriNotionHost(
+  opts: CreateTauriNotionHostOptions
+): NotionHost & { cancel(): void } {
   const session = new SessionManager(opts.keyStore);
   const api = new ApiClient({
     baseUrl: opts.baseUrl,
     getToken: () => session.getToken(),
     fetchFn: opts.fetchFn,
   });
+  // Latched, since a cancel during start()'s fetch has no pending driver flow to reject yet.
+  let cancelled = false;
   return {
     api,
     // A browser that never opened or a callback that never came throws, so the store reports it.
     async authorize(start) {
+      cancelled = false;
       const url = await start(NOTION_RETURN_URI);
+      if (cancelled) {
+        logger.info('Notion connect cancelled from the app');
+        return null;
+      }
       try {
         return await opts.oauthDriver.authorize(url);
       } catch (error) {
@@ -40,6 +49,7 @@ export function createTauriNotionHost(opts: CreateTauriNotionHostOptions): Notio
       }
     },
     cancel() {
+      cancelled = true;
       opts.oauthDriver.cancel();
     },
   };

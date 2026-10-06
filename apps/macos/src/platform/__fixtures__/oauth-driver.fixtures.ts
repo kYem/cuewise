@@ -34,11 +34,7 @@ export function fakeOAuthDriver(outcome: string | Error): FakeOAuthDriver {
   };
 }
 
-/**
- * A driver whose authorize() hangs until cancel() rejects it — for exercising the cancel path.
- * Await `waitForPending()` before cancelling: callers do async work before authorize(), so an
- * immediate cancel would fire into the pre-authorize gap and no-op.
- */
+/** Hangs authorize() until cancel() rejects it; `waitForPending()` resolves once it is pending. */
 export function hangingOAuthDriver(): OAuthDriver & { waitForPending: () => Promise<void> } {
   let rejectPending: ((err: Error) => void) | null = null;
   let notifyPending: () => void = () => {};

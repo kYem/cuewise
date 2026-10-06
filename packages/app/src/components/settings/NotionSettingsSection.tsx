@@ -53,7 +53,7 @@ const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, 
     }
   }, [host, signedIn]);
 
-  const { load, connect, pick, disconnect, changeTable } = useNotionStore.getState();
+  const { load, connect, cancelConnect, pick, disconnect, changeTable } = useNotionStore.getState();
 
   if (!signedIn) {
     return (
@@ -94,14 +94,13 @@ const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, 
       </button>
     );
   } else if (view.status === 'connecting') {
-    const cancel = host.cancel;
     controls = (
       <div className="flex gap-2">
         <button type="button" className={BUTTON} disabled>
           Connecting…
         </button>
-        {cancel !== undefined && (
-          <button type="button" className={BUTTON} onClick={() => cancel()}>
+        {host.cancel !== undefined && (
+          <button type="button" className={BUTTON} onClick={() => cancelConnect(host)}>
             Cancel
           </button>
         )}

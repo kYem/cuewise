@@ -34,6 +34,8 @@ interface NotionStore {
   busy: boolean;
   load: (host: NotionHost) => Promise<void>;
   connect: (host: NotionHost) => Promise<void>;
+  /** Abandons a connect in flight, without the "didn't complete" warning a closed window gets. */
+  cancelConnect: (host: NotionHost) => void;
   pick: (host: NotionHost, table: NotionTable) => Promise<void>;
   changeTable: (host: NotionHost) => Promise<void>;
   disconnect: (host: NotionHost) => Promise<void>;
@@ -86,6 +88,7 @@ function storedTableId(view: NotionView): string | null {
 }
 
 export const useNotionStore = create<NotionStore>((set, get) => {
+  let connectCancelled = false;
   const fail = (error: unknown, message: string, restore: NotionView): void => {
     const next = viewForFault(error);
     if (next !== null) {
@@ -139,13 +142,16 @@ export const useNotionStore = create<NotionStore>((set, get) => {
     connect: async (host) => {
       const previous = get().view;
       set({ view: { status: 'connecting' }, busy: true });
+      connectCancelled = false;
       const verifier = generateCodeVerifier();
       try {
         const redirect = await host.authorize(async (returnUri) =>
           host.api.startNotion(returnUri, await computeCodeChallenge(verifier))
         );
         if (redirect === null) {
-          useToastStore.getState().warning("Connecting Notion didn't complete.");
+          if (!connectCancelled) {
+            useToastStore.getState().warning("Connecting Notion didn't complete.");
+          }
           set({ view: previous, busy: false });
           return;
         }
@@ -177,6 +183,14 @@ export const useNotionStore = create<NotionStore>((set, get) => {
       if (only !== undefined) {
         await get().pick(host, only);
       }
+    },
+
+    cancelConnect: (host) => {
+      if (get().view.status !== 'connecting' || host.cancel === undefined) {
+        return;
+      }
+      connectCancelled = true;
+      host.cancel();
     },
 
     pick: async (host, table) => {
