@@ -10,11 +10,13 @@ import {
 import { useNotionStore } from '../../stores/notion-store';
 import { renderNotionSection } from './__fixtures__/notion-settings.fixtures';
 
+const warningToast = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
-  useToastStore: { getState: () => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }) },
+  useToastStore: { getState: () => ({ error: vi.fn(), warning: warningToast, success: vi.fn() }) },
 }));
 
 beforeEach(() => {
+  warningToast.mockClear();
   useNotionStore.setState({ view: { status: 'loading' }, busy: false });
 });
 
@@ -120,15 +122,26 @@ describe('Notion settings', () => {
     expect(screen.getByRole('button', { name: 'Connecting…' })).toBeDisabled();
   });
 
-  it('offers Cancel during a connect when the host can abandon one', async () => {
+  it('cancels a connect quietly when the host can abandon one', async () => {
     const user = userEvent.setup();
-    const host = { ...fakeNotionHost(), cancel: vi.fn() };
-    useNotionStore.setState({ view: { status: 'connecting' }, busy: true });
+    let abandon: () => void = () => undefined;
+    const host = {
+      ...fakeNotionHost(),
+      cancel: vi.fn(() => abandon()),
+    };
+    host.authorize.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          abandon = () => resolve(null);
+        })
+    );
     renderNotionSection(host);
+    await user.click(await screen.findByRole('button', { name: 'Connect Notion' }));
 
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
 
-    expect(host.cancel).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: 'Connect Notion' })).toBeInTheDocument();
+    expect(warningToast).not.toHaveBeenCalled();
   });
 
   it('offers no Cancel during a connect when the host cannot abandon one', () => {

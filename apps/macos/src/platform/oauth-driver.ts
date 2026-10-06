@@ -37,8 +37,8 @@ function toError(err: unknown): Error {
  * stale callback arriving outside a flow is dropped — its PKCE verifier died with that flow anyway.
  */
 export function createTauriOAuthDriver(callbackPrefix: string): OAuthDriver {
-  // One flow per driver (sync's serialize() mutex, Notion's disabled buttons), so one slot is enough.
-  // A cancel before authorize() registers is a no-op here; callers that await first latch their own.
+  // One flow per driver (sync's mutex, Notion's disabled buttons), so one slot is enough. A cancel
+  // before authorize() registers is a no-op; the Notion host latches its own, sync does not.
   let cancelCurrent: (() => void) | null = null;
   return {
     cancel(): void {

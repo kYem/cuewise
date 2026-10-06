@@ -61,6 +61,20 @@ describe('createTauriNotionHost', () => {
     expect(fake.calls).toEqual([]);
   });
 
+  it('opens consent on the next connect after a cancelled one', async () => {
+    const fake = fakeOAuthDriver(RETURNED);
+    const host = hostOver(fake.driver);
+    await host.authorize(async () => {
+      host.cancel();
+      return AUTHORIZE_URL;
+    });
+
+    const redirect = await host.authorize(async () => AUTHORIZE_URL);
+
+    expect(redirect).toBe(RETURNED);
+    expect(fake.calls).toEqual([AUTHORIZE_URL]);
+  });
+
   it('rethrows a consent flow that failed, so the store can report it', async () => {
     const fake = fakeOAuthDriver(new Error('no browser available'));
 
