@@ -2,6 +2,7 @@ import { logger } from '@cuewise/shared';
 import { notionTableFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  cancellableNotionHost,
   connectedWithoutTable,
   connectedWithTable,
   fakeNotionHost,
@@ -172,13 +173,11 @@ describe('connect', () => {
 
   it('goes back quietly when the user cancels from the app', async () => {
     useNotionStore.setState({ view: { status: 'disconnected' } });
-    const host = { ...fakeNotionHost(null), cancel: vi.fn() };
-    host.authorize.mockImplementation(async () => {
-      useNotionStore.getState().cancelConnect(host);
-      return null;
-    });
+    const host = cancellableNotionHost();
+    const connecting = useNotionStore.getState().connect(host);
 
-    await useNotionStore.getState().connect(host);
+    useNotionStore.getState().cancelConnect(host);
+    await connecting;
 
     expect(host.cancel).toHaveBeenCalledTimes(1);
     expect(useNotionStore.getState().view).toEqual({ status: 'disconnected' });
@@ -187,16 +186,24 @@ describe('connect', () => {
 
   it('warns again when a connect after a cancelled one does not finish', async () => {
     useNotionStore.setState({ view: { status: 'disconnected' } });
-    const host = { ...fakeNotionHost(null), cancel: vi.fn() };
-    host.authorize.mockImplementationOnce(async () => {
-      useNotionStore.getState().cancelConnect(host);
-      return null;
-    });
-    await useNotionStore.getState().connect(host);
+    const host = cancellableNotionHost();
+    const cancelled = useNotionStore.getState().connect(host);
+    useNotionStore.getState().cancelConnect(host);
+    await cancelled;
+    host.authorize.mockResolvedValueOnce(null);
 
     await useNotionStore.getState().connect(host);
 
     expect(warningToast).toHaveBeenCalledWith("Connecting Notion didn't complete.");
+  });
+
+  it('cancels nothing when no connect is in flight', () => {
+    useNotionStore.setState({ view: { status: 'disconnected' } });
+    const host = cancellableNotionHost();
+
+    useNotionStore.getState().cancelConnect(host);
+
+    expect(host.cancel).not.toHaveBeenCalled();
   });
 
   it('reports a consent flow that failed, and goes back', async () => {

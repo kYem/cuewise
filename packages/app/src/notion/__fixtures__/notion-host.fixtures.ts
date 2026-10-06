@@ -64,3 +64,21 @@ export function fakeNotionHost(
     }),
   };
 }
+
+export interface CancellableNotionHost extends FakeNotionHost {
+  readonly cancel: ReturnType<typeof vi.fn<() => void>>;
+}
+
+/** Consent stays open until `cancel()`, which makes the pending authorize() answer null. */
+export function cancellableNotionHost(): CancellableNotionHost {
+  const host = fakeNotionHost();
+  let abandon: () => void = () => undefined;
+  host.authorize.mockImplementation(
+    (start) =>
+      new Promise((resolve) => {
+        abandon = () => resolve(null);
+        void start(NOTION_RETURN_URI);
+      })
+  );
+  return { ...host, cancel: vi.fn(() => abandon()) };
+}

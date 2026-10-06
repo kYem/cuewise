@@ -3,6 +3,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  cancellableNotionHost,
   connectedWithoutTable,
   connectedWithTable,
   fakeNotionHost,
@@ -124,17 +125,7 @@ describe('Notion settings', () => {
 
   it('cancels a connect quietly when the host can abandon one', async () => {
     const user = userEvent.setup();
-    let abandon: () => void = () => undefined;
-    const host = {
-      ...fakeNotionHost(),
-      cancel: vi.fn(() => abandon()),
-    };
-    host.authorize.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          abandon = () => resolve(null);
-        })
-    );
+    const host = cancellableNotionHost();
     renderNotionSection(host);
     await user.click(await screen.findByRole('button', { name: 'Connect Notion' }));
 
