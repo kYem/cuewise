@@ -61,6 +61,10 @@ for (const dir of packageDirs) {
   rows.push(`| ${pkg.name} | ${cells.join(' | ')} |`);
 }
 
+const footnote = rows.some((row) => row.includes('not run'))
+  ? ['"not run" means the package was unaffected by this change, so Turbo skipped it.', '']
+  : [];
+
 const table = [
   '## Test coverage',
   '',
@@ -68,8 +72,7 @@ const table = [
   '| --- | --- | --- | --- | --- |',
   ...rows,
   '',
-  '"not run" means the package was unaffected by this change, so Turbo skipped it.',
-  '',
+  ...footnote,
 ].join('\n');
 
 console.log(table);
