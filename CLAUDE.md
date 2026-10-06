@@ -387,9 +387,10 @@ pnpm --filter @cuewise/browser-extension test:coverage
 pnpm exec turbo run test:coverage && node scripts/coverage-summary.mts
 ```
 
-CI runs `test:coverage` in place of `test`, so every package with a `test` script needs a `test:coverage`
-too (the summary step fails otherwise). Coverage is reported, not gated: per-package totals land in the
-job summary and the HTML report is a downloadable artifact. `apps/api` uses Istanbul, since workerd has
+PRs run plain `test`; pushes to main run `test:coverage` in its place, so every package with a `test`
+script needs a `test:coverage` too (the summary step fails otherwise, on PRs as well). Coverage is
+reported, not gated: main's per-package totals land in the job summary and the HTML report is a
+downloadable artifact. `apps/api` uses Istanbul, since workerd has
 no `node:inspector` for V8 coverage.
 
 ## Common Gotchas

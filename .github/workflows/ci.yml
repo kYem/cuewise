@@ -70,25 +70,25 @@ jobs:
 
       # PRs only type-check/test/build the packages the diff touches (plus their
       # dependents, via Turbo's graph); pushes to main verify everything.
-      # test:coverage runs the same suites as test, with coverage collected.
       - name: Verify affected (pull requests)
         if: github.event_name == 'pull_request'
-        run: pnpm exec turbo run type-check test:coverage build --affected
+        run: pnpm exec turbo run type-check test build --affected
         env:
           TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
           TURBO_SCM_HEAD: HEAD
 
+      # Main runs the same suites with coverage; PRs skip it to keep feedback fast.
       - name: Verify all (main)
         if: github.event_name != 'pull_request'
         run: pnpm exec turbo run type-check test:coverage build
 
-      # Also fails the job if a package has `test` but no `test:coverage`, which the steps above would skip.
+      # Runs on PRs too: it fails if a package has `test` but no `test:coverage`, which main would skip.
       - name: Coverage summary
         if: ${{ !cancelled() }}
         run: node scripts/coverage-summary.mts
 
       - name: Upload coverage report
-        if: ${{ !cancelled() }}
+        if: ${{ github.event_name != 'pull_request' && !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-${{ github.run_id }}-${{ github.run_attempt }}

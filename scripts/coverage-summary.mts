@@ -4,8 +4,9 @@
  *
  * Prints a per-package coverage table from each workspace package's
  * coverage/coverage-summary.json, and appends it to $GITHUB_STEP_SUMMARY when set.
- * Fails if a package has a `test` script but no `test:coverage`: CI runs the
- * latter, so such a package's tests would silently stop running.
+ * With no reports present (a PR run) it prints nothing. Either way it fails if a
+ * package has a `test` script but no `test:coverage`: main's CI runs the latter,
+ * so such a package's tests would silently stop running there.
  *
  * Usage:
  *   pnpm exec turbo run test:coverage && node scripts/coverage-summary.mts
@@ -37,6 +38,7 @@ const packageDirs = ['apps', 'packages'].flatMap((group) =>
 
 const rows: string[] = [];
 const missingScript: string[] = [];
+let reported = 0;
 
 for (const dir of packageDirs) {
   const pkg = JSON.parse(readFileSync(path.join(root, dir, 'package.json'), 'utf8'));
@@ -51,9 +53,10 @@ for (const dir of packageDirs) {
 
   const summaryPath = path.join(root, dir, 'coverage', 'coverage-summary.json');
   if (!existsSync(summaryPath)) {
-    rows.push(`| ${pkg.name} | not run | | | |`);
+    rows.push(`| ${pkg.name} | no report | | | |`);
     continue;
   }
+  reported += 1;
   const { total } = JSON.parse(readFileSync(summaryPath, 'utf8')) as { total: Totals };
   const cells = [total.lines, total.statements, total.functions, total.branches].map(
     (metric) => `${metric.pct.toFixed(1)}%`
@@ -61,28 +64,25 @@ for (const dir of packageDirs) {
   rows.push(`| ${pkg.name} | ${cells.join(' | ')} |`);
 }
 
-const footnote = rows.some((row) => row.includes('not run'))
-  ? ['"not run" means the package was unaffected by this change, so Turbo skipped it.', '']
-  : [];
+if (reported > 0) {
+  const table = [
+    '## Test coverage',
+    '',
+    '| Package | Lines | Statements | Functions | Branches |',
+    '| --- | --- | --- | --- | --- |',
+    ...rows,
+    '',
+  ].join('\n');
 
-const table = [
-  '## Test coverage',
-  '',
-  '| Package | Lines | Statements | Functions | Branches |',
-  '| --- | --- | --- | --- | --- |',
-  ...rows,
-  '',
-  ...footnote,
-].join('\n');
-
-console.log(table);
-if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, table);
+  console.log(table);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, table);
+  }
 }
 
 if (missingScript.length > 0) {
   console.error(
-    `These packages have a "test" script but no "test:coverage", so CI never runs their tests: ${missingScript.join(', ')}`
+    `These packages have a "test" script but no "test:coverage", so main's CI never runs their tests: ${missingScript.join(', ')}`
   );
   process.exit(1);
 }
