@@ -1,3 +1,4 @@
+import { NO_SAVED_SIGN_IN_DETAIL } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -423,6 +424,17 @@ describe('BridgeSyncController: enableWithGoogle', () => {
     }
   });
 
+  it('persists the google provider when sign-in answers needs-code, so a paired enrol can reconnect', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'needs-code' });
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    await controller.enableWithGoogle('Device A');
+
+    expect(storageMock.set).toHaveBeenCalledWith({
+      [LAST_SYNC_CREDS_KEY]: { provider: 'google', deviceName: 'Device A' },
+    });
+  });
+
   it('persists { provider: "google", deviceName } on success so reconnect can re-auth', async () => {
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
 
@@ -533,13 +545,26 @@ describe('BridgeSyncController: enableWithGoogle', () => {
 });
 
 describe('BridgeSyncController: reconnect', () => {
-  it('returns an error result without sending when no creds are persisted', async () => {
+  it('signs in with Google under the given device name when no creds are persisted', async () => {
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+
+    const result = await controller.reconnect('Device A');
+
+    expect(runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ op: 'enable', provider: 'google', deviceName: 'Device A' })
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('says no sign-in is saved, without sending, when there are no creds and no Google sign-in', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const controller = new BridgeSyncController();
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
-    expect(result).toEqual({ ok: false, reason: 'error' });
+    expect(result).toEqual({ ok: false, reason: 'error', detail: NO_SAVED_SIGN_IN_DETAIL });
     expect(runtime.sendMessage).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   // Backward compat: a record written before `provider` existed (no provider field) still
@@ -548,7 +573,7 @@ describe('BridgeSyncController: reconnect', () => {
     storageMock.data[LAST_SYNC_CREDS_KEY] = { accountId: 'acc-1', deviceName: 'Device A' };
     const controller = new BridgeSyncController();
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(runtime.sendMessage).toHaveBeenCalledWith({
       kind: 'cuewise-sync-control',
@@ -565,7 +590,7 @@ describe('BridgeSyncController: reconnect', () => {
     runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
     const controller = new BridgeSyncController({ timeoutMs: 10 });
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(result).toEqual({ ok: false, reason: 'error' });
     errorSpy.mockRestore();
@@ -575,7 +600,7 @@ describe('BridgeSyncController: reconnect', () => {
     storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'google', deviceName: 'Device A' };
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(identity.launchWebAuthFlow).toHaveBeenCalled();
     expect(runtime.sendMessage).toHaveBeenCalledWith(
@@ -591,7 +616,7 @@ describe('BridgeSyncController: reconnect', () => {
     storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'google', deviceName: 'Device A' };
     const controller = new BridgeSyncController({ googleClientId: 'client-id' });
 
-    await controller.reconnect('CW1-CODE');
+    await controller.reconnect('Device A', 'CW1-CODE');
 
     expect(runtime.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ op: 'enable', provider: 'google', recoveryCode: 'CW1-CODE' })
@@ -602,7 +627,7 @@ describe('BridgeSyncController: reconnect', () => {
     storageMock.data[LAST_SYNC_CREDS_KEY] = { provider: 'dev', deviceName: 'Device A' };
     const controller = new BridgeSyncController();
 
-    const result = await controller.reconnect();
+    const result = await controller.reconnect('Device A');
 
     expect(result).toEqual({ ok: false, reason: 'error' });
     expect(runtime.sendMessage).not.toHaveBeenCalled();

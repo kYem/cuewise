@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
 import type { SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
-import { SyncControllerContext } from '../../sync/sync-controller';
+import { NO_SAVED_SIGN_IN_DETAIL, SyncControllerContext } from '../../sync/sync-controller';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
 
@@ -674,7 +674,10 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Enroll' }));
 
     await waitFor(() =>
-      expect(controller.calls).toContainEqual({ method: 'reconnect', args: [CODE] })
+      expect(controller.calls).toContainEqual({
+        method: 'reconnect',
+        args: [expect.any(String), CODE],
+      })
     );
     expect(controller.calls.some((call) => call.method === 'enable')).toBe(false);
   });
@@ -2310,6 +2313,22 @@ describe('SyncSettingsSectionComponent', () => {
     expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
   });
 
+  it('tells the user to start over when the device has no saved sign-in to reconnect', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeSyncController();
+    controller.scriptReconnect({ ok: false, reason: 'error', detail: NO_SAVED_SIGN_IN_DETAIL });
+    renderSection(controller);
+    act(() => controller.setStatus('needs_reauth'));
+
+    await user.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        'This device has no saved sign-in — disconnect, then turn sync on again.'
+      )
+    );
+  });
+
   describe('pairing (requester)', () => {
     /** Lets a settled controller promise reach the panel without advancing the fake clock. */
     async function flush(): Promise<void> {
@@ -2408,7 +2427,10 @@ describe('SyncSettingsSectionComponent', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Enroll' }));
 
       await waitFor(() =>
-        expect(controller.calls).toContainEqual({ method: 'reconnect', args: [CODE] })
+        expect(controller.calls).toContainEqual({
+          method: 'reconnect',
+          args: [expect.any(String), CODE],
+        })
       );
     });
 

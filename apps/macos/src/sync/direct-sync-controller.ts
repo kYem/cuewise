@@ -225,10 +225,15 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     try {
       await op();
     } catch (err) {
+      const failure = mapEnableError(err, trace);
+      // Needs-code is a finished sign-in, and pairing can complete the enrol without coming back.
+      if (failure.reason === 'needs-code') {
+        await persistCreds(creds);
+      }
       // Attached to every arm, not just the cancel: enableSync hands a minted code over before the
       // steps that can throw, and the account it opens outlives the attempt — so a failure that
       // swallows it locks the user out.
-      return { ...mapEnableError(err, trace), recoveryCode: takeRecoveryCode() };
+      return { ...failure, recoveryCode: takeRecoveryCode() };
     }
     if (engine.getStatus() === 'signed_out') {
       // The engine swallows 401s into signed_out rather than rethrowing — this is the LIVE
@@ -424,11 +429,12 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
         }
       });
     },
-    reconnect(recoveryCode?: string): Promise<EnableResult> {
+    reconnect(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
       return serialize(async () => {
         const creds = await loadCreds();
         if (creds === null) {
-          return { ok: false, reason: 'error', detail: 'No saved sync account on this device' };
+          logger.info('Cloud sync reconnect has no saved sign-in; signing in with Google');
+          return googleFlow(deviceName, recoveryCode);
         }
         if (creds.provider === 'google') {
           // Google can't silently re-auth; the DK is already on device, so a fresh OAuth suffices.

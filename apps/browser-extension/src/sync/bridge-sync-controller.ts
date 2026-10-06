@@ -6,7 +6,7 @@ import type {
   SyncDetailsOptions,
   SyncUiStatus,
 } from '@cuewise/app';
-import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE } from '@cuewise/app';
+import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE, NO_SAVED_SIGN_IN_DETAIL } from '@cuewise/app';
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -43,6 +43,14 @@ export interface BridgeSyncControllerOptions {
   timeoutMs?: number;
   /** OAuth client id for chrome.identity.launchWebAuthFlow; unset disables enableWithGoogle. */
   googleClientId?: string;
+}
+
+// A needs-code answer is a finished sign-in: pairing can complete the enrol without coming back here.
+function signedIn(response: EnableResult): boolean {
+  if (response.ok) {
+    return true;
+  }
+  return response.reason === 'needs-code';
 }
 
 /**
@@ -94,7 +102,7 @@ export class BridgeSyncController implements SyncController {
       logger.error('Sync enable control message failed', error);
       return { ok: false, reason: 'error' };
     }
-    if (response.ok) {
+    if (signedIn(response)) {
       // Persist inside a guard: a storage failure must not turn a successful enroll into a
       // rejection or lose the one-shot recovery code — log and still return the ok response.
       try {
@@ -182,7 +190,7 @@ export class BridgeSyncController implements SyncController {
       logger.error('Sync enableWithGoogle control message failed', error);
       return { ok: false, reason: 'error' };
     }
-    if (response.ok) {
+    if (signedIn(response)) {
       // Persist the provider (never the id token) so reconnect knows to re-auth via Google.
       try {
         await this.persistCreds({ provider: 'google', deviceName });
@@ -197,7 +205,7 @@ export class BridgeSyncController implements SyncController {
     return Boolean(this.googleClientId);
   }
 
-  async reconnect(recoveryCode?: string): Promise<EnableResult> {
+  async reconnect(deviceName: string, recoveryCode?: string): Promise<EnableResult> {
     try {
       const stored = await chrome.storage.local.get(LAST_SYNC_CREDS_KEY);
       // Read loosely: storage is untyped, and records written before `provider` existed lack it.
@@ -205,8 +213,12 @@ export class BridgeSyncController implements SyncController {
         | { provider?: SyncSignInProvider; accountId?: string; deviceName?: string }
         | undefined;
       if (creds?.deviceName === undefined) {
-        logger.warn('Cloud sync reconnect has no persisted credentials');
-        return { ok: false, reason: 'error' };
+        if (this.canEnableWithGoogle()) {
+          logger.info('Cloud sync reconnect has no saved sign-in; signing in with Google');
+          return await this.enableWithGoogle(deviceName, recoveryCode);
+        }
+        logger.warn('Cloud sync reconnect has no saved sign-in to replay');
+        return { ok: false, reason: 'error', detail: NO_SAVED_SIGN_IN_DETAIL };
       }
       if (creds.provider === 'google') {
         // Google can't silently re-auth — re-run the OAuth flow. The data key is already on this
