@@ -120,6 +120,25 @@ describe('Notion settings', () => {
     expect(screen.getByRole('button', { name: 'Connecting…' })).toBeDisabled();
   });
 
+  it('offers Cancel during a connect when the host can abandon one', async () => {
+    const user = userEvent.setup();
+    const host = { ...fakeNotionHost(), cancel: vi.fn() };
+    useNotionStore.setState({ view: { status: 'connecting' }, busy: true });
+    renderNotionSection(host);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(host.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no Cancel during a connect when the host cannot abandon one', () => {
+    useNotionStore.setState({ view: { status: 'connecting' }, busy: true });
+
+    renderNotionSection(fakeNotionHost());
+
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
+
   it('counts a session that still needs its recovery code as signed in', async () => {
     const host = fakeNotionHost();
 

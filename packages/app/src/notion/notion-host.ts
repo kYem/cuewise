@@ -17,4 +17,6 @@ export interface NotionHost {
   readonly api: NotionApi;
   /** The URL consent returned to, or null if unfinished; `start` runs after any click-bound prompt. */
   authorize(start: (returnUri: string) => Promise<string>): Promise<string | null>;
+  /** Makes a pending authorize() answer null; omitted where the consent window reports its own close. */
+  cancel?(): void;
 }

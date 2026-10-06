@@ -87,11 +87,25 @@ const NotionSettings: React.FC<{ host: NotionHost; filter: string }> = ({ host, 
         Retry
       </button>
     );
-  } else if (view.status === 'disconnected' || view.status === 'connecting') {
+  } else if (view.status === 'disconnected') {
     controls = (
       <button type="button" className={BUTTON} disabled={busy} onClick={() => void connect(host)}>
-        {view.status === 'connecting' ? 'Connecting…' : 'Connect Notion'}
+        Connect Notion
       </button>
+    );
+  } else if (view.status === 'connecting') {
+    const cancel = host.cancel;
+    controls = (
+      <div className="flex gap-2">
+        <button type="button" className={BUTTON} disabled>
+          Connecting…
+        </button>
+        {cancel !== undefined && (
+          <button type="button" className={BUTTON} onClick={() => cancel()}>
+            Cancel
+          </button>
+        )}
+      </div>
     );
   } else if (view.status === 'reauth') {
     controls = (

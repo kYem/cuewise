@@ -17,9 +17,8 @@ interface AppWrapperProps {
 }
 
 /**
- * Mounts the shared App, injecting the macOS-only Posture settings section and
- * ambient status chip — but only under Tauri. In the web / e2e build there's no
- * sidecar, so neither (with their `@tauri-apps` calls) ever renders.
+ * Mounts the shared App with the host's settings sections. Posture and its chip render only under
+ * Tauri, since they call the sidecar; Notion renders whenever main.tsx supplied a host.
  */
 export function AppWrapper({ syncController, notionHost }: AppWrapperProps = {}): ReactElement {
   const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;

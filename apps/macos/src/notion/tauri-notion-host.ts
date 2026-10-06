@@ -1,7 +1,7 @@
 import type { NotionHost } from '@cuewise/app';
-import { describeThrown, type KeyValueStore, logger } from '@cuewise/shared';
+import { type KeyValueStore, logger } from '@cuewise/shared';
 import { ApiClient, SessionManager } from '@cuewise/sync-client';
-import type { OAuthDriver } from '../platform/oauth-driver';
+import { OAuthCancelledError, type OAuthDriver } from '../platform/oauth-driver';
 
 /** Must exactly match an ALLOWED_RETURN_URIS entry on the server. */
 export const NOTION_RETURN_URI = 'cuewise://notion';
@@ -26,14 +26,21 @@ export function createTauriNotionHost(opts: CreateTauriNotionHostOptions): Notio
   });
   return {
     api,
+    // A browser that never opened or a callback that never came throws, so the store reports it.
     async authorize(start) {
       const url = await start(NOTION_RETURN_URI);
       try {
         return await opts.oauthDriver.authorize(url);
       } catch (error) {
-        logger.warn(`Notion consent did not return: ${describeThrown(error)}`, { error });
-        return null;
+        if (error instanceof OAuthCancelledError) {
+          logger.info('Notion connect cancelled from the app');
+          return null;
+        }
+        throw error;
       }
+    },
+    cancel() {
+      opts.oauthDriver.cancel();
     },
   };
 }

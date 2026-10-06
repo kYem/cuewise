@@ -10,7 +10,7 @@ export class OAuthCancelledError extends Error {
   }
 }
 
-/** Runs one system-browser OAuth round-trip; the seam DirectSyncController tests fake. */
+/** Runs one system-browser OAuth round-trip; the seam its callers' tests fake. */
 export interface OAuthDriver {
   /**
    * Opens startUrl in the system browser and resolves with the first callback URL under the
@@ -37,7 +37,7 @@ function toError(err: unknown): Error {
  * stale callback arriving outside a flow is dropped — its PKCE verifier died with that flow anyway.
  */
 export function createTauriOAuthDriver(callbackPrefix: string): OAuthDriver {
-  // The serialize() mutex in DirectSyncController guarantees at most one flow at a time, so a
+  // Callers run one flow per driver (sync's serialize() mutex, the Notion store's busy flag), so a
   // single slot is enough; settle-once makes a stale/double cancel a harmless no-op. (A cancel
   // in the sub-millisecond gap before authorize() registers is not closed here — the UI only
   // renders Cancel during a pending flow, and the user can click it again once the browser opens.)

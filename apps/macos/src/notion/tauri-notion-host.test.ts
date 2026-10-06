@@ -1,44 +1,75 @@
 import { logger } from '@cuewise/shared';
-import { LocalStorageKeyValueStore } from '@cuewise/storage';
+import { SessionManager } from '@cuewise/sync-client';
+import { FakeKvStore } from '@cuewise/sync-engine/src/__fixtures__/fake-kv-store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  fakeOAuthDriver,
+  hangingOAuthDriver,
+} from '../platform/__fixtures__/oauth-driver.fixtures';
 import type { OAuthDriver } from '../platform/oauth-driver';
 import { createTauriNotionHost, NOTION_RETURN_URI } from './tauri-notion-host';
 
 const AUTHORIZE_URL = 'https://api.notion.com/v1/oauth/authorize?state=s';
 const RETURNED = `${NOTION_RETURN_URI}?code=one-time`;
 
-function fakeDriver(): OAuthDriver & { authorize: ReturnType<typeof vi.fn> } {
-  return { authorize: vi.fn(async () => RETURNED), cancel: vi.fn() };
-}
-
-function hostOver(oauthDriver: OAuthDriver) {
+function hostOver(oauthDriver: OAuthDriver, fetchFn?: typeof fetch, keyStore = new FakeKvStore()) {
   return createTauriNotionHost({
     baseUrl: 'https://api.cuewise.app',
-    keyStore: new LocalStorageKeyValueStore(),
+    keyStore,
     oauthDriver,
+    fetchFn,
   });
 }
 
 beforeEach(() => {
-  vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+  vi.spyOn(logger, 'info').mockImplementation(() => undefined);
 });
 
 describe('createTauriNotionHost', () => {
   it('starts with the cuewise://notion return URI and opens consent for the URL start built', async () => {
-    const driver = fakeDriver();
+    const fake = fakeOAuthDriver(RETURNED);
     const start = vi.fn(async () => AUTHORIZE_URL);
 
-    const redirect = await hostOver(driver).authorize(start);
+    const redirect = await hostOver(fake.driver).authorize(start);
 
     expect(redirect).toBe(RETURNED);
     expect(start).toHaveBeenCalledWith('cuewise://notion');
-    expect(driver.authorize).toHaveBeenCalledWith(AUTHORIZE_URL);
+    expect(fake.calls).toEqual([AUTHORIZE_URL]);
   });
 
-  it('answers null when the consent callback never arrives', async () => {
-    const driver = fakeDriver();
-    driver.authorize.mockRejectedValue(new Error('Timed out waiting for the sign-in callback'));
+  it('answers null when the user cancels a pending consent', async () => {
+    const driver = hangingOAuthDriver();
+    const host = hostOver(driver);
+    const redirect = host.authorize(async () => AUTHORIZE_URL);
+    await driver.waitForPending();
 
-    await expect(hostOver(driver).authorize(async () => AUTHORIZE_URL)).resolves.toBeNull();
+    host.cancel?.();
+
+    await expect(redirect).resolves.toBeNull();
+  });
+
+  it('rethrows a consent flow that failed, so the store can report it', async () => {
+    const fake = fakeOAuthDriver(new Error('no browser available'));
+
+    await expect(hostOver(fake.driver).authorize(async () => AUTHORIZE_URL)).rejects.toThrow(
+      'no browser available'
+    );
+  });
+
+  it("calls the API through the given fetch with the sync engine's session", async () => {
+    const keyStore = new FakeKvStore();
+    await new SessionManager(keyStore).saveToken('session-token');
+    const fetchFn = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify({ workspace: 'Acme', dataSourceId: null, tableName: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+    );
+
+    await hostOver(fakeOAuthDriver(RETURNED).driver, fetchFn, keyStore).api.getNotionConnection();
+
+    const init = fetchFn.mock.calls[0]?.[1];
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer session-token');
   });
 });
