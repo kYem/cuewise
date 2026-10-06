@@ -185,6 +185,20 @@ describe('connect', () => {
     expect(warningToast).not.toHaveBeenCalled();
   });
 
+  it('warns again when a connect after a cancelled one does not finish', async () => {
+    useNotionStore.setState({ view: { status: 'disconnected' } });
+    const host = { ...fakeNotionHost(null), cancel: vi.fn() };
+    host.authorize.mockImplementationOnce(async () => {
+      useNotionStore.getState().cancelConnect(host);
+      return null;
+    });
+    await useNotionStore.getState().connect(host);
+
+    await useNotionStore.getState().connect(host);
+
+    expect(warningToast).toHaveBeenCalledWith("Connecting Notion didn't complete.");
+  });
+
   it('reports a consent flow that failed, and goes back', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     useNotionStore.setState({ view: { status: 'disconnected' } });

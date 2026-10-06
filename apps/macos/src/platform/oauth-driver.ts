@@ -31,11 +31,8 @@ function toError(err: unknown): Error {
   return new Error(String(err));
 }
 
-/**
- * Production driver over the Tauri shell + deep-link plugins. Only deep links under
- * `callbackPrefix` count, and the one-shot listener only exists while a flow is pending, so a
- * stale callback arriving outside a flow is dropped — its PKCE verifier died with that flow anyway.
- */
+/** Production driver over the Tauri shell + deep-link plugins. Only `callbackPrefix` links count,
+ * and only while a flow is pending: a stale callback's PKCE verifier died with its flow. */
 export function createTauriOAuthDriver(callbackPrefix: string): OAuthDriver {
   // One flow per driver (sync's mutex, Notion's disabled buttons), so one slot is enough. A cancel
   // before authorize() registers is a no-op; the Notion host latches its own, sync does not.
