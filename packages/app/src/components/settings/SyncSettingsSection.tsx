@@ -846,9 +846,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
 
   const forgetAccount = () => {
     setEnabling(false);
-    // A re-enable in this same mount may be a DIFFERENT account — drop the shown identity,
-    // re-arm the once-per-mount fetch, and invalidate any in-flight fetch for the old account
-    // so its late resolution can't paint the previous owner's details.
+    // A re-enable in this mount may be a DIFFERENT account: drop the shown identity, re-arm the
+    // fetch, and invalidate one in flight so it can't paint the previous owner's details.
     setDetails(null);
     setDetailsPending(false);
     detailsRequestedRef.current = false;

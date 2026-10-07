@@ -446,7 +446,7 @@ export class FakeSyncController implements SyncController {
     return this.revokedOthersCount;
   }
 
-  /** What deleteAccount answers; `ok` and `auth` both turn the status off, as the hosts tear down. */
+  /** What deleteAccount answers; `ok` and `auth` turn the status off, as the hosts tear down. */
   deleteAccountResult: DeleteAccountResult = { ok: true };
 
   async deleteAccount(): Promise<DeleteAccountResult> {
