@@ -785,9 +785,15 @@ export function formatClockTime(
   date: Date,
   format: '12h' | '24h' = '12h'
 ): { time: string; period: string } {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
+  return formatWallClockTime(date.getHours(), date.getMinutes(), format);
+}
 
+/** `formatClockTime` for a wall-clock time that isn't the device's, e.g. another zone's. */
+export function formatWallClockTime(
+  hours: number,
+  minutes: number,
+  format: '12h' | '24h'
+): { time: string; period: string } {
   if (format === '24h') {
     return {
       time: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`,

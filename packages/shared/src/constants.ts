@@ -80,6 +80,9 @@ export const DEFAULT_SETTINGS: Settings = {
   showWeather: false, // Opt-in: the only widget that sends where you are off the device
   weatherPosition: 'left', // Beside goals and quick links
   weatherUnits: 'auto', // Resolved from the device locale until the user overrides it
+  showWorldClock: false,
+  worldClocks: [],
+  worldClockPosition: 'right', // Beside the nav, away from weather's default corner
   enableGoalTransfer: true,
   goalTransferTime: 20, // 8 PM (20:00)
   autoRollDueTasks: true,

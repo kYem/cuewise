@@ -28,6 +28,11 @@ describe('DEFAULT_SETTINGS', () => {
   it('keeps weather opt-in (off by default)', () => {
     expect(DEFAULT_SETTINGS.showWeather).toBe(false);
   });
+
+  it('starts the world clock off with no cities', () => {
+    expect(DEFAULT_SETTINGS.showWorldClock).toBe(false);
+    expect(DEFAULT_SETTINGS.worldClocks).toEqual([]);
+  });
 });
 
 // The import path silently skips blanks and duplicate terms, so a bad pack edit

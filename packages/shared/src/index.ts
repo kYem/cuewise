@@ -29,3 +29,5 @@ export * from './types';
 export * from './utils';
 // Export weather helpers (WMO mapping, hour sampling, unit resolution)
 export * from './weather-utils';
+// Export world clock helpers (zone times, offsets, offline zone search)
+export * from './world-clock';
