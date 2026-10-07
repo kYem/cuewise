@@ -23,6 +23,7 @@ export const SYNC_CONTROL_OPS = [
   'revokeSession',
   'renameSession',
   'revokeOtherSessions',
+  'deleteAccount',
   'beginPairing',
   'pollPairing',
   'listPairingRequests',
@@ -170,6 +171,7 @@ export interface SyncOpResponse {
   revokeSession: SyncControlResponse;
   renameSession: SyncControlResponse;
   revokeOtherSessions: SyncRevokedCountResponse | Extract<SyncControlResponse, { ok: false }>;
+  deleteAccount: SyncControlResponse;
   beginPairing: SyncPairingStartedResponse | Extract<SyncControlResponse, { ok: false }>;
   pollPairing: SyncPairingPollResponse | Extract<SyncControlResponse, { ok: false }>;
   listPairingRequests: SyncPairingRequestsResponse | Extract<SyncControlResponse, { ok: false }>;

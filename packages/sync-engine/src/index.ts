@@ -21,6 +21,7 @@ export {
 } from './cycle';
 export {
   CLOUD_SYNC_ENABLED_KEY,
+  type DeleteAccountResult,
   type EnableSyncOptions,
   type EngineApiClient,
   LAST_CYCLE_KEY,
@@ -61,6 +62,7 @@ export type SyncEngineControlSurface = Pick<
   | 'revokeSession'
   | 'renameSession'
   | 'revokeOtherSessions'
+  | 'deleteAccount'
 >;
 export {
   checkForLostDataKey,

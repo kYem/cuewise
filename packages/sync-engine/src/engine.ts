@@ -139,6 +139,9 @@ export type SyncStatus =
  * Structural subset of ApiClient the engine needs (auth + the pull/push + key-envelope calls).
  * A real ApiClient instance satisfies this directly; tests supply an in-memory fake.
  */
+/** What deleting the server account answered; `auth` means the session was already gone. */
+export type DeleteAccountResult = { ok: true } | { ok: false; reason: 'auth' | 'error' };
+
 export type EngineApiClient = Pick<
   RealApiClient,
   | 'exchangeToken'
@@ -151,6 +154,7 @@ export type EngineApiClient = Pick<
   | 'revokeSession'
   | 'renameSession'
   | 'revokeOtherSessions'
+  | 'deleteAccount'
   | 'createPairing'
   | 'listPairings'
   | 'getPairing'
@@ -1581,6 +1585,25 @@ export class SyncEngine {
 
   async revokeOtherSessions(): Promise<number> {
     return this.deps.apiClient.revokeOtherSessions();
+  }
+
+  /**
+   * Deletes the account behind this session (ENG-99), then tears down like disableSync. Only a 204
+   * tears down: a failed delete leaves the account and this device as they were, so retry is safe.
+   */
+  async deleteAccount(): Promise<DeleteAccountResult> {
+    try {
+      await this.deps.apiClient.deleteAccount();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        await this.handleAuthLoss();
+        return { ok: false, reason: 'auth' };
+      }
+      logger.error(`Cloud sync account delete failed: ${describeThrown(err)}`, err);
+      return { ok: false, reason: 'error' };
+    }
+    await this.disableSync();
+    return { ok: true };
   }
 
   /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */

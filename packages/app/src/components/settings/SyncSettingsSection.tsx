@@ -35,6 +35,7 @@ import { RecoveryCodeModal } from './RecoveryCodeModal';
 import { SessionList } from './SessionList';
 import { SettingRow, SettingSubgroup, Switch } from './SettingControls';
 import type { SettingsSection } from './SettingsSections';
+import { StartOverLink } from './StartOverLink';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
 
@@ -191,6 +192,12 @@ const ABANDONED_CODE_MESSAGE =
 const ACCOUNT_SKELETON_ROW = 'flex h-4 items-center';
 
 const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code.';
+
+const DELETE_ACCOUNT_MESSAGE =
+  'This deletes everything Cuewise stores for your account on its server, including the copies your other devices sync from, and disconnects Notion. The data on this device stays. Turn sync on again to start a fresh account with a new recovery code; your other devices will need that code, or your approval, to rejoin.';
+const DELETE_ACCOUNT_DONE = 'Sync account deleted. Turn sync on to start again.';
+const DELETE_ACCOUNT_SIGNED_OUT = 'Your sign-in expired — sign in again, then delete.';
+const DELETE_ACCOUNT_FAILED = "Couldn't delete your sync account — try again.";
 const DISABLE_MESSAGE_UNSAVED =
   "You haven't saved your recovery code yet — regenerate and save one first, or you may lose access when you re-enable this device.";
 
@@ -270,6 +277,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
+  const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
   // Which flow opened EnrollCodeModal — reconnect reuses persisted creds; enable/google re-run
@@ -834,29 +843,60 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   };
 
   // finally closes the confirm dialog so a disable failure can't strand it open.
+  // After a disable or an account delete: the next enable in this mount may be another account.
+  const forgetAccount = () => {
+    setEnabling(false);
+    // A re-enable in this same mount may be a DIFFERENT account — drop the shown identity,
+    // re-arm the once-per-mount fetch, and invalidate any in-flight fetch for the old account
+    // so its late resolution can't paint the previous owner's details.
+    setDetails(null);
+    setDetailsPending(false);
+    detailsRequestedRef.current = false;
+    detailsGenRef.current += 1;
+    // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
+    // nor its "couldn't check" — this is what retires a click the disable superseded.
+    setCycle(CYCLE_NONE);
+    lastCycleGenRef.current += 1;
+    accountGenRef.current += 1;
+  };
+
   const handleDisable = async () => {
     setIsDisabling(true);
     try {
       await controller.disable();
-      setEnabling(false);
-      // A re-enable in this same mount may be a DIFFERENT account — drop the shown identity,
-      // re-arm the once-per-mount fetch, and invalidate any in-flight fetch for the old account
-      // so its late resolution can't paint the previous owner's details.
-      setDetails(null);
-      setDetailsPending(false);
-      detailsRequestedRef.current = false;
-      detailsGenRef.current += 1;
-      // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
-      // nor its "couldn't check" — this is what retires a click the disable superseded.
-      setCycle(CYCLE_NONE);
-      lastCycleGenRef.current += 1;
-      accountGenRef.current += 1;
+      forgetAccount();
     } catch (error) {
       logger.error('Cloud sync disable failed', error);
       useToastStore.getState().error("Couldn't disable sync — please try again.");
     } finally {
       setConfirmDisableOpen(false);
       setIsDisabling(false);
+    }
+  };
+
+  const openDeleteAccount = () => {
+    setEnrollOpen(false);
+    setConfirmDeleteAccountOpen(true);
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      const result = await controller.deleteAccount();
+      if (result.ok) {
+        forgetAccount();
+        useToastStore.getState().success(DELETE_ACCOUNT_DONE);
+      } else if (result.reason === 'auth') {
+        useToastStore.getState().error(DELETE_ACCOUNT_SIGNED_OUT);
+      } else {
+        useToastStore.getState().error(DELETE_ACCOUNT_FAILED);
+      }
+    } catch (error) {
+      logger.error('Cloud sync account delete failed', error);
+      useToastStore.getState().error(DELETE_ACCOUNT_FAILED);
+    } finally {
+      setConfirmDeleteAccountOpen(false);
+      setIsDeletingAccount(false);
     }
   };
 
@@ -1102,10 +1142,13 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
               {stoppedPrompt}
             </p>
             {presentation.kind === 'pairing' && !pairedEnroll && (
-              <PairingPanel
-                onUseRecoveryCode={handleUseRecoveryCode}
-                onComplete={handlePairingComplete}
-              />
+              <>
+                <PairingPanel
+                  onUseRecoveryCode={handleUseRecoveryCode}
+                  onComplete={handlePairingComplete}
+                />
+                <StartOverLink onClick={openDeleteAccount} />
+              </>
             )}
             {presentation.kind === 'reconnect' && (
               <button
@@ -1161,7 +1204,19 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         onSubmit={handleEnrollSubmit}
         onClose={() => setEnrollOpen(false)}
         onPaired={handlePairingComplete}
+        onStartOver={openDeleteAccount}
         startWithCode={enrollCodeFirst}
+      />
+
+      <ConfirmationDialog
+        isOpen={confirmDeleteAccountOpen}
+        onClose={() => setConfirmDeleteAccountOpen(false)}
+        onConfirm={handleDeleteAccount}
+        title="Delete your sync account?"
+        message={DELETE_ACCOUNT_MESSAGE}
+        confirmText="Delete and start over"
+        variant="danger"
+        isLoading={isDeletingAccount}
       />
     </div>
   );

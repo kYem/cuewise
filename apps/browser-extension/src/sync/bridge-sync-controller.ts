@@ -10,6 +10,7 @@ import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE, NO_SAVED_SIGN_IN_DETAIL } from 
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
+  type DeleteAccountResult,
   type PairingApprovalResult,
   type PairingPollResult,
   type PendingPairing,
@@ -471,6 +472,29 @@ export class BridgeSyncController implements SyncController {
       throw new Error('Failed to sign out other devices: response carried no usable count');
     }
     return response.revoked;
+  }
+
+  // Answers rather than throws, like the pairing ops: a dead worker means the delete may not have
+  // run, which is an error the user can retry, never an unhandled rejection.
+  async deleteAccount(): Promise<DeleteAccountResult> {
+    try {
+      const response = await this.send({ kind: 'cuewise-sync-control', op: 'deleteAccount' });
+      if (response?.ok === true) {
+        return { ok: true };
+      }
+      if (response?.ok === false && response.reason === 'auth') {
+        return { ok: false, reason: 'auth' };
+      }
+      logger.error(
+        `Cloud sync account delete failed: ${BridgeSyncController.describeActionFailure(
+          response?.ok === false ? response : undefined
+        )}`
+      );
+      return { ok: false, reason: 'error' };
+    } catch (error) {
+      logger.error(`Cloud sync account delete failed: ${describeThrown(error)}`, error);
+      return { ok: false, reason: 'error' };
+    }
   }
 
   /** Names which of the three unavailable causes this was; `reason` is present on every ok:false. */

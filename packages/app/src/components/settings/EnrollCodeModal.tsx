@@ -6,6 +6,7 @@ import type { EnableResult } from '../../sync/sync-controller';
 import { isCancelledEnable } from '../../sync/sync-controller';
 import { Modal } from '../Modal';
 import { PairingPanel } from './PairingPanel';
+import { StartOverLink } from './StartOverLink';
 
 export interface EnrollCodeModalProps {
   isOpen: boolean;
@@ -13,6 +14,8 @@ export interface EnrollCodeModalProps {
   onClose: () => void;
   /** A pairing approval enrolled this device instead of the code — the caller finishes the enrol. */
   onPaired: () => void;
+  /** Offered with the code input: no code and no other device leaves deleting the account. */
+  onStartOver?: () => void;
   /**
    * Opens straight on the code input, with no pairing lead: the screen that opened this modal is
    * already offering pairing, and leading with it again would ask the same question twice.
@@ -51,6 +54,7 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
   onSubmit,
   onClose,
   onPaired,
+  onStartOver,
   startWithCode = false,
 }) => {
   const [code, setCode] = useState('');
@@ -172,6 +176,8 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
                 'Enroll'
               )}
             </button>
+
+            {onStartOver !== undefined && <StartOverLink onClick={onStartOver} />}
           </div>
         )}
       </div>

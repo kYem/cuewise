@@ -196,6 +196,8 @@ async function runOp(
         return { ok: true };
       case 'revokeOtherSessions':
         return { ok: true, kind: 'revokedCount', revoked: await engine.revokeOtherSessions() };
+      case 'deleteAccount':
+        return await engine.deleteAccount();
       // Serialized with the enroll ops, not bypassed like the read-only ones: a poll can adopt a
       // peer-wrapped key and activate, which must never interleave with an enable doing the same.
       case 'beginPairing':

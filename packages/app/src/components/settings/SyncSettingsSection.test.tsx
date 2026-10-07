@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller';
 import type { SyncDetails, SyncUiStatus } from '../../sync/sync-controller';
 import { NO_SAVED_SIGN_IN_DETAIL, SyncControllerContext } from '../../sync/sync-controller';
+import { START_OVER_LABEL } from './StartOverLink';
 import { SyncSettingsSectionComponent } from './SyncSettingsSection';
 import type { SettingsSectionProps } from './settings-types';
 
@@ -1542,6 +1543,97 @@ describe('SyncSettingsSectionComponent', () => {
     expect(
       screen.queryByRole('button', { name: 'Regenerate recovery code' })
     ).not.toBeInTheDocument();
+  });
+
+  describe('start over (ENG-99)', () => {
+    const CONFIRM_DELETE = 'Delete and start over';
+
+    async function confirmStartOverFromNoKeyPanel(
+      user: ReturnType<typeof userEvent.setup>,
+      controller: FakeSyncController
+    ): Promise<void> {
+      renderSection(controller);
+      act(() => controller.setStatus('needs_enroll'));
+      await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
+      await user.click(screen.getByRole('button', { name: CONFIRM_DELETE }));
+    }
+
+    it('deletes the account from the no-key panel and says how to start again', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+
+      await confirmStartOverFromNoKeyPanel(user, controller);
+
+      await waitFor(() =>
+        expect(toastSuccess).toHaveBeenCalledWith(
+          'Sync account deleted. Turn sync on to start again.'
+        )
+      );
+      expect(controller.calls).toContainEqual({ method: 'deleteAccount', args: [] });
+    });
+
+    it('says to sign in again when the session was already gone', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.deleteAccountResult = { ok: false, reason: 'auth' };
+
+      await confirmStartOverFromNoKeyPanel(user, controller);
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith(
+          'Your sign-in expired — sign in again, then delete.'
+        )
+      );
+    });
+
+    it('says the delete failed when the host could not delete the account', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.deleteAccountResult = { ok: false, reason: 'error' };
+
+      await confirmStartOverFromNoKeyPanel(user, controller);
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith("Couldn't delete your sync account — try again.")
+      );
+      expect(toastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('deletes nothing when the user cancels the confirmation', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      renderSection(controller);
+      act(() => controller.setStatus('needs_enroll'));
+
+      await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(controller.calls.some((call) => call.method === 'deleteAccount')).toBe(false);
+    });
+
+    it('offers starting over beside the recovery code when sign-in needs a code', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.scriptEnable({ ok: false, reason: 'needs-code' });
+      renderSection(controller);
+      await enterEnableStep(user, 'acct-1');
+      await user.click(screen.getByRole('button', { name: 'Enable' }));
+      await user.click(await screen.findByRole('button', { name: PAIRING_CODE_LINK }));
+
+      await user.click(screen.getByRole('button', { name: START_OVER_LABEL }));
+
+      expect(await screen.findByText('Delete your sync account?')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Recovery code')).not.toBeInTheDocument();
+    });
+
+    it('does not offer starting over on a device that syncs', async () => {
+      const controller = new FakeSyncController();
+      renderSection(controller);
+
+      act(() => controller.setStatus('active'));
+
+      expect(screen.queryByRole('button', { name: START_OVER_LABEL })).not.toBeInTheDocument();
+    });
   });
 
   it.each([

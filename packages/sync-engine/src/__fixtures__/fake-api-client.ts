@@ -117,6 +117,15 @@ export class FakeSyncServer {
     this.records.splice(0, this.records.length, ...kept);
   }
 
+  /** DELETE /v1/account: the next sign-in starts a fresh account with no rows and no envelope. */
+  deleteAccount(): void {
+    this.nextSeq = 0;
+    this.purgedSeq = 0;
+    this.recoveryEnvelope = null;
+    this.records.splice(0, this.records.length);
+    this.pairings.clear();
+  }
+
   /** The daily cron reclaiming every tombstone and raising the watermark past them. */
   purgeTombstones(): void {
     for (const row of this.records) {
@@ -379,6 +388,7 @@ export class FakeApiClient implements EngineApiClient {
   private tokenCounter = 0;
   private nextGetChangesError: Error | null = null;
   private nextPushChangesError: Error | null = null;
+  private nextDeleteAccountError: Error | null = null;
   private sessionId: string;
   private deviceName = 'Fake Device';
 
@@ -401,6 +411,11 @@ export class FakeApiClient implements EngineApiClient {
   /** One-shot: throws the given error on the next getChanges call, then clears itself. */
   rejectNextGetChanges(error: Error): void {
     this.nextGetChangesError = error;
+  }
+
+  /** One-shot: throws the given error on the next deleteAccount call, then clears itself. */
+  rejectNextDeleteAccount(error: Error): void {
+    this.nextDeleteAccountError = error;
   }
 
   /** One-shot: throws the given error on the next pushChanges call, then clears itself. */
@@ -457,6 +472,16 @@ export class FakeApiClient implements EngineApiClient {
   async revokeOtherSessions(): Promise<number> {
     this.assertAuthorized();
     return this.revokeOtherSessionsResult;
+  }
+
+  async deleteAccount(): Promise<void> {
+    this.assertAuthorized();
+    if (this.nextDeleteAccountError !== null) {
+      const err = this.nextDeleteAccountError;
+      this.nextDeleteAccountError = null;
+      throw err;
+    }
+    this.server.deleteAccount();
   }
 
   async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {
