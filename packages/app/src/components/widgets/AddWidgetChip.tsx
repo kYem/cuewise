@@ -15,11 +15,14 @@ export const AddWidgetChip: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const headingId = useId();
 
-  // A flag is not a widget: weather without a city renders nothing, and this chip is the
-  // only inline route back to the city search.
+  // A flag is not a widget: weather or world clock without a city renders nothing, and this
+  // chip is the only inline route back to the city search.
   const everyWidgetDelivers = offeredHomeWidgets().every((widget) => {
     if (widget.key === 'showWeather') {
       return settings.showWeather && weatherLocation !== null;
+    }
+    if (widget.key === 'showWorldClock') {
+      return settings.showWorldClock && settings.worldClocks.length > 0;
     }
     return settings[widget.key];
   });

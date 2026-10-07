@@ -12,6 +12,7 @@ describe('HOME_WIDGETS', () => {
       'showQuickLinks',
       'showNotes',
       'showWeather',
+      'showWorldClock',
       'newTabShowCalendar',
     ]);
   });
@@ -32,6 +33,16 @@ describe('HOME_WIDGETS', () => {
     expect(weather?.where({ ...DEFAULT_SETTINGS, weatherPosition: 'right' })).toBe('Top right');
   });
 
+  it('follows the world clock between corners, and under the big clock when that is on', () => {
+    const worldClock = HOME_WIDGETS.find((w) => w.key === 'showWorldClock');
+
+    expect(worldClock?.where({ ...DEFAULT_SETTINGS, worldClockPosition: 'left' })).toBe('Top left');
+    expect(worldClock?.where({ ...DEFAULT_SETTINGS, worldClockPosition: 'right' })).toBe(
+      'Top right'
+    );
+    expect(worldClock?.where({ ...DEFAULT_SETTINGS, showClock: true })).toBe('Center');
+  });
+
   it('sends clock and calendar to the center column', () => {
     const center = HOME_WIDGETS.filter((w) => w.where(DEFAULT_SETTINGS) === 'Center');
 
@@ -49,6 +60,12 @@ describe('offeredHomeWidgets', () => {
   it('withholds the calendar on a build without an OAuth client id, where it is a dead switch', () => {
     const keys = offeredHomeWidgets(false).map((w) => w.key);
 
-    expect(keys).toEqual(['showClock', 'showQuickLinks', 'showNotes', 'showWeather']);
+    expect(keys).toEqual([
+      'showClock',
+      'showQuickLinks',
+      'showNotes',
+      'showWeather',
+      'showWorldClock',
+    ]);
   });
 });

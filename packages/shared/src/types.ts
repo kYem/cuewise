@@ -346,8 +346,19 @@ export const WEATHER_UNITS = ['metric', 'imperial'] as const;
 export type WeatherUnits = (typeof WEATHER_UNITS)[number];
 export type WeatherUnitsPreference = 'auto' | WeatherUnits;
 
-// Which floating cluster the chip joins on the new tab.
-export type WeatherPosition = 'left' | 'right';
+// Which floating cluster a chip joins on the new tab.
+export type CornerPosition = 'left' | 'right';
+export type WeatherPosition = CornerPosition;
+
+// World clock (ENG-23). `timezone` is IANA and may be one this engine doesn't know, when synced
+// from a newer one — readers go through readZoneClock, which returns null instead of throwing.
+export interface WorldClockZone {
+  id: string;
+  label: string;
+  timezone: string;
+}
+
+export type WorldClockPosition = CornerPosition;
 
 // `timezone` is the location's own IANA zone — all "today" arithmetic uses it, never the
 // device's, so a location abroad shows its own day.
@@ -468,6 +479,9 @@ export interface Settings {
   showWeather: boolean; // Show the weather chip on the new tab (default false)
   weatherPosition: WeatherPosition; // Which floating cluster the chip joins (default 'left')
   weatherUnits: WeatherUnitsPreference; // 'auto' resolves from locale (default 'auto')
+  showWorldClock: boolean; // Show other cities' times on the new tab (default false)
+  worldClocks: WorldClockZone[]; // Up to MAX_WORLD_CLOCKS, first one shows on the chip (default [])
+  worldClockPosition: WorldClockPosition; // Which floating cluster the chip joins (default 'right')
   // Goal Transfer
   enableGoalTransfer: boolean; // Enable goal transfer feature (default true)
   goalTransferTime: number; // Hour (0-23) when transfer button appears (default 20 for 8 PM)

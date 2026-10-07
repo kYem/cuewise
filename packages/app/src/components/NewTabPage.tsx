@@ -32,6 +32,7 @@ import { INTEGRATIONS_SECTION_ID } from './settings/NotionSettingsSection';
 import type { SettingsSection } from './settings/SettingsSections';
 import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
+import { WorldClockWidget } from './WorldClockWidget';
 import { AddWidgetChip } from './widgets/AddWidgetChip';
 
 interface NewTabPageProps {
@@ -51,6 +52,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
   const showQuickLinks = useSettingsStore((state) => state.settings.showQuickLinks);
   const showNotes = useSettingsStore((state) => state.settings.showNotes);
   const weatherPosition = useSettingsStore((state) => state.settings.weatherPosition);
+  const worldClockPosition = useSettingsStore((state) => state.settings.worldClockPosition);
   const conceptCardsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
   const conceptNudgeDismissed = useSettingsStore((state) => state.settings.conceptNudgeDismissed);
   const conceptNudgeCount = useSettingsStore((state) => state.settings.conceptNudgeCount);
@@ -434,6 +436,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
             {showQuickLinks && <QuickLinksWidget />}
             {showNotes && <NotesWidget />}
             {weatherPosition === 'left' && <WeatherWidget />}
+            {worldClockPosition === 'left' && <WorldClockWidget />}
             <AddWidgetChip />
           </div>
         </div>
@@ -446,6 +449,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
           }`}
         >
           {weatherPosition === 'right' && <WeatherWidget />}
+          {worldClockPosition === 'right' && <WorldClockWidget />}
           {renderNavControls(floatingMenuRef)}
         </nav>
 

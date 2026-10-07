@@ -1,12 +1,18 @@
 import type { Settings } from '@cuewise/shared';
-import { Calendar, Clock, CloudSun, LayoutGrid, NotebookPen } from 'lucide-react';
+import { Calendar, Clock, CloudSun, Globe, LayoutGrid, NotebookPen } from 'lucide-react';
 import type React from 'react';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { WeatherSetupRow } from './WeatherSetupRow';
+import { WorldClockSetupRow } from './WorldClockSetupRow';
 
 export type HomeWidgetKey = Extract<
   keyof Settings,
-  'showClock' | 'showQuickLinks' | 'showNotes' | 'showWeather' | 'newTabShowCalendar'
+  | 'showClock'
+  | 'showQuickLinks'
+  | 'showNotes'
+  | 'showWeather'
+  | 'showWorldClock'
+  | 'newTabShowCalendar'
 >;
 
 export interface HomeWidget {
@@ -54,6 +60,20 @@ export const HOME_WIDGETS = [
     icon: <CloudSun className={iconClass} />,
     where: (s) => (s.weatherPosition === 'left' ? 'Top left' : 'Top right'),
     setup: WeatherSetupRow,
+  },
+  {
+    key: 'showWorldClock',
+    label: 'World clock',
+    help: 'Times in up to four other cities, worked out on your device',
+    keywords: 'world clock time zone timezone city international offset abroad',
+    icon: <Globe className={iconClass} />,
+    where: (s) => {
+      if (s.showClock) {
+        return 'Center';
+      }
+      return s.worldClockPosition === 'left' ? 'Top left' : 'Top right';
+    },
+    setup: WorldClockSetupRow,
   },
   {
     key: 'newTabShowCalendar',

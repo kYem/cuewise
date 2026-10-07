@@ -2,6 +2,7 @@ import { formatClockTime, formatLongDate, getGreeting } from '@cuewise/shared';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores/settings-store';
+import { WorldClockStrip } from './WorldClockStrip';
 
 export const Clock: React.FC = () => {
   const [time, setTime] = useState(new Date());
@@ -29,6 +30,7 @@ export const Clock: React.FC = () => {
       </div>
       <div className="text-xl md:text-2xl text-secondary mb-1">{greeting}</div>
       <div className="text-base md:text-lg text-secondary">{dateString}</div>
+      <WorldClockStrip />
     </div>
   );
 };

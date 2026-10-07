@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { VILNIUS } from '../../stores/__fixtures__/weather-store.fixtures';
 import { type SettingsStore, useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
+import { TOKYO_ZONE } from './world-clock.fixtures';
 
 export interface WidgetPickerStoreOptions {
   settings?: Partial<Settings>;
@@ -56,6 +57,8 @@ export const ALL_WIDGETS_ON: Partial<Settings> = {
   showQuickLinks: true,
   showNotes: true,
   showWeather: true,
+  showWorldClock: true,
+  worldClocks: [TOKYO_ZONE],
   newTabShowCalendar: true,
 };
 
@@ -64,5 +67,6 @@ export const ALL_WIDGETS_OFF: Partial<Settings> = {
   showQuickLinks: false,
   showNotes: false,
   showWeather: false,
+  showWorldClock: false,
   newTabShowCalendar: false,
 };
