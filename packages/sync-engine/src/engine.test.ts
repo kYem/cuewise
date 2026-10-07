@@ -2309,18 +2309,60 @@ describe('SyncEngine.deleteAccount', () => {
     expect(server.getRecoveryEnvelope()).toBeNull();
   });
 
-  it('answers auth and signs out, deleting nothing, when the session is already gone', async () => {
+  it('answers auth and tears down, keeping local data, when the session has already ended', async () => {
     const server = new FakeSyncServer();
     const device = await lockedOutDevice(server);
-    const envelope = server.getRecoveryEnvelope();
     device.apiClient.rejectNextDeleteAccount(new ApiError('invalid_token', 401));
 
     const result = await device.engine.deleteAccount();
 
     expect(result).toEqual({ ok: false, reason: 'auth' });
-    expect(device.engine.getStatus()).toBe('signed_out');
-    expect(server.getRecoveryEnvelope()).toEqual(envelope);
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
     expect((await getGoals()).map((goal) => goal.id)).toContain('local-b');
+  });
+
+  it('answers ok once the server has deleted the account, even if the teardown throws', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+    vi.spyOn(device.engine, 'disableSync').mockRejectedValueOnce(new Error('scheduler gone'));
+
+    const result = await device.engine.deleteAccount();
+
+    expect(result).toEqual({ ok: true });
+    expect(server.getRecoveryEnvelope()).toBeNull();
+  });
+
+  it('signs out the other devices, which push nothing into the fresh account', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'on-a' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    await deviceB.engine.deleteAccount();
+
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+
+    expect(deviceA.engine.getStatus()).toBe('signed_out');
+    expect(server.rows()).toEqual([]);
+  });
+
+  it('tears down when a retry finds the account a lost reply already deleted', async () => {
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+    server.deleteAccount();
+
+    const result = await device.engine.deleteAccount();
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(device.engine.getStatus()).toBe('disabled');
   });
 
   it('answers error and changes nothing when the delete fails', async () => {

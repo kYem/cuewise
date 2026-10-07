@@ -1581,7 +1581,7 @@ describe('SyncSettingsSectionComponent', () => {
 
       await waitFor(() =>
         expect(toastError).toHaveBeenCalledWith(
-          'Your sign-in expired — sign in again, then delete.'
+          "Your session ended, so the delete couldn't be confirmed. Turn sync on again: if the old account is still there, you can delete it then."
         )
       );
     });
@@ -1597,6 +1597,43 @@ describe('SyncSettingsSectionComponent', () => {
         expect(toastError).toHaveBeenCalledWith("Couldn't delete your sync account — try again.")
       );
       expect(toastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('forgets the deleted account, so starting over never shows its identity', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.scriptDetails({
+        accountEmail: 'a@example.com',
+        accountId: 'a',
+        lastSyncedAt: null,
+      });
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByText('Signed in as a@example.com');
+      act(() => controller.setStatus('needs_enroll'));
+      await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
+      await user.click(screen.getByRole('button', { name: CONFIRM_DELETE }));
+      await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+
+      controller.deferNextDetails();
+      act(() => controller.setStatus('active'));
+
+      expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
+    });
+
+    it('closes the enable form after a delete started from the code prompt', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.scriptEnable({ ok: false, reason: 'needs-code' });
+      renderSection(controller);
+      await enterEnableStep(user, 'acct-1');
+      await user.click(screen.getByRole('button', { name: 'Enable' }));
+      await user.click(await screen.findByRole('button', { name: PAIRING_CODE_LINK }));
+      await user.click(screen.getByRole('button', { name: START_OVER_LABEL }));
+
+      await user.click(await screen.findByRole('button', { name: CONFIRM_DELETE }));
+
+      await waitFor(() => expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument());
     });
 
     it('deletes nothing when the user cancels the confirmation', async () => {

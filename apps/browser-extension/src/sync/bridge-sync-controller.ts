@@ -26,6 +26,9 @@ import type {
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
+// The worker finishes a delete the page stopped waiting for, so a short wait reports a deleted
+// account as a failure; this one network call gets longer before the page gives up on it.
+const DELETE_ACCOUNT_TIMEOUT_FACTOR = 4;
 
 // Google OAuth 2.0 authorization endpoint + the OpenID scope for the implicit id_token flow.
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -474,11 +477,14 @@ export class BridgeSyncController implements SyncController {
     return response.revoked;
   }
 
-  // Answers rather than throws, like the pairing ops: a dead worker means the delete may not have
-  // run, which is an error the user can retry, never an unhandled rejection.
+  // Answers rather than throws, like the pairing ops. A retry after a delete that did land answers
+  // auth, and the worker has torn down by then, so the panel still ends up off.
   async deleteAccount(): Promise<DeleteAccountResult> {
     try {
-      const response = await this.send({ kind: 'cuewise-sync-control', op: 'deleteAccount' });
+      const response = await this.send(
+        { kind: 'cuewise-sync-control', op: 'deleteAccount' },
+        this.timeoutMs * DELETE_ACCOUNT_TIMEOUT_FACTOR
+      );
       if (response?.ok === true) {
         return { ok: true };
       }
@@ -699,13 +705,14 @@ export class BridgeSyncController implements SyncController {
   // the mapped type only ties the assumed response shape to the op actually being sent, so a
   // caller can't silently read a details response as an EnableResult (or vice versa).
   private send<O extends SyncControlOp>(
-    msg: SyncControlMessage & { op: O }
+    msg: SyncControlMessage & { op: O },
+    timeoutMs: number = this.timeoutMs
   ): Promise<SyncOpResponse[O]> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         reject(new Error('Sync control message timed out'));
-      }, this.timeoutMs);
+      }, timeoutMs);
     });
 
     let response: Promise<SyncOpResponse[O]>;

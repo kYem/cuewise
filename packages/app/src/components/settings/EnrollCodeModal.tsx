@@ -14,7 +14,7 @@ export interface EnrollCodeModalProps {
   onClose: () => void;
   /** A pairing approval enrolled this device instead of the code — the caller finishes the enrol. */
   onPaired: () => void;
-  /** Offered with the code input: no code and no other device leaves deleting the account. */
+  /** Shown under the code input: with no code and no other device, deleting the account is left. */
   onStartOver?: () => void;
   /**
    * Opens straight on the code input, with no pairing lead: the screen that opened this modal is

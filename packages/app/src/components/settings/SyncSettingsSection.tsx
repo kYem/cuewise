@@ -196,7 +196,8 @@ const DISABLE_MESSAGE = 'Re-enabling on this device will need your recovery code
 const DELETE_ACCOUNT_MESSAGE =
   'This deletes everything Cuewise stores for your account on its server, including the copies your other devices sync from, and disconnects Notion. The data on this device stays. Turn sync on again to start a fresh account with a new recovery code; your other devices will need that code, or your approval, to rejoin.';
 const DELETE_ACCOUNT_DONE = 'Sync account deleted. Turn sync on to start again.';
-const DELETE_ACCOUNT_SIGNED_OUT = 'Your sign-in expired — sign in again, then delete.';
+const DELETE_ACCOUNT_SIGNED_OUT =
+  "Your session ended, so the delete couldn't be confirmed. Turn sync on again: if the old account is still there, you can delete it then.";
 const DELETE_ACCOUNT_FAILED = "Couldn't delete your sync account — try again.";
 const DISABLE_MESSAGE_UNSAVED =
   "You haven't saved your recovery code yet — regenerate and save one first, or you may lose access when you re-enable this device.";
@@ -842,8 +843,6 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     }
   };
 
-  // finally closes the confirm dialog so a disable failure can't strand it open.
-  // After a disable or an account delete: the next enable in this mount may be another account.
   const forgetAccount = () => {
     setEnabling(false);
     // A re-enable in this same mount may be a DIFFERENT account — drop the shown identity,
@@ -860,6 +859,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     accountGenRef.current += 1;
   };
 
+  // finally closes the confirm dialog so a disable failure can't strand it open.
   const handleDisable = async () => {
     setIsDisabling(true);
     try {
@@ -887,6 +887,8 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
         forgetAccount();
         useToastStore.getState().success(DELETE_ACCOUNT_DONE);
       } else if (result.reason === 'auth') {
+        // The host tore down too: the account may already be gone, so this device starts afresh.
+        forgetAccount();
         useToastStore.getState().error(DELETE_ACCOUNT_SIGNED_OUT);
       } else {
         useToastStore.getState().error(DELETE_ACCOUNT_FAILED);

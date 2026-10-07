@@ -1010,6 +1010,14 @@ describe('BridgeSyncController: deleteAccount', () => {
     await expect(controller.deleteAccount()).resolves.toEqual({ ok: false, reason: 'error' });
     errorSpy.mockRestore();
   });
+  it('waits past the usual timeout for a delete the worker is still finishing', async () => {
+    runtime.sendMessage.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 25))
+    );
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.deleteAccount()).resolves.toEqual({ ok: true });
+  });
 });
 
 describe('BridgeSyncController: pairing polls', () => {

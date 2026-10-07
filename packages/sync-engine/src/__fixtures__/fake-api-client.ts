@@ -50,6 +50,8 @@ export class FakeSyncServer {
   private nextSession = 0;
   private nextPairing = 0;
   private recoveryEnvelope: string | null = null;
+  /** Bumped by an account delete: older tokens 401, and the next sign-in names a new user. */
+  accountGeneration = 0;
   private readonly records: SyncRecord[] = [];
   // One server is one account, so every row here is already scoped the way the real store
   // scopes by userId; what still has to be told apart is which session made the call.
@@ -119,6 +121,7 @@ export class FakeSyncServer {
 
   /** DELETE /v1/account: the next sign-in starts a fresh account with no rows and no envelope. */
   deleteAccount(): void {
+    this.accountGeneration += 1;
     this.nextSeq = 0;
     this.purgedSeq = 0;
     this.recoveryEnvelope = null;
@@ -391,6 +394,7 @@ export class FakeApiClient implements EngineApiClient {
   private nextDeleteAccountError: Error | null = null;
   private sessionId: string;
   private deviceName = 'Fake Device';
+  private tokenGeneration = 0;
 
   constructor(private server: FakeSyncServer) {
     this.sessionId = server.newSessionId();
@@ -400,6 +404,7 @@ export class FakeApiClient implements EngineApiClient {
   switchAccount(server: FakeSyncServer, userId: string): void {
     this.server = server;
     this.sessionId = server.newSessionId();
+    this.tokenGeneration = server.accountGeneration;
     this.accountResult = { userId, email: null };
   }
 
@@ -434,6 +439,7 @@ export class FakeApiClient implements EngineApiClient {
     // one that token was minted with.
     this.sessionId = this.server.newSessionId();
     this.deviceName = req.deviceName;
+    this.tokenGeneration = this.server.accountGeneration;
     return { token: `fake-token-${this.tokenCounter}` };
   }
 
@@ -443,7 +449,13 @@ export class FakeApiClient implements EngineApiClient {
       this.rejectNextGetAccountWith401 = false;
       throw new ApiError('invalid_token', 401);
     }
-    return this.accountResult;
+    if (this.tokenGeneration === 0) {
+      return this.accountResult;
+    }
+    return {
+      ...this.accountResult,
+      userId: `${this.accountResult.userId}-${this.tokenGeneration}`,
+    };
   }
 
   async listSessions(): Promise<SyncSession[]> {
@@ -581,7 +593,7 @@ export class FakeApiClient implements EngineApiClient {
   }
 
   private assertAuthorized(): void {
-    if (this.rejectAllWith401) {
+    if (this.rejectAllWith401 || this.tokenGeneration !== this.server.accountGeneration) {
       throw new ApiError('invalid_token', 401);
     }
   }

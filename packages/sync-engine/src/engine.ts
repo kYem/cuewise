@@ -135,13 +135,13 @@ export type SyncStatus =
   | 'signed_out'
   | 'error';
 
+/** What deleting the server account answered; `auth` means the session had already ended. */
+export type DeleteAccountResult = { ok: true } | { ok: false; reason: 'auth' | 'error' };
+
 /**
  * Structural subset of ApiClient the engine needs (auth + the pull/push + key-envelope calls).
  * A real ApiClient instance satisfies this directly; tests supply an in-memory fake.
  */
-/** What deleting the server account answered; `auth` means the session was already gone. */
-export type DeleteAccountResult = { ok: true } | { ok: false; reason: 'auth' | 'error' };
-
 export type EngineApiClient = Pick<
   RealApiClient,
   | 'exchangeToken'
@@ -1588,21 +1588,24 @@ export class SyncEngine {
   }
 
   /**
-   * Deletes the account behind this session (ENG-99), then tears down like disableSync. Only a 204
-   * tears down: a failed delete leaves the account and this device as they were, so retry is safe.
+   * Deletes this session's account (ENG-99) and tears down like disableSync. A failure other than
+   * a 401 changes nothing, so a retry is safe.
    */
   async deleteAccount(): Promise<DeleteAccountResult> {
     try {
       await this.deps.apiClient.deleteAccount();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        await this.handleAuthLoss();
+        // An earlier attempt whose reply was lost may have deleted it, and the session is dead
+        // either way: tear down rather than keep a device set up for an account that may be gone.
+        await this.bestEffort(() => this.disableSync(), 'account delete teardown');
         return { ok: false, reason: 'auth' };
       }
       logger.error(`Cloud sync account delete failed: ${describeThrown(err)}`, err);
       return { ok: false, reason: 'error' };
     }
-    await this.disableSync();
+    // The account is gone whatever the teardown hits, and that is the answer the user needs.
+    await this.bestEffort(() => this.disableSync(), 'account delete teardown');
     return { ok: true };
   }
 
