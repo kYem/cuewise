@@ -1599,9 +1599,13 @@ describe('SyncSettingsSectionComponent', () => {
       expect(toastSuccess).not.toHaveBeenCalled();
     });
 
-    it('forgets the deleted account, so starting over never shows its identity', async () => {
+    it.each([
+      ['deleted', { ok: true } as const, toastSuccess],
+      ['unconfirmed', { ok: false, reason: 'auth' } as const, toastError],
+    ])('forgets the account once the delete is %s, so starting over never shows it', async (_label, result, toast) => {
       const user = userEvent.setup();
       const controller = new FakeSyncController();
+      controller.deleteAccountResult = result;
       controller.scriptDetails({
         accountEmail: 'a@example.com',
         accountId: 'a',
@@ -1613,7 +1617,7 @@ describe('SyncSettingsSectionComponent', () => {
       act(() => controller.setStatus('needs_enroll'));
       await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
       await user.click(screen.getByRole('button', { name: CONFIRM_DELETE }));
-      await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+      await waitFor(() => expect(toast).toHaveBeenCalled());
 
       controller.deferNextDetails();
       act(() => controller.setStatus('active'));
@@ -1621,9 +1625,13 @@ describe('SyncSettingsSectionComponent', () => {
       expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
     });
 
-    it('closes the enable form after a delete started from the code prompt', async () => {
+    it.each([
+      ['deleted', { ok: true } as const],
+      ['unconfirmed', { ok: false, reason: 'auth' } as const],
+    ])('closes the enable form once a delete from the code prompt is %s', async (_label, result) => {
       const user = userEvent.setup();
       const controller = new FakeSyncController();
+      controller.deleteAccountResult = result;
       controller.scriptEnable({ ok: false, reason: 'needs-code' });
       renderSection(controller);
       await enterEnableStep(user, 'acct-1');

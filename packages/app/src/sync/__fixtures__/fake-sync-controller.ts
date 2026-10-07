@@ -446,13 +446,13 @@ export class FakeSyncController implements SyncController {
     return this.revokedOthersCount;
   }
 
-  /** What deleteAccount answers; a successful delete also turns the status off, as the hosts do. */
+  /** What deleteAccount answers; `ok` and `auth` both turn the status off, as the hosts tear down. */
   deleteAccountResult: DeleteAccountResult = { ok: true };
 
   async deleteAccount(): Promise<DeleteAccountResult> {
     this.calls.push({ method: 'deleteAccount', args: [] });
     this.maybeFail('deleteAccount');
-    if (this.deleteAccountResult.ok) {
+    if (this.deleteAccountResult.ok || this.deleteAccountResult.reason === 'auth') {
       this.setStatus('off');
     }
     return this.deleteAccountResult;
