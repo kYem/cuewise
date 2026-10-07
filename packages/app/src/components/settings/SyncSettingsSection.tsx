@@ -1224,8 +1224,10 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
   );
 };
 
+export const CLOUD_SYNC_SECTION_ID = 'cloud-sync';
+
 export const syncSettingsSection: SettingsSection = {
-  id: 'cloud-sync',
+  id: CLOUD_SYNC_SECTION_ID,
   label: 'Cloud Sync',
   icon: CloudUpload,
   component: SyncSettingsSectionComponent,
