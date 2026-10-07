@@ -169,7 +169,7 @@ export interface SyncController {
   renameSession(id: string, deviceName: string): Promise<void>;
   /** Revokes every session but this one; resolves how many were cut. */
   revokeOtherSessions(): Promise<number>;
-  /** Deletes the server account; tears down like disable() on ok and auth, not on error. */
+  /** Deletes the server account; `ok` and `auth` tear this device down like disable(). */
   deleteAccount(): Promise<DeleteAccountResult>;
   /**
    * The last cycle's outcome, or null if none has run — wrapped so a host that could not read it

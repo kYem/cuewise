@@ -1589,7 +1589,7 @@ export class SyncEngine {
 
   /**
    * Deletes this session's account (ENG-99) and tears down like disableSync, on a 401 too. Any
-   * other failure leaves this device as it was, though a lost reply may still have deleted it.
+   * other failure leaves this device as it was, though a lost reply may mean the account is gone.
    */
   async deleteAccount(): Promise<DeleteAccountResult> {
     try {

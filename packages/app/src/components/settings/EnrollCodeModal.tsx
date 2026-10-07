@@ -177,7 +177,9 @@ export const EnrollCodeModal: React.FC<EnrollCodeModalProps> = ({
               )}
             </button>
 
-            {onStartOver !== undefined && <StartOverLink onClick={onStartOver} />}
+            {onStartOver !== undefined && (
+              <StartOverLink onClick={onStartOver} disabled={isSubmitting} />
+            )}
           </div>
         )}
       </div>
