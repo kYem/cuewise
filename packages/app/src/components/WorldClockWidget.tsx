@@ -1,4 +1,9 @@
-import { cityFromTimeZone, deviceTimeZone, type WorldClockZone } from '@cuewise/shared';
+import {
+  cityFromTimeZone,
+  deviceTimeZone,
+  shownWorldClocks,
+  type WorldClockZone,
+} from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import { Globe, Moon, Sun } from 'lucide-react';
 import type React from 'react';
@@ -127,7 +132,7 @@ const WorldClockPopover: React.FC<{
 export const WorldClockWidget: React.FC = () => {
   const showWorldClock = useSettingsStore((state) => state.settings.showWorldClock);
   const showClock = useSettingsStore((state) => state.settings.showClock);
-  const zones = useSettingsStore((state) => state.settings.worldClocks);
+  const zones = shownWorldClocks(useSettingsStore((state) => state.settings.worldClocks));
   const position = useSettingsStore((state) => state.settings.worldClockPosition);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const now = useMinuteNow();

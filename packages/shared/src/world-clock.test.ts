@@ -15,6 +15,7 @@ import {
   renameWorldClock,
   sameTimeZone,
   searchTimeZones,
+  shownWorldClocks,
   type ZoneClock,
   zoneDayShift,
 } from './world-clock';
@@ -97,6 +98,15 @@ describe('zoneDayShift', () => {
     expect(
       zoneDayShift(clockAt(JUNE, 'Pacific/Pago_Pago'), clockAt(JUNE, 'Pacific/Kiritimati'))
     ).toBe('Yesterday');
+  });
+
+  it('counts two calendar days for a zone that far apart', () => {
+    const lateInPagoPago = new Date('2026-06-15T10:30:00Z');
+    const kiritimati = clockAt(lateInPagoPago, 'Pacific/Kiritimati');
+    const pagoPago = clockAt(lateInPagoPago, 'Pacific/Pago_Pago');
+
+    expect(zoneDayShift(kiritimati, pagoPago)).toBe('+2 days');
+    expect(zoneDayShift(pagoPago, kiritimati)).toBe('−2 days');
   });
 
   it('marks the same day as no shift', () => {
@@ -265,6 +275,29 @@ describe('world clock list edits', () => {
   it('renames, falling back to the city for a blank label', () => {
     expect(renameWorldClock([AUSTIN], 'austin', 'Mom')[0]?.label).toBe('Mom');
     expect(renameWorldClock([AUSTIN], 'austin', '  ')[0]?.label).toBe('Chicago');
+  });
+});
+
+describe('shownWorldClocks', () => {
+  it('shows at most the maximum, in order, from a longer synced list', () => {
+    const many = Array.from({ length: MAX_WORLD_CLOCKS + 2 }, (_, i) => ({
+      ...TOKYO,
+      id: `t${i}`,
+    }));
+
+    expect(shownWorldClocks(many).map((zone) => zone.id)).toEqual(['t0', 't1', 't2', 't3']);
+  });
+
+  it('cuts an overlong synced label', () => {
+    const [zone] = shownWorldClocks([{ ...TOKYO, label: 'x'.repeat(40) }]);
+
+    expect(zone?.label).toHaveLength(MAX_WORLD_CLOCK_LABEL);
+  });
+
+  it('returns the same list when nothing needs cutting', () => {
+    const zones = [TOKYO, LONDON];
+
+    expect(shownWorldClocks(zones)).toBe(zones);
   });
 });
 

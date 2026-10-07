@@ -1,4 +1,4 @@
-import { deviceTimeZone } from '@cuewise/shared';
+import { deviceTimeZone, shownWorldClocks } from '@cuewise/shared';
 import type React from 'react';
 import { useMinuteNow } from '../hooks/useMinuteNow';
 import { useSettingsStore } from '../stores/settings-store';
@@ -7,7 +7,7 @@ import { readZone } from '../utils/world-clock';
 /** The world clock as one quiet line under the big clock, which stays on device time. */
 export const WorldClockStrip: React.FC = () => {
   const showWorldClock = useSettingsStore((state) => state.settings.showWorldClock);
-  const zones = useSettingsStore((state) => state.settings.worldClocks);
+  const zones = shownWorldClocks(useSettingsStore((state) => state.settings.worldClocks));
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
   const now = useMinuteNow();
 

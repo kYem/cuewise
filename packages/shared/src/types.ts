@@ -346,8 +346,9 @@ export const WEATHER_UNITS = ['metric', 'imperial'] as const;
 export type WeatherUnits = (typeof WEATHER_UNITS)[number];
 export type WeatherUnitsPreference = 'auto' | WeatherUnits;
 
-// Which floating cluster the chip joins on the new tab.
-export type WeatherPosition = 'left' | 'right';
+// Which floating cluster a chip joins on the new tab.
+export type CornerPosition = 'left' | 'right';
+export type WeatherPosition = CornerPosition;
 
 // World clock (ENG-23). `timezone` is IANA and may be one this engine doesn't know, when synced
 // from a newer one — readers go through readZoneClock, which returns null instead of throwing.
@@ -357,7 +358,7 @@ export interface WorldClockZone {
   timezone: string;
 }
 
-export type WorldClockPosition = 'left' | 'right';
+export type WorldClockPosition = CornerPosition;
 
 // `timezone` is the location's own IANA zone — all "today" arithmetic uses it, never the
 // device's, so a location abroad shows its own day.

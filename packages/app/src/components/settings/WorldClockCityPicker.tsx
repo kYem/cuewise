@@ -1,4 +1,9 @@
-import { sameTimeZone, searchTimeZones, type WeatherLocation } from '@cuewise/shared';
+import {
+  engineTimeZones,
+  sameTimeZone,
+  searchTimeZones,
+  type WeatherLocation,
+} from '@cuewise/shared';
 import { Loader2, Search } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -32,6 +37,7 @@ export const WorldClockCityPicker: React.FC<{ onSelect: (pick: CityPick) => void
 }) => {
   const [query, setQuery] = useState('');
   const [online, setOnline] = useState<OnlineState>({ status: 'idle' });
+  const [zoneList] = useState(engineTimeZones);
   const generation = useRef(0);
   const trimmed = query.trim();
 
@@ -63,7 +69,7 @@ export const WorldClockCityPicker: React.FC<{ onSelect: (pick: CityPick) => void
   }, [trimmed]);
 
   const options = useMemo<Option[]>(() => {
-    const offline = searchTimeZones(trimmed).map((match) => ({
+    const offline = searchTimeZones(trimmed, zoneList).map((match) => ({
       key: match.timezone,
       text: `${match.city} · ${match.region}`,
       label: match.city,
@@ -86,7 +92,7 @@ export const WorldClockCityPicker: React.FC<{ onSelect: (pick: CityPick) => void
         timezone: place.timezone,
       }));
     return [...offline, ...fresh];
-  }, [trimmed, online]);
+  }, [trimmed, online, zoneList]);
 
   const settledForQuery =
     (online.status === 'done' || online.status === 'failed') && online.query === trimmed;

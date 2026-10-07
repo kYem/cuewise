@@ -1,6 +1,7 @@
 import {
   type ConceptCadence,
   type ConceptFraming,
+  type CornerPosition,
   type FocusImageCategory,
   type FocusPosition,
   formatHourMinute,
@@ -13,7 +14,6 @@ import {
   type ReminderPanelLayout,
   type SettingsLogLevel,
   type TimeFormat,
-  type WeatherPosition,
   type WeatherUnitsPreference,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
@@ -94,7 +94,7 @@ const TIME_FORMAT_OPTIONS: { value: TimeFormat; label: string }[] = [
   { value: '24h', label: '14:30' },
 ];
 
-const CORNER_OPTIONS: { value: WeatherPosition; label: string }[] = [
+const CORNER_OPTIONS: { value: CornerPosition; label: string }[] = [
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
 ];

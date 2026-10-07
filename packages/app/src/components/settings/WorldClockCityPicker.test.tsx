@@ -40,6 +40,18 @@ describe('WorldClockCityPicker', () => {
     expect(searchLocations).not.toHaveBeenCalled();
   });
 
+  it('reads the zone list once, not on every keystroke', () => {
+    const zoneList = vi.spyOn(Intl, 'supportedValuesOf');
+    render(<WorldClockCityPicker onSelect={vi.fn()} />);
+
+    type('to');
+    type('tok');
+    type('toky');
+
+    expect(zoneList).toHaveBeenCalledTimes(1);
+    zoneList.mockRestore();
+  });
+
   it('adds online places once the search lands', async () => {
     vi.mocked(searchLocations).mockResolvedValue([AUSTIN_PLACE]);
     render(<WorldClockCityPicker onSelect={vi.fn()} />);

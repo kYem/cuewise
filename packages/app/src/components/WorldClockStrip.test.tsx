@@ -49,6 +49,14 @@ describe('WorldClockStrip', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
   });
 
+  it('shows at most four cities from a longer synced list', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ ...TOKYO_ZONE, id: `t${i}` }));
+    mockWorldClockSettings({ worldClocks: many });
+    render(<WorldClockStrip />);
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
+  });
+
   it('renders nothing while the world clock is off', () => {
     mockWorldClockSettings({ showWorldClock: false });
     const { container } = render(<WorldClockStrip />);

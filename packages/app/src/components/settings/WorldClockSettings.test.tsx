@@ -21,6 +21,30 @@ describe('WorldClockSettings', () => {
     expect(onChange).toHaveBeenCalledWith([{ ...TOKYO_ZONE, label: 'Kenji' }]);
   });
 
+  it('renames a city on Enter', () => {
+    const onChange = vi.fn();
+    render(<WorldClockSettings zones={[TOKYO_ZONE]} onChange={onChange} />);
+
+    const input = screen.getByRole('textbox', { name: 'Label for Tokyo' });
+    fireEvent.change(input, { target: { value: 'Kenji' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onChange).toHaveBeenCalledWith([{ ...TOKYO_ZONE, label: 'Kenji' }]);
+  });
+
+  it('drops an unsaved rename on Escape', () => {
+    const onChange = vi.fn();
+    render(<WorldClockSettings zones={[TOKYO_ZONE]} onChange={onChange} />);
+
+    const input = screen.getByRole('textbox', { name: 'Label for Tokyo' });
+    fireEvent.change(input, { target: { value: 'Kenji' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    fireEvent.blur(input);
+
+    expect(input).toHaveValue('Tokyo');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('moves a city up', () => {
     const onChange = vi.fn();
     render(<WorldClockSettings zones={[TOKYO_ZONE, NEW_YORK_ZONE]} onChange={onChange} />);

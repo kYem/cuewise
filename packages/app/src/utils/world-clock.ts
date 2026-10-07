@@ -13,7 +13,7 @@ export interface ZoneReading {
   time: string;
   period: string;
   difference: string;
-  dayShift: 'Tomorrow' | 'Yesterday' | null;
+  dayShift: string | null;
   isDay: boolean;
   isWorkingHours: boolean;
 }

@@ -86,14 +86,21 @@ export function formatZoneDifference(zone: ZoneClock, home: ZoneClock): string {
   return `${sign}${hours}h ${minutes}m`;
 }
 
-export function zoneDayShift(zone: ZoneClock, home: ZoneClock): 'Tomorrow' | 'Yesterday' | null {
-  if (zone.dateKey > home.dateKey) {
+const DAY_MS = 86_400_000;
+
+// Kiritimati (+14) and Pago Pago (−11) are 25h apart, so two calendar days is reachable.
+export function zoneDayShift(zone: ZoneClock, home: ZoneClock): string | null {
+  const days = Math.round((Date.parse(zone.dateKey) - Date.parse(home.dateKey)) / DAY_MS);
+  if (days === 0) {
+    return null;
+  }
+  if (days === 1) {
     return 'Tomorrow';
   }
-  if (zone.dateKey < home.dateKey) {
+  if (days === -1) {
     return 'Yesterday';
   }
-  return null;
+  return `${days > 0 ? '+' : '−'}${Math.abs(days)} days`;
 }
 
 export function isZoneDaytime(zone: ZoneClock): boolean {
@@ -146,7 +153,7 @@ export interface TimeZoneMatch {
   region: string;
 }
 
-function engineTimeZones(): readonly string[] {
+export function engineTimeZones(): readonly string[] {
   try {
     return Intl.supportedValuesOf('timeZone');
   } catch {
@@ -187,6 +194,20 @@ function cleanLabel(label: string, timezone: string): string {
     return cityFromTimeZone(timezone);
   }
   return trimmed;
+}
+
+/** Edits enforce the caps, but a synced list from another build or device may not have. */
+export function shownWorldClocks(zones: WorldClockZone[]): WorldClockZone[] {
+  const fits = (zone: WorldClockZone) => zone.label.length <= MAX_WORLD_CLOCK_LABEL;
+  if (zones.length <= MAX_WORLD_CLOCKS && zones.every(fits)) {
+    return zones;
+  }
+  return zones.slice(0, MAX_WORLD_CLOCKS).map((zone) => {
+    if (fits(zone)) {
+      return zone;
+    }
+    return { ...zone, label: zone.label.slice(0, MAX_WORLD_CLOCK_LABEL) };
+  });
 }
 
 export function addWorldClock(

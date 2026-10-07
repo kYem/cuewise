@@ -31,6 +31,12 @@ export const WorldClockSettings: React.FC<{
     pending.current = edit(pending.current);
     onChange(pending.current);
   };
+  const rename = (id: string, label: string) => {
+    if (pending.current.find((zone) => zone.id === id)?.label === label) {
+      return;
+    }
+    commit((current) => renameWorldClock(current, id, label));
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -46,11 +52,15 @@ export const WorldClockSettings: React.FC<{
               defaultValue={zone.label}
               maxLength={MAX_WORLD_CLOCK_LABEL}
               aria-label={`Label for ${zone.label}`}
-              onBlur={(event) => {
-                if (event.target.value !== zone.label) {
-                  commit((current) => renameWorldClock(current, zone.id, event.target.value));
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  rename(zone.id, event.currentTarget.value);
+                }
+                if (event.key === 'Escape') {
+                  event.currentTarget.value = zone.label;
                 }
               }}
+              onBlur={(event) => rename(zone.id, event.target.value)}
               className="w-full bg-transparent text-sm text-primary focus:outline-none focus:ring-2 focus:ring-primary-500/40 rounded px-1"
             />
             <div className="px-1 text-xs text-tertiary truncate">{zone.timezone}</div>

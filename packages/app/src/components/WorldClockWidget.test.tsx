@@ -68,6 +68,15 @@ describe('WorldClockWidget', () => {
     expect(screen.getByRole('button', { name: /world clock/i })).toHaveTextContent('+1');
   });
 
+  it('shows at most four cities from a longer synced list', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ ...TOKYO_ZONE, id: `t${i}` }));
+    mockWorldClockSettings({ worldClocks: many });
+    render(<WorldClockWidget />);
+
+    expect(screen.getByRole('button', { name: /world clock/i })).toHaveTextContent('+3');
+    expect(within(openPopover()).getAllByText('Tokyo')).toHaveLength(4);
+  });
+
   it('follows the 12-hour setting', () => {
     mockWorldClockSettings({ timeFormat: '12h' });
     render(<WorldClockWidget />);
