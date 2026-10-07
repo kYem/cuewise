@@ -135,7 +135,7 @@ export type SyncStatus =
   | 'signed_out'
   | 'error';
 
-/** What deleting the server account answered; `auth` means the session had already ended. */
+/** `ok` and `auth` both tear this device down; `error` leaves it as it was, so a retry is safe. */
 export type DeleteAccountResult = { ok: true } | { ok: false; reason: 'auth' | 'error' };
 
 /**
@@ -1588,8 +1588,8 @@ export class SyncEngine {
   }
 
   /**
-   * Deletes this session's account (ENG-99) and tears down like disableSync. A failure other than
-   * a 401 changes nothing, so a retry is safe.
+   * Deletes this session's account (ENG-99) and tears down like disableSync, on a 401 too. Any
+   * other failure leaves this device as it was, though a lost reply may still have deleted it.
    */
   async deleteAccount(): Promise<DeleteAccountResult> {
     try {

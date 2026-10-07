@@ -1594,7 +1594,9 @@ describe('SyncSettingsSectionComponent', () => {
       await confirmStartOverFromNoKeyPanel(user, controller);
 
       await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith("Couldn't delete your sync account — try again.")
+        expect(toastError).toHaveBeenCalledWith(
+          "Couldn't confirm the delete — try again. If it already went through, trying again finishes it here."
+        )
       );
       expect(toastSuccess).not.toHaveBeenCalled();
     });

@@ -26,8 +26,8 @@ import type {
 import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
-// The worker finishes a delete the page stopped waiting for, so a short wait reports a deleted
-// account as a failure; this one network call gets longer before the page gives up on it.
+// The worker finishes a delete the page stopped waiting for, so a short timeout reports a
+// deleted account as failed.
 const DELETE_ACCOUNT_TIMEOUT_FACTOR = 4;
 
 // Google OAuth 2.0 authorization endpoint + the OpenID scope for the implicit id_token flow.
@@ -477,8 +477,8 @@ export class BridgeSyncController implements SyncController {
     return response.revoked;
   }
 
-  // Answers rather than throws, like the pairing ops. A retry after a delete that did land answers
-  // auth, and the worker has torn down by then, so the panel still ends up off.
+  // A timeout answers error, but the worker may still finish the delete; its teardown then turns
+  // the panel off.
   async deleteAccount(): Promise<DeleteAccountResult> {
     try {
       const response = await this.send(

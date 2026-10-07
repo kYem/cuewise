@@ -198,7 +198,8 @@ const DELETE_ACCOUNT_MESSAGE =
 const DELETE_ACCOUNT_DONE = 'Sync account deleted. Turn sync on to start again.';
 const DELETE_ACCOUNT_SIGNED_OUT =
   "Your session ended, so the delete couldn't be confirmed. Turn sync on again: if the old account is still there, you can delete it then.";
-const DELETE_ACCOUNT_FAILED = "Couldn't delete your sync account — try again.";
+const DELETE_ACCOUNT_FAILED =
+  "Couldn't confirm the delete — try again. If it already went through, trying again finishes it here.";
 const DISABLE_MESSAGE_UNSAVED =
   "You haven't saved your recovery code yet — regenerate and save one first, or you may lose access when you re-enable this device.";
 
@@ -853,7 +854,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
     detailsRequestedRef.current = false;
     detailsGenRef.current += 1;
     // Same reasoning for the cycle: a re-enable must never wear the previous account's failure,
-    // nor its "couldn't check" — this is what retires a click the disable superseded.
+    // nor its "couldn't check" — this is what retires a click the disable or delete superseded.
     setCycle(CYCLE_NONE);
     lastCycleGenRef.current += 1;
     accountGenRef.current += 1;

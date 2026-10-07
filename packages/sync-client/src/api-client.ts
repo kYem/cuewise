@@ -159,8 +159,7 @@ export class ApiClient {
     return this.parseSuccessBody<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>(res);
   }
 
-  // Never retried: the delete removes the very token a retry would send, so a lost 204 would
-  // come back as a 401 for an account that is already gone.
+  // Never retried: a retry would resend the token the delete just revoked.
   async deleteAccount(): Promise<void> {
     await this.request('/v1/account', { method: 'DELETE' }, { auth: true, retry: false });
   }
