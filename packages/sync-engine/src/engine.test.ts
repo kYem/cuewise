@@ -2269,6 +2269,119 @@ describe('SyncEngine.disableSync', () => {
   });
 });
 
+describe('SyncEngine.deleteAccount', () => {
+  /** Device B signed in to A's account but holds no key and no code — the ENG-99 dead end. */
+  async function lockedOutDevice(server: FakeSyncServer): Promise<Device> {
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await setGoals([goalFactory.build({ id: 'local-b' })]);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    return deviceB;
+  }
+
+  it('lets a locked-out device start a fresh account that uploads its local data', async () => {
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+
+    const result = await device.engine.deleteAccount();
+    await device.engine.enableSync('dev', 'cred-b', 'Device B');
+
+    expect(result).toEqual({ ok: true });
+    expect(device.engine.getStatus()).toBe('active');
+    expect(device.onRecoveryCode).toHaveBeenCalledTimes(1);
+    expect(server.rows().map((row) => row.entityId)).toContain('local-b');
+  });
+
+  it('tears this device down like a disable once the server delete succeeds', async () => {
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+
+    await device.engine.deleteAccount();
+
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(await device.kv.get(SYNC_SESSION_KEY, 'local')).toBeNull();
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(server.getRecoveryEnvelope()).toBeNull();
+  });
+
+  it('answers auth and tears down, keeping local data, when the session has already ended', async () => {
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+    device.apiClient.rejectNextDeleteAccount(new ApiError('invalid_token', 401));
+
+    const result = await device.engine.deleteAccount();
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(device.engine.getStatus()).toBe('disabled');
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect((await getGoals()).map((goal) => goal.id)).toContain('local-b');
+  });
+
+  it('answers ok once the server has deleted the account, even if the teardown throws', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+    vi.spyOn(device.engine, 'disableSync').mockRejectedValueOnce(new Error('scheduler gone'));
+
+    const result = await device.engine.deleteAccount();
+
+    expect(result).toEqual({ ok: true });
+    expect(server.getRecoveryEnvelope()).toBeNull();
+  });
+
+  it('signs out the other devices, which push nothing into the fresh account', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await setGoals([goalFactory.build({ id: 'on-a' })]);
+    await deviceA.engine.enableSync('dev', 'cred-a', 'Device A');
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    await expect(deviceB.engine.enableSync('dev', 'cred-b', 'Device B')).rejects.toBeInstanceOf(
+      RecoveryCodeRequiredError
+    );
+    await deviceB.engine.deleteAccount();
+
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+
+    expect(deviceA.engine.getStatus()).toBe('signed_out');
+    expect(server.rows()).toEqual([]);
+  });
+
+  it('tears down when a retry finds the account a lost reply already deleted', async () => {
+    const server = new FakeSyncServer();
+    const device = await lockedOutDevice(server);
+    server.deleteAccount();
+
+    const result = await device.engine.deleteAccount();
+
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+    expect(device.engine.getStatus()).toBe('disabled');
+  });
+
+  it('answers error and changes nothing when the delete fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    device.apiClient.rejectNextDeleteAccount(new ApiError('network_error', 0));
+
+    const result = await device.engine.deleteAccount();
+
+    expect(result).toEqual({ ok: false, reason: 'error', detail: expect.any(String) });
+    expect(device.engine.getStatus()).toBe('active');
+    expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBe(true);
+    expect(server.getRecoveryEnvelope()).not.toBeNull();
+  });
+});
+
 describe('SyncEngine ledger seqs on enable, before the initial sync', () => {
   it('forgets per-entity seqs with the cursor, so no push carries a base from the last account', async () => {
     const server = new FakeSyncServer();

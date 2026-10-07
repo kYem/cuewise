@@ -1,5 +1,6 @@
 import type { SyncSession } from '@cuewise/shared';
 import type {
+  DeleteAccountResult,
   PairingApprovalResult,
   PairingPollResult,
   PendingPairing,
@@ -37,6 +38,7 @@ type FailableMethod =
   | 'revokeSession'
   | 'renameSession'
   | 'revokeOtherSessions'
+  | 'deleteAccount'
   | 'listPairingRequests'
   | 'commitPairing'
   | 'pollApproval'
@@ -442,6 +444,18 @@ export class FakeSyncController implements SyncController {
     this.calls.push({ method: 'revokeOtherSessions', args: [] });
     this.maybeFail('revokeOtherSessions');
     return this.revokedOthersCount;
+  }
+
+  /** What deleteAccount answers; `ok` and `auth` turn the status off, as the hosts tear down. */
+  deleteAccountResult: DeleteAccountResult = { ok: true };
+
+  async deleteAccount(): Promise<DeleteAccountResult> {
+    this.calls.push({ method: 'deleteAccount', args: [] });
+    this.maybeFail('deleteAccount');
+    if (this.deleteAccountResult.ok || this.deleteAccountResult.reason === 'auth') {
+      this.setStatus('off');
+    }
+    return this.deleteAccountResult;
   }
 
   /** Resolves a deferred enableWithGoogle as a quiet cancel, mirroring the macOS driver. */

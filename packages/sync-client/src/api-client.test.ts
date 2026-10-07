@@ -657,6 +657,16 @@ describe('ApiClient', () => {
       expect(JSON.parse(calls[0].init.body as string)).toEqual({ deviceName: 'Work MacBook' });
     });
 
+    it('DELETEs the account and never retries', async () => {
+      const { fetchFn, calls } = stubFetch([problemResponse('internal', 503)]);
+      const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });
+
+      await expect(client.deleteAccount()).rejects.toMatchObject({ status: 503 });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe(`${BASE_URL}/v1/account`);
+      expect(calls[0].init.method).toBe('DELETE');
+    });
+
     it('POSTs revoke-others and returns the count', async () => {
       const { fetchFn, calls } = stubFetch([{ status: 200, body: { revoked: 3 } }]);
       const client = new ApiClient({ baseUrl: BASE_URL, getToken: async () => TOKEN, fetchFn });

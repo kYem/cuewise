@@ -40,6 +40,7 @@ export function fakeControlSurface(
     revokeSession: vi.fn().mockResolvedValue(undefined),
     renameSession: vi.fn().mockResolvedValue(undefined),
     revokeOtherSessions: vi.fn().mockResolvedValue(0),
+    deleteAccount: vi.fn().mockResolvedValue({ ok: true }),
     ...overrides,
   };
 }

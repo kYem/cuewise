@@ -23,6 +23,7 @@ import {
 import { ApiError } from '@cuewise/sync-client';
 import {
   createSyncEngine,
+  type DeleteAccountResult,
   type PairingApprovalResult,
   type PairingPollResult,
   type PendingPairing,
@@ -483,6 +484,10 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     },
     async revokeOtherSessions(): Promise<number> {
       return engine.revokeOtherSessions();
+    },
+    // Queued behind the enroll ops: a delete mid-enroll would wipe the account it is joining.
+    deleteAccount(): Promise<DeleteAccountResult> {
+      return serialize(() => engine.deleteAccount());
     },
     async getLastCycle(): Promise<LastCycleRead> {
       // No realm to be unreachable across, but the record still comes from storage: an unreadable

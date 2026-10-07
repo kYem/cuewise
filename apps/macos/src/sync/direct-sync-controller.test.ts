@@ -458,6 +458,29 @@ describe('createDirectSyncController: reconnect()', () => {
   });
 });
 
+describe('createDirectSyncController: deleteAccount()', () => {
+  it('deletes the account of a locked-out device and leaves it free to start over', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server);
+    useStorage(deviceA);
+    await buildRealController(deviceA).controller.enable('cred-a', 'Device A');
+    const deviceB = createDevice(server);
+    useStorage(deviceB);
+    const { controller, engine } = buildRealController(deviceB);
+    expect(await controller.enable('cred-b', 'Device B')).toEqual({
+      ok: false,
+      reason: 'needs-code',
+    });
+
+    const result = await controller.deleteAccount();
+    const restart = await controller.enable('cred-b', 'Device B');
+
+    expect(result).toEqual({ ok: true });
+    expect(restart.ok).toBe(true);
+    expect(engine.getStatus()).toBe('active');
+  });
+});
+
 describe('createDirectSyncController: enable() concurrency', () => {
   it('serializes two concurrent enable() calls so the capture slot never interleaves', async () => {
     const server = new FakeSyncServer();

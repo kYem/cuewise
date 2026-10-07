@@ -5,6 +5,7 @@ import { FakeSyncController } from '../../sync/__fixtures__/fake-sync-controller
 import type { EnableResult } from '../../sync/sync-controller';
 import { SyncControllerContext } from '../../sync/sync-controller';
 import { EnrollCodeModal } from './EnrollCodeModal';
+import { START_OVER_LABEL } from './StartOverLink';
 
 const toastError = vi.fn();
 vi.mock('../../stores/toast-store', () => ({
@@ -72,6 +73,20 @@ describe('EnrollCodeModal', () => {
     expect(screen.getByRole('button', { name: /enrolling/i })).toBeDisabled();
     expect(screen.getByTestId('enroll-spinner')).toBeInTheDocument();
 
+    resolve({ ok: true });
+    await waitFor(() => expect(h.onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the start-over link out of reach while an enroll is in flight', async () => {
+    const user = userEvent.setup();
+    const { promise, resolve } = deferred<EnableResult>();
+    const h = handlers(() => promise);
+    render(<EnrollCodeModal isOpen {...h} onStartOver={vi.fn()} />);
+
+    await typeCode(user, CODE);
+    await user.click(screen.getByRole('button', { name: 'Enroll' }));
+
+    expect(screen.getByRole('button', { name: START_OVER_LABEL })).toBeDisabled();
     resolve({ ok: true });
     await waitFor(() => expect(h.onClose).toHaveBeenCalledTimes(1));
   });

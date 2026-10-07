@@ -50,6 +50,8 @@ export class FakeSyncServer {
   private nextSession = 0;
   private nextPairing = 0;
   private recoveryEnvelope: string | null = null;
+  /** Bumped by an account delete: older tokens 401, and the next sign-in names a new user. */
+  accountGeneration = 0;
   private readonly records: SyncRecord[] = [];
   // One server is one account, so every row here is already scoped the way the real store
   // scopes by userId; what still has to be told apart is which session made the call.
@@ -115,6 +117,16 @@ export class FakeSyncServer {
     this.purgedSeq = this.nextSeq;
     const kept = this.records.filter((r) => r.collection !== collection || r.entityId !== entityId);
     this.records.splice(0, this.records.length, ...kept);
+  }
+
+  /** DELETE /v1/account: the next sign-in starts a fresh account with no rows and no envelope. */
+  deleteAccount(): void {
+    this.accountGeneration += 1;
+    this.nextSeq = 0;
+    this.purgedSeq = 0;
+    this.recoveryEnvelope = null;
+    this.records.splice(0, this.records.length);
+    this.pairings.clear();
   }
 
   /** The daily cron reclaiming every tombstone and raising the watermark past them. */
@@ -379,8 +391,10 @@ export class FakeApiClient implements EngineApiClient {
   private tokenCounter = 0;
   private nextGetChangesError: Error | null = null;
   private nextPushChangesError: Error | null = null;
+  private nextDeleteAccountError: Error | null = null;
   private sessionId: string;
   private deviceName = 'Fake Device';
+  private tokenGeneration = 0;
 
   constructor(private server: FakeSyncServer) {
     this.sessionId = server.newSessionId();
@@ -390,6 +404,7 @@ export class FakeApiClient implements EngineApiClient {
   switchAccount(server: FakeSyncServer, userId: string): void {
     this.server = server;
     this.sessionId = server.newSessionId();
+    this.tokenGeneration = server.accountGeneration;
     this.accountResult = { userId, email: null };
   }
 
@@ -401,6 +416,11 @@ export class FakeApiClient implements EngineApiClient {
   /** One-shot: throws the given error on the next getChanges call, then clears itself. */
   rejectNextGetChanges(error: Error): void {
     this.nextGetChangesError = error;
+  }
+
+  /** One-shot: throws the given error on the next deleteAccount call, then clears itself. */
+  rejectNextDeleteAccount(error: Error): void {
+    this.nextDeleteAccountError = error;
   }
 
   /** One-shot: throws the given error on the next pushChanges call, then clears itself. */
@@ -419,6 +439,7 @@ export class FakeApiClient implements EngineApiClient {
     // one that token was minted with.
     this.sessionId = this.server.newSessionId();
     this.deviceName = req.deviceName;
+    this.tokenGeneration = this.server.accountGeneration;
     return { token: `fake-token-${this.tokenCounter}` };
   }
 
@@ -428,7 +449,13 @@ export class FakeApiClient implements EngineApiClient {
       this.rejectNextGetAccountWith401 = false;
       throw new ApiError('invalid_token', 401);
     }
-    return this.accountResult;
+    if (this.tokenGeneration === 0) {
+      return this.accountResult;
+    }
+    return {
+      ...this.accountResult,
+      userId: `${this.accountResult.userId}-${this.tokenGeneration}`,
+    };
   }
 
   async listSessions(): Promise<SyncSession[]> {
@@ -457,6 +484,16 @@ export class FakeApiClient implements EngineApiClient {
   async revokeOtherSessions(): Promise<number> {
     this.assertAuthorized();
     return this.revokeOtherSessionsResult;
+  }
+
+  async deleteAccount(): Promise<void> {
+    this.assertAuthorized();
+    if (this.nextDeleteAccountError !== null) {
+      const err = this.nextDeleteAccountError;
+      this.nextDeleteAccountError = null;
+      throw err;
+    }
+    this.server.deleteAccount();
   }
 
   async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {
@@ -556,7 +593,7 @@ export class FakeApiClient implements EngineApiClient {
   }
 
   private assertAuthorized(): void {
-    if (this.rejectAllWith401) {
+    if (this.rejectAllWith401 || this.tokenGeneration !== this.server.accountGeneration) {
       throw new ApiError('invalid_token', 401);
     }
   }

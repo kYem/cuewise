@@ -1,6 +1,7 @@
 import type { EnableResult, SyncDetails } from '@cuewise/app';
 import type { SyncSession } from '@cuewise/shared';
 import type {
+  DeleteAccountResult,
   PairingApprovalResult,
   PairingPollResult,
   PendingPairing,
@@ -23,6 +24,7 @@ export const SYNC_CONTROL_OPS = [
   'revokeSession',
   'renameSession',
   'revokeOtherSessions',
+  'deleteAccount',
   'beginPairing',
   'pollPairing',
   'listPairingRequests',
@@ -170,6 +172,7 @@ export interface SyncOpResponse {
   revokeSession: SyncControlResponse;
   renameSession: SyncControlResponse;
   revokeOtherSessions: SyncRevokedCountResponse | Extract<SyncControlResponse, { ok: false }>;
+  deleteAccount: DeleteAccountResult | Extract<SyncControlResponse, { ok: false }>;
   beginPairing: SyncPairingStartedResponse | Extract<SyncControlResponse, { ok: false }>;
   pollPairing: SyncPairingPollResponse | Extract<SyncControlResponse, { ok: false }>;
   listPairingRequests: SyncPairingRequestsResponse | Extract<SyncControlResponse, { ok: false }>;

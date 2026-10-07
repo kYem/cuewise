@@ -825,6 +825,20 @@ describe('handleSyncControlMessage: sessions', () => {
 
     expect(result).toEqual({ ok: true, kind: 'revokedCount', revoked: 3 });
   });
+
+  it("relays deleteAccount and answers with the engine's result", async () => {
+    const deleteAccount = vi.fn().mockResolvedValue({ ok: false, reason: 'auth' });
+    const engine = fakeControlSurface({ deleteAccount });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'deleteAccount' },
+      fakeDeps()
+    );
+
+    expect(deleteAccount).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ ok: false, reason: 'auth' });
+  });
 });
 
 describe('handleSyncControlMessage: pairing', () => {

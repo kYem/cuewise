@@ -159,8 +159,9 @@ export class ApiClient {
     return this.parseSuccessBody<{ records: SyncRecord[]; keyEnvelopes: KeyEnvelopeExport[] }>(res);
   }
 
+  // Never retried: a retry would resend the token the delete just revoked.
   async deleteAccount(): Promise<void> {
-    await this.request('/v1/account', { method: 'DELETE' }, { auth: true });
+    await this.request('/v1/account', { method: 'DELETE' }, { auth: true, retry: false });
   }
 
   // Per-device management (ENG-95). `id` is the server's opaque row handle, never a credential.

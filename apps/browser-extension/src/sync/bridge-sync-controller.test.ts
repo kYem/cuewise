@@ -982,6 +982,55 @@ describe('BridgeSyncController: sessions', () => {
   });
 });
 
+describe('BridgeSyncController: deleteAccount', () => {
+  it('relays the op and answers ok when the account was deleted', async () => {
+    const controller = new BridgeSyncController();
+
+    const result = await controller.deleteAccount();
+
+    expect(runtime.sendMessage).toHaveBeenCalledWith({
+      kind: 'cuewise-sync-control',
+      op: 'deleteAccount',
+    });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('answers auth when the session was already gone', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'auth' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.deleteAccount()).resolves.toEqual({ ok: false, reason: 'auth' });
+  });
+
+  it('answers error instead of throwing when the worker never replies', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockImplementation(() => new Promise(() => {}));
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.deleteAccount()).resolves.toEqual({ ok: false, reason: 'error' });
+    errorSpy.mockRestore();
+  });
+
+  it("logs the worker's cause when the delete fails", async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error', detail: 'HTTP 503' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.deleteAccount()).resolves.toEqual({ ok: false, reason: 'error' });
+    expect(errorSpy).toHaveBeenCalledWith('Cloud sync account delete failed: error — HTTP 503');
+    errorSpy.mockRestore();
+  });
+
+  it('waits past the usual timeout for a delete the worker is still finishing', async () => {
+    runtime.sendMessage.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 25))
+    );
+    const controller = new BridgeSyncController({ timeoutMs: 10 });
+
+    await expect(controller.deleteAccount()).resolves.toEqual({ ok: true });
+  });
+});
+
 describe('BridgeSyncController: pairing polls', () => {
   const REQUEST: PendingPairing = {
     id: 'pairing-1',

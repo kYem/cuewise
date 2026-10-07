@@ -30,6 +30,7 @@ import { SettingsModal } from './SettingsModal';
 import { SyncMenuFooter } from './SyncMenuFooter';
 import { INTEGRATIONS_SECTION_ID } from './settings/NotionSettingsSection';
 import type { SettingsSection } from './settings/SettingsSections';
+import { CLOUD_SYNC_SECTION_ID } from './settings/SyncSettingsSection';
 import { WeatherWidget } from './WeatherWidget';
 import { WelcomeModal } from './WelcomeModal';
 import { WorldClockWidget } from './WorldClockWidget';
@@ -266,6 +267,12 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
     setIsSettingsModalOpen(true);
   };
 
+  const handleOpenSyncSettings = () => {
+    setIsMenuOpen(false);
+    setSettingsSection(CLOUD_SYNC_SECTION_ID);
+    setIsSettingsModalOpen(true);
+  };
+
   const handleOpenIntegrations = () => {
     setSettingsSection(INTEGRATIONS_SECTION_ID);
     setIsSettingsModalOpen(true);
@@ -368,7 +375,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
               <Settings className="w-5 h-5 text-primary-600" />
               <span className="text-sm font-medium">Settings</span>
             </button>
-            <SyncMenuFooter onOpenSettings={handleOpenSettings} />
+            <SyncMenuFooter onOpenSettings={handleOpenSyncSettings} />
           </div>
         )}
       </div>

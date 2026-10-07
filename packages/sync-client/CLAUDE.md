@@ -15,7 +15,7 @@ A **platform-agnostic** client for the ENG-43 cloud-sync API (`apps/api`) — no
 | `pushChanges(records)` | `POST /v1/changes` → `{cursor, applied, conflicts}` | Yes |
 | `logout()` | `POST /v1/auth/logout` | Yes |
 | `exportData()` | `GET /v1/export` | Yes |
-| `deleteAccount()` | `DELETE /v1/account` | Yes |
+| `deleteAccount()` | `DELETE /v1/account`, never retried | Yes |
 | `getRecoveryEnvelope()` | `GET /v1/keys/recovery` | Yes |
 | `putRecoveryEnvelope(envelope)` | `PUT /v1/keys/recovery` | Yes |
 | `listSessions()` | `GET /v1/sessions` | Yes |

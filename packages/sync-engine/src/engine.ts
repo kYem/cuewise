@@ -135,6 +135,12 @@ export type SyncStatus =
   | 'signed_out'
   | 'error';
 
+/** `ok` and `auth` tear this device down; `error` is unconfirmed, and a retry finishes it. */
+export type DeleteAccountResult =
+  | { ok: true }
+  | { ok: false; reason: 'auth' }
+  | { ok: false; reason: 'error'; detail?: string };
+
 /**
  * Structural subset of ApiClient the engine needs (auth + the pull/push + key-envelope calls).
  * A real ApiClient instance satisfies this directly; tests supply an in-memory fake.
@@ -151,6 +157,7 @@ export type EngineApiClient = Pick<
   | 'revokeSession'
   | 'renameSession'
   | 'revokeOtherSessions'
+  | 'deleteAccount'
   | 'createPairing'
   | 'listPairings'
   | 'getPairing'
@@ -958,7 +965,7 @@ export class SyncEngine {
 
   /**
    * Drops what an abandoned enroll persisted, adopted or not. The server envelope cannot be
-   * withdrawn — there is no delete call — so a code it minted is the only way back into the
+   * withdrawn (no envelope-only delete call), so a code it minted is the only way back into the
    * account it made, which is why that is reported rather than swallowed.
    */
   private async abandonEnroll(mintedACode: boolean): Promise<void> {
@@ -1581,6 +1588,28 @@ export class SyncEngine {
 
   async revokeOtherSessions(): Promise<number> {
     return this.deps.apiClient.revokeOtherSessions();
+  }
+
+  /**
+   * Deletes this session's account (ENG-99) and tears down like disableSync, on a 401 too. Any
+   * other failure leaves this device as it was, though a lost reply may mean the account is gone.
+   */
+  async deleteAccount(): Promise<DeleteAccountResult> {
+    try {
+      await this.deps.apiClient.deleteAccount();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        // An earlier attempt whose reply was lost may have deleted it, and the session is dead
+        // either way: tear down rather than keep a device set up for an account that may be gone.
+        await this.bestEffort(() => this.disableSync(), 'account delete teardown');
+        return { ok: false, reason: 'auth' };
+      }
+      logger.error(`Cloud sync account delete failed: ${describeThrown(err)}`, err);
+      return { ok: false, reason: 'error', detail: describeThrown(err) };
+    }
+    // The account is gone whatever the teardown hits, and that is the answer the user needs.
+    await this.bestEffort(() => this.disableSync(), 'account delete teardown');
+    return { ok: true };
   }
 
   /** Self-heal, then hold the DK and arm the pull loop. No-op if sync was never enabled here. */
