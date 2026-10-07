@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { searchLocations } from '../../utils/weather';
-import { AUSTIN_PLACE, TOKYO_PLACE } from '../__fixtures__/world-clock.fixtures';
+import { AUSTIN_PLACE, KOLKATA_PLACE, TOKYO_PLACE } from '../__fixtures__/world-clock.fixtures';
 import { WorldClockCityPicker } from './WorldClockCityPicker';
 
 vi.mock('../../utils/weather', async (importOriginal) => ({
@@ -61,6 +61,16 @@ describe('WorldClockCityPicker', () => {
     await finishOnlineSearch();
 
     expect(screen.getAllByRole('button', { name: /Tokyo/ })).toHaveLength(1);
+  });
+
+  it('lists a renamed city once when the two searches use different zone ids', async () => {
+    vi.mocked(searchLocations).mockResolvedValue([KOLKATA_PLACE]);
+    render(<WorldClockCityPicker onSelect={vi.fn()} />);
+
+    type('kolkata');
+    await finishOnlineSearch();
+
+    expect(screen.getAllByRole('button', { name: /Kolkata/ })).toHaveLength(1);
   });
 
   it('keeps offline matches quietly when the online search fails', async () => {

@@ -105,9 +105,39 @@ export function isZoneWorkingHours(zone: ZoneClock): boolean {
   return weekday && zone.hour >= 9 && zone.hour < 17;
 }
 
-export function cityFromTimeZone(timeZone: string): string {
+// Chrome's zone list and resolvedOptions still report these by their old ids. The id stays as
+// the engine gives it (an older engine may not know the new one); only the shown name changes.
+const RENAMED_ZONES: Readonly<Record<string, string>> = {
+  'Asia/Calcutta': 'Asia/Kolkata',
+  'Asia/Katmandu': 'Asia/Kathmandu',
+  'Asia/Rangoon': 'Asia/Yangon',
+  'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+  'Europe/Kiev': 'Europe/Kyiv',
+  'America/Godthab': 'America/Nuuk',
+  'Atlantic/Faeroe': 'Atlantic/Faroe',
+  'Pacific/Enderbury': 'Pacific/Kanton',
+};
+
+const CITY_NAMES: Readonly<Record<string, string>> = {
+  'Asia/Ho_Chi_Minh': 'Ho Chi Minh City',
+};
+
+function currentTimeZoneId(timeZone: string): string {
+  return RENAMED_ZONES[timeZone] ?? timeZone;
+}
+
+function lastSegment(timeZone: string): string {
   const segments = timeZone.split('/');
   return (segments[segments.length - 1] ?? timeZone).replace(/_/g, ' ');
+}
+
+export function cityFromTimeZone(timeZone: string): string {
+  const current = currentTimeZoneId(timeZone);
+  return CITY_NAMES[current] ?? lastSegment(current);
+}
+
+export function sameTimeZone(a: string, b: string): boolean {
+  return currentTimeZoneId(a) === currentTimeZoneId(b);
 }
 
 export interface TimeZoneMatch {
@@ -140,11 +170,11 @@ export function searchTimeZones(
       continue;
     }
     const city = cityFromTimeZone(timezone);
-    const haystack = city.toLowerCase();
+    const names = [city.toLowerCase(), lastSegment(timezone).toLowerCase()];
     const match = { timezone, city, region: timezone.split('/')[0] ?? '' };
-    if (haystack.startsWith(needle)) {
+    if (names.some((name) => name.startsWith(needle))) {
       prefix.push(match);
-    } else if (haystack.includes(needle)) {
+    } else if (names.some((name) => name.includes(needle))) {
       substring.push(match);
     }
   }

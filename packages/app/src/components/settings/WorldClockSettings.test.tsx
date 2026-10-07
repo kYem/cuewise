@@ -45,6 +45,30 @@ describe('WorldClockSettings', () => {
     expect(onChange).toHaveBeenCalledWith([NEW_YORK_ZONE]);
   });
 
+  it('keeps a rename when another row changes before the save lands', () => {
+    const onChange = vi.fn();
+    render(<WorldClockSettings zones={[TOKYO_ZONE, NEW_YORK_ZONE]} onChange={onChange} />);
+
+    const input = screen.getByRole('textbox', { name: 'Label for Tokyo' });
+    fireEvent.change(input, { target: { value: 'Kenji' } });
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove NYC team' }));
+
+    expect(onChange).toHaveBeenLastCalledWith([{ ...TOKYO_ZONE, label: 'Kenji' }]);
+  });
+
+  it('keeps both removals when two rows go in quick succession', () => {
+    const onChange = vi.fn();
+    render(
+      <WorldClockSettings zones={[TOKYO_ZONE, NEW_YORK_ZONE, AUCKLAND_ZONE]} onChange={onChange} />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Tokyo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove NYC team' }));
+
+    expect(onChange).toHaveBeenLastCalledWith([AUCKLAND_ZONE]);
+  });
+
   it('adds a picked city to the end', () => {
     const onChange = vi.fn();
     render(<WorldClockSettings zones={[TOKYO_ZONE]} onChange={onChange} />);

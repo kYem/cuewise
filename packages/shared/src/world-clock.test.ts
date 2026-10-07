@@ -13,6 +13,7 @@ import {
   readZoneClock,
   removeWorldClock,
   renameWorldClock,
+  sameTimeZone,
   searchTimeZones,
   type ZoneClock,
   zoneDayShift,
@@ -128,6 +129,30 @@ describe('isZoneWorkingHours', () => {
 describe('cityFromTimeZone', () => {
   it('takes the last segment and restores spaces', () => {
     expect(cityFromTimeZone('America/Argentina/Buenos_Aires')).toBe('Buenos Aires');
+  });
+});
+
+describe('renamed zones', () => {
+  it("names a city by today's name when the engine reports the old one", () => {
+    expect(cityFromTimeZone('Asia/Calcutta')).toBe('Kolkata');
+    expect(cityFromTimeZone('Europe/Kiev')).toBe('Kyiv');
+    expect(cityFromTimeZone('Asia/Saigon')).toBe('Ho Chi Minh City');
+  });
+
+  it('finds a renamed city by either name', () => {
+    const match = [{ timezone: 'Asia/Calcutta', city: 'Kolkata', region: 'Asia' }];
+
+    expect(searchTimeZones('kolk', ['Asia/Calcutta'])).toEqual(match);
+    expect(searchTimeZones('calc', ['Asia/Calcutta'])).toEqual(match);
+  });
+
+  it("finds Kolkata in this engine's own zone list", () => {
+    expect(searchTimeZones('kolkata').map((m) => m.city)).toEqual(['Kolkata']);
+  });
+
+  it('treats an old and a new zone id as the same zone', () => {
+    expect(sameTimeZone('Asia/Calcutta', 'Asia/Kolkata')).toBe(true);
+    expect(sameTimeZone('Asia/Tokyo', 'Asia/Seoul')).toBe(false);
   });
 });
 

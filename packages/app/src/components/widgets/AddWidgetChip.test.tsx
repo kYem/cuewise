@@ -46,6 +46,13 @@ describe('AddWidgetChip', () => {
     expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
   });
 
+  it('stays available while the world clock is on without a city, since it draws nothing', () => {
+    mockWidgetPickerStores({ settings: { ...ALL_WIDGETS_ON, worldClocks: [] } });
+    render(<AddWidgetChip />);
+
+    expect(screen.getByRole('button', { name: 'Add a widget' })).toBeInTheDocument();
+  });
+
   it('closes when the trigger is clicked a second time', async () => {
     const user = userEvent.setup();
     mockWidgetPickerStores({ settings: ALL_WIDGETS_OFF });

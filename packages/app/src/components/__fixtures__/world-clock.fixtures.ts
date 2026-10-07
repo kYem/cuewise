@@ -64,3 +64,15 @@ export const TOKYO_PLACE: WeatherLocation = {
   longitude: 139.69171,
   timezone: 'Asia/Tokyo',
 };
+
+/** The geocoder uses today's zone id; the engine's own list may still say Asia/Calcutta. */
+export const KOLKATA_PLACE: WeatherLocation = {
+  id: '1275004',
+  name: 'Kolkata',
+  admin1: 'West Bengal',
+  country: 'India',
+  countryCode: 'IN',
+  latitude: 22.56263,
+  longitude: 88.36304,
+  timezone: 'Asia/Kolkata',
+};

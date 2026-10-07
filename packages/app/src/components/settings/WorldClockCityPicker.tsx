@@ -1,4 +1,4 @@
-import { searchTimeZones, type WeatherLocation } from '@cuewise/shared';
+import { sameTimeZone, searchTimeZones, type WeatherLocation } from '@cuewise/shared';
 import { Loader2, Search } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -25,11 +25,8 @@ type OnlineState =
   | { status: 'done'; query: string; places: WeatherLocation[] }
   | { status: 'failed'; query: string };
 
-/**
- * City search for the world clock. The engine's own zone list answers instantly and offline; the
- * weather geocoder adds every other town when it can be reached. Its own state, not the weather
- * store's, so the weather picker on the same screen keeps its results.
- */
+// Offline zone matches first, geocoder towns when reachable. Local state, not the weather
+// store's, so the weather picker on the same screen keeps its results.
 export const WorldClockCityPicker: React.FC<{ onSelect: (pick: CityPick) => void }> = ({
   onSelect,
 }) => {
@@ -78,7 +75,9 @@ export const WorldClockCityPicker: React.FC<{ onSelect: (pick: CityPick) => void
     const fresh = online.places
       .filter(
         (place) =>
-          !offline.some((match) => match.timezone === place.timezone && match.label === place.name)
+          !offline.some(
+            (match) => sameTimeZone(match.timezone, place.timezone) && match.label === place.name
+          )
       )
       .map((place) => ({
         key: `place-${place.id}`,
