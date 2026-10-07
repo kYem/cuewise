@@ -15,8 +15,18 @@ export function useMinuteNow(): Date {
         schedule();
       }, untilNextMinute);
     };
+    // Sleep suspends the timer and its leftover delay runs after wake, so re-read on showing.
+    const catchUp = () => {
+      clearTimeout(timer);
+      setNow(new Date());
+      schedule();
+    };
     schedule();
-    return () => clearTimeout(timer);
+    document.addEventListener('visibilitychange', catchUp);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', catchUp);
+    };
   }, []);
 
   return now;

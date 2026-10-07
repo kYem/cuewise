@@ -35,4 +35,15 @@ describe('useMinuteNow', () => {
     });
     expect(result.current.toISOString()).toBe('2026-06-15T12:02:00.000Z');
   });
+
+  it('catches up as soon as the tab is shown again after a sleep', () => {
+    const { result } = renderHook(() => useMinuteNow());
+
+    vi.setSystemTime(new Date('2026-06-16T07:30:05Z'));
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(result.current.toISOString()).toBe('2026-06-16T07:30:05.000Z');
+  });
 });

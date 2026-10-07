@@ -294,6 +294,14 @@ describe('shownWorldClocks', () => {
     expect(zone?.label).toHaveLength(MAX_WORLD_CLOCK_LABEL);
   });
 
+  it('falls back to the city for a blank synced label', () => {
+    expect(shownWorldClocks([{ ...TOKYO, label: '' }])[0]?.label).toBe('Tokyo');
+  });
+
+  it('drops a synced city whose id repeats an earlier one', () => {
+    expect(shownWorldClocks([TOKYO, { ...LONDON, id: TOKYO.id }])).toEqual([TOKYO]);
+  });
+
   it('returns the same list when nothing needs cutting', () => {
     const zones = [TOKYO, LONDON];
 

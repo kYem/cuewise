@@ -1,5 +1,7 @@
-import { MAX_WORLD_CLOCKS } from '@cuewise/shared';
+import { MAX_WORLD_CLOCKS, type WorldClockZone } from '@cuewise/shared';
 import { fireEvent, render, screen } from '@testing-library/react';
+import type React from 'react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { AUCKLAND_ZONE, NEW_YORK_ZONE, TOKYO_ZONE } from '../__fixtures__/world-clock.fixtures';
 import { WorldClockSettings } from './WorldClockSettings';
@@ -8,6 +10,11 @@ vi.mock('../../utils/weather', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../utils/weather')>()),
   searchLocations: vi.fn(async () => []),
 }));
+
+const SavingWorldClockSettings: React.FC<{ initial: WorldClockZone[] }> = ({ initial }) => {
+  const [zones, setZones] = useState(initial);
+  return <WorldClockSettings zones={zones} onChange={setZones} />;
+};
 
 describe('WorldClockSettings', () => {
   it('renames a city when its label loses focus', () => {
@@ -43,6 +50,55 @@ describe('WorldClockSettings', () => {
 
     expect(input).toHaveValue('Tokyo');
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps focus in the label after Enter saves it', () => {
+    render(<SavingWorldClockSettings initial={[TOKYO_ZONE]} />);
+
+    const input = screen.getByRole('textbox', { name: 'Label for Tokyo' });
+    input.focus();
+    fireEvent.change(input, { target: { value: 'Kenji' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByRole('textbox', { name: 'Label for Kenji' })).toHaveFocus();
+  });
+
+  it('keeps Escape in the label from closing the settings around it', () => {
+    const closeSettings = vi.fn();
+    document.addEventListener('keydown', closeSettings);
+    render(<WorldClockSettings zones={[TOKYO_ZONE]} onChange={vi.fn()} />);
+
+    const input = screen.getByRole('textbox', { name: 'Label for Tokyo' });
+    fireEvent.change(input, { target: { value: 'Kenji' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    document.removeEventListener('keydown', closeSettings);
+
+    expect(closeSettings).not.toHaveBeenCalled();
+  });
+
+  it('lets Escape close the settings when the label has no edit', () => {
+    const closeSettings = vi.fn();
+    document.addEventListener('keydown', closeSettings);
+    render(<WorldClockSettings zones={[TOKYO_ZONE]} onChange={vi.fn()} />);
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Label for Tokyo' }), {
+      key: 'Escape',
+    });
+    document.removeEventListener('keydown', closeSettings);
+
+    expect(closeSettings).toHaveBeenCalled();
+  });
+
+  it('shows the saved label again when a blank rename changes nothing', () => {
+    const onChange = vi.fn();
+    render(<WorldClockSettings zones={[TOKYO_ZONE]} onChange={onChange} />);
+
+    const input = screen.getByRole('textbox', { name: 'Label for Tokyo' });
+    fireEvent.change(input, { target: { value: '  ' } });
+    fireEvent.blur(input);
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue('Tokyo');
   });
 
   it('moves a city up', () => {

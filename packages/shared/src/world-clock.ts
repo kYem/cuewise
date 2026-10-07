@@ -198,16 +198,25 @@ function cleanLabel(label: string, timezone: string): string {
 
 /** Edits enforce the caps, but a synced list from another build or device may not have. */
 export function shownWorldClocks(zones: WorldClockZone[]): WorldClockZone[] {
-  const fits = (zone: WorldClockZone) => zone.label.length <= MAX_WORLD_CLOCK_LABEL;
-  if (zones.length <= MAX_WORLD_CLOCKS && zones.every(fits)) {
+  const ids = new Set<string>();
+  const shown: WorldClockZone[] = [];
+  for (const zone of zones) {
+    if (shown.length === MAX_WORLD_CLOCKS || ids.has(zone.id)) {
+      continue;
+    }
+    ids.add(zone.id);
+    const label = cleanLabel(zone.label, zone.timezone);
+    if (label === zone.label) {
+      shown.push(zone);
+    } else {
+      shown.push({ ...zone, label });
+    }
+  }
+  const unchanged = shown.length === zones.length && shown.every((zone, i) => zone === zones[i]);
+  if (unchanged) {
     return zones;
   }
-  return zones.slice(0, MAX_WORLD_CLOCKS).map((zone) => {
-    if (fits(zone)) {
-      return zone;
-    }
-    return { ...zone, label: zone.label.slice(0, MAX_WORLD_CLOCK_LABEL) };
-  });
+  return shown;
 }
 
 export function addWorldClock(
