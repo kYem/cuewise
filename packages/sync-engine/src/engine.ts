@@ -962,7 +962,7 @@ export class SyncEngine {
 
   /**
    * Drops what an abandoned enroll persisted, adopted or not. The server envelope cannot be
-   * withdrawn — there is no delete call — so a code it minted is the only way back into the
+   * withdrawn (no envelope-only delete call), so a code it minted is the only way back into the
    * account it made, which is why that is reported rather than swallowed.
    */
   private async abandonEnroll(mintedACode: boolean): Promise<void> {
