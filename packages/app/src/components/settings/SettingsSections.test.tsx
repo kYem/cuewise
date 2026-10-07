@@ -264,5 +264,19 @@ describe('settings sections', () => {
 
       expect(screen.getByText('Units')).toBeInTheDocument();
     });
+
+    it('keeps the world clock cities behind its toggle', () => {
+      renderSection('home', '', { showWorldClock: false });
+
+      expect(screen.queryByText('Cities')).not.toBeInTheDocument();
+    });
+
+    it('moves the world clock chip to the other corner', () => {
+      const { set } = renderSection('home', '', { showWorldClock: true });
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Left' }).at(-1) as HTMLElement);
+
+      expect(set).toHaveBeenCalledWith({ worldClockPosition: 'left' });
+    });
   });
 });

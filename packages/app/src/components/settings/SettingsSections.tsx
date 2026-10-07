@@ -61,6 +61,7 @@ import { TestNotificationRow } from './TestNotificationRow';
 import { ThumbPicker } from './ThumbPicker';
 import { pomodoroWorkStep } from './timer-presets';
 import { WeatherLocationPicker } from './WeatherLocationPicker';
+import { WorldClockSettings } from './WorldClockSettings';
 
 const SOUND_OPTIONS = Object.entries(NOTIFICATION_SOUNDS).map(([value, label]) => ({
   value,
@@ -93,7 +94,7 @@ const TIME_FORMAT_OPTIONS: { value: TimeFormat; label: string }[] = [
   { value: '24h', label: '14:30' },
 ];
 
-const WEATHER_POSITION_OPTIONS: { value: WeatherPosition; label: string }[] = [
+const CORNER_OPTIONS: { value: WeatherPosition; label: string }[] = [
   { value: 'left', label: 'Left' },
   { value: 'right', label: 'Right' },
 ];
@@ -606,8 +607,32 @@ const HOME_SUBGROUPS: Partial<Record<HomeWidgetKey, SubgroupRenderer>> = {
       <SettingRow label="Position" filter={filter} keywords="weather left right position">
         <Segmented
           value={s.weatherPosition}
-          options={WEATHER_POSITION_OPTIONS}
+          options={CORNER_OPTIONS}
           onChange={(v) => set({ weatherPosition: v })}
+        />
+      </SettingRow>
+    </SettingSubgroup>
+  ),
+  showWorldClock: ({ s, set, filter }) => (
+    <SettingSubgroup>
+      <SettingRow
+        label="Cities"
+        filter={filter}
+        keywords="world clock city time zone timezone add remove rename"
+        stack
+      >
+        <WorldClockSettings zones={s.worldClocks} onChange={(v) => set({ worldClocks: v })} />
+      </SettingRow>
+      <SettingRow
+        label="Position"
+        help="With the big clock on, cities show under it instead"
+        filter={filter}
+        keywords="world clock left right position"
+      >
+        <Segmented
+          value={s.worldClockPosition}
+          options={CORNER_OPTIONS}
+          onChange={(v) => set({ worldClockPosition: v })}
         />
       </SettingRow>
     </SettingSubgroup>

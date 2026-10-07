@@ -12,6 +12,7 @@ describe('widgetPresets', () => {
       showQuickLinks: false,
       showNotes: false,
       showWeather: false,
+      showWorldClock: false,
       newTabShowCalendar: false,
     });
   });
@@ -22,6 +23,7 @@ describe('widgetPresets', () => {
       showQuickLinks: true,
       showNotes: true,
       showWeather: false,
+      showWorldClock: false,
       newTabShowCalendar: false,
     });
   });
@@ -32,6 +34,7 @@ describe('widgetPresets', () => {
       showQuickLinks: true,
       showNotes: true,
       showWeather: true,
+      showWorldClock: true,
       newTabShowCalendar: true,
     });
   });
@@ -44,12 +47,13 @@ describe('widgetPresets', () => {
     expect(preset(id, false)?.patch).not.toHaveProperty('newTabShowCalendar');
   });
 
-  it('still writes the four remaining widgets when the calendar is not offered', () => {
+  it('still writes the remaining widgets when the calendar is not offered', () => {
     expect(preset('everything', false)?.patch).toEqual({
       showClock: true,
       showQuickLinks: true,
       showNotes: true,
       showWeather: true,
+      showWorldClock: true,
     });
   });
 });

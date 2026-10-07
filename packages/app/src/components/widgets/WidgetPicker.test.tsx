@@ -59,6 +59,7 @@ describe('WidgetPicker', () => {
       showQuickLinks: true,
       showNotes: true,
       showWeather: true,
+      showWorldClock: true,
     });
   });
 
@@ -181,6 +182,7 @@ describe('WidgetPicker', () => {
       showQuickLinks: false,
       showNotes: false,
       showWeather: false,
+      showWorldClock: false,
       newTabShowCalendar: false,
     });
   });

@@ -1,4 +1,9 @@
-import { DEFAULT_SETTINGS, type Settings, type WorldClockZone } from '@cuewise/shared';
+import {
+  DEFAULT_SETTINGS,
+  type Settings,
+  type WeatherLocation,
+  type WorldClockZone,
+} from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
@@ -36,3 +41,26 @@ export function mockWorldClockSettings(overrides: Partial<Settings> = {}): Setti
   vi.mocked(useSettingsStore).mockImplementation(createSelectorMock({ settings }));
   return settings;
 }
+
+export const AUSTIN_PLACE: WeatherLocation = {
+  id: '4671654',
+  name: 'Austin',
+  admin1: 'Texas',
+  country: 'United States',
+  countryCode: 'US',
+  latitude: 30.26715,
+  longitude: -97.74306,
+  timezone: 'America/Chicago',
+};
+
+/** The geocoder's answer for a city the offline zone list already found. */
+export const TOKYO_PLACE: WeatherLocation = {
+  id: '1850147',
+  name: 'Tokyo',
+  admin1: 'Tokyo',
+  country: 'Japan',
+  countryCode: 'JP',
+  latitude: 35.6895,
+  longitude: 139.69171,
+  timezone: 'Asia/Tokyo',
+};

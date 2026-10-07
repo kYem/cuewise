@@ -56,6 +56,7 @@ export const ALL_WIDGETS_ON: Partial<Settings> = {
   showQuickLinks: true,
   showNotes: true,
   showWeather: true,
+  showWorldClock: true,
   newTabShowCalendar: true,
 };
 
@@ -64,5 +65,6 @@ export const ALL_WIDGETS_OFF: Partial<Settings> = {
   showQuickLinks: false,
   showNotes: false,
   showWeather: false,
+  showWorldClock: false,
   newTabShowCalendar: false,
 };
