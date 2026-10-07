@@ -30,6 +30,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStaleRefresh } from '../hooks/useStaleRefresh';
 import { useSettingsStore } from '../stores/settings-store';
 import { useWeatherStore } from '../stores/weather-store';
+import { CHIP_CLASS } from './chip-class';
 
 const DAY_ICONS: Record<WeatherConditionKind, React.ComponentType<{ className?: string }>> = {
   clear: Sun,
@@ -64,9 +65,6 @@ const CONDITION_LABELS: Record<WeatherConditionKind, string> = {
   thunderstorm: 'Thunderstorm',
   unknown: 'Unavailable',
 };
-
-const CHIP_CLASS =
-  'flex items-center gap-1.5 rounded-full bg-surface/80 backdrop-blur-sm px-3 py-2.5 shadow-md hover:shadow-lg hover:scale-105 transition-all';
 
 const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean }> = ({
   snapshot,
