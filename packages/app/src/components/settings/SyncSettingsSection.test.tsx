@@ -1572,7 +1572,7 @@ describe('SyncSettingsSectionComponent', () => {
       expect(controller.calls).toContainEqual({ method: 'deleteAccount', args: [] });
     });
 
-    it('says to sign in again when the session was already gone', async () => {
+    it('says to turn sync on again when the session was already gone', async () => {
       const user = userEvent.setup();
       const controller = new FakeSyncController();
       controller.deleteAccountResult = { ok: false, reason: 'auth' };
@@ -1625,6 +1625,30 @@ describe('SyncSettingsSectionComponent', () => {
       act(() => controller.setStatus('active'));
 
       expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
+    });
+
+    it('keeps the account when the delete failed, since the device is still enrolled', async () => {
+      const user = userEvent.setup();
+      const controller = new FakeSyncController();
+      controller.deleteAccountResult = { ok: false, reason: 'error' };
+      controller.scriptDetails({
+        accountEmail: 'a@example.com',
+        accountId: 'a',
+        lastSyncedAt: null,
+      });
+      renderSection(controller);
+      act(() => controller.setStatus('active'));
+      await screen.findByText('Signed in as a@example.com');
+      act(() => controller.setStatus('needs_enroll'));
+      await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
+      await user.click(screen.getByRole('button', { name: CONFIRM_DELETE }));
+      await waitFor(() => expect(toastError).toHaveBeenCalled());
+
+      controller.deferNextDetails();
+      act(() => controller.setStatus('active'));
+
+      expect(screen.getByText('Signed in as a@example.com')).toBeInTheDocument();
+      expect(screen.queryByText('Delete your sync account?')).not.toBeInTheDocument();
     });
 
     it.each([

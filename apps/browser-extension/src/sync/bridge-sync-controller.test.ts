@@ -1011,6 +1011,16 @@ describe('BridgeSyncController: deleteAccount', () => {
     errorSpy.mockRestore();
   });
 
+  it("logs the worker's cause when the delete fails", async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    runtime.sendMessage.mockResolvedValueOnce({ ok: false, reason: 'error', detail: 'HTTP 503' });
+    const controller = new BridgeSyncController();
+
+    await expect(controller.deleteAccount()).resolves.toEqual({ ok: false, reason: 'error' });
+    expect(errorSpy).toHaveBeenCalledWith('Cloud sync account delete failed: error — HTTP 503');
+    errorSpy.mockRestore();
+  });
+
   it('waits past the usual timeout for a delete the worker is still finishing', async () => {
     runtime.sendMessage.mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 25))

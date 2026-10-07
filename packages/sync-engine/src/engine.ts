@@ -135,8 +135,11 @@ export type SyncStatus =
   | 'signed_out'
   | 'error';
 
-/** `ok` and `auth` both tear this device down; `error` leaves it as it was, so a retry is safe. */
-export type DeleteAccountResult = { ok: true } | { ok: false; reason: 'auth' | 'error' };
+/** `ok` and `auth` tear this device down; `error` is unconfirmed, and a retry finishes it. */
+export type DeleteAccountResult =
+  | { ok: true }
+  | { ok: false; reason: 'auth' }
+  | { ok: false; reason: 'error'; detail?: string };
 
 /**
  * Structural subset of ApiClient the engine needs (auth + the pull/push + key-envelope calls).
@@ -1602,7 +1605,7 @@ export class SyncEngine {
         return { ok: false, reason: 'auth' };
       }
       logger.error(`Cloud sync account delete failed: ${describeThrown(err)}`, err);
-      return { ok: false, reason: 'error' };
+      return { ok: false, reason: 'error', detail: describeThrown(err) };
     }
     // The account is gone whatever the teardown hits, and that is the answer the user needs.
     await this.bestEffort(() => this.disableSync(), 'account delete teardown');

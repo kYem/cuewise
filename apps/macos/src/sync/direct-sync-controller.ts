@@ -485,7 +485,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     async revokeOtherSessions(): Promise<number> {
       return engine.revokeOtherSessions();
     },
-    // Same mutex as the enroll ops: the teardown must not interleave with an enroll or a pairing.
+    // Queued behind the enroll ops: a delete mid-enroll would wipe the account it is joining.
     deleteAccount(): Promise<DeleteAccountResult> {
       return serialize(() => engine.deleteAccount());
     },

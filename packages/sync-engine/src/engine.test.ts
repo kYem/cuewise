@@ -2375,7 +2375,7 @@ describe('SyncEngine.deleteAccount', () => {
 
     const result = await device.engine.deleteAccount();
 
-    expect(result).toEqual({ ok: false, reason: 'error' });
+    expect(result).toEqual({ ok: false, reason: 'error', detail: expect.any(String) });
     expect(device.engine.getStatus()).toBe('active');
     expect(await device.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBe(true);
     expect(server.getRecoveryEnvelope()).not.toBeNull();
