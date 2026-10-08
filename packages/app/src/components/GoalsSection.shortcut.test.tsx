@@ -13,6 +13,8 @@ import {
 import { useNotionStore } from '../stores/notion-store';
 import { mockGoalsSectionStores as mockStores } from './__fixtures__/goals-list.fixtures';
 import { goalsWithNotion } from './__fixtures__/goals-notion.fixtures';
+import { setReducedMotion } from './__fixtures__/motion.fixtures';
+import { CHECKBOX_TICK_MS } from './AnimatedCheckbox';
 import { GoalsSection } from './GoalsSection';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
@@ -46,9 +48,9 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it.each([
-    ['full', 'tasks on screen', [goalFactory.build({ completed: false })]],
-    ['compact', 'tasks on screen', [goalFactory.build({ completed: false })]],
-    ['focus', 'tasks on screen', [goalFactory.build({ completed: false })]],
+    ['full', 'tasks on screen', [OPEN_GOAL]],
+    ['compact', 'tasks on screen', [OPEN_GOAL]],
+    ['focus', 'tasks on screen', [OPEN_GOAL]],
     ['full', 'no tasks', []],
     ['compact', 'no tasks', []],
     ['focus', 'no tasks', []],
@@ -97,6 +99,43 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(input).toHaveValue('Half typed');
   });
 
+  it('keeps the add row and its text through the completion tick of the last goal', async () => {
+    setReducedMotion(false);
+    vi.useFakeTimers();
+    mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+    const input = screen.getByRole('textbox', ADD_INPUT);
+    fireEvent.change(input, { target: { value: 'Half typed' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
+    });
+    mockStores({ goalViewMode: 'focus' }, [{ ...OPEN_GOAL, completed: true }]);
+    rerender(<GoalsSection />);
+    act(() => {
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS + 1);
+    });
+    vi.useRealTimers();
+
+    expect(screen.getByText('All done!')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
+    expect(input).toHaveValue('Half typed');
+  });
+
+  it('leaves no stray Add another row when focus view empties and refills', () => {
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add another' }));
+
+    mockStores({ goalViewMode: 'focus' }, []);
+    rerender(<GoalsSection />);
+    mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+  });
+
   it('closes the Add another row once a goal is added from it', async () => {
     mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
     renderWithShortcuts(<GoalsSection />);
@@ -120,7 +159,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it('Escape closes the row Add another opened once every task is done', () => {
-    mockStores({ goalViewMode: 'focus' }, [goalFactory.build({ completed: true })]);
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
     renderWithShortcuts(<GoalsSection />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add another' }));
@@ -227,8 +266,8 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it.each([
-    ['tasks on screen', [goalFactory.build({ completed: false })]],
-    ['every task done', [goalFactory.build({ completed: true })]],
+    ['tasks on screen', [OPEN_GOAL]],
+    ['every task done', [DONE_GOAL]],
   ])('Escape closes the add row n opened in focus view with %s', (_label, tasks) => {
     mockStores({ goalViewMode: 'focus' }, tasks);
     renderWithShortcuts(<GoalsSection />);
@@ -240,7 +279,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it('closes the add row n opened once a goal is added with every task done', async () => {
-    mockStores({ goalViewMode: 'focus' }, [goalFactory.build({ completed: true })]);
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
     renderWithShortcuts(<GoalsSection />);
     press('n');
 

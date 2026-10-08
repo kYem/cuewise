@@ -11,6 +11,8 @@ import { GoalInput } from './GoalInput';
 
 interface GoalFocusViewProps {
   showAddInput?: boolean;
+  /** Owned by the parent, so its reset on view or list changes covers every way the row opens. */
+  onOpenAddInput?: () => void;
   onCloseAddInput?: () => void;
   focusRequest?: number;
 }
@@ -20,13 +22,13 @@ interface GoalFocusViewProps {
  * Designed to work without container wrapper, perfect for glass theme.
  */
 export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
-  showAddInput,
+  showAddInput = false,
+  onOpenAddInput,
   onCloseAddInput,
   focusRequest = 0,
 }) => {
   const { todayTasks, toggleTask, goals } = useGoalStore();
   const { settings, updateSettings } = useSettingsStore();
-  const [showAddInDone, setShowAddInDone] = useState(false);
   // A just-completed task we keep on screen so its tick animation can finish
   // playing before the view advances to the next task / "All done".
   const [animatingGoal, setAnimatingGoal] = useState<Goal | null>(null);
@@ -126,12 +128,6 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
   // All tasks completed (regardless of whether a now-completed task is still
   // focused). While the final task's tick is still playing, keep showing it.
   const allDone = !animatingGoal && incompleteGoals.length === 0;
-  const addRowOpen = showAddInput || showAddInDone;
-  const closeAddRow = () => {
-    setShowAddInDone(false);
-    onCloseAddInput?.();
-  };
-
   // Both screens share this container so the add row keeps its place, and its draft, when the
   // view moves between a goal and "All done".
   return (
@@ -219,10 +215,10 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
         )
       )}
 
-      {allDone && !addRowOpen && (
+      {allDone && !showAddInput && (
         <button
           type="button"
-          onClick={() => setShowAddInDone(true)}
+          onClick={onOpenAddInput}
           className={cn(
             'mt-6 flex items-center gap-2 px-4 py-2 rounded-full',
             'bg-white/20 backdrop-blur-sm text-white',
@@ -235,14 +231,14 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
         </button>
       )}
 
-      {addRowOpen && (
+      {showAddInput && (
         <div className="w-full max-w-xl mt-6">
           <GoalInput
             variant="minimal"
             autoFocus
             focusRequest={focusRequest}
-            onTaskAdded={closeAddRow}
-            onDismiss={closeAddRow}
+            onTaskAdded={onCloseAddInput}
+            onDismiss={onCloseAddInput}
           />
         </div>
       )}

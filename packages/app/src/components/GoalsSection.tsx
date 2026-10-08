@@ -469,6 +469,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         {notionListHost === undefined ? (
           <GoalFocusView
             showAddInput={showAddInput}
+            onOpenAddInput={() => setShowAddInput(true)}
             onCloseAddInput={closeAddInput}
             focusRequest={addRequest}
           />
