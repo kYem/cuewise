@@ -67,6 +67,24 @@ describe('shortcut keys', () => {
     expect(openSettings).not.toHaveBeenCalled();
   });
 
+  it('runs a bare key with Caps Lock on', () => {
+    const openSettings = vi.fn();
+    renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
+
+    press('S', { modifierCapsLock: true });
+
+    expect(openSettings).toHaveBeenCalledOnce();
+  });
+
+  it('runs a g sequence with Caps Lock on', () => {
+    renderWithShortcuts(<div />);
+
+    press('G', { modifierCapsLock: true });
+    press('P', { modifierCapsLock: true });
+
+    expect(window.location.hash).toBe('#pomodoro');
+  });
+
   it('matches the key exactly, so a capital S runs nothing', () => {
     const openSettings = vi.fn();
     renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
@@ -357,6 +375,20 @@ describe('command palette key', () => {
 
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  });
+
+  it('leaves focus to the dialog a palette command opens, not the field behind it', () => {
+    onPlatform('Win32');
+    renderWithShortcuts(<input aria-label="field" />);
+    const field = screen.getByRole('textbox', { name: 'field' });
+    field.focus();
+
+    press('k', { ctrlKey: true }, field);
+    fireEvent.change(paletteSearch(), { target: { value: 'keyboard' } });
+    press('Enter', {}, paletteSearch());
+
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+    expect(field).not.toHaveFocus();
   });
 
   it('lists only live actions in the palette', () => {

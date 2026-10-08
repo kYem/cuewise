@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { isModalOpen } from '../utils/keyboard-shortcut';
 import { KeyCaps } from './ShortcutCheatSheet';
 import type { Shortcut, ShortcutId } from './shortcut-table';
 
@@ -45,7 +46,10 @@ export const CommandPalette: React.FC<{
     return () => {
       setQuery('');
       setActive(0);
-      returnFocus?.focus();
+      // A command that opened a dialog keeps focus off the field now hidden behind it.
+      if (!isModalOpen()) {
+        returnFocus?.focus();
+      }
     };
   }, [isOpen]);
 

@@ -14,6 +14,7 @@ import {
   isPaletteChord,
   isPaletteKeyEvent,
   isShortcutKeyEvent,
+  shortcutKey,
 } from '../utils/keyboard-shortcut';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutCheatSheet } from './ShortcutCheatSheet';
@@ -139,8 +140,9 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
         return;
       }
+      const key = shortcutKey(event) ?? '';
       if (pendingG.current !== null) {
-        const id = AFTER_G.get(event.key);
+        const id = AFTER_G.get(key);
         clearPending();
         if (id !== undefined && isShortcutKeyEvent(event)) {
           claimShortcutEvent(event);
@@ -152,14 +154,14 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!isShortcutKeyEvent(event)) {
         return;
       }
-      if (event.key === 'g') {
+      if (key === 'g') {
         claimShortcutEvent(event);
         pendingG.current = window.setTimeout(() => {
           pendingG.current = null;
         }, SEQUENCE_TIMEOUT_MS);
         return;
       }
-      const id = BARE_KEYS.get(event.key);
+      const id = BARE_KEYS.get(key);
       if (id === undefined || !run(id)) {
         return;
       }
