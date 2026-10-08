@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSyncSignedIn } from '../hooks/useSyncSignedIn';
 import type { NotionHost } from '../notion/notion-host';
+import { useShortcutAction } from '../shortcuts/ShortcutProvider';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useNotionStore } from '../stores/notion-store';
@@ -121,6 +122,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const initCalendar = useCalendarStore((state) => state.initialize);
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
+  const [addRequest, setAddRequest] = useState(0);
   const signedIn = useSyncSignedIn();
   const notionView = useNotionStore((state) => state.view);
 
@@ -148,6 +150,16 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const notionListHost =
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
+  useShortcutAction(
+    'goal.add',
+    notionListHost === undefined
+      ? () => {
+          setShowAddInput(true);
+          setAddRequest((count) => count + 1);
+        }
+      : null
+  );
+  const closeAddInput = () => setShowAddInput(false);
   const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');
   // The Notion mark takes the text colour, never the theme accent, as its brand asks.
   const sourceIconTone = notionListHost === undefined ? 'text-primary-600' : 'text-primary';
@@ -438,7 +450,8 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         {notionListHost === undefined ? (
           <GoalFocusView
             showAddInput={showAddInput}
-            onCloseAddInput={() => setShowAddInput(false)}
+            onCloseAddInput={closeAddInput}
+            focusRequest={addRequest}
           />
         ) : (
           <NotionGoalsList
@@ -529,7 +542,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
 
               {/* Goals List (tiles + bottom add input + history + upcoming) */}
               <div className="flex-1">
-                <GoalsList viewMode="full" />
+                <GoalsList viewMode="full" addRequest={addRequest} />
               </div>
             </>
           )}
@@ -537,7 +550,12 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           {/* Compact Mode Content */}
           {viewMode === 'compact' && notionListHost === undefined && (
             <div className="flex-1">
-              <GoalsList viewMode="compact" />
+              <GoalsList
+                viewMode="compact"
+                addRequest={addRequest}
+                showAddInput={showAddInput}
+                onCloseAddInput={closeAddInput}
+              />
             </div>
           )}
         </div>

@@ -52,6 +52,11 @@ import { UpcomingTasks } from './UpcomingTasks';
 
 interface GoalsListProps {
   viewMode?: GoalViewMode;
+  /** Bumped by the `n` shortcut to focus the add input. */
+  addRequest?: number;
+  /** Compact only: keeps the add-row up while tasks are on screen, until a task is added. */
+  showAddInput?: boolean;
+  onCloseAddInput?: () => void;
 }
 
 // Checkbox-style icon shared by the read-only and editable subtask rows.
@@ -90,7 +95,12 @@ function LinkedGoalBadge({
   );
 }
 
-export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
+export const GoalsList: React.FC<GoalsListProps> = ({
+  viewMode = 'full',
+  addRequest = 0,
+  showAddInput = false,
+  onCloseAddInput,
+}) => {
   const {
     todayTasks,
     goals,
@@ -184,9 +194,9 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
     <div className="space-y-2.5">
       {/* Compact: show the add-row whenever nothing is visible — no tasks, or
           every task completed while "show completed" is off */}
-      {viewMode === 'compact' && visibleTasks.length === 0 && (
+      {viewMode === 'compact' && (visibleTasks.length === 0 || showAddInput) && (
         <div className="py-2">
-          <GoalInput variant="widget" />
+          <GoalInput variant="widget" focusRequest={addRequest} onTaskAdded={onCloseAddInput} />
         </div>
       )}
 
@@ -524,7 +534,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({ viewMode = 'full' }) => {
       {/* Add a goal — bottom add row (full mode only, mirrors the widget design) */}
       {viewMode === 'full' && (
         <div className="pt-1">
-          <GoalInput variant="widget" />
+          <GoalInput variant="widget" focusRequest={addRequest} />
         </div>
       )}
 

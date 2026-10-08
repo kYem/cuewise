@@ -12,13 +12,18 @@ import { GoalInput } from './GoalInput';
 interface GoalFocusViewProps {
   showAddInput?: boolean;
   onCloseAddInput?: () => void;
+  focusRequest?: number;
 }
 
 /**
  * Minimal focus view showing a single user-selected goal.
  * Designed to work without container wrapper, perfect for glass theme.
  */
-export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCloseAddInput }) => {
+export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
+  showAddInput,
+  onCloseAddInput,
+  focusRequest = 0,
+}) => {
   const { todayTasks, toggleTask, goals } = useGoalStore();
   const { settings, updateSettings } = useSettingsStore();
   const [showAddInDone, setShowAddInDone] = useState(false);
@@ -112,7 +117,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
     return (
       <div className="flex flex-col items-center justify-center py-8">
         <div className="w-full max-w-xl">
-          <GoalInput variant="minimal" />
+          <GoalInput variant="minimal" focusRequest={focusRequest} />
         </div>
       </div>
     );
@@ -132,9 +137,17 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
         </p>
 
         {/* Add another task */}
-        {showAddInDone ? (
+        {showAddInDone || showAddInput ? (
           <div className="w-full max-w-xl mt-6">
-            <GoalInput variant="minimal" autoFocus onTaskAdded={() => setShowAddInDone(false)} />
+            <GoalInput
+              variant="minimal"
+              autoFocus
+              focusRequest={focusRequest}
+              onTaskAdded={() => {
+                setShowAddInDone(false);
+                onCloseAddInput?.();
+              }}
+            />
           </div>
         ) : (
           <button
@@ -232,7 +245,12 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
       {/* Add Goal Input (when shown) */}
       {showAddInput && (
         <div className="w-full max-w-xl mt-6">
-          <GoalInput variant="minimal" onTaskAdded={onCloseAddInput} />
+          <GoalInput
+            variant="minimal"
+            autoFocus
+            focusRequest={focusRequest}
+            onTaskAdded={onCloseAddInput}
+          />
         </div>
       )}
     </div>
