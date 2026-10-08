@@ -207,6 +207,8 @@ interface GoalInputProps {
   autoFocus?: boolean;
   /** Focuses the input each time it increases, e.g. from the `n` shortcut. */
   focusRequest?: number;
+  /** Escape in the input; lets a row that `n` opened close again. */
+  onDismiss?: () => void;
   variant?: GoalInputVariant;
 }
 
@@ -215,6 +217,7 @@ export function GoalInput({
   onTaskAdded,
   autoFocus = false,
   focusRequest = 0,
+  onDismiss,
   variant = 'boxed',
 }: GoalInputProps): React.ReactElement {
   const [text, setText] = useState('');
@@ -236,8 +239,11 @@ export function GoalInput({
     }
   }, [autoFocus]);
 
+  // Only a request made after mount: an input that reappears later must not take focus for an old `n`.
+  const handledRequest = useRef(focusRequest);
   useEffect(() => {
-    if (focusRequest > 0) {
+    if (focusRequest !== handledRequest.current) {
+      handledRequest.current = focusRequest;
       inputRef.current?.focus();
     }
   }, [focusRequest]);
@@ -267,6 +273,9 @@ export function GoalInput({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       await submitTask();
+    }
+    if (e.key === 'Escape' && onDismiss) {
+      onDismiss();
     }
   };
 

@@ -160,6 +160,12 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       : null
   );
   const closeAddInput = () => setShowAddInput(false);
+  // A row `n` opened belongs to the view it was opened in, not the next one.
+  const [addInputView, setAddInputView] = useState(viewMode);
+  if (addInputView !== viewMode) {
+    setAddInputView(viewMode);
+    setShowAddInput(false);
+  }
   const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');
   // The Notion mark takes the text colour, never the theme accent, as its brand asks.
   const sourceIconTone = notionListHost === undefined ? 'text-primary-600' : 'text-primary';

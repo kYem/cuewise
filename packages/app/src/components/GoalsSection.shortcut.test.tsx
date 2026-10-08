@@ -1,13 +1,15 @@
 import type { Settings } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { goalFactory } from '@cuewise/test-utils/factories';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LiveIds, renderWithShortcuts } from '../shortcuts/__fixtures__/shortcuts.fixtures';
+import { ShortcutProvider } from '../shortcuts/ShortcutProvider';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { createMockGoalStore } from './__fixtures__/goals-list.fixtures';
+import { GoalInput } from './GoalInput';
 import { GoalsSection } from './GoalsSection';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
@@ -72,6 +74,53 @@ describe('GoalsSection - add-goal shortcut', () => {
     fireEvent.keyDown(document.body, { key: 'n' });
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveValue('');
+  });
+
+  it('leaves focus alone when an add input mounts after an earlier n', () => {
+    mockStores({ goalViewMode: 'full' });
+    render(<GoalInput variant="widget" focusRequest={2} />);
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).not.toHaveFocus();
+  });
+
+  it('focuses a mounted add input when n asks again', () => {
+    mockStores({ goalViewMode: 'full' });
+    const { rerender } = render(<GoalInput variant="widget" focusRequest={2} />);
+
+    rerender(<GoalInput variant="widget" focusRequest={3} />);
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+  });
+
+  it('Escape closes the add row n opened in compact view', () => {
+    mockStores({ goalViewMode: 'compact' });
+    renderWithShortcuts(<GoalsSection />);
+
+    fireEvent.keyDown(document.body, { key: 'n' });
+    fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+  });
+
+  it('switching view closes the add row n opened', () => {
+    mockStores({ goalViewMode: 'compact' });
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    fireEvent.keyDown(document.body, { key: 'n' });
+
+    mockStores({ goalViewMode: 'full' });
+    rerender(
+      <ShortcutProvider>
+        <GoalsSection />
+      </ShortcutProvider>
+    );
+    mockStores({ goalViewMode: 'compact' });
+    rerender(
+      <ShortcutProvider>
+        <GoalsSection />
+      </ShortcutProvider>
+    );
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
   });
 
   it('offers the add-goal shortcut for Cuewise goals', () => {

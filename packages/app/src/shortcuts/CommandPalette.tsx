@@ -74,6 +74,14 @@ export const CommandPalette: React.FC<{
       event.preventDefault();
       choose(activeResult);
     }
+  };
+
+  // The search box is the only stop: Tab stays on it rather than reaching the page behind.
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
     if (event.key === 'Escape') {
       event.stopPropagation();
       close();
@@ -93,6 +101,7 @@ export const CommandPalette: React.FC<{
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        onKeyDown={handleDialogKeyDown}
         className="relative w-full max-w-lg rounded-2xl bg-surface-elevated shadow-2xl border border-border overflow-hidden"
       >
         <div className="flex items-center gap-2 px-4 border-b border-border">

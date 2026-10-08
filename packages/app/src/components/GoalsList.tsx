@@ -196,7 +196,13 @@ export const GoalsList: React.FC<GoalsListProps> = ({
           every task completed while "show completed" is off */}
       {viewMode === 'compact' && (visibleTasks.length === 0 || showAddInput) && (
         <div className="py-2">
-          <GoalInput variant="widget" focusRequest={addRequest} onTaskAdded={onCloseAddInput} />
+          <GoalInput
+            variant="widget"
+            autoFocus={showAddInput}
+            focusRequest={addRequest}
+            onTaskAdded={onCloseAddInput}
+            onDismiss={onCloseAddInput}
+          />
         </div>
       )}
 

@@ -85,6 +85,22 @@ describe('CommandPalette', () => {
     expect(screen.getByText('No matching commands')).toBeInTheDocument();
   });
 
+  it('keeps Tab inside the palette', () => {
+    const { input } = renderPalette();
+
+    const allowed = fireEvent.keyDown(input, { key: 'Tab' });
+
+    expect(allowed).toBe(false);
+  });
+
+  it('closes on Escape wherever focus sits inside it', () => {
+    const { onClose } = renderPalette();
+
+    fireEvent.keyDown(screen.getByRole('option', { name: /Insights/ }), { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('closes on Escape', () => {
     const { onClose, input } = renderPalette();
 

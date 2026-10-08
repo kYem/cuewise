@@ -147,6 +147,10 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
                 setShowAddInDone(false);
                 onCloseAddInput?.();
               }}
+              onDismiss={() => {
+                setShowAddInDone(false);
+                onCloseAddInput?.();
+              }}
             />
           </div>
         ) : (
@@ -250,6 +254,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
             autoFocus
             focusRequest={focusRequest}
             onTaskAdded={onCloseAddInput}
+            onDismiss={onCloseAddInput}
           />
         </div>
       )}
