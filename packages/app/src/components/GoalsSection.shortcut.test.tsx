@@ -25,6 +25,8 @@ vi.mock('@cuewise/storage', () => ({
 
 // The focus view's input keeps its visible label; the others are named "Add a goal".
 const ADD_INPUT = { name: /Add a goal|main goal for today/ };
+const OPEN_GOAL = goalFactory.build({ completed: false });
+const DONE_GOAL = goalFactory.build({ completed: true });
 
 async function submitGoal(text: string) {
   const input = screen.getByRole('textbox', ADD_INPUT);
@@ -117,6 +119,55 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode: 'focus' }, []);
     rerender(<GoalsSection />);
     mockStores({ goalViewMode: 'focus' });
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['the last goal is completed', [goalFactory.build({ completed: false })], [DONE_GOAL]],
+    ['an open goal syncs in at All done', [DONE_GOAL], [DONE_GOAL, OPEN_GOAL]],
+  ])('closes the focus-view add row n opened when %s', (_change, before, after) => {
+    mockStores({ goalViewMode: 'focus' }, before);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBeInTheDocument();
+
+    mockStores({ goalViewMode: 'focus' }, after);
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+  });
+
+  it('n opens the compact add row with every goal done and "show completed" on', () => {
+    mockStores({ goalViewMode: 'compact', showCompletedGoals: true }, [DONE_GOAL]);
+    renderWithShortcuts(<GoalsSection />);
+
+    press('n');
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+  });
+
+  it('leaves no stray add row when an open goal syncs into a compact list of finished goals', () => {
+    mockStores({ goalViewMode: 'compact' }, [DONE_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+    expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+
+    mockStores({ goalViewMode: 'compact' }, [DONE_GOAL, OPEN_GOAL]);
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+  });
+
+  it('leaves no stray add row when the compact list empties and refills after n', () => {
+    mockStores({ goalViewMode: 'compact' });
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+
+    mockStores({ goalViewMode: 'compact' }, []);
+    rerender(<GoalsSection />);
+    mockStores({ goalViewMode: 'compact' });
     rerender(<GoalsSection />);
 
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();

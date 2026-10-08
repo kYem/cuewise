@@ -170,10 +170,12 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       : null
   );
   const closeAddInput = () => setShowAddInput(false);
-  // A row `n` opened belongs to the view, source and empty-or-not state it was opened in: once
-  // that changes (a goal synced in, the list emptied), a later render must not resurrect it.
+  // A row `n` opened belongs to the screen it was opened on: once view, source or list state
+  // changes (a goal synced in, the list emptied, all done), a later render must not resurrect it.
   const source = notionListHost === undefined ? 'cuewise' : 'notion';
-  const addInputScope = `${viewMode}:${source}:${addInputAlwaysShown}`;
+  // Focus view draws "All done" as a separate screen, so its row would remount there.
+  const focusAllDone = viewMode === 'focus' && totalCount > 0 && incompleteCount === 0;
+  const addInputScope = `${viewMode}:${source}:${addInputAlwaysShown}:${focusAllDone}`;
   const [openedInScope, setOpenedInScope] = useState(addInputScope);
   if (openedInScope !== addInputScope) {
     setOpenedInScope(addInputScope);
