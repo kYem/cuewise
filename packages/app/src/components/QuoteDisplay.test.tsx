@@ -3,6 +3,11 @@ import { quoteFactory } from '@cuewise/test-utils/factories';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  LiveIds,
+  RunButton,
+  renderWithShortcuts,
+} from '../shortcuts/__fixtures__/shortcuts.fixtures';
 import { useQuoteStore } from '../stores/quote-store';
 import {
   createAtBeginningMockStore,
@@ -339,5 +344,40 @@ describe('QuoteDisplay - Navigation', () => {
 
       expect(screen.queryByRole('link')).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('QuoteDisplay - command palette', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('offers New quote, resetting the rotation timer the way space does', async () => {
+    const store = createLoadedMockStore();
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(store));
+    const onManualRefresh = vi.fn();
+    renderWithShortcuts(
+      <>
+        <QuoteDisplay onManualRefresh={onManualRefresh} enableSpaceShortcut />
+        <RunButton id="quote.next" />
+      </>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'run quote.next' }));
+
+    await waitFor(() => expect(onManualRefresh).toHaveBeenCalledTimes(1));
+    expect(store.refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
+  });
+
+  it('offers no New quote while quotes are loading', () => {
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadingMockStore()));
+    renderWithShortcuts(
+      <>
+        <QuoteDisplay enableSpaceShortcut />
+        <LiveIds />
+      </>
+    );
+
+    expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
   });
 });

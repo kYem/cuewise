@@ -2,6 +2,11 @@ import { createSelectorMock } from '@cuewise/test-utils';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  LiveIds,
+  RunButton,
+  renderWithShortcuts,
+} from '../shortcuts/__fixtures__/shortcuts.fixtures';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -48,6 +53,51 @@ function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [
 describe('ConceptRotation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('offers the due concept to the palette while a quote shows', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithShortcuts(
+      <>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+        <LiveIds />
+        <RunButton id="concept.show" />
+      </>
+    );
+    expect(screen.getByTestId('live')).toHaveTextContent('concept.show');
+
+    fireEvent.click(screen.getByRole('button', { name: 'run concept.show' }));
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('offers no due concept when none is due', () => {
+    setup({ cards: [] });
+    renderWithShortcuts(
+      <>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+        <LiveIds />
+      </>
+    );
+
+    expect(screen.getByTestId('live')).not.toHaveTextContent('concept.show');
+  });
+
+  it('offers New quote while a card is up, leaving it the way space does', () => {
+    const { refreshQuote } = setup({ framing: 'queue', cards: [dueCard] });
+    const onManualRefresh = vi.fn();
+    renderWithShortcuts(
+      <>
+        <ConceptRotation fallback={<div>QUOTE</div>} onManualRefresh={onManualRefresh} />
+        <RunButton id="quote.next" />
+      </>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'run quote.next' }));
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
+    expect(onManualRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('renders the fallback when the feature is disabled', () => {
