@@ -10,9 +10,11 @@ import {
 } from 'react';
 import {
   claimShortcutEvent,
+  isMacPlatform,
   isPaletteKeyEvent,
   isShortcutKeyEvent,
 } from '../utils/keyboard-shortcut';
+import { ShortcutCheatSheet } from './ShortcutCheatSheet';
 import { SHORTCUTS, type Shortcut, type ShortcutId } from './shortcut-table';
 
 type Run = () => void;
@@ -56,7 +58,7 @@ const AFTER_G = new Map(
 export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const handlers = useRef(new Map<ShortcutId, React.MutableRefObject<Run>>());
   const [registered, setRegistered] = useState<ReadonlySet<ShortcutId>>(new Set());
-  const [, setIsCheatSheetOpen] = useState(false);
+  const [isCheatSheetOpen, setIsCheatSheetOpen] = useState(false);
   const [, setIsPaletteOpen] = useState(false);
 
   const registry = useMemo<Registry>(
@@ -101,6 +103,7 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [registered]
   );
 
+  const closeCheatSheet = useCallback(() => setIsCheatSheetOpen(false), []);
   const liveIdsRef = useRef(liveShortcuts);
   liveIdsRef.current = liveShortcuts;
   const pendingG = useRef<number | null>(null);
@@ -169,7 +172,15 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   return (
     <RegistryContext.Provider value={registry}>
-      <UiContext.Provider value={ui}>{children}</UiContext.Provider>
+      <UiContext.Provider value={ui}>
+        {children}
+        <ShortcutCheatSheet
+          isOpen={isCheatSheetOpen}
+          onClose={closeCheatSheet}
+          shortcuts={liveShortcuts}
+          mac={isMacPlatform()}
+        />
+      </UiContext.Provider>
     </RegistryContext.Provider>
   );
 };

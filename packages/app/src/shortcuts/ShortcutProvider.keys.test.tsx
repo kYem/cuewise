@@ -136,5 +136,11 @@ describe('shortcut keys', () => {
     expect(window.location.hash).toBe('#concepts');
   });
 
-  it.todo('opens the cheat sheet on ?');
+  it('opens the cheat sheet on ?', () => {
+    renderWithShortcuts(<div />);
+
+    press('?', { shiftKey: true });
+
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
 });
