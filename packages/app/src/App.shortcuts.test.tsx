@@ -62,6 +62,21 @@ describe('App keyboard shortcuts', () => {
     expect(window.location.hash).toBe('#pomodoro');
   });
 
+  it('leaves s and f alone off the home page', async () => {
+    await renderHome();
+    await act(async () => {
+      window.location.hash = 'insights';
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+
+    fireEvent.keyDown(document.body, { key: 's' });
+    fireEvent.keyDown(document.body, { key: 'f' });
+
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument();
+    expect(useFocusModeStore.getState().isActive).toBe(false);
+    expect(window.location.hash).toBe('#insights');
+  });
+
   it('the menu opens the cheat sheet', async () => {
     await renderHome();
     fireEvent.click(screen.getAllByTitle('Menu')[0]);

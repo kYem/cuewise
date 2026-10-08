@@ -54,7 +54,7 @@ interface GoalsListProps {
   viewMode?: GoalViewMode;
   /** Bumped by the `n` shortcut to focus the add input. */
   addRequest?: number;
-  /** Compact only: keeps the add-row up while tasks are on screen, until a task is added. */
+  /** Compact only: keeps the add-row up while tasks are on screen, until a task is added or Escape. */
   showAddInput?: boolean;
   onCloseAddInput?: () => void;
 }
@@ -186,15 +186,16 @@ export const GoalsList: React.FC<GoalsListProps> = ({
   const showsUnfinished =
     settings.showIncompleteGoals && getRecentIncompleteTasks(goals).length > 0;
 
+  // Nothing visible includes every task done while "show completed" is off.
+  const showCompactAddRow = viewMode === 'compact' && (visibleTasks.length === 0 || showAddInput);
+
   if (isLoading) {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
 
   return (
     <div className="space-y-2.5">
-      {/* Compact: show the add-row whenever nothing is visible — no tasks, or
-          every task completed while "show completed" is off */}
-      {viewMode === 'compact' && (visibleTasks.length === 0 || showAddInput) && (
+      {showCompactAddRow && (
         <div className="py-2">
           <GoalInput
             variant="widget"

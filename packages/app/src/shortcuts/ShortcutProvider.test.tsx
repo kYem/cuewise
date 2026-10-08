@@ -59,6 +59,32 @@ describe('ShortcutProvider registry', () => {
     expect(second).toHaveBeenCalledOnce();
   });
 
+  it('keeps the newer handler when an older one unmounts after it', () => {
+    const older = vi.fn();
+    const newer = vi.fn();
+    const { rerender } = renderWithShortcuts(
+      <>
+        <RegisterAction id="settings" run={older} />
+        <RegisterAction key="newer" id="settings" run={newer} />
+        <LiveIds />
+        <RunButton id="settings" />
+      </>
+    );
+    rerender(
+      <ShortcutProvider>
+        <RegisterAction key="newer" id="settings" run={newer} />
+        <LiveIds />
+        <RunButton id="settings" />
+      </ShortcutProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'run settings' }));
+
+    expect(screen.getByTestId('live')).toHaveTextContent('settings');
+    expect(newer).toHaveBeenCalledOnce();
+    expect(older).not.toHaveBeenCalled();
+  });
+
   it('always offers navigation and help', () => {
     renderWithShortcuts(<LiveIds />);
 

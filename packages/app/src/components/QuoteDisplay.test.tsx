@@ -369,6 +369,18 @@ describe('QuoteDisplay - command palette', () => {
     expect(store.refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
   });
 
+  it('offers no New quote where the page does not own the space shortcut', () => {
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadedMockStore()));
+    renderWithShortcuts(
+      <>
+        <QuoteDisplay />
+        <LiveIds />
+      </>
+    );
+
+    expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
+  });
+
   it('offers no New quote while quotes are loading', () => {
     vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadingMockStore()));
     renderWithShortcuts(

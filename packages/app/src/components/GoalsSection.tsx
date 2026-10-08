@@ -150,9 +150,10 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const notionListHost =
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
+  const canAddGoal = notionListHost === undefined && !isLoading && !error;
   useShortcutAction(
     'goal.add',
-    notionListHost === undefined
+    canAddGoal
       ? () => {
           setShowAddInput(true);
           setAddRequest((count) => count + 1);
@@ -160,10 +161,11 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       : null
   );
   const closeAddInput = () => setShowAddInput(false);
-  // A row `n` opened belongs to the view it was opened in, not the next one.
-  const [addInputView, setAddInputView] = useState(viewMode);
-  if (addInputView !== viewMode) {
-    setAddInputView(viewMode);
+  // A row `n` opened belongs to the view and source it was opened in, not the next one.
+  const addInputScope = `${viewMode}:${notionListHost === undefined ? 'cuewise' : 'notion'}`;
+  const [openedInScope, setOpenedInScope] = useState(addInputScope);
+  if (openedInScope !== addInputScope) {
+    setOpenedInScope(addInputScope);
     setShowAddInput(false);
   }
   const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');

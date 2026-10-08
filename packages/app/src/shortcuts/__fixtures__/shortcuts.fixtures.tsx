@@ -1,7 +1,29 @@
 import { type RenderResult, render } from '@testing-library/react';
 import type React from 'react';
+import { type Mock, vi } from 'vitest';
 import { ShortcutProvider, useShortcutAction, useShortcutUi } from '../ShortcutProvider';
 import type { ShortcutId } from '../shortcut-table';
+
+const keyListeners: Array<(event: KeyboardEvent) => void> = [];
+
+/** A stand-in page listener: a spy called for each keydown the predicate accepts. */
+export function listenFor(predicate: (event: KeyboardEvent) => boolean): Mock {
+  const spy = vi.fn();
+  const listener = (event: KeyboardEvent) => {
+    if (predicate(event)) {
+      spy();
+    }
+  };
+  document.addEventListener('keydown', listener);
+  keyListeners.push(listener);
+  return spy;
+}
+
+export function removeKeyListeners(): void {
+  for (const listener of keyListeners.splice(0)) {
+    document.removeEventListener('keydown', listener);
+  }
+}
 
 export function renderWithShortcuts(ui: React.ReactElement): RenderResult {
   return render(<ShortcutProvider>{ui}</ShortcutProvider>);

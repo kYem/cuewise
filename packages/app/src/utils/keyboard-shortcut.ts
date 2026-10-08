@@ -42,13 +42,17 @@ export function isMacPlatform(): boolean {
   return /mac/i.test(nav.userAgentData?.platform ?? nav.platform ?? '');
 }
 
-/** Cmd+K on macOS, Ctrl+K elsewhere — allowed while typing, which is where people reach for it. */
-export function isPaletteKeyEvent(event: KeyboardEvent, mac = isMacPlatform()): boolean {
+/** Cmd+K on macOS, Ctrl+K elsewhere, whatever is open — the browser must never get it. */
+export function isPaletteChord(event: KeyboardEvent, mac = isMacPlatform()): boolean {
   if (event.key !== 'k' || event.repeat || event.altKey || event.shiftKey) {
     return false;
   }
-  const primary = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  return primary && !isModalOpen();
+  return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
+/** The chord when it should open the palette — allowed while typing, where people reach for it. */
+export function isPaletteKeyEvent(event: KeyboardEvent, mac = isMacPlatform()): boolean {
+  return isPaletteChord(event, mac) && !isModalOpen();
 }
 
 /**

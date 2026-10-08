@@ -29,7 +29,10 @@ export const CommandPalette: React.FC<{
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const results = filterShortcuts(shortcuts, query);
-  const activeResult = results[active];
+  // The list can shrink under the selection while open, when a live action goes away.
+  const activeIndex = Math.min(active, Math.max(results.length - 1, 0));
+  const activeResult = results[activeIndex];
+  const hasResults = results.length > 0;
 
   useEffect(() => {
     if (!isOpen) {
@@ -68,7 +71,7 @@ export const CommandPalette: React.FC<{
         return;
       }
       const step = event.key === 'ArrowDown' ? 1 : -1;
-      setActive((index) => (index + step + results.length) % results.length);
+      setActive((activeIndex + step + results.length) % results.length);
     }
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -110,8 +113,8 @@ export const CommandPalette: React.FC<{
             ref={inputRef}
             role="combobox"
             aria-label="Search commands"
-            aria-expanded="true"
-            aria-controls={listId}
+            aria-expanded={hasResults}
+            aria-controls={hasResults ? listId : undefined}
             aria-activedescendant={
               activeResult === undefined ? undefined : `${listId}-${activeResult.id}`
             }
@@ -125,7 +128,7 @@ export const CommandPalette: React.FC<{
             className="flex-1 py-3 bg-transparent text-primary placeholder:text-tertiary focus:outline-none"
           />
         </div>
-        {results.length === 0 ? (
+        {!hasResults ? (
           <p className="px-4 py-6 text-sm text-secondary text-center">No matching commands</p>
         ) : (
           <div
@@ -140,7 +143,7 @@ export const CommandPalette: React.FC<{
                 id={`${listId}-${shortcut.id}`}
                 role="option"
                 tabIndex={-1}
-                aria-selected={index === active}
+                aria-selected={index === activeIndex}
                 onMouseEnter={() => setActive(index)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(shortcut)}
@@ -151,7 +154,7 @@ export const CommandPalette: React.FC<{
                 }}
                 className={cn(
                   'flex items-center justify-between gap-3 px-4 py-2 text-sm text-primary cursor-pointer',
-                  index === active && 'bg-primary-100/60'
+                  index === activeIndex && 'bg-primary-100/60'
                 )}
               >
                 {shortcut.label}

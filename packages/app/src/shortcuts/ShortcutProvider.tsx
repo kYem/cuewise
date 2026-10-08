@@ -11,6 +11,7 @@ import {
 import {
   claimShortcutEvent,
   isMacPlatform,
+  isPaletteChord,
   isPaletteKeyEvent,
   isShortcutKeyEvent,
 } from '../utils/keyboard-shortcut';
@@ -26,7 +27,7 @@ interface Registry {
 
 export interface ShortcutUi {
   liveShortcuts: Shortcut[];
-  run(id: ShortcutId): void;
+  run(id: ShortcutId): boolean;
   openCheatSheet(): void;
   openPalette(): void;
 }
@@ -84,17 +85,23 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     []
   );
 
-  const run = useCallback((id: ShortcutId) => {
+  /** False when nothing handles `id` right now, so the caller leaves the key to the page. */
+  const run = useCallback((id: ShortcutId): boolean => {
     const hash = NAV_HASH[id];
     if (hash !== undefined) {
       window.location.hash = hash;
-      return;
+      return true;
     }
     if (id === 'help') {
       setIsCheatSheetOpen(true);
-      return;
+      return true;
     }
-    handlers.current.get(id)?.current();
+    const handler = handlers.current.get(id);
+    if (handler === undefined) {
+      return false;
+    }
+    handler.current();
+    return true;
   }, []);
 
   const liveShortcuts = useMemo(
@@ -106,8 +113,8 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const closeCheatSheet = useCallback(() => setIsCheatSheetOpen(false), []);
-  const liveIdsRef = useRef(liveShortcuts);
-  liveIdsRef.current = liveShortcuts;
+  const paletteOpenRef = useRef(isPaletteOpen);
+  paletteOpenRef.current = isPaletteOpen;
   const pendingG = useRef<number | null>(null);
 
   useEffect(() => {
@@ -117,13 +124,16 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         pendingG.current = null;
       }
     };
-    const isLive = (id: ShortcutId) => liveIdsRef.current.some((s) => s.id === id);
     const handle = (event: KeyboardEvent) => {
-      if (isPaletteKeyEvent(event)) {
+      if (isPaletteChord(event)) {
         claimShortcutEvent(event);
         event.preventDefault();
         clearPending();
-        setIsPaletteOpen(true);
+        if (paletteOpenRef.current) {
+          setIsPaletteOpen(false);
+        } else if (isPaletteKeyEvent(event)) {
+          setIsPaletteOpen(true);
+        }
         return;
       }
       if (pendingG.current !== null) {
@@ -147,12 +157,11 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return;
       }
       const id = BARE_KEYS.get(event.key);
-      if (id === undefined || !isLive(id)) {
+      if (id === undefined || !run(id)) {
         return;
       }
       claimShortcutEvent(event);
       event.preventDefault();
-      run(id);
     };
     // Capture phase: runs before every bubble listener, whatever order they registered in.
     document.addEventListener('keydown', handle, true);

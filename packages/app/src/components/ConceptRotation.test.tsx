@@ -71,6 +71,34 @@ describe('ConceptRotation', () => {
     expect(screen.getByText('Saga pattern')).toBeInTheDocument();
   });
 
+  it('stops offering the due concept once it is on screen', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithShortcuts(
+      <>
+        <ConceptRotation fallback={<div>QUOTE</div>} />
+        <LiveIds />
+        <RunButton id="concept.show" />
+      </>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'run concept.show' }));
+
+    expect(screen.getByTestId('live')).not.toHaveTextContent('concept.show');
+  });
+
+  it('keeps g then c on navigation, leaving the concept slot alone', () => {
+    window.location.hash = '';
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithShortcuts(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    fireEvent.keyDown(document.body, { key: 'g' });
+    fireEvent.keyDown(document.body, { key: 'c' });
+
+    expect(window.location.hash).toBe('#concepts');
+    expect(screen.queryByText('Saga pattern')).not.toBeInTheDocument();
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
   it('offers no due concept when none is due', () => {
     setup({ cards: [] });
     renderWithShortcuts(

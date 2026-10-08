@@ -21,6 +21,10 @@ describe('filterShortcuts', () => {
     expect(filterShortcuts(ALL, 'prefs').map((s) => s.id)).toEqual(['settings']);
   });
 
+  it('ignores case', () => {
+    expect(filterShortcuts(ALL, 'FOCUS').map((s) => s.id)).toEqual(['focus', 'go.pomodoro']);
+  });
+
   it('lists everything for a blank query', () => {
     expect(filterShortcuts(ALL, '  ')).toHaveLength(ALL.length);
   });
@@ -83,6 +87,41 @@ describe('CommandPalette', () => {
     fireEvent.change(input, { target: { value: 'zzz' } });
 
     expect(screen.getByText('No matching commands')).toBeInTheDocument();
+  });
+
+  it('stops claiming a list once nothing matches', () => {
+    const { input } = renderPalette();
+
+    fireEvent.change(input, { target: { value: 'zzz' } });
+
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-controls');
+  });
+
+  it('does nothing on Enter or the arrows when nothing matches', () => {
+    const { onRun, input } = renderPalette();
+
+    fireEvent.change(input, { target: { value: 'zzz' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onRun).not.toHaveBeenCalled();
+  });
+
+  it('keeps a selection when the list shrinks under it', () => {
+    const onRun = vi.fn();
+    const { rerender } = render(
+      <CommandPalette isOpen onClose={vi.fn()} shortcuts={ALL} onRun={onRun} />
+    );
+    const input = screen.getByRole('combobox', { name: 'Search commands' });
+    for (let i = 0; i < 5; i++) {
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+    }
+
+    rerender(<CommandPalette isOpen onClose={vi.fn()} shortcuts={ALL.slice(0, 2)} onRun={onRun} />);
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onRun).toHaveBeenCalledWith(ALL[1]?.id);
   });
 
   it('keeps Tab inside the palette', () => {

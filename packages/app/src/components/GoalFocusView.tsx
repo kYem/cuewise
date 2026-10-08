@@ -117,7 +117,12 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
     return (
       <div className="flex flex-col items-center justify-center py-8">
         <div className="w-full max-w-xl">
-          <GoalInput variant="minimal" focusRequest={focusRequest} />
+          <GoalInput
+            variant="minimal"
+            focusRequest={focusRequest}
+            onTaskAdded={onCloseAddInput}
+            onDismiss={onCloseAddInput}
+          />
         </div>
       </div>
     );

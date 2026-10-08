@@ -205,9 +205,9 @@ interface GoalInputProps {
   defaultGoalId?: string;
   onTaskAdded?: () => void;
   autoFocus?: boolean;
-  /** Focuses the input each time it increases, e.g. from the `n` shortcut. */
+  /** Focuses the input whenever this changes after mount, e.g. from the `n` shortcut. */
   focusRequest?: number;
-  /** Escape in the input; lets a row that `n` opened close again. */
+  /** Called on Escape in the input, so a revealed add-row can close. */
   onDismiss?: () => void;
   variant?: GoalInputVariant;
 }
@@ -239,7 +239,7 @@ export function GoalInput({
     }
   }, [autoFocus]);
 
-  // Only a request made after mount: an input that reappears later must not take focus for an old `n`.
+  // Ignore the value at mount: an input that reappears must not take focus for an old `n`.
   const handledRequest = useRef(focusRequest);
   useEffect(() => {
     if (focusRequest !== handledRequest.current) {

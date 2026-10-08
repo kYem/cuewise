@@ -1,7 +1,12 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isShortcutKeyEvent, isSpaceShortcutEvent } from '../utils/keyboard-shortcut';
-import { RegisterAction, renderWithShortcuts } from './__fixtures__/shortcuts.fixtures';
+import {
+  listenFor,
+  RegisterAction,
+  removeKeyListeners,
+  renderWithShortcuts,
+} from './__fixtures__/shortcuts.fixtures';
 import { SEQUENCE_TIMEOUT_MS } from './ShortcutProvider';
 
 beforeEach(() => {
@@ -12,6 +17,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  removeKeyListeners();
 });
 
 function press(key: string, init: KeyboardEventInit = {}, target: Element = document.body) {
@@ -42,7 +48,7 @@ describe('shortcut keys', () => {
     expect(openSettings).not.toHaveBeenCalled();
   });
 
-  it('leaves Shift+letter alone', () => {
+  it('matches the key exactly, so a capital S runs nothing', () => {
     const openSettings = vi.fn();
     renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
 
@@ -120,21 +126,104 @@ describe('shortcut keys', () => {
   });
 
   it('keeps the c in g c from reaching other c shortcuts', () => {
-    const conceptKey = vi.fn();
-    const listener = (e: KeyboardEvent) => {
-      if (e.key === 'c' && isShortcutKeyEvent(e)) {
-        conceptKey();
-      }
-    };
-    document.addEventListener('keydown', listener);
+    const conceptKey = listenFor((e) => e.key === 'c' && isShortcutKeyEvent(e));
     renderWithShortcuts(<div />);
 
     press('g');
     press('c');
-    document.removeEventListener('keydown', listener);
 
     expect(conceptKey).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('#concepts');
+  });
+
+  it('ignores a g sequence typed into a field', () => {
+    renderWithShortcuts(<input aria-label="field" />);
+    const field = screen.getByRole('textbox', { name: 'field' });
+
+    press('g', {}, field);
+    press('p', {}, field);
+
+    expect(window.location.hash).toBe('');
+  });
+
+  it('ignores a modified second key after g', () => {
+    renderWithShortcuts(<div />);
+
+    press('g');
+    press('p', { ctrlKey: true });
+
+    expect(window.location.hash).toBe('');
+  });
+
+  it('swallows a bare shortcut pressed while a g is pending', () => {
+    const openSettings = vi.fn();
+    renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
+
+    press('g');
+    press('s');
+
+    expect(openSettings).not.toHaveBeenCalled();
+  });
+
+  it('stands bare keys down while a dialog is open', () => {
+    const openSettings = vi.fn();
+    renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
+
+    press('?', { shiftKey: true });
+    press('s');
+
+    expect(openSettings).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Win32', { ctrlKey: true }],
+    ['MacIntel', { metaKey: true }],
+  ])('cancels the palette key on %s so the browser never sees it', (platform, modifier) => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
+    renderWithShortcuts(<div />);
+
+    const allowed = fireEvent.keyDown(document.body, { key: 'k', ...modifier });
+
+    expect(allowed).toBe(false);
+  });
+
+  it('closes the palette on a second Ctrl+K and keeps it from the browser', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    renderWithShortcuts(<div />);
+    press('k', { ctrlKey: true });
+
+    const allowed = fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
+      key: 'k',
+      ctrlKey: true,
+    });
+
+    expect(allowed).toBe(false);
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  });
+
+  it('keeps Ctrl+K from the browser while another dialog is open', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    renderWithShortcuts(<div />);
+    press('?', { shiftKey: true });
+
+    const allowed = fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+
+    expect(allowed).toBe(false);
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  });
+
+  it('drops a pending g when the palette opens', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    renderWithShortcuts(<div />);
+
+    press('g');
+    press('k', { ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
+      key: 'Escape',
+    });
+    press('p');
+
+    expect(window.location.hash).toBe('');
   });
 
   it('opens the palette with Cmd+K while typing, and gives focus back on close', () => {
@@ -168,18 +257,11 @@ describe('shortcut keys', () => {
 
   it('keeps Space from reaching the page while the palette is open', () => {
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
-    const pageSpace = vi.fn();
-    const listener = (e: KeyboardEvent) => {
-      if (isSpaceShortcutEvent(e)) {
-        pageSpace();
-      }
-    };
-    document.addEventListener('keydown', listener);
+    const pageSpace = listenFor(isSpaceShortcutEvent);
     renderWithShortcuts(<div />);
 
     press('k', { ctrlKey: true });
     press(' ');
-    document.removeEventListener('keydown', listener);
 
     expect(pageSpace).not.toHaveBeenCalled();
   });
