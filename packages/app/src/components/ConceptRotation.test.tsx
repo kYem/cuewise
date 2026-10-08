@@ -86,6 +86,15 @@ describe('ConceptRotation', () => {
     expect(screen.getByTestId('live')).not.toHaveTextContent('concept.show');
   });
 
+  it('keeps c for the concept slot with the shortcuts mounted', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithShortcuts(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    fireEvent.keyDown(document.body, { key: 'c' });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
   it('keeps g then c on navigation, leaving the concept slot alone', () => {
     window.location.hash = '';
     setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });

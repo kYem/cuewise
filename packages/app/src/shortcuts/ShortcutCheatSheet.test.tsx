@@ -15,6 +15,14 @@ describe('ShortcutCheatSheet', () => {
     expect(within(dialog).queryByText('Show due concept')).not.toBeInTheDocument();
   });
 
+  it('leaves out a group with nothing live in it', () => {
+    const navigationOnly = SHORTCUTS.filter((s) => s.group === 'Go to');
+    render(<ShortcutCheatSheet isOpen onClose={vi.fn()} shortcuts={navigationOnly} mac />);
+
+    expect(screen.queryByRole('region', { name: 'Quote' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Go to' })).toBeInTheDocument();
+  });
+
   it('names the palette key for macOS', () => {
     render(<ShortcutCheatSheet isOpen onClose={vi.fn()} shortcuts={[...SHORTCUTS]} mac />);
 

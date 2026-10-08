@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   claimShortcutEvent,
+  isMacPlatform,
   isPaletteKeyEvent,
   isShortcutKeyEvent,
   isSpaceShortcutEvent,
@@ -13,6 +14,7 @@ function dispatch(
     on?: HTMLElement;
     metaKey?: boolean;
     ctrlKey?: boolean;
+    altKey?: boolean;
     repeat?: boolean;
     shiftKey?: boolean;
   } = {}
@@ -29,6 +31,7 @@ function dispatch(
       bubbles: true,
       metaKey: options.metaKey,
       ctrlKey: options.ctrlKey,
+      altKey: options.altKey,
       repeat: options.repeat,
       shiftKey: options.shiftKey,
     })
@@ -157,6 +160,29 @@ describe('claimShortcutEvent', () => {
   });
 });
 
+describe('isMacPlatform', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, 'userAgentData');
+  });
+
+  it('prefers the client-hints platform where the browser has it', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    Object.defineProperty(navigator, 'userAgentData', {
+      value: { platform: 'macOS' },
+      configurable: true,
+    });
+
+    expect(isMacPlatform()).toBe(true);
+  });
+
+  it('falls back to navigator.platform', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Linux x86_64');
+
+    expect(isMacPlatform()).toBe(false);
+  });
+});
+
 describe('isPaletteKeyEvent', () => {
   const onMac = (event: KeyboardEvent) => isPaletteKeyEvent(event, true);
   const offMac = (event: KeyboardEvent) => isPaletteKeyEvent(event, false);
@@ -188,6 +214,15 @@ describe('isPaletteKeyEvent', () => {
 
   it('leaves Shift combos alone', () => {
     expect(dispatch(onMac, 'k', { metaKey: true, shiftKey: true })).toBe(false);
+  });
+
+  it('leaves Alt combos and Ctrl with Cmd together alone', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, altKey: true })).toBe(false);
+    expect(dispatch(offMac, 'k', { ctrlKey: true, metaKey: true })).toBe(false);
+  });
+
+  it('takes a Caps Lock K', () => {
+    expect(dispatch(offMac, 'K', { ctrlKey: true })).toBe(true);
   });
 
   it('ignores a bare k', () => {

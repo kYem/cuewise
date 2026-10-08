@@ -381,6 +381,28 @@ describe('QuoteDisplay - command palette', () => {
     expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
   });
 
+  it('offers no New quote while quotes failed to load', () => {
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createErrorMockStore()));
+    renderWithShortcuts(
+      <>
+        <QuoteDisplay enableSpaceShortcut />
+        <LiveIds />
+      </>
+    );
+
+    expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
+  });
+
+  it('keeps Space for a new quote with the shortcuts mounted', async () => {
+    const store = createLoadedMockStore();
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(store));
+    renderWithShortcuts(<QuoteDisplay enableSpaceShortcut />);
+
+    fireEvent.keyDown(document.body, { key: ' ' });
+
+    await waitFor(() => expect(store.refreshQuote).toHaveBeenCalledWith({ userInitiated: true }));
+  });
+
   it('offers no New quote while quotes are loading', () => {
     vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadingMockStore()));
     renderWithShortcuts(

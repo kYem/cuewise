@@ -25,8 +25,15 @@ export function removeKeyListeners(): void {
   }
 }
 
+/** `rerender` keeps the provider, so a test re-renders with just its own tree. */
 export function renderWithShortcuts(ui: React.ReactElement): RenderResult {
-  return render(<ShortcutProvider>{ui}</ShortcutProvider>);
+  const result = render(<ShortcutProvider>{ui}</ShortcutProvider>);
+  return {
+    ...result,
+    rerender: (next: React.ReactNode) => {
+      result.rerender(<ShortcutProvider>{next}</ShortcutProvider>);
+    },
+  };
 }
 
 export const RegisterAction: React.FC<{ id: ShortcutId; run: (() => void) | null }> = ({

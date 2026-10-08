@@ -13,7 +13,7 @@ export function isTextEntryEvent(event: KeyboardEvent): boolean {
 
 const claimed = new WeakSet<Event>();
 
-/** Marks a keypress one shortcut acted on, so every other shortcut listener lets it pass. */
+/** Marks a keypress a shortcut has taken, so every other shortcut listener lets it pass. */
 export function claimShortcutEvent(event: Event): void {
   claimed.add(event);
 }
@@ -44,7 +44,8 @@ export function isMacPlatform(): boolean {
 
 /** Cmd+K on macOS, Ctrl+K elsewhere, whatever is open — the browser must never get it. */
 export function isPaletteChord(event: KeyboardEvent, mac = isMacPlatform()): boolean {
-  if (event.key !== 'k' || event.repeat || event.altKey || event.shiftKey) {
+  // Lower-cased: Caps Lock reports `K`, and the browser would still act on it.
+  if (event.key.toLowerCase() !== 'k' || event.altKey || event.shiftKey) {
     return false;
   }
   return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
@@ -52,7 +53,7 @@ export function isPaletteChord(event: KeyboardEvent, mac = isMacPlatform()): boo
 
 /** The chord when it should open the palette — allowed while typing, where people reach for it. */
 export function isPaletteKeyEvent(event: KeyboardEvent, mac = isMacPlatform()): boolean {
-  return isPaletteChord(event, mac) && !isModalOpen();
+  return isPaletteChord(event, mac) && !event.repeat && !isModalOpen();
 }
 
 /**

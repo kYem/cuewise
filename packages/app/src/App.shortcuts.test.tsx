@@ -1,24 +1,14 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Same stubs as App.home-widgets.test.tsx: the real background loader never settles in jsdom.
-vi.mock('./utils/image-preload-cache', () => ({
-  preloadImages: vi.fn(),
-  getPreloadedCurrentUrl: vi.fn(() => null),
-  refreshBackground: vi.fn(() => Promise.resolve(null)),
-  setCustomBackgroundOverride: vi.fn(),
-  getCustomBackgroundOverride: vi.fn(() => null),
-}));
-vi.mock('./utils/unsplash', () => ({
-  loadImageWithFallback: vi.fn(() => Promise.resolve(null)),
-  preloadImage: vi.fn((url: string) => Promise.resolve(url)),
-  getPhotoCredit: vi.fn(() => ({
-    photographer: null,
-    photographerUrl: null,
-    sourceUrl: 'https://unsplash.com',
-  })),
-  isUnsplashUrl: vi.fn(() => false),
-}));
+vi.mock(
+  './utils/image-preload-cache',
+  async () => (await import('./__fixtures__/app-module-stubs')).imagePreloadCacheStub
+);
+vi.mock(
+  './utils/unsplash',
+  async () => (await import('./__fixtures__/app-module-stubs')).unsplashStub
+);
 
 import { installAppRenderStubs } from './__fixtures__/app-render.fixtures';
 import App from './App';
@@ -44,6 +34,7 @@ describe('App keyboard shortcuts', () => {
   it('s opens settings and closes the menu', async () => {
     await renderHome();
     fireEvent.click(screen.getAllByTitle('Menu')[0]);
+    expect(screen.getAllByRole('menu').length).toBeGreaterThan(0);
 
     fireEvent.keyDown(document.body, { key: 's' });
 

@@ -54,7 +54,7 @@ interface GoalsListProps {
   viewMode?: GoalViewMode;
   /** Bumped by the `n` shortcut to focus the add input. */
   addRequest?: number;
-  /** Compact only: keeps the add-row up while tasks are on screen, until a task is added or Escape. */
+  /** Compact only: keeps the add-row open while tasks show, until a task is added or Escape. */
   showAddInput?: boolean;
   onCloseAddInput?: () => void;
 }

@@ -1,25 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The real loader retries a blocked CDN for ~24s, which jsdom never resolves — this test only
-// needs the page mounted, so it stubs the background rather than leaving those timers running.
-vi.mock('./utils/image-preload-cache', () => ({
-  preloadImages: vi.fn(),
-  getPreloadedCurrentUrl: vi.fn(() => null),
-  refreshBackground: vi.fn(() => Promise.resolve(null)),
-  setCustomBackgroundOverride: vi.fn(),
-  getCustomBackgroundOverride: vi.fn(() => null),
-}));
-vi.mock('./utils/unsplash', () => ({
-  loadImageWithFallback: vi.fn(() => Promise.resolve(null)),
-  preloadImage: vi.fn((url: string) => Promise.resolve(url)),
-  getPhotoCredit: vi.fn(() => ({
-    photographer: null,
-    photographerUrl: null,
-    sourceUrl: 'https://unsplash.com',
-  })),
-  isUnsplashUrl: vi.fn(() => false),
-}));
+vi.mock(
+  './utils/image-preload-cache',
+  async () => (await import('./__fixtures__/app-module-stubs')).imagePreloadCacheStub
+);
+vi.mock(
+  './utils/unsplash',
+  async () => (await import('./__fixtures__/app-module-stubs')).unsplashStub
+);
 
 import { installAppRenderStubs } from './__fixtures__/app-render.fixtures';
 import App from './App';

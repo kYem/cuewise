@@ -6,7 +6,6 @@ import {
   RunButton,
   renderWithShortcuts,
 } from './__fixtures__/shortcuts.fixtures';
-import { ShortcutProvider } from './ShortcutProvider';
 
 describe('ShortcutProvider registry', () => {
   it('lists an action only while a component has registered it', () => {
@@ -18,11 +17,7 @@ describe('ShortcutProvider registry', () => {
     );
     expect(screen.getByTestId('live')).toHaveTextContent('settings');
 
-    rerender(
-      <ShortcutProvider>
-        <LiveIds />
-      </ShortcutProvider>
-    );
+    rerender(<LiveIds />);
     expect(screen.getByTestId('live')).not.toHaveTextContent('settings');
   });
 
@@ -47,10 +42,10 @@ describe('ShortcutProvider registry', () => {
       </>
     );
     rerender(
-      <ShortcutProvider>
+      <>
         <RegisterAction id="settings" run={second} />
         <RunButton id="settings" />
-      </ShortcutProvider>
+      </>
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'run settings' }));
@@ -71,11 +66,11 @@ describe('ShortcutProvider registry', () => {
       </>
     );
     rerender(
-      <ShortcutProvider>
+      <>
         <RegisterAction key="newer" id="settings" run={newer} />
         <LiveIds />
         <RunButton id="settings" />
-      </ShortcutProvider>
+      </>
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'run settings' }));

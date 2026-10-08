@@ -129,6 +129,9 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         claimShortcutEvent(event);
         event.preventDefault();
         clearPending();
+        if (event.repeat) {
+          return;
+        }
         if (paletteOpenRef.current) {
           setIsPaletteOpen(false);
         } else if (isPaletteKeyEvent(event)) {

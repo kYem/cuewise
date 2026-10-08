@@ -1,8 +1,10 @@
-import { type Goal, getYesterdayDateString } from '@cuewise/shared';
+import { type Goal, getYesterdayDateString, type Settings } from '@cuewise/shared';
 import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
-import type { CompletionFilter } from '../../stores/goal-store';
+import { useCalendarStore } from '../../stores/calendar-store';
+import { type CompletionFilter, useGoalStore } from '../../stores/goal-store';
+import { useSettingsStore } from '../../stores/settings-store';
 
 // Re-exported so existing GoalsList test imports keep resolving from this file.
 export { createSettingsStoreMock };
@@ -91,6 +93,28 @@ export type MockGoalsPageStore = MockGoalStore & {
   completionFilter: CompletionFilter;
   setCompletionFilter: Mock;
 };
+
+/**
+ * GoalsSection with its real children: goal, calendar and settings stores. The calling test must
+ * `vi.mock` all three modules.
+ */
+export function mockGoalsSectionStores(
+  settings: Partial<Settings>,
+  tasks: Goal[] = [goalFactory.build({ completed: false })],
+  state: { isLoading?: boolean; error?: string | null } = {}
+): void {
+  const store = {
+    ...createMockGoalStore({ todayTasks: tasks, goals: tasks, isLoading: state.isLoading }),
+    error: state.error ?? null,
+    initialize: vi.fn(),
+    addTask: vi.fn(async () => true),
+  };
+  vi.mocked(useGoalStore).mockImplementation(createSelectorMock(store));
+  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: vi.fn() }));
+  vi.mocked(useSettingsStore).mockImplementation(
+    createSettingsStoreMock({ showCompletedGoals: false, ...settings })
+  );
+}
 
 /** GoalsPage's own reads on top of the GoalsList mock, which already covers UnfinishedBanner. */
 export function createGoalsPageStore(

@@ -57,6 +57,30 @@ describe('shortcut keys', () => {
     expect(openSettings).not.toHaveBeenCalled();
   });
 
+  it('leaves Space and c to the page listeners that own them', () => {
+    const space = listenFor(isSpaceShortcutEvent);
+    const concept = listenFor((e) => e.key === 'c' && isShortcutKeyEvent(e));
+    renderWithShortcuts(<div />);
+
+    press(' ');
+    press('c');
+
+    expect(space).toHaveBeenCalledOnce();
+    expect(concept).toHaveBeenCalledOnce();
+  });
+
+  it('stops listening once unmounted', () => {
+    const concept = listenFor((e) => e.key === 'c' && isShortcutKeyEvent(e));
+    const { unmount } = renderWithShortcuts(<div />);
+    unmount();
+
+    press('g');
+    press('c');
+
+    expect(concept).toHaveBeenCalledOnce();
+    expect(window.location.hash).toBe('');
+  });
+
   it('lets a key with no live action through untouched', () => {
     renderWithShortcuts(<RegisterAction id="goal.add" run={null} />);
     const event = new KeyboardEvent('keydown', { key: 'n', bubbles: true, cancelable: true });
@@ -199,6 +223,44 @@ describe('shortcut keys', () => {
 
     expect(allowed).toBe(false);
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  });
+
+  it('reopens the palette empty after a Ctrl+K closed it', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    renderWithShortcuts(<div />);
+    press('k', { ctrlKey: true });
+    const search = screen.getByRole('combobox', { name: 'Search commands' });
+    fireEvent.change(search, { target: { value: 'set' } });
+
+    press('k', { ctrlKey: true }, search);
+    press('k', { ctrlKey: true });
+
+    expect(screen.getByRole('combobox', { name: 'Search commands' })).toHaveValue('');
+  });
+
+  it('keeps a held Ctrl+K from the browser without toggling the palette', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    renderWithShortcuts(<div />);
+    press('k', { ctrlKey: true });
+
+    const allowed = fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
+      key: 'k',
+      ctrlKey: true,
+      repeat: true,
+    });
+
+    expect(allowed).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+  });
+
+  it('takes Ctrl+K with Caps Lock on', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    renderWithShortcuts(<div />);
+
+    const allowed = fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
+
+    expect(allowed).toBe(false);
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
   });
 
   it('keeps Ctrl+K from the browser while another dialog is open', () => {

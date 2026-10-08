@@ -41,7 +41,10 @@ export const CommandPalette: React.FC<{
     const returnFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     inputRef.current?.focus();
+    // Here, not in `close`: the provider can also shut the palette (a second Cmd/Ctrl+K).
     return () => {
+      setQuery('');
+      setActive(0);
       returnFocus?.focus();
     };
   }, [isOpen]);
@@ -50,11 +53,7 @@ export const CommandPalette: React.FC<{
     return null;
   }
 
-  const close = () => {
-    setQuery('');
-    setActive(0);
-    onClose();
-  };
+  const close = onClose;
 
   const choose = (shortcut: Shortcut | undefined) => {
     if (shortcut === undefined) {
