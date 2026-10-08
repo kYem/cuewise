@@ -85,6 +85,16 @@ describe('shortcut keys', () => {
     expect(window.location.hash).toBe('#pomodoro');
   });
 
+  it('leaves Shift+letter unbound with Caps Lock on', () => {
+    const openSettings = vi.fn();
+    renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
+
+    press('S', { shiftKey: true, modifierCapsLock: true });
+    press('s', { shiftKey: true, modifierCapsLock: true });
+
+    expect(openSettings).not.toHaveBeenCalled();
+  });
+
   it('matches the key exactly, so a capital S runs nothing', () => {
     const openSettings = vi.fn();
     renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);

@@ -34,17 +34,21 @@ export function claimShortcutEvent(event: Event): void {
 }
 
 /**
- * The key a bare shortcut matches on: lower-cased under Caps Lock, so `N` still reads as `n`
- * while Shift+N stays unbound. Undefined for autofill's synthetic keydowns, which carry no key.
+ * The key a bare shortcut matches on: lower-cased under Caps Lock so `N` still reads as `n`.
+ * Undefined for a shifted letter under Caps Lock, and for autofill's key-less keydowns.
  */
 export function shortcutKey(event: KeyboardEvent): string | undefined {
   if (typeof event.key !== 'string') {
     return undefined;
   }
-  if (event.getModifierState('CapsLock')) {
-    return event.key.toLowerCase();
+  if (!event.getModifierState('CapsLock')) {
+    return event.key;
   }
-  return event.key;
+  // macOS reports Caps Lock + Shift+N as `N`, Windows as `n`: either way it stays unbound.
+  if (event.shiftKey && /^[a-z]$/i.test(event.key)) {
+    return undefined;
+  }
+  return event.key.toLowerCase();
 }
 
 export function isModalOpen(): boolean {

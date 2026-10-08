@@ -46,7 +46,7 @@ export const CommandPalette: React.FC<{
     return () => {
       setQuery('');
       setActive(0);
-      // A command that opened a dialog keeps focus off the field now hidden behind it.
+      // A command that opened a dialog keeps focus off the element now hidden behind it.
       if (!isModalOpen()) {
         returnFocus?.focus();
       }

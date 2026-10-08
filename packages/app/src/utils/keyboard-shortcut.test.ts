@@ -6,7 +6,34 @@ import {
   isPaletteKeyEvent,
   isShortcutKeyEvent,
   isSpaceShortcutEvent,
+  shortcutKey,
 } from './keyboard-shortcut';
+
+describe('shortcutKey', () => {
+  const keydown = (key: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent('keydown', { key, ...init });
+
+  it('passes over a keydown with no key, as Chrome autofill sends', () => {
+    expect(shortcutKey(new Event('keydown') as KeyboardEvent)).toBeUndefined();
+  });
+
+  it('lower-cases a letter under Caps Lock', () => {
+    expect(shortcutKey(keydown('N', { modifierCapsLock: true }))).toBe('n');
+  });
+
+  it('keeps a shifted letter as it is without Caps Lock', () => {
+    expect(shortcutKey(keydown('N', { shiftKey: true }))).toBe('N');
+  });
+
+  it('leaves a shifted letter unbound under Caps Lock, whatever case it reports', () => {
+    expect(shortcutKey(keydown('N', { shiftKey: true, modifierCapsLock: true }))).toBeUndefined();
+    expect(shortcutKey(keydown('n', { shiftKey: true, modifierCapsLock: true }))).toBeUndefined();
+  });
+
+  it('keeps ? under Caps Lock, since Shift is part of typing it', () => {
+    expect(shortcutKey(keydown('?', { shiftKey: true, modifierCapsLock: true }))).toBe('?');
+  });
+});
 
 function dispatch(
   predicate: (event: KeyboardEvent) => boolean,
