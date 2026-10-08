@@ -125,15 +125,31 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it.each([
-    ['the last goal is completed', [goalFactory.build({ completed: false })], [DONE_GOAL]],
+    ['the last goal is completed', [OPEN_GOAL], [DONE_GOAL]],
     ['an open goal syncs in at All done', [DONE_GOAL], [DONE_GOAL, OPEN_GOAL]],
-  ])('closes the focus-view add row n opened when %s', (_change, before, after) => {
+  ])('keeps the focus-view add row and its text when %s', (_change, before, after) => {
     mockStores({ goalViewMode: 'focus' }, before);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+    const input = screen.getByRole('textbox', ADD_INPUT);
+    fireEvent.change(input, { target: { value: 'Half typed' } });
+
+    mockStores({ goalViewMode: 'focus' }, after);
+    rerender(<GoalsSection />);
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
+    expect(input).toHaveValue('Half typed');
+  });
+
+  it('leaves no add row after an error screen comes and goes', () => {
+    mockStores({ goalViewMode: 'compact' });
     const { rerender } = renderWithShortcuts(<GoalsSection />);
     press('n');
     expect(screen.getByRole('textbox', ADD_INPUT)).toBeInTheDocument();
 
-    mockStores({ goalViewMode: 'focus' }, after);
+    mockStores({ goalViewMode: 'compact' }, undefined, { error: 'Could not save' });
+    rerender(<GoalsSection />);
+    mockStores({ goalViewMode: 'compact' });
     rerender(<GoalsSection />);
 
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
