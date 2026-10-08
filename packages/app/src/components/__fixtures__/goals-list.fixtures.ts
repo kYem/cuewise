@@ -99,7 +99,7 @@ export type MockGoalsPageStore = MockGoalStore & {
  * The calling test must `vi.mock` all three modules.
  */
 export function mockGoalsSectionStores(
-  settings: Partial<Settings>,
+  settings: Partial<Settings> & { updateSettings?: Mock },
   tasks: Goal[] = [goalFactory.build({ completed: false })],
   state: { isLoading?: boolean; error?: string | null } = {}
 ): MockGoalStore {

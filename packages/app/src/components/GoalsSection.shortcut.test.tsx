@@ -175,6 +175,65 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(store.toggleTask).toHaveBeenCalledWith(ANOTHER_GOAL.id);
   });
 
+  it("keeps the deleted goal's old tick from cutting the next goal's tick short", async () => {
+    vi.useFakeTimers();
+    const updateSettings = vi.fn();
+    mockStores({ goalViewMode: 'focus', updateSettings }, [OPEN_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS / 2);
+    });
+
+    mockStores({ goalViewMode: 'focus', updateSettings }, [ANOTHER_GOAL]);
+    rerender(<GoalsSection />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(ANOTHER_GOAL.text) }));
+    });
+    mockStores({ goalViewMode: 'focus', updateSettings }, [{ ...ANOTHER_GOAL, completed: true }]);
+    rerender(<GoalsSection />);
+    act(() => {
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS / 2 + 50);
+    });
+
+    expect(screen.getByText(ANOTHER_GOAL.text)).toBeInTheDocument();
+    expect(screen.queryByText('All done!')).not.toBeInTheDocument();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('holds the latch while the deleted goal is still saving, then lets the next goal tick', async () => {
+    vi.useFakeTimers();
+    let finishSaving: (ok: boolean) => void = () => undefined;
+    const saving = new Promise<boolean>((resolve) => {
+      finishSaving = resolve;
+    });
+    const first = mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
+    first.toggleTask.mockImplementation(() => saving);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
+    });
+
+    const next = mockStores({ goalViewMode: 'focus' }, [ANOTHER_GOAL]);
+    rerender(<GoalsSection />);
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(ANOTHER_GOAL.text) }));
+    expect(next.toggleTask).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishSaving(true);
+    });
+    act(() => {
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS + 1);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(ANOTHER_GOAL.text) }));
+    });
+
+    expect(next.toggleTask).toHaveBeenCalledWith(ANOTHER_GOAL.id);
+  });
+
   it('drops a ticking goal once a sync deletes it, whether the list empties or refills', async () => {
     vi.useFakeTimers();
     mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
