@@ -126,7 +126,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
   // All tasks completed (regardless of whether a now-completed task is still
   // focused). While the final task's tick is still playing, keep showing it.
   const allDone = !animatingGoal && incompleteGoals.length === 0;
-  const addRowOpen = showAddInput || (allDone && showAddInDone);
+  const addRowOpen = showAddInput || showAddInDone;
   const closeAddRow = () => {
     setShowAddInDone(false);
     onCloseAddInput?.();

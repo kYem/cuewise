@@ -74,12 +74,38 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it('n opens the add input once every task is done in focus view', () => {
-    mockStores({ goalViewMode: 'focus' }, [goalFactory.build({ completed: true })]);
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
     renderWithShortcuts(<GoalsSection />);
 
     press('n');
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Add another' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the Add another row and its text when an open goal syncs in', () => {
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add another' }));
+    const input = screen.getByRole('textbox', ADD_INPUT);
+    fireEvent.change(input, { target: { value: 'Half typed' } });
+
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL, OPEN_GOAL]);
+    rerender(<GoalsSection />);
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
+    expect(input).toHaveValue('Half typed');
+  });
+
+  it('closes the Add another row once a goal is added from it', async () => {
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
+    renderWithShortcuts(<GoalsSection />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add another' }));
+
+    await submitGoal('One more');
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add another' })).toBeInTheDocument();
   });
 
   it('leaves no stray add row when a goal syncs in after n in the empty focus view', () => {
