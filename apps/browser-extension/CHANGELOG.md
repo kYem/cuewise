@@ -1,5 +1,22 @@
 # @cuewise/browser-extension
 
+## 1.27.0
+
+### Minor Changes
+
+- 13b1c5c: Insights shows a weekly focus heatmap.
+- 8871201: Add keyboard shortcuts and a command palette (Cmd/Ctrl+K).
+- 669eb60: Reminders that fire while Cuewise is open show a card with Done and Snooze.
+- a3a8983: Add a world clock that shows up to four cities on the new tab.
+
+### Patch Changes
+
+- 1586eff: Focus mode now shows the same photo as a just-refreshed background.
+- 053f045: Leaving the Pomodoro page now stops its sound.
+- 57ed30f: A device locked out of Cloud Sync can delete the account and start over.
+- 6de5aba: Reconnect works on a device that joined Cloud Sync by pairing.
+- 5479fba: Cloud sync no longer loses an edit when a save fails.
+
 ## 1.26.0
 
 ### Minor Changes

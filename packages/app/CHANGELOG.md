@@ -1,5 +1,30 @@
 # @cuewise/app
 
+## 1.25.0
+
+### Minor Changes
+
+- 13b1c5c: Insights shows a weekly focus heatmap.
+- 8871201: Add keyboard shortcuts and a command palette (Cmd/Ctrl+K).
+- 9f14aef: Connect a Notion table from Settings in the macOS app.
+- 669eb60: Reminders that fire while Cuewise is open show a card with Done and Snooze.
+- a3a8983: Add a world clock that shows up to four cities on the new tab.
+
+### Patch Changes
+
+- 1586eff: Focus mode now shows the same photo as a just-refreshed background.
+- 053f045: Leaving the Pomodoro page now stops its sound.
+- 57ed30f: A device locked out of Cloud Sync can delete the account and start over.
+- 6de5aba: Reconnect works on a device that joined Cloud Sync by pairing.
+- Updated dependencies [13b1c5c]
+- Updated dependencies [669eb60]
+- Updated dependencies [5479fba]
+- Updated dependencies [a3a8983]
+  - @cuewise/shared@1.27.0
+  - @cuewise/storage@1.27.0
+  - @cuewise/sync-engine@0.4.1
+  - @cuewise/ui@1.27.0
+
 ## 1.24.0
 
 ### Minor Changes
