@@ -1,8 +1,10 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isShortcutKeyEvent, isSpaceShortcutEvent } from '../utils/keyboard-shortcut';
 import {
   listenFor,
+  onPlatform,
+  press,
   RegisterAction,
   removeKeyListeners,
   renderWithShortcuts,
@@ -20,8 +22,8 @@ afterEach(() => {
   removeKeyListeners();
 });
 
-function press(key: string, init: KeyboardEventInit = {}, target: Element = document.body) {
-  fireEvent.keyDown(target, { key, ...init });
+function search(): HTMLElement {
+  return screen.getByRole('combobox', { name: 'Search commands' });
 }
 
 describe('shortcut keys', () => {
@@ -81,13 +83,14 @@ describe('shortcut keys', () => {
     expect(window.location.hash).toBe('');
   });
 
-  it('lets a key with no live action through untouched', () => {
+  it('leaves a key with no live action to the page', () => {
+    const pageN = listenFor((e) => e.key === 'n' && isShortcutKeyEvent(e));
     renderWithShortcuts(<RegisterAction id="goal.add" run={null} />);
-    const event = new KeyboardEvent('keydown', { key: 'n', bubbles: true, cancelable: true });
 
-    document.body.dispatchEvent(event);
+    const allowed = press('n');
 
-    expect(event.defaultPrevented).toBe(false);
+    expect(allowed).toBe(true);
+    expect(pageN).toHaveBeenCalledOnce();
   });
 
   it('leaves Space and c to the components that own them', () => {
@@ -149,6 +152,15 @@ describe('shortcut keys', () => {
     expect(window.location.hash).toBe('');
   });
 
+  it('treats a held g as one press, not g then g', () => {
+    renderWithShortcuts(<div />);
+
+    press('g');
+    press('g', { repeat: true });
+
+    expect(window.location.hash).toBe('');
+  });
+
   it('keeps the c in g c from reaching other c shortcuts', () => {
     const conceptKey = listenFor((e) => e.key === 'c' && isShortcutKeyEvent(e));
     renderWithShortcuts(<div />);
@@ -199,126 +211,137 @@ describe('shortcut keys', () => {
     expect(openSettings).not.toHaveBeenCalled();
   });
 
+  it('opens the cheat sheet on ?', () => {
+    renderWithShortcuts(<div />);
+
+    press('?', { shiftKey: true });
+
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
+
+  it('lists only live actions on the cheat sheet', () => {
+    renderWithShortcuts(<RegisterAction id="settings" run={vi.fn()} />);
+
+    press('?', { shiftKey: true });
+    const sheet = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+
+    expect(within(sheet).getByText('Settings')).toBeInTheDocument();
+    expect(within(sheet).queryByText('Add a goal')).not.toBeInTheDocument();
+  });
+});
+
+describe('command palette key', () => {
   it.each([
     ['Win32', { ctrlKey: true }],
     ['MacIntel', { metaKey: true }],
-  ])('cancels the palette key on %s so the browser never sees it', (platform, modifier) => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
+  ] as const)('cancels the palette key on %s so the browser never sees it', (platform, modifier) => {
+    onPlatform(platform);
     renderWithShortcuts(<div />);
 
-    const allowed = fireEvent.keyDown(document.body, { key: 'k', ...modifier });
-
-    expect(allowed).toBe(false);
+    expect(press('k', modifier)).toBe(false);
   });
 
   it('closes the palette on a second Ctrl+K and keeps it from the browser', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     renderWithShortcuts(<div />);
     press('k', { ctrlKey: true });
 
-    const allowed = fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
-      key: 'k',
-      ctrlKey: true,
-    });
+    const allowed = press('k', { ctrlKey: true }, search());
 
     expect(allowed).toBe(false);
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
   });
 
   it('reopens the palette empty after a Ctrl+K closed it', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     renderWithShortcuts(<div />);
     press('k', { ctrlKey: true });
-    const search = screen.getByRole('combobox', { name: 'Search commands' });
-    fireEvent.change(search, { target: { value: 'set' } });
+    fireEvent.change(search(), { target: { value: 'set' } });
 
-    press('k', { ctrlKey: true }, search);
+    press('k', { ctrlKey: true }, search());
     press('k', { ctrlKey: true });
 
-    expect(screen.getByRole('combobox', { name: 'Search commands' })).toHaveValue('');
+    expect(search()).toHaveValue('');
   });
 
   it('keeps a held Ctrl+K from the browser without toggling the palette', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     renderWithShortcuts(<div />);
     press('k', { ctrlKey: true });
 
-    const allowed = fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
-      key: 'k',
-      ctrlKey: true,
-      repeat: true,
-    });
+    const allowed = press('k', { ctrlKey: true, repeat: true }, search());
 
     expect(allowed).toBe(false);
     expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
   });
 
   it('takes Ctrl+K with Caps Lock on', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     renderWithShortcuts(<div />);
 
-    const allowed = fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
-
-    expect(allowed).toBe(false);
+    expect(press('K', { ctrlKey: true })).toBe(false);
     expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
   });
 
   it('keeps Ctrl+K from the browser while another dialog is open', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     renderWithShortcuts(<div />);
     press('?', { shiftKey: true });
 
-    const allowed = fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
-
-    expect(allowed).toBe(false);
+    expect(press('k', { ctrlKey: true })).toBe(false);
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
   });
 
   it('drops a pending g when the palette opens', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     renderWithShortcuts(<div />);
 
     press('g');
     press('k', { ctrlKey: true });
-    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
-      key: 'Escape',
-    });
+    press('Escape', {}, search());
     press('p');
 
     expect(window.location.hash).toBe('');
   });
 
   it('opens the palette with Cmd+K while typing, and gives focus back on close', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    onPlatform('MacIntel');
     renderWithShortcuts(<input aria-label="field" />);
     const field = screen.getByRole('textbox', { name: 'field' });
     field.focus();
 
     press('k', { metaKey: true }, field);
     expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
-      key: 'Escape',
-    });
+    press('Escape', {}, search());
 
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
     expect(field).toHaveFocus();
   });
 
   it('runs a palette command through the registry', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     const openSettings = vi.fn();
     renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
 
     press('k', { ctrlKey: true });
-    const search = screen.getByRole('combobox', { name: 'Search commands' });
-    fireEvent.change(search, { target: { value: 'settings' } });
-    fireEvent.keyDown(search, { key: 'Enter' });
+    fireEvent.change(search(), { target: { value: 'settings' } });
+    press('Enter', {}, search());
 
     expect(openSettings).toHaveBeenCalledOnce();
   });
 
+  it('lists only live actions in the palette', () => {
+    onPlatform('Win32');
+    renderWithShortcuts(<div />);
+
+    press('k', { ctrlKey: true });
+
+    expect(screen.getByRole('option', { name: /Pomodoro/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Add a goal/ })).not.toBeInTheDocument();
+  });
+
   it('keeps Space from reaching the page while the palette is open', () => {
-    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    onPlatform('Win32');
     const pageSpace = listenFor(isSpaceShortcutEvent);
     renderWithShortcuts(<div />);
 
@@ -326,13 +349,5 @@ describe('shortcut keys', () => {
     press(' ');
 
     expect(pageSpace).not.toHaveBeenCalled();
-  });
-
-  it('opens the cheat sheet on ?', () => {
-    renderWithShortcuts(<div />);
-
-    press('?', { shiftKey: true });
-
-    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
   });
 });

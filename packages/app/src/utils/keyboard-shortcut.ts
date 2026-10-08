@@ -44,8 +44,11 @@ export function isMacPlatform(): boolean {
 
 /** Cmd+K on macOS, Ctrl+K elsewhere, whatever is open — the browser must never get it. */
 export function isPaletteChord(event: KeyboardEvent, mac = isMacPlatform()): boolean {
-  // Lower-cased: Caps Lock reports `K`, and the browser would still act on it.
-  if (event.key.toLowerCase() !== 'k' || event.altKey || event.shiftKey) {
+  // Lower-cased: Caps Lock reports `K`. Autofill's synthetic keydowns carry no key at all.
+  if (typeof event.key !== 'string' || event.key.toLowerCase() !== 'k') {
+    return false;
+  }
+  if (event.altKey || event.shiftKey) {
     return false;
   }
   return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;

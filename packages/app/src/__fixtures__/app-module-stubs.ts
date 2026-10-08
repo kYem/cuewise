@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
-// The real background loader retries a blocked CDN for ~24s, which jsdom never resolves; tests
-// that only need the page mounted stub it through these, via `vi.mock(path, async () => ...)`.
+// jsdom never loads an image, so the real background loader waits out its load timeouts.
+// Tests that only need the page mounted swap these in through an async `vi.mock` factory.
 
 export const imagePreloadCacheStub = {
   preloadImages: vi.fn(),

@@ -1,8 +1,13 @@
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectedWithTable, fakeNotionHost } from '../notion/__fixtures__/notion-host.fixtures';
-import { LiveIds, renderWithShortcuts } from '../shortcuts/__fixtures__/shortcuts.fixtures';
+import {
+  LiveIds,
+  onPlatform,
+  press,
+  renderWithShortcuts,
+} from '../shortcuts/__fixtures__/shortcuts.fixtures';
 import { useNotionStore } from '../stores/notion-store';
 import { mockGoalsSectionStores as mockStores } from './__fixtures__/goals-list.fixtures';
 import { goalsWithNotion } from './__fixtures__/goals-notion.fixtures';
@@ -20,7 +25,7 @@ vi.mock('@cuewise/storage', () => ({
 const ADD_INPUT = { name: /Add a goal|main goal for today/ };
 
 function pressN() {
-  return fireEvent.keyDown(document.body, { key: 'n' });
+  return press('n');
 }
 
 async function submitGoal(text: string) {
@@ -36,15 +41,35 @@ describe('GoalsSection - add-goal shortcut', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it.each([
-    'full',
-    'compact',
-    'focus',
-  ] as const)('n opens and focuses the add input in %s view with tasks on screen', (goalViewMode) => {
-    mockStores({ goalViewMode });
+    ['full', 'tasks on screen', [goalFactory.build({ completed: false })]],
+    ['compact', 'tasks on screen', [goalFactory.build({ completed: false })]],
+    ['focus', 'tasks on screen', [goalFactory.build({ completed: false })]],
+    ['full', 'no tasks', []],
+    ['compact', 'no tasks', []],
+    ['focus', 'no tasks', []],
+  ] as const)('n opens and focuses the add input in %s view with %s', (goalViewMode, _l, tasks) => {
+    mockStores({ goalViewMode }, [...tasks]);
     renderWithShortcuts(<GoalsSection />);
 
     pressN();
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+  });
+
+  it('Add a goal from the palette leaves the cursor in the add input', () => {
+    onPlatform('Win32');
+    mockStores({ goalViewMode: 'compact' });
+    renderWithShortcuts(<GoalsSection />);
+
+    press('k', { ctrlKey: true });
+    const search = screen.getByRole('combobox', { name: 'Search commands' });
+    fireEvent.change(search, { target: { value: 'add a goal' } });
+    press('Enter', {}, search);
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
   });

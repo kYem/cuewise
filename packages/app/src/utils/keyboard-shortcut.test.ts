@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   claimShortcutEvent,
   isMacPlatform,
+  isPaletteChord,
   isPaletteKeyEvent,
   isShortcutKeyEvent,
   isSpaceShortcutEvent,
@@ -223,6 +224,12 @@ describe('isPaletteKeyEvent', () => {
 
   it('takes a Caps Lock K', () => {
     expect(dispatch(offMac, 'K', { ctrlKey: true })).toBe(true);
+  });
+
+  it('passes over a keydown with no key, as Chrome autofill sends', () => {
+    const autofill = new Event('keydown') as KeyboardEvent;
+
+    expect(isPaletteChord(autofill, false)).toBe(false);
   });
 
   it('ignores a bare k', () => {

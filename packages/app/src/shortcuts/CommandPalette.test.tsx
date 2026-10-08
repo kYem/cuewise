@@ -140,6 +140,14 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('closes when the backdrop is clicked', () => {
+    const { onClose } = renderPalette();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close command palette' }));
+
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('closes on Escape', () => {
     const { onClose, input } = renderPalette();
 

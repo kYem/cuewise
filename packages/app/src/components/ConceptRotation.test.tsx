@@ -53,6 +53,7 @@ function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [
 describe('ConceptRotation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.location.hash = '';
   });
 
   it('offers the due concept to the palette while a quote shows', () => {
@@ -96,7 +97,6 @@ describe('ConceptRotation', () => {
   });
 
   it('keeps g then c on navigation, leaving the concept slot alone', () => {
-    window.location.hash = '';
     setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
     renderWithShortcuts(<ConceptRotation fallback={<div>QUOTE</div>} />);
 

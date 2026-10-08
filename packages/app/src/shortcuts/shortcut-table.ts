@@ -20,7 +20,7 @@ export interface Shortcut {
   label: string;
   group: ShortcutGroup;
   keywords: string[];
-  /** The component listens for this key itself; the table only lists it. */
+  /** The component binds this key itself; the provider only runs it from the palette. */
   boundBy?: 'component';
 }
 

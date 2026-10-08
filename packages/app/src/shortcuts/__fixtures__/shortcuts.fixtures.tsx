@@ -1,10 +1,19 @@
-import { type RenderResult, render } from '@testing-library/react';
+import { fireEvent, type RenderResult, render } from '@testing-library/react';
 import type React from 'react';
 import { type Mock, vi } from 'vitest';
 import { ShortcutProvider, useShortcutAction, useShortcutUi } from '../ShortcutProvider';
 import type { ShortcutId } from '../shortcut-table';
 
 const keyListeners: Array<(event: KeyboardEvent) => void> = [];
+
+export function press(key: string, init: KeyboardEventInit = {}, target: Element = document.body) {
+  return fireEvent.keyDown(target, { key, ...init });
+}
+
+/** `navigator.platform` for the palette chord; restore with `vi.restoreAllMocks()`. */
+export function onPlatform(platform: 'MacIntel' | 'Win32'): void {
+  vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
+}
 
 /** A stand-in page listener: a spy called for each keydown the predicate accepts. */
 export function listenFor(predicate: (event: KeyboardEvent) => boolean): Mock {

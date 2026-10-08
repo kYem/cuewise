@@ -95,8 +95,8 @@ export type MockGoalsPageStore = MockGoalStore & {
 };
 
 /**
- * GoalsSection with its real children: goal, calendar and settings stores. The calling test must
- * `vi.mock` all three modules.
+ * Mocks the goal, calendar and settings stores that GoalsSection and its real children read.
+ * The calling test must `vi.mock` all three modules.
  */
 export function mockGoalsSectionStores(
   settings: Partial<Settings>,
