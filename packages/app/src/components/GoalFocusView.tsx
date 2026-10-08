@@ -11,17 +11,24 @@ import { GoalInput } from './GoalInput';
 
 interface GoalFocusViewProps {
   showAddInput?: boolean;
+  /** Sets the parent's row flag, so its scope reset covers this button as well as `n`. */
+  onOpenAddInput?: () => void;
   onCloseAddInput?: () => void;
+  focusRequest?: number;
 }
 
 /**
  * Minimal focus view showing a single user-selected goal.
  * Designed to work without container wrapper, perfect for glass theme.
  */
-export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCloseAddInput }) => {
+export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
+  showAddInput = false,
+  onOpenAddInput,
+  onCloseAddInput,
+  focusRequest = 0,
+}) => {
   const { todayTasks, toggleTask, goals } = useGoalStore();
   const { settings, updateSettings } = useSettingsStore();
-  const [showAddInDone, setShowAddInDone] = useState(false);
   // A just-completed task we keep on screen so its tick animation can finish
   // playing before the view advances to the next task / "All done".
   const [animatingGoal, setAnimatingGoal] = useState<Goal | null>(null);
@@ -50,7 +57,25 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
   // completed from another view) fall through to the next open task. The held
   // (animating) goal wins so its completion tick can finish playing.
   const activeFocusedGoal = focusedGoal && !focusedGoal.completed ? focusedGoal : null;
-  const displayGoal = animatingGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null;
+  // Hold the ticking goal only while it still exists: one deleted mid-tick (by sync) is gone.
+  const heldGoal =
+    animatingGoal !== null && todayTasks.some((g) => g.id === animatingGoal.id)
+      ? animatingGoal
+      : null;
+  const displayGoal = heldGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null;
+
+  // A ticking goal deleted by sync drops its hold now, so the next goal shown can be ticked.
+  // Skipped mid-toggle: handleToggle releases it itself, via the advance or its failure path.
+  const heldGoalGone = animatingGoal !== null && heldGoal === null;
+  useEffect(() => {
+    if (!heldGoalGone || advanceTimer.current === null) {
+      return;
+    }
+    window.clearTimeout(advanceTimer.current);
+    advanceTimer.current = null;
+    isToggling.current = false;
+    setAnimatingGoal(null);
+  }, [heldGoalGone]);
 
   // Find the parent objective if this task is linked to one
   const parentObjective = displayGoal?.parentId
@@ -107,132 +132,124 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({ showAddInput, onCl
     advanceTimer.current = window.setTimeout(advance, CHECKBOX_TICK_MS);
   };
 
-  // Empty state - show input directly
-  if (todayTasks.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <div className="w-full max-w-xl">
-          <GoalInput variant="minimal" />
-        </div>
-      </div>
-    );
-  }
-
+  const isEmpty = todayTasks.length === 0;
   // All tasks completed (regardless of whether a now-completed task is still
   // focused). While the final task's tick is still playing, keep showing it.
-  if (!animatingGoal && incompleteGoals.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <CheckCircle2 className="w-12 h-12 mb-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
-        <p className="text-lg text-white font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-          All done!
-        </p>
-        <p className="text-sm text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-          Completed {todayTasks.length} task{todayTasks.length !== 1 ? 's' : ''} today
-        </p>
-
-        {/* Add another task */}
-        {showAddInDone ? (
-          <div className="w-full max-w-xl mt-6">
-            <GoalInput variant="minimal" autoFocus onTaskAdded={() => setShowAddInDone(false)} />
-          </div>
-        ) : (
+  const allDone = !heldGoal && !isEmpty && incompleteGoals.length === 0;
+  // One container for the empty, goal and "All done" screens, so an open add row keeps its draft
+  // and focus when the list empties or finishes under it.
+  return (
+    <div
+      className={cn('flex flex-col items-center', (allDone || isEmpty) && 'justify-center py-8')}
+    >
+      {allDone ? (
+        <div className="flex flex-col items-center">
+          <CheckCircle2 className="w-12 h-12 mb-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+          <p className="text-lg text-white font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+            All done!
+          </p>
+          <p className="text-sm text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
+            Completed {todayTasks.length} task{todayTasks.length !== 1 ? 's' : ''} today
+          </p>
+        </div>
+      ) : (
+        displayGoal && (
           <button
             type="button"
-            onClick={() => setShowAddInDone(true)}
+            onClick={handleToggle}
             className={cn(
-              'mt-6 flex items-center gap-2 px-4 py-2 rounded-full',
-              'bg-white/20 backdrop-blur-sm text-white',
-              'hover:bg-white/30 transition-all',
-              'drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]'
+              'group flex items-center gap-4 px-4 py-3 rounded-xl transition-all',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30'
             )}
           >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm font-medium">Add another</span>
-          </button>
-        )}
-      </div>
-    );
-  }
+            {/* Checkbox - hidden by default, shows on hover */}
+            <div
+              className={cn(
+                'flex-shrink-0 transition-all duration-200',
+                displayGoal.completed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              )}
+            >
+              <AnimatedCheckbox checked={displayGoal.completed} size="xl" tone="onImage" />
+            </div>
 
-  return (
-    <div className="flex flex-col items-center">
-      {/* Focused Goal - minimal text-only display */}
-      {displayGoal && (
+            {/* Goal Text and Parent - stacked vertically */}
+            <div className="flex flex-col items-start gap-1">
+              <span
+                className={cn(
+                  'text-3xl md:text-4xl text-left transition-all font-semibold',
+                  displayGoal.completed
+                    ? 'text-white/60 line-through drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
+                    : 'text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]'
+                )}
+                style={{
+                  textShadow: displayGoal.completed
+                    ? '0 2px 4px rgba(0,0,0,0.5)'
+                    : '0 2px 8px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4)',
+                }}
+              >
+                {displayGoal.text}
+              </span>
+
+              {/* Read-only due-date + subtask progress for the focused task */}
+              {(displayGoal.dueDate || hasSubtasks) && (
+                <div
+                  className="flex items-center gap-3 text-sm text-white/70"
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
+                >
+                  {displayGoal.dueDate && (
+                    <span className="flex items-center gap-1">
+                      <CalendarClock className="w-3.5 h-3.5" />
+                      {getDueDateLabel(displayGoal.dueDate)}
+                    </span>
+                  )}
+                  {hasSubtasks && (
+                    <span className="flex items-center gap-1">
+                      <ListChecks className="w-3.5 h-3.5" />
+                      {subtaskProgress.completed}/{subtaskProgress.total}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Parent objective - shows on hover */}
+              {parentObjective && (
+                <span
+                  className="text-sm text-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
+                >
+                  ↳ {parentObjective.text}
+                </span>
+              )}
+            </div>
+          </button>
+        )
+      )}
+
+      {allDone && !showAddInput && (
         <button
           type="button"
-          onClick={handleToggle}
+          onClick={onOpenAddInput}
           className={cn(
-            'group flex items-center gap-4 px-4 py-3 rounded-xl transition-all',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30'
+            'mt-6 flex items-center gap-2 px-4 py-2 rounded-full',
+            'bg-white/20 backdrop-blur-sm text-white',
+            'hover:bg-white/30 transition-all',
+            'drop-shadow-[0_1px_2px_rgba(0,0,0,0.3)]'
           )}
         >
-          {/* Checkbox - hidden by default, shows on hover */}
-          <div
-            className={cn(
-              'flex-shrink-0 transition-all duration-200',
-              displayGoal.completed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            )}
-          >
-            <AnimatedCheckbox checked={displayGoal.completed} size="xl" tone="onImage" />
-          </div>
-
-          {/* Goal Text and Parent - stacked vertically */}
-          <div className="flex flex-col items-start gap-1">
-            <span
-              className={cn(
-                'text-3xl md:text-4xl text-left transition-all font-semibold',
-                displayGoal.completed
-                  ? 'text-white/60 line-through drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
-                  : 'text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]'
-              )}
-              style={{
-                textShadow: displayGoal.completed
-                  ? '0 2px 4px rgba(0,0,0,0.5)'
-                  : '0 2px 8px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4)',
-              }}
-            >
-              {displayGoal.text}
-            </span>
-
-            {/* Read-only due-date + subtask progress for the focused task */}
-            {(displayGoal.dueDate || hasSubtasks) && (
-              <div
-                className="flex items-center gap-3 text-sm text-white/70"
-                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
-              >
-                {displayGoal.dueDate && (
-                  <span className="flex items-center gap-1">
-                    <CalendarClock className="w-3.5 h-3.5" />
-                    {getDueDateLabel(displayGoal.dueDate)}
-                  </span>
-                )}
-                {hasSubtasks && (
-                  <span className="flex items-center gap-1">
-                    <ListChecks className="w-3.5 h-3.5" />
-                    {subtaskProgress.completed}/{subtaskProgress.total}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Parent objective - shows on hover */}
-            {parentObjective && (
-              <span
-                className="text-sm text-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
-              >
-                ↳ {parentObjective.text}
-              </span>
-            )}
-          </div>
+          <Plus className="w-4 h-4" />
+          <span className="text-sm font-medium">Add another</span>
         </button>
       )}
 
-      {/* Add Goal Input (when shown) */}
-      {showAddInput && (
-        <div className="w-full max-w-xl mt-6">
-          <GoalInput variant="minimal" onTaskAdded={onCloseAddInput} />
+      {(showAddInput || isEmpty) && (
+        <div className={cn('w-full max-w-xl', !isEmpty && 'mt-6')}>
+          <GoalInput
+            variant="minimal"
+            autoFocus={showAddInput}
+            focusRequest={focusRequest}
+            onTaskAdded={onCloseAddInput}
+            onDismiss={onCloseAddInput}
+          />
         </div>
       )}
     </div>

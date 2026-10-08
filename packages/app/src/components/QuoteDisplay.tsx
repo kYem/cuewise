@@ -12,6 +12,7 @@ import {
 import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useShortcutAction } from '../shortcuts/ShortcutProvider';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isSpaceShortcutEvent, releaseFocusOnPointer } from '../utils/keyboard-shortcut';
@@ -135,6 +136,9 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [enableSpaceShortcut, error, isLoading, currentQuote, handleRefreshClick]);
+
+  const quoteOnScreen = enableSpaceShortcut && !error && !isLoading && currentQuote;
+  useShortcutAction('quote.next', quoteOnScreen ? handleRefreshClick : null);
 
   const handleGoBack = async () => {
     await goBack();

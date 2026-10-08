@@ -7,6 +7,7 @@ import {
 } from '@cuewise/shared';
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useShortcutAction } from '../shortcuts/ShortcutProvider';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -183,10 +184,6 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
     return () => document.removeEventListener('keydown', handleKey);
   }, [enabled, isLoading, due.length, surfaced]);
 
-  if (!surfaced) {
-    return <>{fallback}</>;
-  }
-
   const yieldToQuotes = () => {
     setDecision((prev) => (prev ? { ...prev, show: false } : prev));
     setSlot('auto');
@@ -202,6 +199,15 @@ export const ConceptRotation: React.FC<ConceptRotationProps> = ({
     useQuoteStore.getState().refreshQuote({ userInitiated: true });
     onManualRefresh?.();
   };
+
+  const conceptWaiting = enabled && !isLoading && due.length > 0 && !surfaced;
+  useShortcutAction('concept.show', conceptWaiting ? () => setSlot('concepts') : null);
+  // While a card holds the slot QuoteDisplay is unmounted, so its New quote comes from here.
+  useShortcutAction('quote.next', surfaced ? skipToQuote : null);
+
+  if (!surfaced) {
+    return <>{fallback}</>;
+  }
 
   // Browsing moves the anchor: it is the one thing that should change the card on screen.
   const moveBy = (delta: number) => {

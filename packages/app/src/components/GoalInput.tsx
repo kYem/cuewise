@@ -205,6 +205,10 @@ interface GoalInputProps {
   defaultGoalId?: string;
   onTaskAdded?: () => void;
   autoFocus?: boolean;
+  /** Focuses the input whenever this changes after mount, e.g. from the `n` shortcut. */
+  focusRequest?: number;
+  /** Called on Escape in the input, so a revealed add-row can close. */
+  onDismiss?: () => void;
   variant?: GoalInputVariant;
 }
 
@@ -212,6 +216,8 @@ export function GoalInput({
   defaultGoalId,
   onTaskAdded,
   autoFocus = false,
+  focusRequest = 0,
+  onDismiss,
   variant = 'boxed',
 }: GoalInputProps): React.ReactElement {
   const [text, setText] = useState('');
@@ -232,6 +238,15 @@ export function GoalInput({
       inputRef.current.focus();
     }
   }, [autoFocus]);
+
+  // Ignore the value at mount: an input that reappears must not take focus for an old `n`.
+  const handledRequest = useRef(focusRequest);
+  useEffect(() => {
+    if (focusRequest !== handledRequest.current) {
+      handledRequest.current = focusRequest;
+      inputRef.current?.focus();
+    }
+  }, [focusRequest]);
 
   const submitTask = async (): Promise<void> => {
     if (!text.trim()) {
@@ -258,6 +273,9 @@ export function GoalInput({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       await submitTask();
+    }
+    if (e.key === 'Escape' && onDismiss) {
+      onDismiss();
     }
   };
 
@@ -340,6 +358,7 @@ export function GoalInput({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add a goal…"
+            aria-label="Add a goal"
             className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-border bg-surface-variant/50 focus:border-primary-400 focus:outline-none transition-colors text-sm text-primary placeholder:text-tertiary"
             maxLength={200}
           />
@@ -389,6 +408,7 @@ export function GoalInput({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="What do you want to focus on today?"
+          aria-label="Add a goal"
           className="flex-1 min-w-[280px] px-4 py-3 rounded-lg border-2 border-border focus:border-primary-500 focus:outline-none transition-colors text-primary placeholder:text-secondary bg-surface/50"
           maxLength={200}
         />

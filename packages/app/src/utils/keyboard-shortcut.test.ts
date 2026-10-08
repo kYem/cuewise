@@ -1,10 +1,51 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { isShortcutKeyEvent, isSpaceShortcutEvent } from './keyboard-shortcut';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  claimShortcutEvent,
+  isMacPlatform,
+  isPaletteChord,
+  isPaletteKeyEvent,
+  isShortcutKeyEvent,
+  isSpaceShortcutEvent,
+  shortcutKey,
+} from './keyboard-shortcut';
+
+describe('shortcutKey', () => {
+  const keydown = (key: string, init: KeyboardEventInit = {}) =>
+    new KeyboardEvent('keydown', { key, ...init });
+
+  it('passes over a keydown with no key, as Chrome autofill sends', () => {
+    expect(shortcutKey(new Event('keydown') as KeyboardEvent)).toBeUndefined();
+  });
+
+  it('lower-cases a letter under Caps Lock', () => {
+    expect(shortcutKey(keydown('N', { modifierCapsLock: true }))).toBe('n');
+  });
+
+  it('keeps a shifted letter as it is without Caps Lock', () => {
+    expect(shortcutKey(keydown('N', { shiftKey: true }))).toBe('N');
+  });
+
+  it('leaves a shifted letter unbound under Caps Lock, whatever case it reports', () => {
+    expect(shortcutKey(keydown('N', { shiftKey: true, modifierCapsLock: true }))).toBeUndefined();
+    expect(shortcutKey(keydown('n', { shiftKey: true, modifierCapsLock: true }))).toBeUndefined();
+  });
+
+  it('keeps ? under Caps Lock, since Shift is part of typing it', () => {
+    expect(shortcutKey(keydown('?', { shiftKey: true, modifierCapsLock: true }))).toBe('?');
+  });
+});
 
 function dispatch(
   predicate: (event: KeyboardEvent) => boolean,
   key: string,
-  options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean; shiftKey?: boolean } = {}
+  options: {
+    on?: HTMLElement;
+    metaKey?: boolean;
+    ctrlKey?: boolean;
+    altKey?: boolean;
+    repeat?: boolean;
+    shiftKey?: boolean;
+  } = {}
 ): boolean {
   const target = options.on ?? document.body;
   let allowed = false;
@@ -17,6 +58,8 @@ function dispatch(
       key,
       bubbles: true,
       metaKey: options.metaKey,
+      ctrlKey: options.ctrlKey,
+      altKey: options.altKey,
       repeat: options.repeat,
       shiftKey: options.shiftKey,
     })
@@ -66,6 +109,19 @@ describe('isShortcutKeyEvent', () => {
     expect(press({ on: input })).toBe(false);
   });
 
+  it.each([
+    'checkbox',
+    'radio',
+    'range',
+    'button',
+  ])('allows keypresses on a focused %s, which takes no typing', (type) => {
+    expect(press({ on: appendWith('input', { type }) })).toBe(true);
+  });
+
+  it.each(['text', 'search', 'email', 'number'])('rejects keypresses in a %s input', (type) => {
+    expect(press({ on: appendWith('input', { type }) })).toBe(false);
+  });
+
   it('rejects keypresses in a contenteditable', () => {
     const editable = document.createElement('div');
     // jsdom does not derive isContentEditable from the attribute.
@@ -111,6 +167,8 @@ describe('isSpaceShortcutEvent', () => {
   });
 
   it.each([
+    ['a checkbox', 'input', { type: 'checkbox' }],
+    ['a radio', 'input', { type: 'radio' }],
     ['a button', 'button', {}],
     ['a role=button control', 'div', { role: 'button' }],
     ['a summary', 'summary', {}],
@@ -128,5 +186,95 @@ describe('isSpaceShortcutEvent', () => {
     button.appendChild(icon);
 
     expect(pressSpace({ on: icon })).toBe(false);
+  });
+});
+
+describe('claimShortcutEvent', () => {
+  it('makes the shared guards reject an event a shortcut already handled', () => {
+    const claimFirst = (event: KeyboardEvent) => claimShortcutEvent(event);
+    document.addEventListener('keydown', claimFirst, true);
+
+    const shortcut = press();
+    const space = pressSpace();
+    document.removeEventListener('keydown', claimFirst, true);
+
+    expect(shortcut).toBe(false);
+    expect(space).toBe(false);
+  });
+});
+
+describe('isMacPlatform', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(navigator, 'userAgentData');
+  });
+
+  it('prefers the client-hints platform where the browser has it', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    Object.defineProperty(navigator, 'userAgentData', {
+      value: { platform: 'macOS' },
+      configurable: true,
+    });
+
+    expect(isMacPlatform()).toBe(true);
+  });
+
+  it('falls back to navigator.platform', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Linux x86_64');
+
+    expect(isMacPlatform()).toBe(false);
+  });
+});
+
+describe('isPaletteKeyEvent', () => {
+  const onMac = (event: KeyboardEvent) => isPaletteKeyEvent(event, true);
+  const offMac = (event: KeyboardEvent) => isPaletteKeyEvent(event, false);
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('takes Cmd+K on macOS and Ctrl+K elsewhere', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true })).toBe(true);
+    expect(dispatch(offMac, 'k', { ctrlKey: true })).toBe(true);
+    expect(dispatch(onMac, 'k', { ctrlKey: true })).toBe(false);
+    expect(dispatch(offMac, 'k', { metaKey: true })).toBe(false);
+  });
+
+  it('still opens while typing in a field', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, on: appendWith('input') })).toBe(true);
+  });
+
+  it('ignores an auto-repeat', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, repeat: true })).toBe(false);
+  });
+
+  it('stays shut while a modal dialog is open', () => {
+    appendWith('div', { role: 'dialog', 'aria-modal': 'true' });
+
+    expect(dispatch(onMac, 'k', { metaKey: true })).toBe(false);
+  });
+
+  it('leaves Shift combos alone', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, shiftKey: true })).toBe(false);
+  });
+
+  it('leaves Alt combos and Ctrl with Cmd together alone', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, altKey: true })).toBe(false);
+    expect(dispatch(offMac, 'k', { ctrlKey: true, metaKey: true })).toBe(false);
+  });
+
+  it('takes a Caps Lock K', () => {
+    expect(dispatch(offMac, 'K', { ctrlKey: true })).toBe(true);
+  });
+
+  it('passes over a keydown with no key, as Chrome autofill sends', () => {
+    const autofill = new Event('keydown') as KeyboardEvent;
+
+    expect(isPaletteChord(autofill, false)).toBe(false);
+  });
+
+  it('ignores a bare k', () => {
+    expect(dispatch(onMac, 'k')).toBe(false);
   });
 });

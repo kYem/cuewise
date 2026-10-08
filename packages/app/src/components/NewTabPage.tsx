@@ -1,12 +1,23 @@
 import { formatClockTime, formatLongDate, getDueConceptCards, getGreeting } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
-import { BarChart3, BookMarked, Brain, Flag, PanelRight, Settings, Timer } from 'lucide-react';
+import {
+  BarChart3,
+  BookMarked,
+  Brain,
+  Flag,
+  Keyboard,
+  PanelRight,
+  Settings,
+  Timer,
+} from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConceptNudge } from '../hooks/useConceptNudge';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import type { NotionHost } from '../notion/notion-host';
+import { useShortcutAction, useShortcutUi } from '../shortcuts/ShortcutProvider';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
+import { useFocusModeStore } from '../stores/focus-mode-store';
 import { useGoalStore } from '../stores/goal-store';
 import { usePomodoroStorageSync, usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
@@ -87,6 +98,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
   // Enable cross-tab synchronization for Pomodoro timer
   usePomodoroStorageSync();
 
+  const shortcutUi = useShortcutUi();
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
   const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
@@ -278,6 +290,17 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
     setIsSettingsModalOpen(true);
   };
 
+  const handleOpenShortcuts = () => {
+    setIsMenuOpen(false);
+    shortcutUi?.openCheatSheet();
+  };
+
+  useShortcutAction('settings', handleOpenSettings);
+  useShortcutAction('focus', () => {
+    useFocusModeStore.getState().enterFocusMode();
+    window.location.hash = 'pomodoro';
+  });
+
   const handleToggleThemeSwitcher = () => {
     updateSettings({ showThemeSwitcher: !showThemeSwitcher });
   };
@@ -365,6 +388,15 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
             >
               <PanelRight className="w-5 h-5 text-primary-600" />
               <span className="text-sm font-medium">Theme Switcher</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleOpenShortcuts}
+              className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
+            >
+              <Keyboard className="w-5 h-5 text-primary-600" />
+              <span className="text-sm font-medium">Keyboard shortcuts</span>
             </button>
             <button
               type="button"

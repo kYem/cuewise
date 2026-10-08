@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSyncSignedIn } from '../hooks/useSyncSignedIn';
 import type { NotionHost } from '../notion/notion-host';
+import { useShortcutAction } from '../shortcuts/ShortcutProvider';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useGoalStore } from '../stores/goal-store';
 import { useNotionStore } from '../stores/notion-store';
@@ -121,6 +122,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const initCalendar = useCalendarStore((state) => state.initialize);
   const [storageUsage, setStorageUsage] = useState<StorageUsageInfo | null>(null);
   const [showAddInput, setShowAddInput] = useState(false);
+  const [addRequest, setAddRequest] = useState(0);
   const signedIn = useSyncSignedIn();
   const notionView = useNotionStore((state) => state.view);
 
@@ -148,7 +150,36 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const notionListHost =
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
-  const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');
+  const canAddGoal = notionListHost === undefined && !isLoading && !error;
+  // Matches GoalsList: with "show completed" off, finished tasks are hidden.
+  const visibleCount = settings.showCompletedGoals ? totalCount : incompleteCount;
+  // These views show an input anyway, so `n` reveals nothing there and no row flag is set.
+  const addInputAlwaysShown =
+    viewMode === 'full' ||
+    (viewMode === 'focus' && totalCount === 0) ||
+    (viewMode === 'compact' && visibleCount === 0);
+  useShortcutAction(
+    'goal.add',
+    canAddGoal
+      ? () => {
+          if (!addInputAlwaysShown) {
+            setShowAddInput(true);
+          }
+          setAddRequest((count) => count + 1);
+        }
+      : null
+  );
+  const closeAddInput = () => setShowAddInput(false);
+  // An open add row belongs to the state it opened in: once view, source, emptiness or
+  // availability changes (the list emptied or filled, an error came and went), it closes.
+  const source = notionListHost === undefined ? 'cuewise' : 'notion';
+  const addInputScope = `${viewMode}:${source}:${addInputAlwaysShown}:${canAddGoal}`;
+  const [openedInScope, setOpenedInScope] = useState(addInputScope);
+  if (openedInScope !== addInputScope) {
+    setOpenedInScope(addInputScope);
+    setShowAddInput(false);
+  }
+  const SourceIcon = goalsSourceIcon(source);
   // The Notion mark takes the text colour, never the theme accent, as its brand asks.
   const sourceIconTone = notionListHost === undefined ? 'text-primary-600' : 'text-primary';
 
@@ -438,7 +469,9 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         {notionListHost === undefined ? (
           <GoalFocusView
             showAddInput={showAddInput}
-            onCloseAddInput={() => setShowAddInput(false)}
+            onOpenAddInput={() => setShowAddInput(true)}
+            onCloseAddInput={closeAddInput}
+            focusRequest={addRequest}
           />
         ) : (
           <NotionGoalsList
@@ -529,7 +562,7 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
 
               {/* Goals List (tiles + bottom add input + history + upcoming) */}
               <div className="flex-1">
-                <GoalsList viewMode="full" />
+                <GoalsList viewMode="full" addRequest={addRequest} />
               </div>
             </>
           )}
@@ -537,7 +570,12 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           {/* Compact Mode Content */}
           {viewMode === 'compact' && notionListHost === undefined && (
             <div className="flex-1">
-              <GoalsList viewMode="compact" />
+              <GoalsList
+                viewMode="compact"
+                addRequest={addRequest}
+                showAddInput={showAddInput}
+                onCloseAddInput={closeAddInput}
+              />
             </div>
           )}
         </div>

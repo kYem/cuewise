@@ -1,7 +1,14 @@
 import { createSelectorMock } from '@cuewise/test-utils';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  liveIds,
+  RunButton,
+  renderWithLiveIds,
+  renderWithShortcuts,
+} from '../shortcuts/__fixtures__/shortcuts.fixtures';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -22,9 +29,24 @@ interface SetupOptions {
   framing?: 'ambient' | 'queue';
   cadence?: 'every' | 'third' | 'ten' | 'off';
   cards?: ReturnType<typeof conceptCardFactory.build>[];
+  isLoading?: boolean;
 }
 
-function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [] }: SetupOptions) {
+/** A quote on screen with a due concept waiting, plus a button that runs `concept.show`. */
+const WaitingConcept: React.FC = () => (
+  <>
+    <ConceptRotation fallback={<div>QUOTE</div>} />
+    <RunButton id="concept.show" />
+  </>
+);
+
+function setup({
+  enabled = true,
+  framing = 'queue',
+  cadence = 'every',
+  cards = [],
+  isLoading = false,
+}: SetupOptions) {
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
       settings: {
@@ -37,7 +59,7 @@ function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [
   );
   const reviewCard = vi.fn().mockResolvedValue(true);
   vi.mocked(useConceptCardsStore).mockImplementation(
-    createSelectorMock({ cards, isLoading: false, initialize: vi.fn(), reviewCard })
+    createSelectorMock({ cards, isLoading, initialize: vi.fn(), reviewCard })
   );
   // clearAllMocks does not strip a plain assigned property, so every test gets its own.
   const refreshQuote = vi.fn();
@@ -48,6 +70,75 @@ function setup({ enabled = true, framing = 'queue', cadence = 'every', cards = [
 describe('ConceptRotation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.location.hash = '';
+  });
+
+  it('offers the due concept to the palette while a quote shows', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithLiveIds(<WaitingConcept />);
+    expect(liveIds()).toHaveTextContent('concept.show');
+
+    fireEvent.click(screen.getByRole('button', { name: 'run concept.show' }));
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('stops offering the due concept once it is on screen', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithLiveIds(<WaitingConcept />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'run concept.show' }));
+
+    expect(liveIds()).not.toHaveTextContent('concept.show');
+  });
+
+  it.each([
+    ['nothing is due', { cards: [] }],
+    ['concepts are off', { enabled: false, cards: [dueCard] }],
+    ['cards are still loading', { isLoading: true, cards: [dueCard] }],
+  ])('offers no due concept when %s', (_state, options) => {
+    setup({ framing: 'ambient', cadence: 'off', ...options });
+    renderWithLiveIds(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    expect(liveIds()).not.toHaveTextContent('concept.show');
+  });
+
+  it('keeps c for the concept slot with the shortcuts mounted', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithShortcuts(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    fireEvent.keyDown(document.body, { key: 'c' });
+
+    expect(screen.getByText('Saga pattern')).toBeInTheDocument();
+  });
+
+  it('keeps g then c on navigation, leaving the concept slot alone', () => {
+    setup({ framing: 'ambient', cadence: 'off', cards: [dueCard] });
+    renderWithShortcuts(<ConceptRotation fallback={<div>QUOTE</div>} />);
+
+    fireEvent.keyDown(document.body, { key: 'g' });
+    fireEvent.keyDown(document.body, { key: 'c' });
+
+    expect(window.location.hash).toBe('#concepts');
+    expect(screen.queryByText('Saga pattern')).not.toBeInTheDocument();
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+  });
+
+  it('offers New quote while a card is up, leaving it the way space does', () => {
+    const { refreshQuote } = setup({ framing: 'queue', cards: [dueCard] });
+    const onManualRefresh = vi.fn();
+    renderWithShortcuts(
+      <>
+        <ConceptRotation fallback={<div>QUOTE</div>} onManualRefresh={onManualRefresh} />
+        <RunButton id="quote.next" />
+      </>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'run quote.next' }));
+
+    expect(screen.getByText('QUOTE')).toBeInTheDocument();
+    expect(refreshQuote).toHaveBeenCalledWith({ userInitiated: true });
+    expect(onManualRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('renders the fallback when the feature is disabled', () => {

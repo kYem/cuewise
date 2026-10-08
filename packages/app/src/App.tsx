@@ -16,6 +16,7 @@ import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { useDayChange } from './hooks/useDayChange';
 import type { NotionHost } from './notion/notion-host';
+import { ShortcutProvider } from './shortcuts/ShortcutProvider';
 import { useBackgroundStore } from './stores/background-store';
 import { useGoalStore } from './stores/goal-store';
 import {
@@ -216,99 +217,101 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
   return (
     <SyncControllerContext.Provider value={syncController ?? null}>
       <ErrorBoundary>
-        {/* Skip to main content link - visible on focus for keyboard users */}
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
-        >
-          Skip to main content
-        </a>
+        <ShortcutProvider>
+          {/* Skip to main content link - visible on focus for keyboard users */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
+          >
+            Skip to main content
+          </a>
 
-        {/* Glass theme background layers */}
-        {showBackgroundImage && (
-          <>
-            {/* Fallback dark gradient - always visible as base layer */}
-            <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+          {/* Glass theme background layers */}
+          {showBackgroundImage && (
+            <>
+              {/* Fallback dark gradient - always visible as base layer */}
+              <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
 
-            {/* Background image - fades in when loaded */}
-            <div
-              className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
-                imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
-              }`}
-              data-testid="background-photo"
-              style={{
-                backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
-                ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
-              }}
-            />
-
-            {settings.glassEnhanced && (
+              {/* Background image - fades in when loaded */}
               <div
-                className="fixed inset-0 pointer-events-none"
-                style={{ background: 'var(--glass-scrim)' }}
+                className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
+                  imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
+                }`}
+                data-testid="background-photo"
+                style={{
+                  backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+                  ...getBackgroundFilterStyle(backgroundDim, backgroundBlur),
+                }}
               />
-            )}
 
-            {/* Dims the photo so the page's own content stays readable over it. */}
-            {!photoIsFeatured && (
-              <div className="fixed inset-0 bg-black/25" data-testid="background-dim" />
-            )}
+              {settings.glassEnhanced && (
+                <div
+                  className="fixed inset-0 pointer-events-none"
+                  style={{ background: 'var(--glass-scrim)' }}
+                />
+              )}
 
-            {/* Credit and its refresh sit in the bottom-left, where content pages need the room. */}
-            {imageLoaded && photoIsFeatured && (
-              <BackgroundCredit
-                imageUrl={backgroundImage}
-                onRefresh={handleRefreshBackground}
-                isRefreshing={isRefreshingBackground}
-              />
-            )}
+              {/* Dims the photo so the page's own content stays readable over it. */}
+              {!photoIsFeatured && (
+                <div className="fixed inset-0 bg-black/25" data-testid="background-dim" />
+              )}
 
-            {/* Loading indicator - shown while image loads */}
-            {!imageLoaded && (
-              <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="p-5 rounded-2xl bg-white/10 backdrop-blur-md shadow-2xl animate-float">
-                    <Coffee className="w-14 h-14 text-white/90" />
-                  </div>
-                  <div className="flex items-center gap-1 text-white/70 text-sm font-medium">
-                    <span>Brewing your view</span>
-                    <span className="animate-bounce-dots">.</span>
-                    <span className="animate-bounce-dots animation-delay-200">.</span>
-                    <span className="animate-bounce-dots animation-delay-400">.</span>
+              {/* Credit and refresh sit bottom-left, where content pages need the room. */}
+              {imageLoaded && photoIsFeatured && (
+                <BackgroundCredit
+                  imageUrl={backgroundImage}
+                  onRefresh={handleRefreshBackground}
+                  isRefreshing={isRefreshingBackground}
+                />
+              )}
+
+              {/* Loading indicator - shown while image loads */}
+              {!imageLoaded && (
+                <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="p-5 rounded-2xl bg-white/10 backdrop-blur-md shadow-2xl animate-float">
+                      <Coffee className="w-14 h-14 text-white/90" />
+                    </div>
+                    <div className="flex items-center gap-1 text-white/70 text-sm font-medium">
+                      <span>Brewing your view</span>
+                      <span className="animate-bounce-dots">.</span>
+                      <span className="animate-bounce-dots animation-delay-200">.</span>
+                      <span className="animate-bounce-dots animation-delay-400">.</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {/* Hide content while settings load or glass theme background loads */}
-        <div
-          data-testid="app-content"
-          className={`flex h-full w-full relative transition-opacity duration-500 ${
-            hideContent ? 'opacity-0' : 'opacity-100'
-          }`}
-        >
-          {/* Main content area */}
-          <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
-            {currentPage === 'pomodoro' && <PomodoroPage />}
-            {currentPage === 'insights' && <InsightsPage />}
-            {currentPage === 'quotes' && <QuoteManagementPage />}
-            {currentPage === 'goals' && <GoalsPage />}
-            {currentPage === 'concepts' && <ConceptsPage />}
-            {currentPage === 'home' && (
-              <NewTabPage extraSections={effectiveExtraSections} notionHost={notionHost} />
-            )}
-          </main>
+          {/* Hide content while settings load or glass theme background loads */}
+          <div
+            data-testid="app-content"
+            className={`flex h-full w-full relative transition-opacity duration-500 ${
+              hideContent ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            {/* Main content area */}
+            <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
+              {currentPage === 'pomodoro' && <PomodoroPage />}
+              {currentPage === 'insights' && <InsightsPage />}
+              {currentPage === 'quotes' && <QuoteManagementPage />}
+              {currentPage === 'goals' && <GoalsPage />}
+              {currentPage === 'concepts' && <ConceptsPage />}
+              {currentPage === 'home' && (
+                <NewTabPage extraSections={effectiveExtraSections} notionHost={notionHost} />
+              )}
+            </main>
 
-          {/* Live Theme Switcher (pushes content to the left when visible) */}
-          <ThemeSwitcher isVisible={settings.showThemeSwitcher} />
-        </div>
+            {/* Live Theme Switcher (pushes content to the left when visible) */}
+            <ThemeSwitcher isVisible={settings.showThemeSwitcher} />
+          </div>
 
-        {/* Toast notifications */}
-        <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
-        {/* Completion celebrations */}
-        <CelebrationOverlay />
+          {/* Toast notifications */}
+          <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
+          {/* Completion celebrations */}
+          <CelebrationOverlay />
+        </ShortcutProvider>
       </ErrorBoundary>
     </SyncControllerContext.Provider>
   );

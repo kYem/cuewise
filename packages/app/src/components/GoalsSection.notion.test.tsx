@@ -86,6 +86,15 @@ describe('GoalsSection - Notion source', () => {
     expect(host.api.listNotionItems).not.toHaveBeenCalled();
   });
 
+  it('offers no add-goal shortcut while Notion goals are showing', async () => {
+    mockStores({ goalsSource: 'notion' });
+
+    renderGoalsWithNotion(connectedHost(), { shortcuts: true });
+
+    await screen.findByRole('button', { name: PICKER });
+    expect(screen.getByTestId('live')).not.toHaveTextContent('goal.add');
+  });
+
   it('offers no source picker until a table is connected', async () => {
     mockStores();
     const host = fakeNotionHost();

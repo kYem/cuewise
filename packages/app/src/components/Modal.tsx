@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 
 interface ModalProps {
@@ -20,6 +20,7 @@ const SIZE_CLASS: Record<NonNullable<ModalProps['size']>, string> = {
 };
 
 export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2xl', children }) => {
+  const titleId = useId();
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -64,6 +65,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         className={`relative bg-surface-elevated rounded-2xl shadow-2xl ${SIZE_CLASS[size]} w-full max-h-[90vh] overflow-hidden animate-slide-up`}
       >
         {/* Header - only show if title is provided */}
@@ -71,7 +73,10 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
           <div
             className={`flex items-center justify-between border-b border-border ${isCompact ? 'px-5 py-3.5' : 'p-6'}`}
           >
-            <h2 className={`font-semibold text-primary ${isCompact ? 'text-lg' : 'text-2xl'}`}>
+            <h2
+              id={titleId}
+              className={`font-semibold text-primary ${isCompact ? 'text-lg' : 'text-2xl'}`}
+            >
               {title}
             </h2>
             <button
