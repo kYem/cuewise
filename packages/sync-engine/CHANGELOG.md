@@ -1,5 +1,18 @@
 # @cuewise/sync-engine
 
+## 0.4.1
+
+### Patch Changes
+
+- 5479fba: Cloud sync no longer loses an edit when a save fails.
+- Updated dependencies [13b1c5c]
+- Updated dependencies [669eb60]
+- Updated dependencies [5479fba]
+- Updated dependencies [a3a8983]
+  - @cuewise/shared@1.27.0
+  - @cuewise/storage@1.27.0
+  - @cuewise/sync-client@0.3.1
+
 ## 0.4.0
 
 ### Minor Changes

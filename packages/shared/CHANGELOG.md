@@ -1,5 +1,16 @@
 # @cuewise/shared
 
+## 1.27.0
+
+### Minor Changes
+
+- a3a8983: Add a world clock that shows up to four cities on the new tab.
+
+### Patch Changes
+
+- 13b1c5c: Insights shows a weekly focus heatmap.
+- 669eb60: Reminders that fire while Cuewise is open show a card with Done and Snooze.
+
 ## 1.26.0
 
 ### Minor Changes
