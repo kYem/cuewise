@@ -57,11 +57,12 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
   // completed from another view) fall through to the next open task. The held
   // (animating) goal wins so its completion tick can finish playing.
   const activeFocusedGoal = focusedGoal && !focusedGoal.completed ? focusedGoal : null;
-  // An emptied list wins over the tick hold: a goal deleted mid-tick has nothing left to show.
-  const displayGoal =
-    todayTasks.length === 0
-      ? null
-      : (animatingGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null);
+  // Hold the ticking goal only while it still exists: one deleted mid-tick (by sync) is gone.
+  const heldGoal =
+    animatingGoal !== null && todayTasks.some((g) => g.id === animatingGoal.id)
+      ? animatingGoal
+      : null;
+  const displayGoal = heldGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null;
 
   // Find the parent objective if this task is linked to one
   const parentObjective = displayGoal?.parentId
@@ -121,7 +122,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
   const isEmpty = todayTasks.length === 0;
   // All tasks completed (regardless of whether a now-completed task is still
   // focused). While the final task's tick is still playing, keep showing it.
-  const allDone = !animatingGoal && !isEmpty && incompleteGoals.length === 0;
+  const allDone = !heldGoal && !isEmpty && incompleteGoals.length === 0;
   // One container for the empty, goal and "All done" screens, so an open add row keeps its draft
   // and focus when the list empties or finishes under it.
   return (

@@ -28,6 +28,7 @@ vi.mock('@cuewise/storage', () => ({
 const ADD_INPUT = { name: /Add a goal|main goal for today/ };
 const OPEN_GOAL = goalFactory.build({ completed: false });
 const DONE_GOAL = goalFactory.build({ completed: true });
+const ANOTHER_GOAL = goalFactory.build({ completed: false });
 
 async function submitGoal(text: string) {
   const input = screen.getByRole('textbox', ADD_INPUT);
@@ -149,11 +150,25 @@ describe('GoalsSection - add-goal shortcut', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
     });
+    mockStores({ goalViewMode: 'focus' }, [{ ...OPEN_GOAL, completed: true }]);
+    rerender(<GoalsSection />);
+    expect(screen.getByText(OPEN_GOAL.text)).toBeInTheDocument();
+
     mockStores({ goalViewMode: 'focus' }, []);
     rerender(<GoalsSection />);
-
     expect(screen.queryByText(OPEN_GOAL.text)).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', ADD_INPUT)).toBeInTheDocument();
+
+    mockStores({ goalViewMode: 'focus' }, [ANOTHER_GOAL]);
+    rerender(<GoalsSection />);
+    expect(screen.queryByText(OPEN_GOAL.text)).not.toBeInTheDocument();
+    expect(screen.getByText(ANOTHER_GOAL.text)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(CHECKBOX_TICK_MS + 1);
+    });
+    expect(screen.queryByText(OPEN_GOAL.text)).not.toBeInTheDocument();
+    expect(screen.getByText(ANOTHER_GOAL.text)).toBeInTheDocument();
   });
 
   it('leaves no stray Add another row when focus view empties and refills', () => {
