@@ -1,10 +1,21 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { isShortcutKeyEvent, isSpaceShortcutEvent } from './keyboard-shortcut';
+import {
+  claimShortcutEvent,
+  isPaletteKeyEvent,
+  isShortcutKeyEvent,
+  isSpaceShortcutEvent,
+} from './keyboard-shortcut';
 
 function dispatch(
   predicate: (event: KeyboardEvent) => boolean,
   key: string,
-  options: { on?: HTMLElement; metaKey?: boolean; repeat?: boolean; shiftKey?: boolean } = {}
+  options: {
+    on?: HTMLElement;
+    metaKey?: boolean;
+    ctrlKey?: boolean;
+    repeat?: boolean;
+    shiftKey?: boolean;
+  } = {}
 ): boolean {
   const target = options.on ?? document.body;
   let allowed = false;
@@ -17,6 +28,7 @@ function dispatch(
       key,
       bubbles: true,
       metaKey: options.metaKey,
+      ctrlKey: options.ctrlKey,
       repeat: options.repeat,
       shiftKey: options.shiftKey,
     })
@@ -128,5 +140,57 @@ describe('isSpaceShortcutEvent', () => {
     button.appendChild(icon);
 
     expect(pressSpace({ on: icon })).toBe(false);
+  });
+});
+
+describe('claimShortcutEvent', () => {
+  it('makes the shared guards reject an event a shortcut already handled', () => {
+    const claimFirst = (event: KeyboardEvent) => claimShortcutEvent(event);
+    document.addEventListener('keydown', claimFirst, true);
+
+    const shortcut = press();
+    const space = pressSpace();
+    document.removeEventListener('keydown', claimFirst, true);
+
+    expect(shortcut).toBe(false);
+    expect(space).toBe(false);
+  });
+});
+
+describe('isPaletteKeyEvent', () => {
+  const onMac = (event: KeyboardEvent) => isPaletteKeyEvent(event, true);
+  const offMac = (event: KeyboardEvent) => isPaletteKeyEvent(event, false);
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('takes Cmd+K on macOS and Ctrl+K elsewhere', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true })).toBe(true);
+    expect(dispatch(offMac, 'k', { ctrlKey: true })).toBe(true);
+    expect(dispatch(onMac, 'k', { ctrlKey: true })).toBe(false);
+    expect(dispatch(offMac, 'k', { metaKey: true })).toBe(false);
+  });
+
+  it('still opens while typing in a field', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, on: appendWith('input') })).toBe(true);
+  });
+
+  it('ignores an auto-repeat', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, repeat: true })).toBe(false);
+  });
+
+  it('stays shut while a modal dialog is open', () => {
+    appendWith('div', { role: 'dialog', 'aria-modal': 'true' });
+
+    expect(dispatch(onMac, 'k', { metaKey: true })).toBe(false);
+  });
+
+  it('leaves Shift combos alone', () => {
+    expect(dispatch(onMac, 'k', { metaKey: true, shiftKey: true })).toBe(false);
+  });
+
+  it('ignores a bare k', () => {
+    expect(dispatch(onMac, 'k')).toBe(false);
   });
 });

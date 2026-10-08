@@ -11,8 +11,22 @@ export function isTextEntryEvent(event: KeyboardEvent): boolean {
   );
 }
 
+const claimed = new WeakSet<Event>();
+
+/** Marks a keypress one shortcut acted on, so every other shortcut listener lets it pass. */
+export function claimShortcutEvent(event: Event): void {
+  claimed.add(event);
+}
+
+function isModalOpen(): boolean {
+  return document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+}
+
 /** A bare keypress that should drive a shortcut: no modifiers, not typing, no modal open. */
 export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
+  if (claimed.has(event)) {
+    return false;
+  }
   // `repeat` excluded too: holding the key is one intent, not one per auto-repeat tick.
   if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
     return false;
@@ -20,7 +34,21 @@ export function isShortcutKeyEvent(event: KeyboardEvent): boolean {
   if (isTextEntryEvent(event)) {
     return false;
   }
-  return document.querySelector('[role="dialog"][aria-modal="true"]') === null;
+  return !isModalOpen();
+}
+
+export function isMacPlatform(): boolean {
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return /mac/i.test(nav.userAgentData?.platform ?? nav.platform ?? '');
+}
+
+/** Cmd+K on macOS, Ctrl+K elsewhere — allowed while typing, which is where people reach for it. */
+export function isPaletteKeyEvent(event: KeyboardEvent, mac = isMacPlatform()): boolean {
+  if (event.key !== 'k' || event.repeat || event.altKey || event.shiftKey) {
+    return false;
+  }
+  const primary = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return primary && !isModalOpen();
 }
 
 /**
