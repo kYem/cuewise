@@ -186,7 +186,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
   const showsUnfinished =
     settings.showIncompleteGoals && getRecentIncompleteTasks(goals).length > 0;
 
-  // Nothing visible includes every task done while "show completed" is off.
   const showCompactAddRow = viewMode === 'compact' && (visibleTasks.length === 0 || showAddInput);
 
   if (isLoading) {

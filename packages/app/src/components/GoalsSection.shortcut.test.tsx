@@ -40,6 +40,7 @@ async function submitGoal(text: string) {
 describe('GoalsSection - add-goal shortcut', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useNotionStore.setState({ view: { status: 'loading' }, busy: false });
   });
 
   afterEach(() => {
@@ -121,6 +122,21 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(screen.getByText('All done!')).toBeInTheDocument();
     expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
     expect(input).toHaveValue('Half typed');
+  });
+
+  it('keeps the focus-view add row, its text and focus when the list empties under it', () => {
+    mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+    const input = screen.getByRole('textbox', ADD_INPUT);
+    fireEvent.change(input, { target: { value: 'Half typed' } });
+
+    mockStores({ goalViewMode: 'focus' }, []);
+    rerender(<GoalsSection />);
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
+    expect(input).toHaveValue('Half typed');
+    expect(input).toHaveFocus();
   });
 
   it('leaves no stray Add another row when focus view empties and refills', () => {

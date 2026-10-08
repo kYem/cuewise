@@ -114,24 +114,16 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
     advanceTimer.current = window.setTimeout(advance, CHECKBOX_TICK_MS);
   };
 
-  // Empty state - show input directly
-  if (todayTasks.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <div className="w-full max-w-xl">
-          <GoalInput variant="minimal" focusRequest={focusRequest} />
-        </div>
-      </div>
-    );
-  }
-
+  const isEmpty = todayTasks.length === 0;
   // All tasks completed (regardless of whether a now-completed task is still
   // focused). While the final task's tick is still playing, keep showing it.
-  const allDone = !animatingGoal && incompleteGoals.length === 0;
-  // Both screens share this container so the add row keeps its place, and its draft, when the
-  // view moves between a goal and "All done".
+  const allDone = !animatingGoal && !isEmpty && incompleteGoals.length === 0;
+  // One container for the empty, goal and "All done" screens, so the add row keeps its place,
+  // its draft and its focus whichever way the list changes under it.
   return (
-    <div className={cn('flex flex-col items-center', allDone && 'justify-center py-8')}>
+    <div
+      className={cn('flex flex-col items-center', (allDone || isEmpty) && 'justify-center py-8')}
+    >
       {allDone ? (
         <div className="flex flex-col items-center">
           <CheckCircle2 className="w-12 h-12 mb-3 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
@@ -231,11 +223,11 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
         </button>
       )}
 
-      {showAddInput && (
-        <div className="w-full max-w-xl mt-6">
+      {(showAddInput || isEmpty) && (
+        <div className={cn('w-full max-w-xl', !isEmpty && 'mt-6')}>
           <GoalInput
             variant="minimal"
-            autoFocus
+            autoFocus={showAddInput}
             focusRequest={focusRequest}
             onTaskAdded={onCloseAddInput}
             onDismiss={onCloseAddInput}
