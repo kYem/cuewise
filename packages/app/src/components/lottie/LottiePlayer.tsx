@@ -1,4 +1,5 @@
-import lottie from 'lottie-web/build/player/lottie_light';
+import { describeThrown, logger } from '@cuewise/shared';
+import type { AnimationItem } from 'lottie-web';
 import { useEffect, useRef } from 'react';
 
 interface LottiePlayerProps {
@@ -29,26 +30,46 @@ export function LottiePlayer({
       return;
     }
 
-    const animation = lottie.loadAnimation({
-      container,
-      renderer: 'svg',
-      loop,
-      autoplay,
-      animationData,
-    });
+    let cancelled = false;
+    let animation: AnimationItem | null = null;
 
-    // Explicitly hold the first frame when not autoplaying (reduced-motion),
-    // rather than relying on the renderer's incidental frame-0 paint.
-    if (!autoplay) {
-      animation.goToAndStop(0, true);
-    }
+    // Loaded on first use: the player is ~170 kB and every animation is decorative.
+    import('lottie-web/build/player/lottie_light')
+      .then(({ default: lottie }) => {
+        if (cancelled) {
+          return;
+        }
+        animation = lottie.loadAnimation({
+          container,
+          renderer: 'svg',
+          loop,
+          autoplay,
+          animationData,
+        });
 
-    if (onComplete !== undefined) {
-      animation.addEventListener('complete', onComplete);
-    }
+        // Explicitly hold the first frame when not autoplaying (reduced-motion),
+        // rather than relying on the renderer's incidental frame-0 paint.
+        if (!autoplay) {
+          animation.goToAndStop(0, true);
+        }
+
+        if (onComplete !== undefined) {
+          animation.addEventListener('complete', onComplete);
+        }
+      })
+      .catch((error: unknown) => {
+        logger.error(`Lottie player failed to load: ${describeThrown(error)}`, error);
+        // Callers wait on completion to clear state (the celebration guard), so never strand them.
+        if (!cancelled && onComplete !== undefined) {
+          onComplete();
+        }
+      });
 
     return () => {
-      animation.destroy();
+      cancelled = true;
+      if (animation !== null) {
+        animation.destroy();
+      }
     };
   }, [animationData, loop, autoplay, onComplete]);
 

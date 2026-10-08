@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import type { AnimationItem } from 'lottie-web';
 import lottie from 'lottie-web/build/player/lottie_light';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,17 +49,17 @@ describe('CelebrationOverlay', () => {
     expect(lottie.loadAnimation).not.toHaveBeenCalled();
   });
 
-  it('plays the animation when a celebration is active', () => {
+  it('plays the animation when a celebration is active', async () => {
     useCelebrationStore.setState({ active: 'pomodoro' });
     render(<CelebrationOverlay />);
-    expect(lottie.loadAnimation).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(lottie.loadAnimation).toHaveBeenCalledTimes(1));
   });
 
-  it('dismisses (clears active) when the animation completes', () => {
+  it('dismisses (clears active) when the animation completes', async () => {
     useCelebrationStore.setState({ active: 'pomodoro' });
     render(<CelebrationOverlay />);
 
-    expect(completeHandler).not.toBeNull();
+    await waitFor(() => expect(completeHandler).not.toBeNull());
     if (completeHandler !== null) {
       completeHandler();
     }
@@ -87,11 +87,11 @@ describe('CelebrationOverlay', () => {
     expect(useCelebrationStore.getState().active).toBe(null);
   });
 
-  it('plays the confetti asset when a celebration is active', () => {
+  it('plays the confetti asset when a celebration is active', async () => {
     useCelebrationStore.setState({ active: 'pomodoro' });
     render(<CelebrationOverlay />);
 
-    expect(lottie.loadAnimation).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(lottie.loadAnimation).toHaveBeenCalledTimes(1));
     const config = vi.mocked(lottie.loadAnimation).mock.calls[0][0] as { animationData: unknown };
     expect(config.animationData).toBe(confetti);
   });

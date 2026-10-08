@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import type { AnimationConfigWithData, AnimationItem } from 'lottie-web';
 import lottie from 'lottie-web/build/player/lottie_light';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,18 +38,20 @@ describe('EmptyState', () => {
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
   });
 
-  it('loops and autoplays the illustration when motion is allowed', () => {
+  it('loops and autoplays the illustration when motion is allowed', async () => {
     render(<EmptyState animationData={data} title="No goals yet" />);
 
+    await waitFor(() => expect(lottie.loadAnimation).toHaveBeenCalled());
     const config = vi.mocked(lottie.loadAnimation).mock.calls[0][0] as AnimationConfigWithData;
     expect(config.loop).toBe(true);
     expect(config.autoplay).toBe(true);
   });
 
-  it('renders a static frame (autoplay false) under prefers-reduced-motion', () => {
+  it('renders a static frame (autoplay false) under prefers-reduced-motion', async () => {
     setReducedMotion(true);
     render(<EmptyState animationData={data} title="No goals yet" />);
 
+    await waitFor(() => expect(lottie.loadAnimation).toHaveBeenCalled());
     const config = vi.mocked(lottie.loadAnimation).mock.calls[0][0] as AnimationConfigWithData;
     expect(config.autoplay).toBe(false);
     expect(config.loop).toBe(true);

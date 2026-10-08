@@ -1,16 +1,11 @@
 import { logger } from '@cuewise/shared';
 import { ToastContainer } from '@cuewise/ui';
 import { Coffee } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { BackgroundCredit } from './components/BackgroundCredit';
-import { ConceptsPage } from './components/ConceptsPage';
 import { CelebrationOverlay } from './components/celebration/CelebrationOverlay';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { GoalsPage } from './components/GoalsPage';
-import { InsightsPage } from './components/InsightsPage';
 import { NewTabPage } from './components/NewTabPage';
-import { PomodoroPage } from './components/PomodoroPage';
-import { QuoteManagementPage } from './components/QuoteManagementPage';
 import type { SettingsSection } from './components/settings/SettingsSections';
 import { syncSettingsSection } from './components/settings/SyncSettingsSection';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
@@ -37,6 +32,23 @@ import { describeBackgroundSource, ImageLoadTimeoutError, preloadImage } from '.
 const BACKGROUND_REVEAL_DEADLINE_MS = 1500;
 /** Only has to outlast a slow link; the reveal deadline above already unblocks the page. */
 const BACKGROUND_LOAD_TIMEOUT_MS = 60_000;
+
+// Every new tab opens on home, so the other pages (Insights alone brings recharts) load on visit.
+const PomodoroPage = lazy(() =>
+  import('./components/PomodoroPage').then((m) => ({ default: m.PomodoroPage }))
+);
+const InsightsPage = lazy(() =>
+  import('./components/InsightsPage').then((m) => ({ default: m.InsightsPage }))
+);
+const QuoteManagementPage = lazy(() =>
+  import('./components/QuoteManagementPage').then((m) => ({ default: m.QuoteManagementPage }))
+);
+const GoalsPage = lazy(() =>
+  import('./components/GoalsPage').then((m) => ({ default: m.GoalsPage }))
+);
+const ConceptsPage = lazy(() =>
+  import('./components/ConceptsPage').then((m) => ({ default: m.ConceptsPage }))
+);
 
 type Page = 'home' | 'pomodoro' | 'insights' | 'quotes' | 'goals' | 'concepts';
 
@@ -291,11 +303,13 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
         >
           {/* Main content area */}
           <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
-            {currentPage === 'pomodoro' && <PomodoroPage />}
-            {currentPage === 'insights' && <InsightsPage />}
-            {currentPage === 'quotes' && <QuoteManagementPage />}
-            {currentPage === 'goals' && <GoalsPage />}
-            {currentPage === 'concepts' && <ConceptsPage />}
+            <Suspense fallback={null}>
+              {currentPage === 'pomodoro' && <PomodoroPage />}
+              {currentPage === 'insights' && <InsightsPage />}
+              {currentPage === 'quotes' && <QuoteManagementPage />}
+              {currentPage === 'goals' && <GoalsPage />}
+              {currentPage === 'concepts' && <ConceptsPage />}
+            </Suspense>
             {currentPage === 'home' && (
               <NewTabPage extraSections={effectiveExtraSections} notionHost={notionHost} />
             )}
