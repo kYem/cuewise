@@ -137,6 +137,23 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
     expect(input).toHaveValue('Half typed');
     expect(input).toHaveFocus();
+    expect(screen.queryByText('All done!')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add another' })).not.toBeInTheDocument();
+  });
+
+  it('drops a goal held for its tick once a sync empties the list', async () => {
+    vi.useFakeTimers();
+    mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
+    });
+    mockStores({ goalViewMode: 'focus' }, []);
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByText(OPEN_GOAL.text)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBeInTheDocument();
   });
 
   it('leaves no stray Add another row when focus view empties and refills', () => {
