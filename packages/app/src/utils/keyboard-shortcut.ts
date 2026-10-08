@@ -1,10 +1,25 @@
 import type React from 'react';
 
+// A clicked checkbox keeps focus, and none of these take typing, so shortcuts stay live on them.
+const NON_TEXT_INPUT_TYPES = new Set([
+  'checkbox',
+  'radio',
+  'range',
+  'button',
+  'submit',
+  'reset',
+  'color',
+  'file',
+  'image',
+]);
+
 /** Whether the key went to a field the user is typing in, so the keypress is theirs, not the page's. */
 export function isTextEntryEvent(event: KeyboardEvent): boolean {
   const target = event.target as HTMLElement | null;
+  if (target instanceof HTMLInputElement) {
+    return !NON_TEXT_INPUT_TYPES.has(target.type);
+  }
   return (
-    target?.tagName === 'INPUT' ||
     target?.tagName === 'TEXTAREA' ||
     target?.tagName === 'SELECT' ||
     (target?.isContentEditable ?? false)
@@ -60,7 +75,7 @@ export function isPaletteKeyEvent(event: KeyboardEvent, mac = isMacPlatform()): 
 }
 
 /**
- * Space, as a page-level shortcut. Skips a focused button, role=button or summary:
+ * Space, as a page-level shortcut. Skips a focused button, role=button, summary or input:
  * space belongs to the control the user is on, which already does its own thing with it.
  */
 export function isSpaceShortcutEvent(event: KeyboardEvent): boolean {
@@ -70,7 +85,7 @@ export function isSpaceShortcutEvent(event: KeyboardEvent): boolean {
   }
   const target = event.target;
   if (target instanceof Element) {
-    return target.closest('button, [role="button"], summary') === null;
+    return target.closest('button, [role="button"], summary, input') === null;
   }
   return true;
 }

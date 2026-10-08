@@ -4,8 +4,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  LiveIds,
+  liveIds,
   RunButton,
+  renderWithLiveIds,
   renderWithShortcuts,
 } from '../shortcuts/__fixtures__/shortcuts.fixtures';
 import { useQuoteStore } from '../stores/quote-store';
@@ -371,26 +372,20 @@ describe('QuoteDisplay - command palette', () => {
 
   it('offers no New quote where the page does not own the space shortcut', () => {
     vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadedMockStore()));
-    renderWithShortcuts(
-      <>
-        <QuoteDisplay />
-        <LiveIds />
-      </>
-    );
+    renderWithLiveIds(<QuoteDisplay />);
 
-    expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
+    expect(liveIds()).not.toHaveTextContent('quote.next');
   });
 
-  it('offers no New quote while quotes failed to load', () => {
-    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createErrorMockStore()));
-    renderWithShortcuts(
-      <>
-        <QuoteDisplay enableSpaceShortcut />
-        <LiveIds />
-      </>
-    );
+  it.each([
+    ['quotes are loading', createLoadingMockStore],
+    ['quotes failed to load', createErrorMockStore],
+    ['there is no quote', () => createLoadedMockStore(undefined, { currentQuote: null })],
+  ])('offers no New quote while %s', (_state, makeStore) => {
+    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(makeStore()));
+    renderWithLiveIds(<QuoteDisplay enableSpaceShortcut />);
 
-    expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
+    expect(liveIds()).not.toHaveTextContent('quote.next');
   });
 
   it('keeps Space for a new quote with the shortcuts mounted', async () => {
@@ -401,17 +396,5 @@ describe('QuoteDisplay - command palette', () => {
     fireEvent.keyDown(document.body, { key: ' ' });
 
     await waitFor(() => expect(store.refreshQuote).toHaveBeenCalledWith({ userInitiated: true }));
-  });
-
-  it('offers no New quote while quotes are loading', () => {
-    vi.mocked(useQuoteStore).mockImplementation(createSelectorMock(createLoadingMockStore()));
-    renderWithShortcuts(
-      <>
-        <QuoteDisplay enableSpaceShortcut />
-        <LiveIds />
-      </>
-    );
-
-    expect(screen.getByTestId('live')).not.toHaveTextContent('quote.next');
   });
 });

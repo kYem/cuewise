@@ -3,9 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectedWithTable, fakeNotionHost } from '../notion/__fixtures__/notion-host.fixtures';
 import {
-  LiveIds,
+  liveIds,
   onPlatform,
   press,
+  renderWithLiveIds,
   renderWithShortcuts,
 } from '../shortcuts/__fixtures__/shortcuts.fixtures';
 import { useNotionStore } from '../stores/notion-store';
@@ -189,39 +190,20 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
   });
 
-  it('offers no add-goal shortcut while goals are loading', () => {
-    mockStores({ goalViewMode: 'compact' }, undefined, { isLoading: true });
-    renderWithShortcuts(
-      <>
-        <GoalsSection />
-        <LiveIds />
-      </>
-    );
+  it.each([
+    ['goals are loading', { isLoading: true }],
+    ['goals failed to load', { error: 'Could not load goals' }],
+  ])('offers no add-goal shortcut while %s', (_state, state) => {
+    mockStores({ goalViewMode: 'compact' }, undefined, state);
+    renderWithLiveIds(<GoalsSection />);
 
-    expect(screen.getByTestId('live')).not.toHaveTextContent('goal.add');
-  });
-
-  it('offers no add-goal shortcut when goals failed to load', () => {
-    mockStores({ goalViewMode: 'compact' }, undefined, { error: 'Could not load goals' });
-    renderWithShortcuts(
-      <>
-        <GoalsSection />
-        <LiveIds />
-      </>
-    );
-
-    expect(screen.getByTestId('live')).not.toHaveTextContent('goal.add');
+    expect(liveIds()).not.toHaveTextContent('goal.add');
   });
 
   it('offers the add-goal shortcut for Cuewise goals', () => {
     mockStores({ goalViewMode: 'full' });
-    renderWithShortcuts(
-      <>
-        <GoalsSection />
-        <LiveIds />
-      </>
-    );
+    renderWithLiveIds(<GoalsSection />);
 
-    expect(screen.getByTestId('live')).toHaveTextContent('goal.add');
+    expect(liveIds()).toHaveTextContent('goal.add');
   });
 });

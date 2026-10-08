@@ -82,6 +82,19 @@ describe('isShortcutKeyEvent', () => {
     expect(press({ on: input })).toBe(false);
   });
 
+  it.each([
+    'checkbox',
+    'radio',
+    'range',
+    'button',
+  ])('allows keypresses on a focused %s, which takes no typing', (type) => {
+    expect(press({ on: appendWith('input', { type }) })).toBe(true);
+  });
+
+  it.each(['text', 'search', 'email', 'number'])('rejects keypresses in a %s input', (type) => {
+    expect(press({ on: appendWith('input', { type }) })).toBe(false);
+  });
+
   it('rejects keypresses in a contenteditable', () => {
     const editable = document.createElement('div');
     // jsdom does not derive isContentEditable from the attribute.
@@ -127,6 +140,8 @@ describe('isSpaceShortcutEvent', () => {
   });
 
   it.each([
+    ['a checkbox', 'input', { type: 'checkbox' }],
+    ['a radio', 'input', { type: 'radio' }],
     ['a button', 'button', {}],
     ['a role=button control', 'div', { role: 'button' }],
     ['a summary', 'summary', {}],

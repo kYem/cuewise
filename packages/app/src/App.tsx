@@ -256,7 +256,7 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
                 <div className="fixed inset-0 bg-black/25" data-testid="background-dim" />
               )}
 
-              {/* Credit and its refresh sit in the bottom-left, where content pages need the room. */}
+              {/* Credit and refresh sit bottom-left, where content pages need the room. */}
               {imageLoaded && photoIsFeatured && (
                 <BackgroundCredit
                   imageUrl={backgroundImage}

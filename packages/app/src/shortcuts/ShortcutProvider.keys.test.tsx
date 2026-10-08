@@ -36,6 +36,26 @@ describe('shortcut keys', () => {
     expect(openSettings).toHaveBeenCalledOnce();
   });
 
+  it('hides a key it ran from the page listeners', () => {
+    const pageS = listenFor((e) => e.key === 's' && isShortcutKeyEvent(e));
+    renderWithShortcuts(<RegisterAction id="settings" run={vi.fn()} />);
+
+    press('s');
+
+    expect(pageS).not.toHaveBeenCalled();
+  });
+
+  it('runs g sequences from a focused checkbox', () => {
+    renderWithShortcuts(<input type="checkbox" aria-label="Select quote" />);
+    const checkbox = screen.getByRole('checkbox', { name: 'Select quote' });
+    checkbox.focus();
+
+    press('g', {}, checkbox);
+    press('p', {}, checkbox);
+
+    expect(window.location.hash).toBe('#pomodoro');
+  });
+
   it('ignores the key while typing in a field', () => {
     const openSettings = vi.fn();
     renderWithShortcuts(
@@ -328,6 +348,18 @@ describe('command palette key', () => {
     press('Enter', {}, search());
 
     expect(openSettings).toHaveBeenCalledOnce();
+  });
+
+  it('swaps the palette for the cheat sheet when Keyboard shortcuts is chosen', () => {
+    onPlatform('Win32');
+    renderWithShortcuts(<div />);
+
+    press('k', { ctrlKey: true });
+    fireEvent.change(search(), { target: { value: 'keyboard' } });
+    press('Enter', {}, search());
+
+    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
   });
 
   it('lists only live actions in the palette', () => {

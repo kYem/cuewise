@@ -1,4 +1,4 @@
-import { fireEvent, type RenderResult, render } from '@testing-library/react';
+import { fireEvent, type RenderResult, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { type Mock, vi } from 'vitest';
 import { ShortcutProvider, useShortcutAction, useShortcutUi } from '../ShortcutProvider';
@@ -52,6 +52,20 @@ export const RegisterAction: React.FC<{ id: ShortcutId; run: (() => void) | null
   useShortcutAction(id, run);
   return null;
 };
+
+/** Renders `ui` next to `LiveIds`, for asserting which actions are on offer. */
+export function renderWithLiveIds(ui: React.ReactElement): RenderResult {
+  return renderWithShortcuts(
+    <>
+      {ui}
+      <LiveIds />
+    </>
+  );
+}
+
+export function liveIds(): HTMLElement {
+  return screen.getByTestId('live');
+}
 
 /** The ids the cheat sheet and palette would list right now, space-separated. */
 export const LiveIds: React.FC = () => {

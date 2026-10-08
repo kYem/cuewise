@@ -96,10 +96,18 @@ describe('ShortcutProvider registry', () => {
     expect(window.location.hash).toBe('#insights');
   });
 
-  it('does nothing outside the provider', () => {
+  it('offers and runs nothing outside the provider', () => {
     const run = vi.fn();
-    render(<RegisterAction id="settings" run={run} />);
+    render(
+      <>
+        <RegisterAction id="settings" run={run} />
+        <LiveIds />
+      </>
+    );
 
+    fireEvent.keyDown(document.body, { key: 's' });
+
+    expect(screen.getByTestId('live')).toBeEmptyDOMElement();
     expect(run).not.toHaveBeenCalled();
   });
 });
