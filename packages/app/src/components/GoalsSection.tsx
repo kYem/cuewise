@@ -151,11 +151,16 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
   const canAddGoal = notionListHost === undefined && !isLoading && !error;
+  // Full view and the empty focus view always show an input; flagging a reveal there would
+  // leave the flag set, and a row would pop up later when a goal arrives.
+  const addInputAlwaysShown = viewMode === 'full' || (viewMode === 'focus' && totalCount === 0);
   useShortcutAction(
     'goal.add',
     canAddGoal
       ? () => {
-          setShowAddInput(true);
+          if (!addInputAlwaysShown) {
+            setShowAddInput(true);
+          }
           setAddRequest((count) => count + 1);
         }
       : null

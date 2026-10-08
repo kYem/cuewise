@@ -4,6 +4,7 @@ import { isShortcutKeyEvent, isSpaceShortcutEvent } from '../utils/keyboard-shor
 import {
   listenFor,
   onPlatform,
+  paletteSearch,
   press,
   RegisterAction,
   removeKeyListeners,
@@ -21,10 +22,6 @@ afterEach(() => {
   vi.restoreAllMocks();
   removeKeyListeners();
 });
-
-function search(): HTMLElement {
-  return screen.getByRole('combobox', { name: 'Search commands' });
-}
 
 describe('shortcut keys', () => {
   it('runs a live bare-key action', () => {
@@ -266,7 +263,7 @@ describe('command palette key', () => {
     renderWithShortcuts(<div />);
     press('k', { ctrlKey: true });
 
-    const allowed = press('k', { ctrlKey: true }, search());
+    const allowed = press('k', { ctrlKey: true }, paletteSearch());
 
     expect(allowed).toBe(false);
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
@@ -276,12 +273,12 @@ describe('command palette key', () => {
     onPlatform('Win32');
     renderWithShortcuts(<div />);
     press('k', { ctrlKey: true });
-    fireEvent.change(search(), { target: { value: 'set' } });
+    fireEvent.change(paletteSearch(), { target: { value: 'set' } });
 
-    press('k', { ctrlKey: true }, search());
+    press('k', { ctrlKey: true }, paletteSearch());
     press('k', { ctrlKey: true });
 
-    expect(search()).toHaveValue('');
+    expect(paletteSearch()).toHaveValue('');
   });
 
   it('keeps a held Ctrl+K from the browser without toggling the palette', () => {
@@ -289,7 +286,7 @@ describe('command palette key', () => {
     renderWithShortcuts(<div />);
     press('k', { ctrlKey: true });
 
-    const allowed = press('k', { ctrlKey: true, repeat: true }, search());
+    const allowed = press('k', { ctrlKey: true, repeat: true }, paletteSearch());
 
     expect(allowed).toBe(false);
     expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
@@ -318,7 +315,7 @@ describe('command palette key', () => {
 
     press('g');
     press('k', { ctrlKey: true });
-    press('Escape', {}, search());
+    fireEvent.click(screen.getByRole('button', { name: 'Close command palette' }));
     press('p');
 
     expect(window.location.hash).toBe('');
@@ -332,7 +329,7 @@ describe('command palette key', () => {
 
     press('k', { metaKey: true }, field);
     expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
-    press('Escape', {}, search());
+    press('Escape', {}, paletteSearch());
 
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
     expect(field).toHaveFocus();
@@ -344,8 +341,8 @@ describe('command palette key', () => {
     renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
 
     press('k', { ctrlKey: true });
-    fireEvent.change(search(), { target: { value: 'settings' } });
-    press('Enter', {}, search());
+    fireEvent.change(paletteSearch(), { target: { value: 'settings' } });
+    press('Enter', {}, paletteSearch());
 
     expect(openSettings).toHaveBeenCalledOnce();
   });
@@ -355,8 +352,8 @@ describe('command palette key', () => {
     renderWithShortcuts(<div />);
 
     press('k', { ctrlKey: true });
-    fireEvent.change(search(), { target: { value: 'keyboard' } });
-    press('Enter', {}, search());
+    fireEvent.change(paletteSearch(), { target: { value: 'keyboard' } });
+    press('Enter', {}, paletteSearch());
 
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();

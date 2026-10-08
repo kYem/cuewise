@@ -5,6 +5,7 @@ import { connectedWithTable, fakeNotionHost } from '../notion/__fixtures__/notio
 import {
   liveIds,
   onPlatform,
+  paletteSearch,
   press,
   renderWithLiveIds,
   renderWithShortcuts,
@@ -24,10 +25,6 @@ vi.mock('@cuewise/storage', () => ({
 
 // The focus view's input keeps its visible label; the others are named "Add a goal".
 const ADD_INPUT = { name: /Add a goal|main goal for today/ };
-
-function pressN() {
-  return press('n');
-}
 
 async function submitGoal(text: string) {
   const input = screen.getByRole('textbox', ADD_INPUT);
@@ -57,7 +54,7 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode }, [...tasks]);
     renderWithShortcuts(<GoalsSection />);
 
-    pressN();
+    press('n');
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
   });
@@ -68,9 +65,8 @@ describe('GoalsSection - add-goal shortcut', () => {
     renderWithShortcuts(<GoalsSection />);
 
     press('k', { ctrlKey: true });
-    const search = screen.getByRole('combobox', { name: 'Search commands' });
-    fireEvent.change(search, { target: { value: 'add a goal' } });
-    press('Enter', {}, search);
+    fireEvent.change(paletteSearch(), { target: { value: 'add a goal' } });
+    press('Enter', {}, paletteSearch());
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
   });
@@ -79,22 +75,44 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode: 'focus' }, [goalFactory.build({ completed: true })]);
     renderWithShortcuts(<GoalsSection />);
 
-    pressN();
+    press('n');
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+  });
+
+  it('leaves no stray add row when a goal syncs in after n in the empty focus view', () => {
+    mockStores({ goalViewMode: 'focus' }, []);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    press('n');
+
+    mockStores({ goalViewMode: 'focus' });
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+  });
+
+  it('Escape closes the row Add another opened once every task is done', () => {
+    mockStores({ goalViewMode: 'focus' }, [goalFactory.build({ completed: true })]);
+    renderWithShortcuts(<GoalsSection />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add another' }));
+    fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
+
+    expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add another' })).toBeInTheDocument();
   });
 
   it('cancels the n so the browser cannot type it into the input it opens', () => {
     mockStores({ goalViewMode: 'compact' });
     renderWithShortcuts(<GoalsSection />);
 
-    expect(pressN()).toBe(false);
+    expect(press('n')).toBe(false);
   });
 
   it('closes the add row n opened once the first goal is added in focus view', async () => {
     mockStores({ goalViewMode: 'focus' }, []);
     const { rerender } = renderWithShortcuts(<GoalsSection />);
-    pressN();
+    press('n');
 
     await submitGoal('Plan the week');
     mockStores({ goalViewMode: 'focus' });
@@ -106,7 +124,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   it('Escape closes the add row n opened from the empty focus view', () => {
     mockStores({ goalViewMode: 'focus' }, []);
     const { rerender } = renderWithShortcuts(<GoalsSection />);
-    pressN();
+    press('n');
 
     fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
     mockStores({ goalViewMode: 'focus' });
@@ -121,7 +139,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   ])('Escape closes the add row n opened in focus view with %s', (_label, tasks) => {
     mockStores({ goalViewMode: 'focus' }, tasks);
     renderWithShortcuts(<GoalsSection />);
-    pressN();
+    press('n');
 
     fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
 
@@ -131,7 +149,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   it('closes the add row n opened once a goal is added with every task done', async () => {
     mockStores({ goalViewMode: 'focus' }, [goalFactory.build({ completed: true })]);
     renderWithShortcuts(<GoalsSection />);
-    pressN();
+    press('n');
 
     await submitGoal('One more');
 
@@ -141,7 +159,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   it('closes the compact add row once a goal is added', async () => {
     mockStores({ goalViewMode: 'compact' });
     renderWithShortcuts(<GoalsSection />);
-    pressN();
+    press('n');
 
     await submitGoal('Plan the week');
 
@@ -155,7 +173,7 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode: 'compact', goalsSource: 'cuewise' });
     const { rerender } = render(section());
     await waitFor(() => expect(useNotionStore.getState().view.status).toBe('connected'));
-    pressN();
+    press('n');
     expect(screen.getByRole('textbox', ADD_INPUT)).toBeInTheDocument();
 
     mockStores({ goalViewMode: 'compact', goalsSource: 'notion' });
@@ -170,7 +188,7 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode: 'compact' });
     renderWithShortcuts(<GoalsSection />);
 
-    pressN();
+    press('n');
     fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
 
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
@@ -179,7 +197,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   it('switching view closes the add row n opened', () => {
     mockStores({ goalViewMode: 'compact' });
     const { rerender } = renderWithShortcuts(<GoalsSection />);
-    pressN();
+    press('n');
     expect(screen.getByRole('textbox', ADD_INPUT)).toBeInTheDocument();
 
     mockStores({ goalViewMode: 'full' });

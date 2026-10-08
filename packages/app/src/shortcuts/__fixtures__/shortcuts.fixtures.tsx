@@ -10,6 +10,10 @@ export function press(key: string, init: KeyboardEventInit = {}, target: Element
   return fireEvent.keyDown(target, { key, ...init });
 }
 
+export function paletteSearch(): HTMLElement {
+  return screen.getByRole('combobox', { name: 'Search commands' });
+}
+
 /** `navigator.platform` for the palette chord; restore with `vi.restoreAllMocks()`. */
 export function onPlatform(platform: 'MacIntel' | 'Win32'): void {
   vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
