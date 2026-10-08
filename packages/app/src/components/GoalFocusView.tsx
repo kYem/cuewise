@@ -11,7 +11,7 @@ import { GoalInput } from './GoalInput';
 
 interface GoalFocusViewProps {
   showAddInput?: boolean;
-  /** Owned by the parent, so its reset on view or list changes covers every way the row opens. */
+  /** Sets the parent's row flag, so its scope reset covers this button as well as `n`. */
   onOpenAddInput?: () => void;
   onCloseAddInput?: () => void;
   focusRequest?: number;

@@ -13,7 +13,6 @@ import {
 import { useNotionStore } from '../stores/notion-store';
 import { mockGoalsSectionStores as mockStores } from './__fixtures__/goals-list.fixtures';
 import { goalsWithNotion } from './__fixtures__/goals-notion.fixtures';
-import { setReducedMotion } from './__fixtures__/motion.fixtures';
 import { CHECKBOX_TICK_MS } from './AnimatedCheckbox';
 import { GoalsSection } from './GoalsSection';
 
@@ -44,6 +43,7 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -100,7 +100,6 @@ describe('GoalsSection - add-goal shortcut', () => {
   });
 
   it('keeps the add row and its text through the completion tick of the last goal', async () => {
-    setReducedMotion(false);
     vi.useFakeTimers();
     mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
     const { rerender } = renderWithShortcuts(<GoalsSection />);
@@ -113,10 +112,11 @@ describe('GoalsSection - add-goal shortcut', () => {
     });
     mockStores({ goalViewMode: 'focus' }, [{ ...OPEN_GOAL, completed: true }]);
     rerender(<GoalsSection />);
+    expect(screen.queryByText('All done!')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
     act(() => {
       vi.advanceTimersByTime(CHECKBOX_TICK_MS + 1);
     });
-    vi.useRealTimers();
 
     expect(screen.getByText('All done!')).toBeInTheDocument();
     expect(screen.getByRole('textbox', ADD_INPUT)).toBe(input);
