@@ -109,25 +109,25 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(press('n')).toBe(false);
   });
 
-  it('closes the add row n opened once the first goal is added in focus view', async () => {
-    mockStores({ goalViewMode: 'focus' }, []);
+  it('leaves no stray add row when focus view empties and refills after n', () => {
+    mockStores({ goalViewMode: 'focus' });
     const { rerender } = renderWithShortcuts(<GoalsSection />);
     press('n');
 
-    await submitGoal('Plan the week');
+    mockStores({ goalViewMode: 'focus' }, []);
+    rerender(<GoalsSection />);
     mockStores({ goalViewMode: 'focus' });
     rerender(<GoalsSection />);
 
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
   });
 
-  it('Escape closes the add row n opened from the empty focus view', () => {
-    mockStores({ goalViewMode: 'focus' }, []);
+  it('leaves no stray add row when a goal syncs into an empty compact list after n', () => {
+    mockStores({ goalViewMode: 'compact' }, []);
     const { rerender } = renderWithShortcuts(<GoalsSection />);
     press('n');
 
-    fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
-    mockStores({ goalViewMode: 'focus' });
+    mockStores({ goalViewMode: 'compact' });
     rerender(<GoalsSection />);
 
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();

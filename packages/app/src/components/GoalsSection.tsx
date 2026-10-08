@@ -151,9 +151,13 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     showSourcePicker && settings.goalsSource === 'notion' ? notionHost : undefined;
   const notionTableName = notionView.status === 'connected' ? notionView.tableName : null;
   const canAddGoal = notionListHost === undefined && !isLoading && !error;
-  // Full view and the empty focus view always show an input; flagging a reveal there would
-  // leave the flag set, and a row would pop up later when a goal arrives.
-  const addInputAlwaysShown = viewMode === 'full' || (viewMode === 'focus' && totalCount === 0);
+  // Matches GoalsList: with "show completed" off, finished tasks are hidden.
+  const visibleCount = settings.showCompletedGoals ? totalCount : incompleteCount;
+  // These views show an input anyway, so `n` reveals nothing there and no row flag is set.
+  const addInputAlwaysShown =
+    viewMode === 'full' ||
+    (viewMode === 'focus' && totalCount === 0) ||
+    (viewMode === 'compact' && visibleCount === 0);
   useShortcutAction(
     'goal.add',
     canAddGoal
@@ -166,14 +170,16 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
       : null
   );
   const closeAddInput = () => setShowAddInput(false);
-  // A row `n` opened belongs to the view and source it was opened in, not the next one.
-  const addInputScope = `${viewMode}:${notionListHost === undefined ? 'cuewise' : 'notion'}`;
+  // A row `n` opened belongs to the view, source and empty-or-not state it was opened in: once
+  // that changes (a goal synced in, the list emptied), a later render must not resurrect it.
+  const source = notionListHost === undefined ? 'cuewise' : 'notion';
+  const addInputScope = `${viewMode}:${source}:${addInputAlwaysShown}`;
   const [openedInScope, setOpenedInScope] = useState(addInputScope);
   if (openedInScope !== addInputScope) {
     setOpenedInScope(addInputScope);
     setShowAddInput(false);
   }
-  const SourceIcon = goalsSourceIcon(notionListHost === undefined ? 'cuewise' : 'notion');
+  const SourceIcon = goalsSourceIcon(source);
   // The Notion mark takes the text colour, never the theme accent, as its brand asks.
   const sourceIconTone = notionListHost === undefined ? 'text-primary-600' : 'text-primary';
 
