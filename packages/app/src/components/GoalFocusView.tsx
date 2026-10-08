@@ -65,7 +65,7 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
   const displayGoal = heldGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null;
 
   // A ticking goal deleted by sync drops its hold now, so the next goal shown can be ticked.
-  // Skipped mid-toggle: handleToggle would re-arm the advance, and that advance releases it.
+  // Skipped mid-toggle: handleToggle releases it itself, via the advance or its failure path.
   const heldGoalGone = animatingGoal !== null && heldGoal === null;
   useEffect(() => {
     if (!heldGoalGone || advanceTimer.current === null) {
