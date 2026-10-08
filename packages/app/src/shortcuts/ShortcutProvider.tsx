@@ -14,6 +14,7 @@ import {
   isPaletteKeyEvent,
   isShortcutKeyEvent,
 } from '../utils/keyboard-shortcut';
+import { CommandPalette } from './CommandPalette';
 import { ShortcutCheatSheet } from './ShortcutCheatSheet';
 import { SHORTCUTS, type Shortcut, type ShortcutId } from './shortcut-table';
 
@@ -59,7 +60,8 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const handlers = useRef(new Map<ShortcutId, React.MutableRefObject<Run>>());
   const [registered, setRegistered] = useState<ReadonlySet<ShortcutId>>(new Set());
   const [isCheatSheetOpen, setIsCheatSheetOpen] = useState(false);
-  const [, setIsPaletteOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const closePalette = useCallback(() => setIsPaletteOpen(false), []);
 
   const registry = useMemo<Registry>(
     () => ({
@@ -179,6 +181,12 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           onClose={closeCheatSheet}
           shortcuts={liveShortcuts}
           mac={isMacPlatform()}
+        />
+        <CommandPalette
+          isOpen={isPaletteOpen}
+          onClose={closePalette}
+          shortcuts={liveShortcuts}
+          onRun={run}
         />
       </UiContext.Provider>
     </RegistryContext.Provider>

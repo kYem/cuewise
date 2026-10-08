@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isShortcutKeyEvent } from '../utils/keyboard-shortcut';
+import { isShortcutKeyEvent, isSpaceShortcutEvent } from '../utils/keyboard-shortcut';
 import { RegisterAction, renderWithShortcuts } from './__fixtures__/shortcuts.fixtures';
 import { SEQUENCE_TIMEOUT_MS } from './ShortcutProvider';
 
@@ -11,6 +11,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function press(key: string, init: KeyboardEventInit = {}, target: Element = document.body) {
@@ -134,6 +135,53 @@ describe('shortcut keys', () => {
 
     expect(conceptKey).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('#concepts');
+  });
+
+  it('opens the palette with Cmd+K while typing, and gives focus back on close', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    renderWithShortcuts(<input aria-label="field" />);
+    const field = screen.getByRole('textbox', { name: 'field' });
+    field.focus();
+
+    press('k', { metaKey: true }, field);
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search commands' }), {
+      key: 'Escape',
+    });
+
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+    expect(field).toHaveFocus();
+  });
+
+  it('runs a palette command through the registry', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    const openSettings = vi.fn();
+    renderWithShortcuts(<RegisterAction id="settings" run={openSettings} />);
+
+    press('k', { ctrlKey: true });
+    const search = screen.getByRole('combobox', { name: 'Search commands' });
+    fireEvent.change(search, { target: { value: 'settings' } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    expect(openSettings).toHaveBeenCalledOnce();
+  });
+
+  it('keeps Space from reaching the page while the palette is open', () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
+    const pageSpace = vi.fn();
+    const listener = (e: KeyboardEvent) => {
+      if (isSpaceShortcutEvent(e)) {
+        pageSpace();
+      }
+    };
+    document.addEventListener('keydown', listener);
+    renderWithShortcuts(<div />);
+
+    press('k', { ctrlKey: true });
+    press(' ');
+    document.removeEventListener('keydown', listener);
+
+    expect(pageSpace).not.toHaveBeenCalled();
   });
 
   it('opens the cheat sheet on ?', () => {
