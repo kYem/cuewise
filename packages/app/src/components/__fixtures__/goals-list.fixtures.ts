@@ -102,7 +102,7 @@ export function mockGoalsSectionStores(
   settings: Partial<Settings>,
   tasks: Goal[] = [goalFactory.build({ completed: false })],
   state: { isLoading?: boolean; error?: string | null } = {}
-): void {
+): MockGoalStore {
   const store = {
     ...createMockGoalStore({ todayTasks: tasks, goals: tasks, isLoading: state.isLoading }),
     error: state.error ?? null,
@@ -114,6 +114,7 @@ export function mockGoalsSectionStores(
   vi.mocked(useSettingsStore).mockImplementation(
     createSettingsStoreMock({ showCompletedGoals: false, ...settings })
   );
+  return store;
 }
 
 /** GoalsPage's own reads on top of the GoalsList mock, which already covers UnfinishedBanner. */

@@ -142,7 +142,40 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(screen.queryByRole('button', { name: 'Add another' })).not.toBeInTheDocument();
   });
 
-  it('drops a goal held for its tick once a sync empties the list', async () => {
+  it('shows All done at once when a sync deletes the ticking goal and the rest are done', async () => {
+    vi.useFakeTimers();
+    mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL, DONE_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
+    });
+    mockStores({ goalViewMode: 'focus' }, [DONE_GOAL]);
+    rerender(<GoalsSection />);
+
+    expect(screen.queryByText(OPEN_GOAL.text)).not.toBeInTheDocument();
+    expect(screen.getByText('All done!')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add another' })).toBeInTheDocument();
+  });
+
+  it('lets the next goal be ticked straight away when a sync deletes the ticking one', async () => {
+    vi.useFakeTimers();
+    mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
+    const { rerender } = renderWithShortcuts(<GoalsSection />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(OPEN_GOAL.text) }));
+    });
+
+    const store = mockStores({ goalViewMode: 'focus' }, [ANOTHER_GOAL]);
+    rerender(<GoalsSection />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(ANOTHER_GOAL.text) }));
+    });
+
+    expect(store.toggleTask).toHaveBeenCalledWith(ANOTHER_GOAL.id);
+  });
+
+  it('drops a ticking goal once a sync deletes it, whether the list empties or refills', async () => {
     vi.useFakeTimers();
     mockStores({ goalViewMode: 'focus' }, [OPEN_GOAL]);
     const { rerender } = renderWithShortcuts(<GoalsSection />);

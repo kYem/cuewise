@@ -64,6 +64,19 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
       : null;
   const displayGoal = heldGoal ?? activeFocusedGoal ?? incompleteGoals[0] ?? null;
 
+  // A ticking goal deleted by sync drops its hold now, so the next goal shown can be ticked.
+  // Waits for the scheduled advance: while the toggle is still in flight it would re-arm one.
+  const heldGoalGone = animatingGoal !== null && heldGoal === null;
+  useEffect(() => {
+    if (!heldGoalGone || advanceTimer.current === null) {
+      return;
+    }
+    window.clearTimeout(advanceTimer.current);
+    advanceTimer.current = null;
+    isToggling.current = false;
+    setAnimatingGoal(null);
+  }, [heldGoalGone]);
+
   // Find the parent objective if this task is linked to one
   const parentObjective = displayGoal?.parentId
     ? goals.find((g) => g.id === displayGoal.parentId)
