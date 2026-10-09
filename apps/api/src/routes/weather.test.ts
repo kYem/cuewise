@@ -687,17 +687,20 @@ describe('daylight', () => {
   it.each([
     ['after sunset', '2026-07-25T23:00:00Z', false],
     ['at midday', '2026-07-25T11:00:00Z', true],
-  ])('falls back to the sun window %s when the day flag is unreadable', async (_label, nowIso, expected) => {
-    vi.setSystemTime(new Date(nowIso));
-    const stringFlag = { ...WITH_SUN, current: { ...WITH_SUN.current, is_day: '0' } };
-    const app = createApp({ weatherUpstream: stubUpstream(stringFlag).fetch });
+  ])(
+    'falls back to the sun window %s when the day flag is unreadable',
+    async (_label, nowIso, expected) => {
+      vi.setSystemTime(new Date(nowIso));
+      const stringFlag = { ...WITH_SUN, current: { ...WITH_SUN.current, is_day: '0' } };
+      const app = createApp({ weatherUpstream: stubUpstream(stringFlag).fetch });
 
-    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+      const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
 
-    const body = (await res.json()) as { current: { isDay: boolean } };
-    expect(body.current.isDay).toBe(expected);
-    vi.useRealTimers();
-  });
+      const body = (await res.json()) as { current: { isDay: boolean } };
+      expect(body.current.isDay).toBe(expected);
+      vi.useRealTimers();
+    }
+  );
 
   // The reply is cached for ten minutes, so a single-day payload can be served after the
   // location's own midnight — the date it carries is then yesterday's.

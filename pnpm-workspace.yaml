@@ -28,11 +28,11 @@ allowBuilds:
   workerd: true
 
 catalog:
-  '@astrojs/check': ^0.9.4
-  '@astrojs/sitemap': ^3.2.0
-  '@biomejs/biome': ^2.5.3
+  '@astrojs/check': ^0.9.10
+  '@astrojs/sitemap': ^3.7.4
+  '@biomejs/biome': ^2.5.14
   '@cloudflare/vitest-pool-workers': ^0.22.0
-  '@cloudflare/workers-types': ^4.20250620.0
+  '@cloudflare/workers-types': ^5.20260923.1
   '@crxjs/vite-plugin': ^2.7.1
   '@playwright/test': ^1.63.0
   '@tailwindcss/postcss': ^4.3.3
@@ -47,30 +47,31 @@ catalog:
   '@vitest/coverage-istanbul': 4.1.11
   '@vitest/coverage-v8': 4.1.11
   '@vitest/ui': 4.1.11
-  # Later 7.1.x patches are inside the release cooldown; 7.1.6 clears it on 2026-08-12.
-  astro: 7.2.8
-  autoprefixer: ^10.5.5
+  astro: 7.3.5
+  autoprefixer: ^10.6.1
+  chrono-node: ^2.10.1
   clsx: ^2.1.1
   date-fns: ^4.4.0
   fishery: ^2.4.0
-  hono: ^4.13.5
-  jose: ^6.0.10
+  hono: ^4.13.9
+  jose: ^6.2.12
   jsdom: ^29.1.1
   lucide-react: ^0.553.0
   postcss: ^8.5.28
   react: ^18.3.1
   react-dom: ^18.3.1
-  recharts: 3.8.1
+  recharts: 3.10.1
   sharp: ^0.35.4
-  tailwind-merge: ^3.6.0
+  tailwind-merge: ^3.7.0
   tailwindcss: ^4.3.3
-  turbo: ^2.10.4
+  tsx: ^4.23.15
+  turbo: ^2.11.4
   typescript: ^7.0.2
-  vite: ^8.2.2
+  vite: ^8.3.1
   vitest: 4.1.11
-  wrangler: ^4.124.0
-  zod: ^4.4.3
-  zustand: 5.0.14
+  wrangler: ^4.140.0
+  zod: ^4.6.5
+  zustand: 5.0.15
 
 catalogs:
   # Astro's check tooling (@astrojs/check) peer-caps at TS 6, so the standalone website

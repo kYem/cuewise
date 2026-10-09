@@ -39,13 +39,12 @@ describe('widgetPresets', () => {
     });
   });
 
-  it.each([
-    'minimal',
-    'recommended',
-    'everything',
-  ])('leaves the calendar key out of %s on a build that cannot render it', (id) => {
-    expect(preset(id, false)?.patch).not.toHaveProperty('newTabShowCalendar');
-  });
+  it.each(['minimal', 'recommended', 'everything'])(
+    'leaves the calendar key out of %s on a build that cannot render it',
+    (id) => {
+      expect(preset(id, false)?.patch).not.toHaveProperty('newTabShowCalendar');
+    }
+  );
 
   it('still writes the remaining widgets when the calendar is not offered', () => {
     expect(preset('everything', false)?.patch).toEqual({

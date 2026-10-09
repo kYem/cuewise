@@ -128,18 +128,15 @@ describe('settings sections', () => {
   });
 
   describe('search', () => {
-    it.each([
-      'dim',
-      'blur',
-      'wallpaper',
-      'unsplash',
-      'scenic',
-    ])('surfaces Background and not Focus mode for "%s"', (query) => {
-      const matched = sectionsMatching(query);
+    it.each(['dim', 'blur', 'wallpaper', 'unsplash', 'scenic'])(
+      'surfaces Background and not Focus mode for "%s"',
+      (query) => {
+        const matched = sectionsMatching(query);
 
-      expect(matched).toContain('background');
-      expect(matched).not.toContain('focus');
-    });
+        expect(matched).toContain('background');
+        expect(matched).not.toContain('focus');
+      }
+    );
 
     it.each(['fullscreen', 'auto enter'])('still surfaces Focus mode for "%s"', (query) => {
       expect(sectionsMatching(query)).toContain('focus');
@@ -182,17 +179,16 @@ describe('settings sections', () => {
     });
 
     // Every phrase that opens the section must also match the row, or the panel opens empty.
-    it.each([
-      'notification',
-      'test notification',
-      'send test',
-    ])('renders the test row for a "%s" search', (query) => {
-      expect(sectionsMatching(query)).toContain('goals');
-      renderSection('goals', query);
+    it.each(['notification', 'test notification', 'send test'])(
+      'renders the test row for a "%s" search',
+      (query) => {
+        expect(sectionsMatching(query)).toContain('goals');
+        renderSection('goals', query);
 
-      expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
-      expect(screen.queryByText('Reminders layout')).not.toBeInTheDocument();
-    });
+        expect(screen.getByRole('button', { name: 'Send test' })).toBeEnabled();
+        expect(screen.queryByText('Reminders layout')).not.toBeInTheDocument();
+      }
+    );
   });
 
   describe('Home', () => {
@@ -209,15 +205,16 @@ describe('settings sections', () => {
       settingsHomeWidgets().map((w) => [w.key, false])
     ) as Partial<Settings>;
 
-    it.each(
-      settingsHomeWidgets().map((w) => [w.label, w.key] as const)
-    )('writes only its own settings key when %s is toggled', (label, key) => {
-      const { set } = renderSection('home', '', allHomeWidgetsOff);
+    it.each(settingsHomeWidgets().map((w) => [w.label, w.key] as const))(
+      'writes only its own settings key when %s is toggled',
+      (label, key) => {
+        const { set } = renderSection('home', '', allHomeWidgetsOff);
 
-      fireEvent.click(screen.getByRole('checkbox', { name: label }));
+        fireEvent.click(screen.getByRole('checkbox', { name: label }));
 
-      expect(set).toHaveBeenCalledWith({ [key]: true });
-    });
+        expect(set).toHaveBeenCalledWith({ [key]: true });
+      }
+    );
 
     it('reveals the time format control once the clock is on', () => {
       renderSection('home', '', { showClock: true });

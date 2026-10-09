@@ -194,23 +194,23 @@ describe('PomodoroTimer - sounds', () => {
     expect(soundsState.stop).not.toHaveBeenCalled();
   });
 
-  it.each([
-    true,
-    false,
-  ])('stops what this tab plays on leaving mid-session, with auto-start %s', (autoStart) => {
-    const { soundsState } = mockStores({
-      music: true,
-      autoStart,
-      activeSource: 'ambient',
-      status: 'running',
-    });
+  it.each([true, false])(
+    'stops what this tab plays on leaving mid-session, with auto-start %s',
+    (autoStart) => {
+      const { soundsState } = mockStores({
+        music: true,
+        autoStart,
+        activeSource: 'ambient',
+        status: 'running',
+      });
 
-    const { unmount } = render(<PomodoroTimer />);
-    expect(soundsState.stopHere).not.toHaveBeenCalled();
-    unmount();
+      const { unmount } = render(<PomodoroTimer />);
+      expect(soundsState.stopHere).not.toHaveBeenCalled();
+      unmount();
 
-    expect(soundsState.stopHere).toHaveBeenCalled();
-  });
+      expect(soundsState.stopHere).toHaveBeenCalled();
+    }
+  );
 
   it('stops this tab’s sound on leaving before it resigns the sounds lead', () => {
     const order: string[] = [];

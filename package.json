@@ -31,7 +31,7 @@
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "husky": "^9.1.7",
-    "tsx": "^4.23.12",
+    "tsx": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:"
   },

@@ -29,7 +29,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@tombcato/smart-ticker": "^1.0.4",
-    "chrono-node": "^2.9.0",
+    "chrono-node": "catalog:",
     "date-fns": "catalog:",
     "lottie-web": "^5.13.0",
     "lucide-react": "catalog:",
