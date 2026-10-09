@@ -1,4 +1,4 @@
-/// <reference types="@cloudflare/vitest-pool-workers/types" />
+/// <reference types="@cloudflare/vitest-plugin/types" />
 import type { Env as ApiEnv } from '../src/env';
 
 type D1Migration = { name: string; queries: string[] };

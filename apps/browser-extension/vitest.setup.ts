@@ -2,7 +2,7 @@ import { configurePlatform } from '@cuewise/shared';
 import { fakeNotifier, installChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 
 // Incidental consumers (page components embedding EmptyState/celebration) must not
 // run the real lottie SVG renderer in jsdom. Dedicated lottie tests override this
