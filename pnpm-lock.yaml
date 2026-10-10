@@ -267,8 +267,8 @@ importers:
         specifier: ^5.3.0
         version: 5.3.0
       '@tombcato/smart-ticker':
-        specifier: ^1.0.4
-        version: 1.0.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^1.2.4
+        version: 1.2.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       chrono-node:
         specifier: 'catalog:'
         version: 2.10.1
@@ -504,8 +504,8 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2(react@18.3.1)
       '@tombcato/smart-ticker':
-        specifier: ^1.0.4
-        version: 1.0.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^1.2.4
+        version: 1.2.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       chrono-node:
         specifier: 'catalog:'
         version: 2.10.1
@@ -2379,6 +2379,9 @@ packages:
   '@speed-highlight/core@1.2.17':
     resolution: {integrity: sha512-Z92FwKpCtfaW1V0jTU/fh3QzYEZN8wDwrzRIBoADCJfn4mJCNcJN/XegifX7BDrQ8/h9Xh/JnbyMchL0FqXrkg==}
 
+  '@stackblitz/sdk@1.11.1':
+    resolution: {integrity: sha512-5wl1j3IhtmE7POTl2W9VGQdbQyBQrRsF3jcYBK+0V353AuO8H2GFZkiFNyTRxL+TDY3HIFCHc3G983Osmg76Lg==}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -2603,16 +2606,19 @@ packages:
     peerDependencies:
       '@testing-library/dom': '>=7.21.4'
 
-  '@tombcato/smart-ticker@1.0.4':
-    resolution: {integrity: sha512-dyNqg5OW6YavRHJcrYMCwDj5i2JQw8AnIC/L+P/sT+OkGsNO+iOpBdBR0Sl9mJreAi5vVcrz2SQJWRhpk/7G2w==}
+  '@tombcato/smart-ticker@1.2.4':
+    resolution: {integrity: sha512-AJDoqvcwZ7MqEjkR8teGqkxXFmI0M35k4fdoDjCuTEhVYpryzequtZLO8Zmz2wvKSBKkZ8+LOWbVgBHivsZI9Q==}
     peerDependencies:
       react: '>=17.0.0'
       react-dom: '>=17.0.0'
+      svelte: '>=4.0.0'
       vue: '>=3.0.0'
     peerDependenciesMeta:
       react:
         optional: true
       react-dom:
+        optional: true
+      svelte:
         optional: true
       vue:
         optional: true
@@ -6694,6 +6700,8 @@ snapshots:
 
   '@speed-highlight/core@1.2.17': {}
 
+  '@stackblitz/sdk@1.11.1': {}
+
   '@standard-schema/spec@1.1.0': {}
 
   '@standard-schema/utils@0.3.0': {}
@@ -6869,7 +6877,9 @@ snapshots:
     dependencies:
       '@testing-library/dom': 10.4.1
 
-  '@tombcato/smart-ticker@1.0.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@tombcato/smart-ticker@1.2.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@stackblitz/sdk': 1.11.1
     optionalDependencies:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)

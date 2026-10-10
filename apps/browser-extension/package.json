@@ -27,7 +27,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/poppins": "^5.3.0",
-    "@tombcato/smart-ticker": "^1.0.4",
+    "@tombcato/smart-ticker": "^1.2.4",
     "chrono-node": "catalog:",
     "date-fns": "catalog:",
     "lottie-web": "^5.13.0",
