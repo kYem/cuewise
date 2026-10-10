@@ -133,14 +133,18 @@ function getToken(interactive: boolean): Promise<string> {
       reject(new Error('Calendar permission not granted'));
       return;
     }
-    chrome.identity.getAuthToken({ interactive }, (result) => {
-      const token = typeof result === 'string' ? result : result?.token;
-      if (chrome.runtime.lastError || !token) {
-        reject(new Error(chrome.runtime.lastError?.message ?? 'No auth token'));
-        return;
+    // @types/chrome types the callback arg as a string; Chrome docs describe a GetAuthTokenResult.
+    chrome.identity.getAuthToken(
+      { interactive },
+      (result: string | chrome.identity.GetAuthTokenResult | undefined) => {
+        const token = typeof result === 'string' ? result : result?.token;
+        if (chrome.runtime.lastError || !token) {
+          reject(new Error(chrome.runtime.lastError?.message ?? 'No auth token'));
+          return;
+        }
+        resolve(token);
       }
-      resolve(token);
-    });
+    );
   });
 }
 
