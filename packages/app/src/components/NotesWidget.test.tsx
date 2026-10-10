@@ -16,6 +16,12 @@ async function openPad() {
   return screen.findByRole('textbox', { name: 'Notes' });
 }
 
+// Radix defers a primary-button pointerdown outside until the click that completes it.
+function clickAway() {
+  fireEvent.pointerDown(document.body, { button: 0 });
+  fireEvent.click(document.body);
+}
+
 /** Settles promises without advancing the clock, so the debounce can't satisfy an assertion. */
 async function settle() {
   await act(async () => {});
@@ -240,7 +246,7 @@ describe('NotesWidget', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep notes open' }));
     await settle();
-    fireEvent.pointerDown(document.body);
+    clickAway();
     expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
     fireEvent.keyDown(pad, { key: 'Escape' });
     expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
@@ -256,7 +262,7 @@ describe('NotesWidget', () => {
     render(<NotesWidget />);
     await openPad();
 
-    fireEvent.pointerDown(document.body);
+    clickAway();
 
     expect(screen.queryByRole('textbox', { name: 'Notes' })).not.toBeInTheDocument();
   });
@@ -267,7 +273,7 @@ describe('NotesWidget', () => {
 
     expect(await screen.findByRole('textbox', { name: 'Notes' })).toHaveValue('left open');
     expect(screen.getByRole('button', { name: 'Unpin notes' })).toBeInTheDocument();
-    fireEvent.pointerDown(document.body);
+    clickAway();
     expect(screen.getByRole('textbox', { name: 'Notes' })).toBeInTheDocument();
   });
 
