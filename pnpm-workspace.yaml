@@ -31,8 +31,11 @@ catalog:
   '@astrojs/check': ^0.9.10
   '@astrojs/sitemap': ^3.7.4
   '@biomejs/biome': ^2.5.14
+  '@changesets/cli': ^3.0.3
   '@cloudflare/vitest-plugin': ^1.2.6
   '@cloudflare/workers-types': ^5.20260923.1
+  '@commitlint/cli': ^21.2.3
+  '@commitlint/config-conventional': ^21.2.3
   '@crxjs/vite-plugin': ^3.0.0
   '@playwright/test': ^1.63.0
   '@tailwindcss/postcss': ^4.3.3
