@@ -12,7 +12,7 @@ interface GoalLinkPopoverProps {
   /** Called with the picked goal id, or null to remove the link. */
   onSelect: (goalId: string | null) => void;
   /** The row's edit input — pointer interactions here must never blur it. */
-  editInputRef: React.RefObject<HTMLInputElement>;
+  editInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
 // WebKit doesn't focus buttons on mouse click, so without this the edit input
