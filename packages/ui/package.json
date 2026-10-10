@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@cuewise/shared": "workspace:*",
-    "@radix-ui/react-popover": "^1.1.15",
-    "@radix-ui/react-tooltip": "^1.2.8",
+    "@radix-ui/react-popover": "^1.1.23",
+    "@radix-ui/react-tooltip": "^1.2.16",
     "clsx": "catalog:",
     "lucide-react": "catalog:",
     "react": "catalog:",
