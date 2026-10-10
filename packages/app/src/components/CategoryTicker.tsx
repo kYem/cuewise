@@ -1,4 +1,4 @@
-import { Ticker, TickerUtils } from '@tombcato/smart-ticker';
+import { Presets, Ticker } from '@tombcato/smart-ticker';
 import '@tombcato/smart-ticker/style.css';
 import type React from 'react';
 
@@ -9,7 +9,7 @@ interface CategoryTickerProps {
 
 // Character lists for category name scrolling
 const CATEGORY_CHARACTER_LISTS = [
-  TickerUtils.provideAlphabeticalList(), // A-Za-z
+  Presets.ALPHABET,
   ' ', // Space for multi-word categories
 ];
 
