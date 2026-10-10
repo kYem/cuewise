@@ -1166,21 +1166,23 @@ describe('each key is read through its own schema', () => {
     await expect(read()).resolves.toEqual([own]);
   });
 
-  it.each(
-    cases
-  )('drops a foreign row stored under %s', async (_label, key, _own, foreign, _near, read) => {
-    configurePlatform({ storage: storeHolding({ [key]: [foreign] }) });
+  it.each(cases)(
+    'drops a foreign row stored under %s',
+    async (_label, key, _own, foreign, _near, read) => {
+      configurePlatform({ storage: storeHolding({ [key]: [foreign] }) });
 
-    await expect(read()).resolves.toEqual([]);
-  });
+      await expect(read()).resolves.toEqual([]);
+    }
+  );
 
-  it.each(
-    cases
-  )('drops a %s row with one field wrong', async (_label, key, _own, _foreign, near, read) => {
-    configurePlatform({ storage: storeHolding({ [key]: [near] }) });
+  it.each(cases)(
+    'drops a %s row with one field wrong',
+    async (_label, key, _own, _foreign, near, read) => {
+      configurePlatform({ storage: storeHolding({ [key]: [near] }) });
 
-    await expect(read()).resolves.toEqual([]);
-  });
+      await expect(read()).resolves.toEqual([]);
+    }
+  );
 
   // One level down: a valid parent carrying exactly one bad child.
   it.each([

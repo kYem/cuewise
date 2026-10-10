@@ -279,12 +279,15 @@ describe('command palette key', () => {
   it.each([
     ['Win32', { ctrlKey: true }],
     ['MacIntel', { metaKey: true }],
-  ] as const)('cancels the palette key on %s so the browser never sees it', (platform, modifier) => {
-    onPlatform(platform);
-    renderWithShortcuts(<div />);
+  ] as const)(
+    'cancels the palette key on %s so the browser never sees it',
+    (platform, modifier) => {
+      onPlatform(platform);
+      renderWithShortcuts(<div />);
 
-    expect(press('k', modifier)).toBe(false);
-  });
+      expect(press('k', modifier)).toBe(false);
+    }
+  );
 
   it('closes the palette on a second Ctrl+K and keeps it from the browser', () => {
     onPlatform('Win32');

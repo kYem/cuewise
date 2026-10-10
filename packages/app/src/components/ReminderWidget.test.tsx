@@ -198,18 +198,18 @@ describe('ReminderWidget', () => {
       expect(await screen.findByText(BLOCKED)).toBeInTheDocument();
     });
 
-    it.each([
-      'granted',
-      'unknown',
-    ] as const)('stays hidden when permission is %s', async (state) => {
-      notifier.permission.mockResolvedValue(state);
+    it.each(['granted', 'unknown'] as const)(
+      'stays hidden when permission is %s',
+      async (state) => {
+        notifier.permission.mockResolvedValue(state);
 
-      render(<ReminderWidget />);
-      expandPanel();
+        render(<ReminderWidget />);
+        expandPanel();
 
-      await waitFor(() => expect(notifier.permission).toHaveBeenCalled());
-      expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument();
-    });
+        await waitFor(() => expect(notifier.permission).toHaveBeenCalled());
+        expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument();
+      }
+    );
 
     it('re-checks on every open, so allowing them clears it', async () => {
       notifier.permission.mockResolvedValueOnce('denied').mockResolvedValue('granted');

@@ -1604,28 +1604,31 @@ describe('SyncSettingsSectionComponent', () => {
     it.each([
       ['deleted', { ok: true } as const, toastSuccess],
       ['unconfirmed', { ok: false, reason: 'auth' } as const, toastError],
-    ])('forgets the account once the delete is %s, so starting over never shows it', async (_label, result, toast) => {
-      const user = userEvent.setup();
-      const controller = new FakeSyncController();
-      controller.deleteAccountResult = result;
-      controller.scriptDetails({
-        accountEmail: 'a@example.com',
-        accountId: 'a',
-        lastSyncedAt: null,
-      });
-      renderSection(controller);
-      act(() => controller.setStatus('active'));
-      await screen.findByText('Signed in as a@example.com');
-      act(() => controller.setStatus('needs_enroll'));
-      await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
-      await user.click(screen.getByRole('button', { name: CONFIRM_DELETE }));
-      await waitFor(() => expect(toast).toHaveBeenCalled());
+    ])(
+      'forgets the account once the delete is %s, so starting over never shows it',
+      async (_label, result, toast) => {
+        const user = userEvent.setup();
+        const controller = new FakeSyncController();
+        controller.deleteAccountResult = result;
+        controller.scriptDetails({
+          accountEmail: 'a@example.com',
+          accountId: 'a',
+          lastSyncedAt: null,
+        });
+        renderSection(controller);
+        act(() => controller.setStatus('active'));
+        await screen.findByText('Signed in as a@example.com');
+        act(() => controller.setStatus('needs_enroll'));
+        await user.click(await screen.findByRole('button', { name: START_OVER_LABEL }));
+        await user.click(screen.getByRole('button', { name: CONFIRM_DELETE }));
+        await waitFor(() => expect(toast).toHaveBeenCalled());
 
-      controller.deferNextDetails();
-      act(() => controller.setStatus('active'));
+        controller.deferNextDetails();
+        act(() => controller.setStatus('active'));
 
-      expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
-    });
+        expect(screen.queryByText('Signed in as a@example.com')).not.toBeInTheDocument();
+      }
+    );
 
     it('keeps the account when the delete failed, since the device is still enrolled', async () => {
       const user = userEvent.setup();
@@ -1654,21 +1657,24 @@ describe('SyncSettingsSectionComponent', () => {
     it.each([
       ['deleted', { ok: true } as const],
       ['unconfirmed', { ok: false, reason: 'auth' } as const],
-    ])('closes the enable form once a delete from the code prompt is %s', async (_label, result) => {
-      const user = userEvent.setup();
-      const controller = new FakeSyncController();
-      controller.deleteAccountResult = result;
-      controller.scriptEnable({ ok: false, reason: 'needs-code' });
-      renderSection(controller);
-      await enterEnableStep(user, 'acct-1');
-      await user.click(screen.getByRole('button', { name: 'Enable' }));
-      await user.click(await screen.findByRole('button', { name: PAIRING_CODE_LINK }));
-      await user.click(screen.getByRole('button', { name: START_OVER_LABEL }));
+    ])(
+      'closes the enable form once a delete from the code prompt is %s',
+      async (_label, result) => {
+        const user = userEvent.setup();
+        const controller = new FakeSyncController();
+        controller.deleteAccountResult = result;
+        controller.scriptEnable({ ok: false, reason: 'needs-code' });
+        renderSection(controller);
+        await enterEnableStep(user, 'acct-1');
+        await user.click(screen.getByRole('button', { name: 'Enable' }));
+        await user.click(await screen.findByRole('button', { name: PAIRING_CODE_LINK }));
+        await user.click(screen.getByRole('button', { name: START_OVER_LABEL }));
 
-      await user.click(await screen.findByRole('button', { name: CONFIRM_DELETE }));
+        await user.click(await screen.findByRole('button', { name: CONFIRM_DELETE }));
 
-      await waitFor(() => expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument());
-    });
+        await waitFor(() => expect(screen.queryByLabelText('Account ID')).not.toBeInTheDocument());
+      }
+    );
 
     it('deletes nothing when the user cancels the confirmation', async () => {
       const user = userEvent.setup();

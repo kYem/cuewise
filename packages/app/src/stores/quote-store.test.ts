@@ -967,19 +967,22 @@ describe('writers read storage, not their own snapshot', () => {
         'removeQuoteFromCollection',
         () => useQuoteStore.getState().removeQuoteFromCollection('gone', 'c1'),
       ],
-    ])('%s warns instead of reporting success when the locked read lost the quote', async (_label, act) => {
-      useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
-      vi.mocked(storage.getQuotes).mockResolvedValue([]);
+    ])(
+      '%s warns instead of reporting success when the locked read lost the quote',
+      async (_label, act) => {
+        useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
+        vi.mocked(storage.getQuotes).mockResolvedValue([]);
 
-      await act();
+        await act();
 
-      expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
-        collapseRepeats: true,
-      });
-      expect(mockToastSuccess).not.toHaveBeenCalled();
-      // A gone quote is not a failure, and reporting both would send the user at a retry.
-      expect(mockToastError).not.toHaveBeenCalled();
-    });
+        expect(mockToastWarning).toHaveBeenCalledWith('This quote no longer exists', {
+          collapseRepeats: true,
+        });
+        expect(mockToastSuccess).not.toHaveBeenCalled();
+        // A gone quote is not a failure, and reporting both would send the user at a retry.
+        expect(mockToastError).not.toHaveBeenCalled();
+      }
+    );
 
     it('addQuoteToCollection reports gone when the locked read lost the quote', async () => {
       useQuoteStore.setState({ quotes: [quoteFactory.build({ id: 'gone', isCustom: true })] });
@@ -1078,17 +1081,20 @@ describe('writers read storage, not their own snapshot', () => {
         () => useQuoteStore.getState().bulkToggleHidden(['kept', 'gone'], true),
         '1 quotes hidden',
       ],
-    ])('%s counts what the locked read matched, not what was asked', async (_label, act, message) => {
-      const kept = quoteFactory.build({ id: 'kept', isCustom: true });
-      useQuoteStore.setState({
-        quotes: [kept, quoteFactory.build({ id: 'gone', isCustom: true })],
-      });
-      vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
+    ])(
+      '%s counts what the locked read matched, not what was asked',
+      async (_label, act, message) => {
+        const kept = quoteFactory.build({ id: 'kept', isCustom: true });
+        useQuoteStore.setState({
+          quotes: [kept, quoteFactory.build({ id: 'gone', isCustom: true })],
+        });
+        vi.mocked(storage.getQuotes).mockResolvedValue([kept]);
 
-      await act();
+        await act();
 
-      expect(mockToastSuccess).toHaveBeenCalledWith(message);
-    });
+        expect(mockToastSuccess).toHaveBeenCalledWith(message);
+      }
+    );
 
     // The seed is skipped entirely, so a write failure cannot fail a load that had nothing to seed.
     it('initialize does not rewrite the list when a pull beat the seed', async () => {
@@ -1670,22 +1676,25 @@ describe('writers read storage, not their own snapshot', () => {
         'Failed to remove quote from collection. Please try again.',
         { collapseRepeats: true },
       ],
-    ])('%s does not adopt a write that did not persist', async (_label, seed, act, message, options) => {
-      const mine = quoteFactory.build({ id: 'mine', isCustom: true, ...seed });
-      useQuoteStore.setState({ quotes: [mine] });
-      vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
-      vi.mocked(storage.setQuotes).mockResolvedValue(WRITE_FAILED);
+    ])(
+      '%s does not adopt a write that did not persist',
+      async (_label, seed, act, message, options) => {
+        const mine = quoteFactory.build({ id: 'mine', isCustom: true, ...seed });
+        useQuoteStore.setState({ quotes: [mine] });
+        vi.mocked(storage.getQuotes).mockResolvedValue([mine]);
+        vi.mocked(storage.setQuotes).mockResolvedValue(WRITE_FAILED);
 
-      await act();
+        await act();
 
-      expect(useQuoteStore.getState().quotes).toEqual([mine]);
-      expect(useQuoteStore.getState().error).toBeNull();
-      if (options === undefined) {
-        expect(mockToastError).toHaveBeenCalledWith(message);
-      } else {
-        expect(mockToastError).toHaveBeenCalledWith(message, options);
+        expect(useQuoteStore.getState().quotes).toEqual([mine]);
+        expect(useQuoteStore.getState().error).toBeNull();
+        if (options === undefined) {
+          expect(mockToastError).toHaveBeenCalledWith(message);
+        } else {
+          expect(mockToastError).toHaveBeenCalledWith(message, options);
+        }
       }
-    });
+    );
 
     // The one three-outcome writer whose 'failed' was never asserted on the store side, and the
     // one whose modal discards typed text if it wrongly answers 'saved'.

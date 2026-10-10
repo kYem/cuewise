@@ -98,26 +98,29 @@ describe('QuoteManagementPage bulk selection', () => {
       { isHidden: true } as Partial<Quote>,
       [['mine'], false],
     ],
-  ])('%s calls the store with the argument that matches the button', async (label, method, seed, expected) => {
-    const writer = vi.fn(async () => true);
-    useQuoteStore.setState({
-      quotes: [quoteFactory.build({ id: 'mine', isFavorite: false, isHidden: false, ...seed })],
-      isLoading: false,
-      error: null,
-      initialize: vi.fn(async () => undefined),
-      [method]: writer,
-    });
-    render(<QuoteManagementPage />);
-    if (seed.isHidden === true) {
-      fireEvent.click(screen.getByRole('button', { name: 'Hidden' }));
+  ])(
+    '%s calls the store with the argument that matches the button',
+    async (label, method, seed, expected) => {
+      const writer = vi.fn(async () => true);
+      useQuoteStore.setState({
+        quotes: [quoteFactory.build({ id: 'mine', isFavorite: false, isHidden: false, ...seed })],
+        isLoading: false,
+        error: null,
+        initialize: vi.fn(async () => undefined),
+        [method]: writer,
+      });
+      render(<QuoteManagementPage />);
+      if (seed.isHidden === true) {
+        fireEvent.click(screen.getByRole('button', { name: 'Hidden' }));
+      }
+      await selectOneQuote();
+
+      // Scoped: the per-quote card carries the same two favourite titles.
+      fireEvent.click(within(bulkToolbar()).getByTitle(label));
+
+      await waitFor(() => expect(writer).toHaveBeenCalledWith(...expected));
     }
-    await selectOneQuote();
-
-    // Scoped: the per-quote card carries the same two favourite titles.
-    fireEvent.click(within(bulkToolbar()).getByTitle(label));
-
-    await waitFor(() => expect(writer).toHaveBeenCalledWith(...expected));
-  });
+  );
 
   it.each([
     ['keeps the selection when the write failed', false, '1 selected'],

@@ -124,15 +124,14 @@ describe('handleSyncMessage', () => {
     expect(logger.warn).toHaveBeenCalled();
   });
 
-  it.each([
-    { kind: 'cuewise-sync-control', op: 'enable' },
-    null,
-    'not-a-message',
-  ])('leaves another channel’s message (%o) to its own listener', (msg) => {
-    const engine = fakeEngine();
+  it.each([{ kind: 'cuewise-sync-control', op: 'enable' }, null, 'not-a-message'])(
+    'leaves another channel’s message (%o) to its own listener',
+    (msg) => {
+      const engine = fakeEngine();
 
-    expect(handleSyncMessage(engine, msg)).toBeUndefined();
-    expect(engine.markMutated).not.toHaveBeenCalled();
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
+      expect(handleSyncMessage(engine, msg)).toBeUndefined();
+      expect(engine.markMutated).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+    }
+  );
 });

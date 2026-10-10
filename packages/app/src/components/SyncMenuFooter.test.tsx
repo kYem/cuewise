@@ -98,21 +98,21 @@ describe('SyncMenuFooter', () => {
     controller.resolveSyncNow({ kind: 'synced' });
   });
 
-  it.each([
-    'needs_reauth',
-    'needs_enroll',
-  ] as const)('sends the user to settings for %s instead of offering a sync', async (status) => {
-    const onOpenSettings = vi.fn();
-    const controller = new FakeSyncController();
-    controller.setStatus(status);
-    controller.scriptDetails({ accountEmail: 'a@b.c', accountId: 'acct-1', lastSyncedAt: null });
-    renderFooter(controller, onOpenSettings);
+  it.each(['needs_reauth', 'needs_enroll'] as const)(
+    'sends the user to settings for %s instead of offering a sync',
+    async (status) => {
+      const onOpenSettings = vi.fn();
+      const controller = new FakeSyncController();
+      controller.setStatus(status);
+      controller.scriptDetails({ accountEmail: 'a@b.c', accountId: 'acct-1', lastSyncedAt: null });
+      renderFooter(controller, onOpenSettings);
 
-    fireEvent.click(await screen.findByTestId('sync-menu-footer'));
+      fireEvent.click(await screen.findByTestId('sync-menu-footer'));
 
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    expect(controller.calls.some((call) => call.method === 'syncNow')).toBe(false);
-  });
+      expect(onOpenSettings).toHaveBeenCalledTimes(1);
+      expect(controller.calls.some((call) => call.method === 'syncNow')).toBe(false);
+    }
+  );
 
   it('holds the email row open while the details fetch is in flight', async () => {
     const controller = new FakeSyncController();

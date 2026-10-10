@@ -52,18 +52,17 @@ describe('installExternalLinks', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  it.each([
-    'javascript:alert(1)',
-    'file:///etc/passwd',
-    'smb://host/share',
-  ])('refuses to hand %s to the OS, since quick-link URLs are typed by the user', (href) => {
-    const icon = renderLink(href);
-    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+  it.each(['javascript:alert(1)', 'file:///etc/passwd', 'smb://host/share'])(
+    'refuses to hand %s to the OS, since quick-link URLs are typed by the user',
+    (href) => {
+      const icon = renderLink(href);
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
 
-    icon.dispatchEvent(event);
+      icon.dispatchEvent(event);
 
-    expect(openMock).not.toHaveBeenCalled();
-  });
+      expect(openMock).not.toHaveBeenCalled();
+    }
+  );
 
   it('stops intercepting once disposed', () => {
     const icon = renderLink('https://example.com/');
