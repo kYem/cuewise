@@ -23,11 +23,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "catalog:",
+    "@cloudflare/vitest-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
-    "@vitest/coverage-istanbul": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:api-vitest4",
     "typescript": "catalog:",
-    "vitest": "catalog:",
+    "vitest": "catalog:api-vitest4",
     "wrangler": "catalog:"
   }
 }

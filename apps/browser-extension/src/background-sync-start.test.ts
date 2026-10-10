@@ -1,5 +1,5 @@
 import { configurePlatform, type KeyValueStore } from '@cuewise/shared';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 const { startMock } = vi.hoisted(() => ({ startMock: vi.fn(() => Promise.resolve()) }));
 
@@ -57,13 +57,6 @@ const noopStore: KeyValueStore = {
   getUsage: async () => ({ bytesInUse: 0, quota: 0 }),
 };
 
-beforeAll(async () => {
-  global.chrome = chromeMock as unknown as typeof chrome;
-  configurePlatform({ storage: noopStore });
-  vi.stubEnv('VITE_SYNC_API_BASE_URL', 'https://sync.example.test');
-  await import('./background');
-}, 30_000);
-
 afterAll(() => {
   vi.unstubAllEnvs();
 });
@@ -71,7 +64,14 @@ afterAll(() => {
 // A settled migration delays the first storage touch; a rejected one would cancel it for the
 // worker's whole lifetime, leaving the device silently unsynced until the next cold start.
 describe('background: a settings migration that fails', () => {
+  // Imported inside the test: vitest 5 clears mock calls before each test, and the setup file's
+  // beforeEach replaces global.chrome.
   it('still starts the sync engine', async () => {
+    global.chrome = chromeMock as unknown as typeof chrome;
+    configurePlatform({ storage: noopStore });
+    vi.stubEnv('VITE_SYNC_API_BASE_URL', 'https://sync.example.test');
+    await import('./background');
+
     await vi.waitFor(() => expect(startMock).toHaveBeenCalled());
-  });
+  }, 30_000);
 });

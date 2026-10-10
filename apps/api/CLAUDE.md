@@ -10,7 +10,7 @@ AI-assistant guide for the ENG-43 cloud-sync backend. Read the root [`CLAUDE.md`
 
 **The one guardrail that shapes everything below**: the server stores **ciphertext only**. It never parses, indexes, decrypts, or logs a record's payload — `ciphertext` is an opaque string all the way through `validate-changes.ts`, `d1-store.ts`, and the `records` table. (The real encryption envelope is ENG-44's deliverable; until it lands, callers pass a stub plaintext envelope through the same opaque field — the server code is identical either way.) This is why there's no server-side search or analytics on record contents, and why `GET /export` / `DELETE /account` exist from v1 — they're the privacy exit hatch a ciphertext-only server owes its users.
 
-Stack: Hono (routing) + D1 (`DB` binding) + `jose` (JWT/JWKS verification for Google/Apple ID tokens) + Vitest via `@cloudflare/vitest-pool-workers` (tests run inside a real Workers runtime, not a Node shim).
+Stack: Hono (routing) + D1 (`DB` binding) + `jose` (JWT/JWKS verification for Google/Apple ID tokens) + Vitest via `@cloudflare/vitest-plugin` (tests run inside a real Workers runtime, not a Node shim).
 
 ## Architecture
 
@@ -211,7 +211,7 @@ pnpm --filter @cuewise/api type-check
 pnpm --filter @cuewise/api e2e         # scripts/e2e-roundtrip.mjs — needs `wrangler dev` running
 ```
 
-Tests run through `@cloudflare/vitest-pool-workers` (`vitest.config.ts`) — inside a real Workers runtime with an in-memory D1, not a Node mock. `test/apply-migrations.ts` is wired as a `setupFiles` entry and applies every file in `migrations/` before each test file runs.
+Tests run through `@cloudflare/vitest-plugin` (`vitest.config.ts`) — inside a real Workers runtime with an in-memory D1, not a Node mock. `test/apply-migrations.ts` is wired as a `setupFiles` entry and applies every file in `migrations/` before each test file runs.
 
 Tests are **co-located** (`foo.ts` next to `foo.test.ts`) — e.g. `src/crypto-utils.ts` / `src/crypto-utils.test.ts`. A couple of route tests use a more descriptive name than a strict mirror (`routes/apple.ts` → `routes/apple-auth.test.ts`, `routes/auth.ts` → `routes/auth-token.test.ts`). Fixtures live in `src/__fixtures__/`: `api-test-helpers.fixtures.ts` (`signedInToken`, `record`, `clockedStore`, `getChanges`/`postChanges`), `jwks.fixtures.ts` (`createTestIdp` — an in-memory RS256 keypair + local JWKS so verifier tests never hit real Google/Apple endpoints) and `notion.fixtures.ts` (`stubNotionClient`, `connectedNotionUser`, `FailingWriteStore` — a real `D1SyncStore` with one write that throws, so cleanup paths run against real rows).
 
