@@ -32,8 +32,6 @@ minimumReleaseAgeExclude:
 overrides:
   # yaml-language-server holds 2.7.1; even its latest stops at 2.8.3, the first patched release.
   yaml@2: 2.9.0
-  # miniflare (see the cooldown exception) pins a sharp patch still inside the window; drop with it.
-  miniflare>sharp: 0.35.4
 
 allowBuilds:
   esbuild: true
@@ -77,7 +75,7 @@ catalog:
   react: ^19.3.0
   react-dom: ^19.3.0
   recharts: 3.10.1
-  sharp: ^0.35.4
+  sharp: ^0.35.5
   tailwind-merge: ^3.7.0
   tailwindcss: ^4.3.3
   tsx: ^4.23.15
