@@ -14,6 +14,17 @@ minimumReleaseAge: 20160
 minimumReleaseAgeExclude:
   - typescript
   - '@typescript/*'
+  # Early adoption of @cloudflare/vitest-plugin 1.4 (vitest 5) and its fresh runtime; drop after 2026-10-22.
+  - '@cloudflare/vitest-plugin@1.4.0'
+  - 'wrangler@4.149.0'
+  - '@cloudflare/workers-types@5.20261006.1'
+  - 'miniflare@5.20261006.1-alpha'
+  - 'workerd@1.20261006.1'
+  - '@cloudflare/workerd-darwin-64@1.20261006.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20261006.1'
+  - '@cloudflare/workerd-linux-64@1.20261006.1'
+  - '@cloudflare/workerd-linux-arm64@1.20261006.1'
+  - '@cloudflare/workerd-windows-64@1.20261006.1'
 
 # Force patched versions of transitive deps flagged by Dependabot. Major-scoped
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
@@ -21,6 +32,8 @@ minimumReleaseAgeExclude:
 overrides:
   # yaml-language-server holds 2.7.1; even its latest stops at 2.8.3, the first patched release.
   yaml@2: 2.9.0
+  # miniflare (see the cooldown exception) pins a sharp patch still inside the window; drop with it.
+  miniflare>sharp: 0.35.4
 
 allowBuilds:
   esbuild: true
@@ -32,8 +45,8 @@ catalog:
   '@astrojs/sitemap': ^3.7.4
   '@biomejs/biome': ^2.5.14
   '@changesets/cli': ^3.0.3
-  '@cloudflare/vitest-plugin': ^1.2.6
-  '@cloudflare/workers-types': ^5.20260923.1
+  '@cloudflare/vitest-plugin': ^1.4.0
+  '@cloudflare/workers-types': ^5.20261006.1
   '@commitlint/cli': ^21.2.3
   '@commitlint/config-conventional': ^21.2.3
   '@crxjs/vite-plugin': ^3.0.0
@@ -47,6 +60,7 @@ catalog:
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
   '@vitejs/plugin-react': ^6.1.1
+  '@vitest/coverage-istanbul': 5.0.1
   '@vitest/coverage-v8': 5.0.1
   '@vitest/ui': 5.0.1
   astro: 7.3.5
@@ -71,7 +85,7 @@ catalog:
   typescript: ^7.0.2
   vite: ^8.3.1
   vitest: 5.0.1
-  wrangler: ^4.140.0
+  wrangler: ^4.149.0
   zod: ^4.6.5
   zustand: 5.0.15
 
@@ -80,8 +94,3 @@ catalogs:
   # stays on 6 here until it supports TS 7; everything else uses the default catalog (7.x).
   astro-ts6:
     typescript: ^6.0.3
-  # @cloudflare/vitest-plugin supports vitest 5 from 1.4.0, which clears the release cooldown on
-  # 2026-10-22; until then the API (the plugin's only user) stays on vitest 4.
-  api-vitest4:
-    '@vitest/coverage-istanbul': 4.1.11
-    vitest: 4.1.11
