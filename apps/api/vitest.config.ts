@@ -1,5 +1,5 @@
 import path from 'node:path';
-// pool-workers 0.18 (vitest 4): the pool is a plugin (cloudflareTest) instead of test.poolOptions.workers,
+// Since pool-workers 0.18: the pool is a plugin (cloudflareTest) instead of test.poolOptions.workers,
 // and the config helpers moved off the /config subpath onto the package root.
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
