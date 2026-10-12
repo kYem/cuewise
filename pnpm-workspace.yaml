@@ -58,9 +58,9 @@ catalog:
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
   '@vitejs/plugin-react': ^6.1.1
-  '@vitest/coverage-istanbul': 5.0.1
-  '@vitest/coverage-v8': 5.0.1
-  '@vitest/ui': 5.0.1
+  '@vitest/coverage-istanbul': 5.0.2
+  '@vitest/coverage-v8': 5.0.2
+  '@vitest/ui': 5.0.2
   astro: 7.3.5
   autoprefixer: ^10.6.1
   chrono-node: ^2.10.1
@@ -79,10 +79,10 @@ catalog:
   tailwind-merge: ^3.7.0
   tailwindcss: ^4.3.3
   tsx: ^4.23.15
-  turbo: ^2.11.4
+  turbo: ^2.11.5
   typescript: ^7.0.2
   vite: ^8.3.1
-  vitest: 5.0.1
+  vitest: 5.0.2
   wrangler: ^4.149.0
   zod: ^4.6.5
   zustand: 5.0.15
