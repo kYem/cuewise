@@ -1,6 +1,7 @@
 import {
-  doneCountToday,
+  describeDailyProgress,
   formatCompactInterval,
+  formatDailyProgress,
   REMINDER_CATEGORY_META,
   type Reminder,
 } from '@cuewise/shared';
@@ -49,20 +50,26 @@ interface HabitPillProps {
 }
 
 // Today's progress toward a daily target, else the interval. Only interval reminders get here.
-// A met target shows a tick and the true count, since Dones past it still count.
 function habitCadence(reminder: Reminder): string {
   if (reminder.recurring?.frequency !== 'interval') {
     return '';
   }
-  const target = reminder.recurring.dailyTarget;
-  if (target === undefined) {
-    return formatCompactInterval(reminder.recurring.intervalMinutes);
+  return (
+    formatDailyProgress(reminder, new Date()) ??
+    formatCompactInterval(reminder.recurring.intervalMinutes)
+  );
+}
+
+// The visible cadence is replaced by this label, so it carries today's progress in words.
+function habitLabel(reminder: Reminder, paused: boolean): string {
+  if (paused) {
+    return `Resume ${reminder.text}`;
   }
-  const done = doneCountToday(reminder, new Date());
-  if (done >= target) {
-    return `✓ ${done}`;
+  const progress = describeDailyProgress(reminder, new Date());
+  if (progress === undefined) {
+    return `Mark ${reminder.text} done`;
   }
-  return `${done}/${target}`;
+  return `Mark ${reminder.text} done, ${progress}`;
 }
 
 /**
@@ -117,7 +124,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
       onClick={handleClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label={paused ? `Resume ${reminder.text}` : `Mark ${reminder.text} done`}
+      aria-label={habitLabel(reminder, paused)}
       title={paused ? 'Paused — tap to resume' : 'Tap to mark done'}
       className={cn(
         'inline-flex max-w-full items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-2xl border transition-all',
