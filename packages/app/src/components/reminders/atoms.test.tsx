@@ -40,7 +40,7 @@ describe('ReminderCategoryCheck', () => {
 
 describe('RecurrencePauseControl', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 5, 15, 12, 0));
   });
 

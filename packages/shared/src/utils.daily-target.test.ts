@@ -46,7 +46,11 @@ describe('formatDailyProgress', () => {
     expect(formatDailyProgress(water({ date: '2026-10-05', count: 1 }), at(14))).toBe('1/3');
   });
 
-  it('shows a tick and the true count once the target is met', () => {
+  it('shows a tick the moment the target is reached', () => {
+    expect(formatDailyProgress(water({ date: '2026-10-05', count: 3 }), at(14))).toBe('✓ 3');
+  });
+
+  it('keeps counting Dones past a met target', () => {
     expect(formatDailyProgress(water({ date: '2026-10-05', count: 4 }), at(14))).toBe('✓ 4');
   });
 
