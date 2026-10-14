@@ -4,6 +4,7 @@ import { DEFAULT_REMINDER_ACTIVE_HOURS, REMINDER_TEMPLATES } from './constants';
 import type { Reminder, ReminderActiveHours } from './types';
 import {
   buildReminderRecurring,
+  describeDailyProgress,
   doneCountToday,
   formatDailyProgress,
   nextReminderDueDate,
@@ -58,6 +59,20 @@ describe('formatDailyProgress', () => {
     const plain = baseReminder({ recurring: { frequency: 'interval', intervalMinutes: 60 } });
 
     expect(formatDailyProgress(plain, at(14))).toBeUndefined();
+  });
+});
+
+describe('describeDailyProgress', () => {
+  it('spells out done of target', () => {
+    expect(describeDailyProgress(water({ date: '2026-10-05', count: 1 }), at(14))).toBe(
+      '1 of 3 done today'
+    );
+  });
+
+  it('has nothing to say without a daily target', () => {
+    const plain = baseReminder({ recurring: { frequency: 'interval', intervalMinutes: 60 } });
+
+    expect(describeDailyProgress(plain, at(14))).toBeUndefined();
   });
 });
 

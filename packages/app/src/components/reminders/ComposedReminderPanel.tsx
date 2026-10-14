@@ -1,4 +1,5 @@
 import {
+  describeDailyProgress,
   formatCompactInterval,
   formatDailyProgress,
   REMINDER_CATEGORY_META,
@@ -59,6 +60,18 @@ function habitCadence(reminder: Reminder): string {
   );
 }
 
+// The visible cadence is replaced by this label, so it carries today's progress in words.
+function habitLabel(reminder: Reminder, paused: boolean): string {
+  if (paused) {
+    return `Resume ${reminder.text}`;
+  }
+  const progress = describeDailyProgress(reminder, new Date());
+  if (progress === undefined) {
+    return `Mark ${reminder.text} done`;
+  }
+  return `Mark ${reminder.text} done, ${progress}`;
+}
+
 /**
  * Ambient habit chip: a category dot/text/cadence pill that is tap-to-mark-done
  * when active, shows a pulsing check while nudging, and resumes on tap when
@@ -111,7 +124,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
       onClick={handleClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      aria-label={paused ? `Resume ${reminder.text}` : `Mark ${reminder.text} done`}
+      aria-label={habitLabel(reminder, paused)}
       title={paused ? 'Paused — tap to resume' : 'Tap to mark done'}
       className={cn(
         'inline-flex max-w-full items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-2xl border transition-all',

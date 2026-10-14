@@ -55,7 +55,17 @@ describe('RecurrencePauseControl', () => {
     });
     render(<RecurrencePauseControl reminder={reminder} onPauseToggle={vi.fn()} />);
 
-    expect(screen.getByText(/every 60 min · 1\/3 today/)).toBeInTheDocument();
+    expect(screen.getByText('· 1/3 today')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('spells out today’s progress for screen readers', () => {
+    const reminder = recurringReminderFactory.build({
+      recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 3 },
+      doneToday: { date: '2026-06-15', count: 1 },
+    });
+    render(<RecurrencePauseControl reminder={reminder} onPauseToggle={vi.fn()} />);
+
+    expect(screen.getByText('1 of 3 done today')).toHaveClass('sr-only');
   });
 
   it('shows only the cadence of an interval without a daily target', () => {
