@@ -5,6 +5,7 @@ import type { Reminder, ReminderActiveHours } from './types';
 import {
   buildReminderRecurring,
   doneCountToday,
+  formatDailyProgress,
   nextReminderDueDate,
   recordReminderDone,
   resolveReminderNotificationAction,
@@ -37,6 +38,22 @@ describe('doneCountToday', () => {
 
   it('is zero before anything was marked done', () => {
     expect(doneCountToday(water(), at(14))).toBe(0);
+  });
+});
+
+describe('formatDailyProgress', () => {
+  it('reads as done over target', () => {
+    expect(formatDailyProgress(water({ date: '2026-10-05', count: 1 }), at(14))).toBe('1/3');
+  });
+
+  it('shows a tick and the true count once the target is met', () => {
+    expect(formatDailyProgress(water({ date: '2026-10-05', count: 4 }), at(14))).toBe('✓ 4');
+  });
+
+  it('has nothing to show without a daily target', () => {
+    const plain = baseReminder({ recurring: { frequency: 'interval', intervalMinutes: 60 } });
+
+    expect(formatDailyProgress(plain, at(14))).toBeUndefined();
   });
 });
 

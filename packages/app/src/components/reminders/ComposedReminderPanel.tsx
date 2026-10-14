@@ -1,6 +1,6 @@
 import {
-  doneCountToday,
   formatCompactInterval,
+  formatDailyProgress,
   REMINDER_CATEGORY_META,
   type Reminder,
 } from '@cuewise/shared';
@@ -49,20 +49,14 @@ interface HabitPillProps {
 }
 
 // Today's progress toward a daily target, else the interval. Only interval reminders get here.
-// A met target shows a tick and the true count, since Dones past it still count.
 function habitCadence(reminder: Reminder): string {
   if (reminder.recurring?.frequency !== 'interval') {
     return '';
   }
-  const target = reminder.recurring.dailyTarget;
-  if (target === undefined) {
-    return formatCompactInterval(reminder.recurring.intervalMinutes);
-  }
-  const done = doneCountToday(reminder, new Date());
-  if (done >= target) {
-    return `✓ ${done}`;
-  }
-  return `${done}/${target}`;
+  return (
+    formatDailyProgress(reminder, new Date()) ??
+    formatCompactInterval(reminder.recurring.intervalMinutes)
+  );
 }
 
 /**

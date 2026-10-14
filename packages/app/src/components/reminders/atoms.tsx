@@ -1,4 +1,5 @@
 import {
+  formatDailyProgress,
   formatReminderCadence,
   isUpcomingRecurringOccurrence,
   REMINDER_CATEGORY_META,
@@ -119,6 +120,8 @@ export function RecurrencePauseControl({ reminder, onPauseToggle }: RecurrencePa
     return null;
   }
   const paused = reminder.paused === true;
+  const progress = formatDailyProgress(reminder, new Date());
+  const progressLabel = progress === undefined ? '' : ` · ${progress} today`;
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -130,6 +133,7 @@ export function RecurrencePauseControl({ reminder, onPauseToggle }: RecurrencePa
       >
         <Repeat className="w-3 h-3" />
         {formatReminderCadence(recurring)}
+        {progressLabel}
         {paused ? ' · paused' : ''}
       </span>
       <button
