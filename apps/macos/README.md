@@ -41,6 +41,21 @@ pnpm --filter @cuewise/macos build:sidecar  # swift build + copy into src-tauri/
 
 Frames are analyzed in memory only — no image is ever stored or sent.
 
+## Release & updates
+
+`release.yml` builds the app on `macos-latest` alongside every extension release and
+attaches the DMG, the signed updater archive and `latest.json`. The tray's "Check for
+Updates…" reads `releases/latest/download/latest.json`, so every release must carry it.
+
+- Builds use `src-tauri/tauri.release.conf.json`: updater artifacts on, ad-hoc signed
+  (`signingIdentity: "-"`) until Apple Developer ID + notarization land (ENG-70).
+- The updater key pair: public key in `tauri.conf.json`, private key and password as
+  `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in the
+  `macos-release` GitHub environment. Lose the private key and installed apps can't update.
+- Plain `pnpm --filter @cuewise/macos bundle` needs no key; to reproduce a release
+  build locally, export the key and add `--config src-tauri/tauri.release.conf.json`.
+- Apple Silicon only for now; Intel would need a universal build of app and sidecar.
+
 ## Verifying the player CSP
 
 Before shipping a change to the player's `frame-ancestors`

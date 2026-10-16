@@ -3,6 +3,7 @@ mod glow;
 mod posture;
 mod scheduler;
 mod tray;
+mod updater;
 
 use tauri::{tray::TrayIconBuilder, AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
@@ -38,6 +39,7 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(scheduler::SchedulerState::default())
         .manage(posture::PostureState::default())
         .manage(tray::TrayMenuState::default())
@@ -76,6 +78,7 @@ pub fn run() {
                     "insights" => reveal(app, Some("insights")),
                     // #settings is a deep link: home + the settings modal open.
                     "settings" => reveal(app, Some("settings")),
+                    "check-updates" => updater::check_for_updates(app),
                     "quit" => app.exit(0),
                     // Everything else is a webview-supplied action id (set_tray_menu
                     // builds those), so relay it — the webview no-ops unknown ids.
