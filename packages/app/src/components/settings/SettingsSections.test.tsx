@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
+import { HABIT_HISTORY_SYNC_NOTICE } from '../HabitsSection';
 import { SETTINGS_SECTIONS, settingsHomeWidgets } from './SettingsSections';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';
@@ -80,6 +81,14 @@ describe('settings sections', () => {
     vi.mocked(storage.readSettings).mockResolvedValue({ ok: true, settings: defaultSettings });
     // BackgroundSection mounts the real CustomBackgroundPicker, which reads on mount.
     vi.mocked(storage.getCustomBackground).mockResolvedValue(null);
+  });
+
+  describe('Advanced', () => {
+    it('says habit history only syncs with a Cuewise account', () => {
+      renderSection('advanced');
+
+      expect(screen.getByText(HABIT_HISTORY_SYNC_NOTICE, { exact: false })).toBeInTheDocument();
+    });
   });
 
   describe('Background', () => {
