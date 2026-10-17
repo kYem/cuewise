@@ -36,6 +36,7 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
   }));
   const keptToday = rows.filter((row) => row.stats.last30.at(-1)?.state === 'kept').length;
   const steadiest = rows.reduce((top, row) => (row.stats.current > top.stats.current ? row : top));
+  const hasStreak = steadiest.stats.current > 0;
   const rated = rows.flatMap((row) => (row.stats.rate30 === null ? [] : [row.stats.rate30]));
   const consistency =
     rated.length === 0
@@ -57,16 +58,23 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
           <h3 className="text-secondary text-sm font-medium mb-1">Kept Today</h3>
           <p className="text-xs text-tertiary">Habits whose day is already done</p>
         </div>
-        <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+        <div
+          data-testid="habit-streak-tile"
+          className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 bg-orange-100 rounded-lg">
               <Flame className="w-6 h-6 text-orange-600" />
             </div>
-            <span className="text-3xl font-bold text-orange-600">{steadiest.stats.current}</span>
+            <span className="text-3xl font-bold text-orange-600">
+              {hasStreak ? steadiest.stats.current : '—'}
+            </span>
           </div>
           <h3 className="text-secondary text-sm font-medium mb-1">Longest Running Streak</h3>
           <p className="text-xs text-tertiary">
-            {steadiest.reminder.text} · best this year: {steadiest.stats.best} days
+            {hasStreak
+              ? `${steadiest.reminder.text} · best this year: ${steadiest.stats.best} days`
+              : 'No streak yet'}
           </p>
         </div>
         <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
@@ -79,7 +87,7 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
             </span>
           </div>
           <h3 className="text-secondary text-sm font-medium mb-1">30-Day Consistency</h3>
-          <p className="text-xs text-tertiary">Kept days across your habits</p>
+          <p className="text-xs text-tertiary">Average across your habits</p>
         </div>
       </div>
 

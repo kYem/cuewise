@@ -49,6 +49,31 @@ describe('HabitsSection', () => {
     ).toBeInTheDocument();
   });
 
+  it('names the habit behind the longest running streak and its best', () => {
+    render(
+      <HabitsSection
+        habits={[water]}
+        habitHistory={[kept('2026-10-04'), kept('2026-10-05')]}
+        chromeSyncOn={false}
+      />
+    );
+
+    const tile = within(screen.getByTestId('habit-streak-tile'));
+    expect(tile.getByText('2')).toBeInTheDocument();
+    expect(tile.getByText('Drink water · best this year: 2 days')).toBeInTheDocument();
+  });
+
+  it('shows a dash and no habit on the streak tile when every streak is broken', () => {
+    render(
+      <HabitsSection habits={[water]} habitHistory={[kept('2026-10-02')]} chromeSyncOn={false} />
+    );
+
+    const tile = within(screen.getByTestId('habit-streak-tile'));
+    expect(tile.getByText('—')).toBeInTheDocument();
+    expect(tile.getByText('No streak yet')).toBeInTheDocument();
+    expect(tile.queryByText(/Drink water/)).toBeNull();
+  });
+
   it('shows the 30-day rate as a bar and a percentage', () => {
     render(
       <HabitsSection
