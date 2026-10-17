@@ -2331,8 +2331,7 @@ export function resolveReminderNotificationAction(
     return { type: 'dismiss' };
   }
   if (buttonIndex === 0) {
-    // Done: complete one-offs. An active recurring reminder was already advanced
-    // on fire, and a paused one must not be completed — just dismiss.
+    // Done: complete one-offs and count active habits; calendar cadences and paused ones dismiss.
     if (!reminder.recurring) {
       return { type: 'complete' };
     }
