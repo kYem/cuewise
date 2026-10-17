@@ -52,7 +52,7 @@ function breaksStreak(state: HabitDayState): boolean {
 
 /**
  * Streaks walk the retention window, the same days `recordHabitDay` keeps: a kept day counts even
- * when off, an off day or unfinished today is skipped, anything else breaks.
+ * when off; an off day, a day before the first record or an unfinished today is skipped.
  */
 export function getHabitStats(reminder: Reminder, days: HabitDay[], now: Date): HabitStats {
   const counts = new Map<string, number>();
@@ -78,7 +78,8 @@ export function getHabitStats(reminder: Reminder, days: HabitDay[], now: Date): 
     if (count >= target) {
       return { date, state: 'kept', count };
     }
-    if (!isActiveDay(day, activeHours)) {
+    const untracked = offset > 0 && (firstRecorded === undefined || date < firstRecorded);
+    if (untracked || !isActiveDay(day, activeHours)) {
       return { date, state: 'off', count };
     }
     if (offset === 0) {
@@ -108,13 +109,7 @@ export function getHabitStats(reminder: Reminder, days: HabitDay[], now: Date): 
   }
 
   const last30 = cells.slice(-RECENT_DAYS);
-  const since = firstRecorded;
-  const rated =
-    since === undefined
-      ? []
-      : last30.filter(
-          (cell) => cell.date >= since && cell.state !== 'off' && cell.state !== 'pending'
-        );
+  const rated = last30.filter((cell) => cell.state !== 'off' && cell.state !== 'pending');
   const kept = rated.filter((cell) => cell.state === 'kept').length;
   const rate30 = rated.length === 0 ? null : Math.round((kept / rated.length) * 100);
 

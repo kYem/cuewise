@@ -130,11 +130,20 @@ describe('getHabitStats', () => {
     expect(stats.rate30).toBe(67);
   });
 
-  it('has no rate before anything was recorded', () => {
+  it('treats the days before the first record as off, not missed', () => {
+    const stats = getHabitStats(habit(), ticks([4, 1], [5, 1]), at(20));
+
+    expect(stats).toMatchObject({ current: 2, best: 2, rate30: 100 });
+    expect(stats.last30.slice(0, -2).every((cell) => cell.state === 'off')).toBe(true);
+  });
+
+  it('draws a habit with no record as off days and a pending today, with no rate', () => {
     const stats = getHabitStats(habit(), [], at(20));
 
     expect(stats).toMatchObject({ current: 0, best: 0, rate30: null });
     expect(stats.last30).toHaveLength(30);
+    expect(stats.last30.at(-1)?.state).toBe('pending');
+    expect(stats.last30.slice(0, -1).every((cell) => cell.state === 'off')).toBe(true);
   });
 
   it('ignores other habits’ days', () => {
