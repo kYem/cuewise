@@ -10,10 +10,12 @@ import {
   getManyFromStorage,
   getSettings,
   getSettingsForSync,
+  recordHabitDone,
   SETTINGS_KEYS,
   setCollectionsRaw,
   setGoals,
   setGoalsRaw,
+  setHabitHistoryRaw,
   setManyInStorage,
   setQuotes,
   setQuotesRaw,
@@ -25,6 +27,7 @@ import {
 } from '@cuewise/storage';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { DEVICE_LOCAL_SETTINGS_KEYS, defaultBindings } from './collections';
 
@@ -209,7 +212,65 @@ describe('defaultBindings', () => {
   it('returns a binding for each synced collection', () => {
     const names = defaultBindings().map((b) => b.name);
 
-    expect(names).toEqual(['goals', 'quotes', 'collections', 'reminders', 'settings']);
+    expect(names).toEqual([
+      'goals',
+      'quotes',
+      'collections',
+      'reminders',
+      'habitHistory',
+      'settings',
+    ]);
+  });
+});
+
+describe('habitHistory binding', () => {
+  const oct4 = { id: 'r1:2026-10-04', reminderId: 'r1', date: '2026-10-04', count: 2 };
+
+  function habitHistoryBinding() {
+    return requireBinding(defaultBindings(), 'habitHistory');
+  }
+
+  it('writeOne adds a day beside the ones already recorded', async () => {
+    await recordHabitDone('r1', '2026-10-05');
+
+    await habitHistoryBinding().writeOne(oct4.id, oct4);
+
+    expect(Object.keys(await habitHistoryBinding().readAll()).sort()).toEqual([
+      'r1:2026-10-04',
+      'r1:2026-10-05',
+    ]);
+  });
+
+  it('writeOne replaces a day it already holds', async () => {
+    await recordHabitDone('r1', '2026-10-04');
+
+    await habitHistoryBinding().writeOne(oct4.id, oct4);
+
+    expect((await habitHistoryBinding().readAll())[oct4.id]).toEqual(oct4);
+  });
+
+  it('writeOne removes a day when entity is null', async () => {
+    await recordHabitDone('r1', '2026-10-04');
+    await recordHabitDone('r1', '2026-10-05');
+
+    await habitHistoryBinding().writeOne('r1:2026-10-04', null);
+
+    expect(Object.keys(await habitHistoryBinding().readAll())).toEqual(['r1:2026-10-05']);
+  });
+
+  it('writeOne keeps history in the local area while Chrome sync routes goals to sync', async () => {
+    const kv = new FakeKvStore();
+    configurePlatform({ storage: kv });
+    await setManyInStorage({ [settingsStorageKey('syncEnabled')]: true }, 'local');
+    const set = vi.spyOn(kv, 'set');
+    const areasWritten = (key: string) =>
+      set.mock.calls.filter(([written]) => written === key).map(([, , area]) => area);
+
+    await habitHistoryBinding().writeOne(oct4.id, oct4);
+    await goalsBinding().writeOne('g1', goalFactory.build({ id: 'g1' }));
+
+    expect(areasWritten(STORAGE_KEYS.HABIT_HISTORY)).toEqual(['local']);
+    expect(areasWritten(STORAGE_KEYS.GOALS)).toEqual(['sync']);
   });
 });
 
@@ -279,7 +340,7 @@ describe('bindings see what the UI cannot', () => {
   });
 });
 
-/** The same three properties as the goals block, across the other three array bindings. */
+/** The same three properties as the goals block, across the other array bindings. */
 describe.each([
   [
     'quotes',
@@ -291,6 +352,11 @@ describe.each([
     'reminders',
     setRemindersRaw,
     { id: 'unreadable', text: 'newer build', dueDate: 'x', completed: 'nope' },
+  ],
+  [
+    'habitHistory',
+    setHabitHistoryRaw,
+    { id: 'unreadable', reminderId: 'r1', date: 'x', count: 'nope' },
   ],
 ])('the %s binding sees what the UI cannot', (name, seedRaw, unreadable) => {
   function binding() {

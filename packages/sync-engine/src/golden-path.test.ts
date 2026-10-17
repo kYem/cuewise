@@ -1,8 +1,10 @@
 import { configurePlatform, hlcDecode, hlcEncode } from '@cuewise/shared';
 import {
   getGoals,
+  getHabitHistory,
   getQuotes,
   getSettings,
+  recordHabitDone,
   setGoals,
   setQuotes,
   setSettingsPatch,
@@ -181,6 +183,41 @@ describe('golden path: two devices converge through one shared fake server', () 
     useStorage(deviceA);
     const aGoalsAfterDelete = await getGoals();
     expect(aGoalsAfterDelete.find((g) => g.id === 'g1')).toBeUndefined();
+  });
+});
+
+describe('habit history: each day is its own entity', () => {
+  it('keeps different habit days recorded offline on two devices', async () => {
+    const server = new FakeSyncServer();
+    const deviceA = createDevice(server, makeClock(1_000_000));
+    useStorage(deviceA);
+    await deviceA.engine.enableSync('dev', 'devA-cred', 'Device A');
+    const recoveryCode = deviceA.onRecoveryCode.mock.calls[0][0] as string;
+
+    const deviceB = createDevice(server, makeClock(5_000_000));
+    useStorage(deviceB);
+    await deviceB.engine.enableSync('dev', 'devB-cred', 'Device B', { recoveryCode });
+    await deviceB.engine.syncNow();
+
+    useStorage(deviceA);
+    const aDay = await recordHabitDone('r1', '2026-10-04');
+    await deviceA.engine.markMutated('habitHistory', aDay.changedId);
+    useStorage(deviceB);
+    const bDay = await recordHabitDone('r1', '2026-10-05');
+    await deviceB.engine.markMutated('habitHistory', bDay.changedId);
+
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+    useStorage(deviceB);
+    await deviceB.engine.syncNow();
+    useStorage(deviceA);
+    await deviceA.engine.syncNow();
+
+    for (const device of [deviceA, deviceB]) {
+      useStorage(device);
+      const ids = (await getHabitHistory()).map((day) => day.id);
+      expect(ids.sort()).toEqual(['r1:2026-10-04', 'r1:2026-10-05']);
+    }
   });
 });
 
