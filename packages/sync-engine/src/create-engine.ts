@@ -44,8 +44,8 @@ export function createSyncEngine(opts: CreateSyncEngineOptions): SyncEngine {
     onRecoveryCode: opts.onRecoveryCode,
   });
   // Constructing the engine IS wiring it — hosts can no longer forget the manual
-  // setSyncEngine() step. SyncEngine's markMutated/markMutatedBulk/markDeleted
-  // structurally satisfy SyncMutationSink, so no adapter is needed here.
+  // setSyncEngine() step. SyncEngine structurally satisfies SyncMutationSink,
+  // so no adapter is needed here.
   configurePlatform({ syncSink: engine });
   return engine;
 }
