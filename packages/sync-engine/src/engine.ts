@@ -1720,6 +1720,10 @@ export class SyncEngine {
         return;
       }
     }
+    await this.resetCursorForNewBindings();
+    if (this.startSuperseded(epoch)) {
+      return;
+    }
     this.setStatus('active');
     await this.syncNowLoopSafe();
     await this.armPullLoopUnlessOff();
@@ -1906,6 +1910,7 @@ export class SyncEngine {
     await this.meta.update((meta) => {
       meta.cursor = 0;
       meta.seqs = {};
+      meta.boundCollections = this.bindingsFingerprint();
     });
   }
 
@@ -1918,6 +1923,27 @@ export class SyncEngine {
       meta.tombstones = [];
       meta.quarantine = [];
       delete meta.relistOwed;
+      meta.boundCollections = this.bindingsFingerprint();
+    });
+  }
+
+  private bindingsFingerprint(): string {
+    return this.bindings
+      .map((binding) => binding.name)
+      .sort()
+      .join(',');
+  }
+
+  // Loaded first so the common case writes nothing: start() runs on every worker spawn.
+  private async resetCursorForNewBindings(): Promise<void> {
+    const fingerprint = this.bindingsFingerprint();
+    const meta = await this.meta.load();
+    if (meta.boundCollections === fingerprint) {
+      return;
+    }
+    await this.meta.update((fresh) => {
+      fresh.cursor = 0;
+      fresh.boundCollections = fingerprint;
     });
   }
 
