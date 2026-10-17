@@ -5,6 +5,7 @@ import {
   logger,
   type Reminder,
   resetPlatform,
+  STORAGE_KEYS,
   type SyncMutationSink,
 } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
@@ -43,6 +44,7 @@ vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
   getSettings: vi.fn(),
+  getHabitHistory: vi.fn(),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -69,6 +71,7 @@ vi.mock('./toast-store', () => ({
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
 const getSettingsMock = vi.mocked(storage.getSettings);
+const getHabitHistoryMock = vi.mocked(storage.getHabitHistory);
 
 // The Scheduler is injected; assert against it instead of poking chrome.alarms.
 const fakeScheduler = {
@@ -105,11 +108,13 @@ beforeEach(() => {
   getRemindersMock.mockImplementation(async () => useReminderStore.getState().reminders);
   setRemindersMock.mockResolvedValue({ success: true });
   getSettingsMock.mockResolvedValue(DEFAULT_SETTINGS);
+  getHabitHistoryMock.mockResolvedValue([]);
   configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({
     reminders: [],
     upcomingReminders: [],
     overdueReminders: [],
+    habitHistory: [],
     isLoading: false,
     error: null,
   });
@@ -1002,6 +1007,46 @@ describe('converging on reminders written elsewhere', () => {
       expect(toastWarning).toHaveBeenCalledWith(expect.stringContaining('your reminders'))
     );
     expect(useReminderStore.getState().reminders).toBe(before);
+    expect(useReminderStore.getState().error).toBeNull();
+  });
+
+  it('picks up a history-only change written elsewhere', async () => {
+    const fake = await initializeObserving();
+    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
+    getHabitHistoryMock.mockResolvedValue([day]);
+
+    fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([day]));
+  });
+
+  it('still adopts pulled reminders when the habit history cannot be read, keeping the history it has', async () => {
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
+    getHabitHistoryMock.mockResolvedValue([day]);
+    const fake = await initializeObserving();
+    getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+
+    fake.emit([STORAGE_KEYS.REMINDERS, STORAGE_KEYS.HABIT_HISTORY]);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().reminders).toHaveLength(2));
+    expect(useReminderStore.getState().habitHistory).toEqual([day]);
+    expect(logError).toHaveBeenCalledWith(
+      expect.stringContaining('habit history'),
+      expect.any(Error)
+    );
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+
+  it('loads reminders with an empty history when the habit history cannot be read at launch', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
+
+    await initializeObserving();
+
+    expect(useReminderStore.getState().reminders).toEqual([mine]);
+    expect(useReminderStore.getState().habitHistory).toEqual([]);
     expect(useReminderStore.getState().error).toBeNull();
   });
 
