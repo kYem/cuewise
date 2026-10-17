@@ -4,6 +4,7 @@ export * from './components/Badge';
 export * from './components/Button';
 export * from './components/Card';
 export * from './components/Chart';
+export * from './components/HoverCard';
 export * from './components/Input';
 export * from './components/Label';
 export * from './components/Popover';
