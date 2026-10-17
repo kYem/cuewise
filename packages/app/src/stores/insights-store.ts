@@ -13,6 +13,7 @@ import {
   exportWeeklyTrendsCSV,
   type Goal,
   getTodayDateString,
+  type HabitDay,
   type ImportOptions,
   type ImportResult,
   type ImportValidation,
@@ -23,17 +24,20 @@ import {
   parseImportData,
   prunePostureStats,
   type Quote,
+  type Reminder,
   type StorageError,
   summarizePosture,
 } from '@cuewise/shared';
 import {
   getGoals,
   getGoalsRaw,
+  getHabitHistory,
   getPomodoroSessions,
   getPomodoroSessionsRaw,
   getPostureStats,
   getQuotes,
   getQuotesRaw,
+  getReminders,
   isCustomQuote,
   setGoalsRaw,
   setPomodoroSessionsRaw,
@@ -42,6 +46,7 @@ import {
 } from '@cuewise/storage';
 import { create } from 'zustand';
 import { readFileAsText } from '../utils/file-utils';
+import { splitReminders } from '../utils/reminder-classify';
 import { useToastStore } from './toast-store';
 
 /**
@@ -75,11 +80,23 @@ function mergeImport<T extends { id: string }>(
   };
 }
 
+// An unreadable history must not blank the rest of the page.
+async function readHabitHistory(): Promise<HabitDay[]> {
+  try {
+    return await getHabitHistory();
+  } catch (error) {
+    logger.error('Error reading habit history', error);
+    return [];
+  }
+}
+
 interface InsightsStore {
   insights: InsightsData | null;
   analytics: AdvancedAnalytics | null;
   // Null when nothing was ever tracked (e.g. the extension, which has no posture tracking).
   postureSummary: PostureSummary | null;
+  habitReminders: Reminder[];
+  habitHistory: HabitDay[];
   isLoading: boolean;
   error: string | null;
 
@@ -109,6 +126,8 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
   insights: null,
   analytics: null,
   postureSummary: null,
+  habitReminders: [],
+  habitHistory: [],
   isLoading: true,
   error: null,
   quotes: [],
@@ -122,12 +141,15 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Load all data needed for insights
-      const [quotes, goals, pomodoroSessions, rawPostureStats] = await Promise.all([
-        getQuotes(),
-        getGoals(),
-        getPomodoroSessions(),
-        getPostureStats(),
-      ]);
+      const [quotes, goals, pomodoroSessions, rawPostureStats, reminders, habitHistory] =
+        await Promise.all([
+          getQuotes(),
+          getGoals(),
+          getPomodoroSessions(),
+          getPostureStats(),
+          getReminders(),
+          readHabitHistory(),
+        ]);
       // Read through the same shape guard the controller flushes through, so a
       // skewed persisted blob can't reach the card as NaN or a thrown summary.
       const postureStats = prunePostureStats(rawPostureStats, getTodayDateString());
@@ -142,6 +164,8 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         insights,
         analytics,
         postureSummary,
+        habitReminders: splitReminders(reminders).habits,
+        habitHistory,
         quotes,
         goals,
         pomodoroSessions,
@@ -160,12 +184,15 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ error: null });
 
       // Reload data and recalculate insights
-      const [quotes, goals, pomodoroSessions, rawPostureStats] = await Promise.all([
-        getQuotes(),
-        getGoals(),
-        getPomodoroSessions(),
-        getPostureStats(),
-      ]);
+      const [quotes, goals, pomodoroSessions, rawPostureStats, reminders, habitHistory] =
+        await Promise.all([
+          getQuotes(),
+          getGoals(),
+          getPomodoroSessions(),
+          getPostureStats(),
+          getReminders(),
+          readHabitHistory(),
+        ]);
       // Read through the same shape guard the controller flushes through, so a
       // skewed persisted blob can't reach the card as NaN or a thrown summary.
       const postureStats = prunePostureStats(rawPostureStats, getTodayDateString());
@@ -175,7 +202,16 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       const postureSummary =
         postureStats.length > 0 ? summarizePosture(postureStats, getTodayDateString()) : null;
 
-      set({ insights, analytics, postureSummary, quotes, goals, pomodoroSessions });
+      set({
+        insights,
+        analytics,
+        postureSummary,
+        habitReminders: splitReminders(reminders).habits,
+        habitHistory,
+        quotes,
+        goals,
+        pomodoroSessions,
+      });
     } catch (error) {
       logger.error('Error refreshing insights', error);
       const errorMessage = 'Failed to refresh insights. Please try again.';
