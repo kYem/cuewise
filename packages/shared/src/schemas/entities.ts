@@ -5,6 +5,7 @@ import type {
   ConceptCard,
   DailyBackground,
   Goal,
+  HabitDay,
   PlaylistProgress,
   PomodoroSession,
   PostureDailyStat,
@@ -62,6 +63,14 @@ export const reminderSchema = z.object({
   completedAt: z.optional(z.string()),
 });
 assertNoDrift<z.infer<typeof reminderSchema>, Reminder>();
+
+export const habitDaySchema = z.object({
+  id: z.string(),
+  reminderId: z.string(),
+  date: z.string(),
+  count: z.number(),
+});
+assertNoDrift<z.infer<typeof habitDaySchema>, HabitDay>();
 
 export const pomodoroSessionSchema = z.object({
   id: z.string(),

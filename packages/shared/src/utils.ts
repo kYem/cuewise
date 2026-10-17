@@ -2046,8 +2046,8 @@ function activeSpanMinutes(activeHours: ReminderActiveHours): number {
   return span > 0 ? span : span + 24 * 60;
 }
 
-function isActiveDay(day: Date, activeHours: ReminderActiveHours): boolean {
-  const days = activeHours.days;
+export function isActiveDay(day: Date, activeHours: ReminderActiveHours | undefined): boolean {
+  const days = activeHours?.days;
   if (days === undefined || days.length === 0) {
     return true;
   }
@@ -2191,7 +2191,7 @@ export function skipReminderOccurrence(reminder: Reminder, now: Date = new Date(
   return next;
 }
 
-function dailyTargetOf(reminder: Reminder): number | undefined {
+export function dailyTargetOf(reminder: Reminder): number | undefined {
   const recurring = reminder.recurring;
   if (recurring?.frequency !== 'interval' || recurring.dailyTarget === undefined) {
     return undefined;
@@ -2203,7 +2203,7 @@ function dailyTargetOf(reminder: Reminder): number | undefined {
  * The day a daily target counts toward: the date the current window opened. The small hours of a
  * window that crosses midnight still belong to the evening before.
  */
-function targetDayOf(reminder: Reminder, now: Date): Date {
+export function targetDayOf(reminder: Reminder, now: Date): Date {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const recurring = reminder.recurring;
   if (recurring?.frequency !== 'interval' || recurring.activeHours === undefined) {

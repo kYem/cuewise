@@ -8,6 +8,8 @@ export * from './concept-cards';
 export * from './constants';
 // Export CSV utilities
 export * from './csv-utils';
+// Export habit-history helpers (per-day counts behind the habit stats)
+export * from './habit-stats';
 // Export hybrid logical clock (sync conflict ordering)
 export * from './hlc';
 // Export logger
