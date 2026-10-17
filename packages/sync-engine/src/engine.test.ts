@@ -2709,6 +2709,32 @@ describe('SyncEngine.start / stop', () => {
     expect(pulls.mock.calls[0]?.[0]).toBeGreaterThan(0);
   });
 
+  it('still starts when the ledger is unreadable, and re-pulls from zero once it reads again', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build()]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await new SyncMetadataStore(device.kv).update((meta) => {
+      meta.cursor = 42;
+      delete meta.boundCollections;
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.unreadableKey = SYNC_META_KEY;
+    const scheduler = new FakeScheduler();
+    const restarted = restart(device, scheduler);
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(scheduler.scheduled).not.toEqual([]);
+
+    device.kv.unreadableKey = null;
+    const pulls = vi.spyOn(device.apiClient, 'getChanges');
+    await restart(device).start();
+    expect(pulls.mock.calls[0]?.[0]).toBe(0);
+  });
+
   it('asks for the recovery code when the key is gone and the server cannot be reached', async () => {
     // The fetch is load-bearing only here, and an unanswerable one must still not leave a keyless
     // device claiming to sync — the fall-through hands it to the key load, which says reconnect.

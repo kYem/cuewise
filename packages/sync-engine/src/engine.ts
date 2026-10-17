@@ -1703,7 +1703,7 @@ export class SyncEngine {
     }
 
     // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
-    await this.resetCursorForNewBindings();
+    await this.bestEffort(() => this.resetCursorForNewBindings(), 'bound-collections cursor reset');
     if (this.startSuperseded(epoch)) {
       return;
     }
