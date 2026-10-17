@@ -19,7 +19,14 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
 } from '@cuewise/shared';
-import { getReminders, updateReminders } from '@cuewise/storage';
+import {
+  getReminders,
+  type StorageResult,
+  setReminders,
+  updateReminders,
+  withCollectionLock,
+} from '@cuewise/storage';
+import { recordHabitTick } from './habit-history';
 import { activitySubject, recordReminderActivity } from './reminder-activity';
 import { addReminderPrompt, removeReminderPrompt } from './reminder-prompts';
 
@@ -244,31 +251,46 @@ export async function respondToReminder(
       }
     } else if (action.type === 'count') {
       const now = new Date();
-      // Counted against the stored copy, inside the write: a pull may have moved it meanwhile.
-      const counted: { reminder: Reminder | null } = { reminder: null };
-      const { result } = await updateReminders((current) =>
-        current.map((r) => {
-          if (r.id !== reminderId) {
-            return r;
+      // Decided on the stored copy inside the lock, and written only when it changed: an unchanged
+      // reminder re-stamped dirty would outrank a peer's concurrent edit.
+      const counted = await withCollectionLock(
+        'reminders',
+        async (): Promise<{
+          reminder: Reminder | null;
+          changed: boolean;
+          habit: boolean;
+          result: StorageResult;
+        }> => {
+          const current = await getReminders();
+          const stored = current.find((r) => r.id === reminderId);
+          if (stored === undefined) {
+            return { reminder: null, changed: false, habit: false, result: { success: true } };
           }
-          const done = recordReminderDone(r, now);
+          const habit = stored.recurring?.frequency === 'interval' && !stored.paused;
+          const done = recordReminderDone(stored, now);
           // The fire already armed the next nudge; only a met target moves it to tomorrow.
-          counted.reminder = isDailyTargetMet(done, now)
+          const next = isDailyTargetMet(done, now)
             ? { ...done, dueDate: nextReminderDueDate(done, now).toISOString() }
             : done;
-          return counted.reminder;
-        })
+          if (next === stored) {
+            return { reminder: stored, changed: false, habit, result: { success: true } };
+          }
+          const result = await setReminders(current.map((r) => (r.id === reminderId ? next : r)));
+          return { reminder: next, changed: true, habit, result };
+        }
       );
-      if (result?.success === false) {
+      if (counted.result.success === false) {
         saved = false;
-        logger.error('Could not persist the counted reminder', result.error);
+        logger.error('Could not persist the counted reminder', counted.result.error);
         await recordReminderActivity({
           event: 'failed',
           ...subjectOf(reminder, reminderId),
           detail: 'done: not persisted',
         });
       } else if (counted.reminder !== null) {
-        notifyMutated('reminders', reminderId);
+        if (counted.changed) {
+          notifyMutated('reminders', reminderId);
+        }
         if (isDailyTargetMet(counted.reminder, now)) {
           await getScheduler().scheduleAt(
             reminderAlarmId(reminderId),
@@ -276,6 +298,9 @@ export async function respondToReminder(
           );
         }
         await recordReminderActivity({ event: 'done', ...activitySubject(counted.reminder) });
+        if (counted.habit) {
+          await recordHabitTick(counted.reminder, now);
+        }
       }
     } else if (action.type === 'snooze') {
       const { result } = await updateReminders((current) =>
