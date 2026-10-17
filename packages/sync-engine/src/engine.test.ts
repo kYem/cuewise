@@ -3395,6 +3395,21 @@ describe('SyncEngine.markMutatedBulk', () => {
   });
 });
 
+describe('SyncEngine.markDeletedBulk', () => {
+  it('tombstones the full id list through the mutation tracker', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const metaStore = new SyncMetadataStore(device.kv);
+
+    await device.engine.markDeletedBulk('goals', ['g1', 'g2']);
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1', 'g2']);
+    expect(saved.tombstones).toEqual(['goals/g1', 'goals/g2']);
+  });
+});
+
 // Local rather than in __fixtures__: both build on this file's createDevice.
 async function enabledThenSignedOut(server: FakeSyncServer): Promise<Device> {
   const device = createDevice(server);

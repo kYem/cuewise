@@ -190,4 +190,5 @@ export interface SyncMutationSink {
   markDeleted(collection: string, entityId: string): Promise<void> | void;
   // Optional so callers that never bulk-notify (and the no-op no-sink path) stay safe.
   markMutatedBulk?(collection: string, entityIds: string[]): Promise<void> | void;
+  markDeletedBulk?(collection: string, entityIds: string[]): Promise<void> | void;
 }

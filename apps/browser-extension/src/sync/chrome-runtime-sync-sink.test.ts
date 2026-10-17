@@ -39,6 +39,8 @@ describe('ChromeRuntimeSyncSink', () => {
     await vi.advanceTimersByTimeAsync(0);
     sink.markMutatedBulk('quotes', ['a', 'b']);
     await vi.advanceTimersByTimeAsync(0);
+    sink.markDeletedBulk('habitHistory', ['a', 'b']);
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(runtime.sendMessage).toHaveBeenCalledWith({
       kind: 'cuewise-sync-mutation',
@@ -48,6 +50,7 @@ describe('ChromeRuntimeSyncSink', () => {
       [{ op: 'mutated', collection: 'goals', entityId: 'g1' }],
       [{ op: 'deleted', collection: 'goals', entityId: 'g1' }],
       [{ op: 'mutatedBulk', collection: 'quotes', entityIds: ['a', 'b'] }],
+      [{ op: 'deletedBulk', collection: 'habitHistory', entityIds: ['a', 'b'] }],
     ]);
   });
 

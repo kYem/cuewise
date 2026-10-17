@@ -57,6 +57,20 @@ describe('MutationTracker', () => {
     expect(saved.tombstones).toEqual(['quotes/q1']);
   });
 
+  it('tombstones and dirties every id of a bulk delete in one ledger save', async () => {
+    const meta = new SyncMetadataStore(new FakeKvStore());
+    await meta.load();
+    const save = vi.spyOn(meta, 'save');
+    const tracker = new MutationTracker(meta);
+
+    await tracker.markDeletedBulk('habitHistory', ['r1:2026-10-01', 'r1:2026-10-02']);
+
+    const saved = await meta.load();
+    expect(saved.tombstones).toEqual(['habitHistory/r1:2026-10-01', 'habitHistory/r1:2026-10-02']);
+    expect(saved.dirty.habitHistory).toEqual(['r1:2026-10-01', 'r1:2026-10-02']);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
   describe('markMutatedBulk', () => {
     it('marks every id dirty with distinct advancing hlcs in a single save', async () => {
       const kv = new FakeKvStore();

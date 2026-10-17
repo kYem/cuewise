@@ -40,7 +40,19 @@ export class MutationTracker {
     });
   }
 
-  // Shared by both methods: advance the device clock, stamp the entity's hlc, mark it dirty.
+  /** Same as markDeleted, but loads/saves meta ONCE for the whole batch instead of per-id. */
+  async markDeletedBulk(collection: string, entityIds: string[]): Promise<void> {
+    await this.meta.update((meta) => {
+      for (const entityId of entityIds) {
+        const key = this.stamp(meta, collection, entityId);
+        if (!meta.tombstones.includes(key)) {
+          meta.tombstones.push(key);
+        }
+      }
+    });
+  }
+
+  // Shared by every mark: advance the device clock, stamp the entity's hlc, mark it dirty.
   private stamp(meta: SyncMeta, collection: string, entityId: string): string {
     const next = hlcNow(hlcDecode(meta.clock), this.now());
     meta.clock = hlcEncode(next);

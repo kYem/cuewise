@@ -47,3 +47,24 @@ export function notifyDeleted(collection: string, entityId: string): void {
     logger.error('Sync notify (markDeleted) failed', { collection, entityId, error });
   }
 }
+
+// Bulk form of notifyDeleted; a sink without it still hears every id, one mark each.
+export function notifyDeletedBulk(collection: string, entityIds: string[]): void {
+  const sink = getSyncSink();
+  if (sink === null || entityIds.length === 0) {
+    return;
+  }
+  if (sink.markDeletedBulk === undefined) {
+    for (const entityId of entityIds) {
+      notifyDeleted(collection, entityId);
+    }
+    return;
+  }
+  try {
+    Promise.resolve(sink.markDeletedBulk(collection, entityIds)).catch((error) => {
+      logger.error('Sync notify (markDeletedBulk) failed', { collection, entityIds, error });
+    });
+  } catch (error) {
+    logger.error('Sync notify (markDeletedBulk) failed', { collection, entityIds, error });
+  }
+}

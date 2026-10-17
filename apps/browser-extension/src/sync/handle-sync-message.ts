@@ -3,12 +3,13 @@ import { isSyncMutationMark, type SyncMutationAck, type SyncMutationMark } from 
 
 /**
  * Structural subset of SyncEngine the router needs. Unlike SyncMutationSink,
- * markMutatedBulk is required — SyncEngine always implements it.
+ * markMutatedBulk and markDeletedBulk are required — SyncEngine always implements them.
  */
 export interface SyncMessageEngine {
   markMutated(collection: string, entityId: string): Promise<void> | void;
   markDeleted(collection: string, entityId: string): Promise<void> | void;
   markMutatedBulk(collection: string, entityIds: string[]): Promise<void> | void;
+  markDeletedBulk(collection: string, entityIds: string[]): Promise<void> | void;
 }
 
 function hasMutationKind(msg: unknown): msg is Record<string, unknown> {
@@ -93,6 +94,9 @@ function coalesce(marks: SyncMutationMark[]): SyncMutationMark[] {
 function recordMark(engine: SyncMessageEngine, mark: SyncMutationMark): Promise<void> | void {
   if (mark.op === 'mutatedBulk') {
     return engine.markMutatedBulk(mark.collection, mark.entityIds);
+  }
+  if (mark.op === 'deletedBulk') {
+    return engine.markDeletedBulk(mark.collection, mark.entityIds);
   }
   if (mark.op === 'mutated') {
     return engine.markMutated(mark.collection, mark.entityId);

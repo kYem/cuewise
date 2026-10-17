@@ -7,6 +7,7 @@ function fakeEngine(): SyncMessageEngine {
     markMutated: vi.fn(),
     markDeleted: vi.fn(),
     markMutatedBulk: vi.fn(),
+    markDeletedBulk: vi.fn(),
   };
 }
 
@@ -65,6 +66,18 @@ describe('handleSyncMessage', () => {
     expect(engine.markMutatedBulk).toHaveBeenCalledExactlyOnceWith('goals', ['g1', 'g2', 'g3']);
     expect(engine.markDeleted).toHaveBeenCalledWith('goals', 'g1');
     expect(engine.markMutated).toHaveBeenCalledExactlyOnceWith('goals', 'g4');
+  });
+
+  it('routes a bulk delete to one engine call', async () => {
+    const engine = fakeEngine();
+
+    await handleSyncMessage(
+      engine,
+      batch({ op: 'deletedBulk', collection: 'habitHistory', entityIds: ['a', 'b'] })
+    );
+
+    expect(engine.markDeletedBulk).toHaveBeenCalledWith('habitHistory', ['a', 'b']);
+    expect(engine.markDeleted).not.toHaveBeenCalled();
   });
 
   it('acks ok only once the ledger write resolves', async () => {

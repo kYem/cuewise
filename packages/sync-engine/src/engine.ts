@@ -1812,6 +1812,12 @@ export class SyncEngine {
     this.schedulePush();
   }
 
+  /** Bulk form of markDeleted: one meta load/save for the whole id list. */
+  async markDeletedBulk(collection: string, entityIds: string[]): Promise<void> {
+    await this.tracker.markDeletedBulk(collection, entityIds);
+    this.schedulePush();
+  }
+
   private schedulePush(): void {
     // Statuses whose wake is cancelled or whose cycles cannot complete; enableSync re-arms.
     if (
