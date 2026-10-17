@@ -25,6 +25,7 @@ import {
   withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
+import { forgetHabit, recordHabitTick } from '../services/habit-history';
 import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
 import { armMissingReminderAlarms, reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
@@ -378,6 +379,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         if (!done.written.paused) {
           await armReminderAlarm(reminderId, new Date(done.written.dueDate).getTime());
         }
+        await recordHabitTick(done.written, now);
         if (isDailyTargetMet(done.written, now)) {
           useToastStore.getState().success('Daily target reached — back tomorrow');
           return;
@@ -424,6 +426,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       // Cancel alarm
       await clearReminderAlarm(reminderId);
+      await forgetHabit(reminderId);
     } catch (error) {
       logger.error('Error deleting reminder', error);
       const errorMessage = 'Failed to delete reminder. Please try again.';
