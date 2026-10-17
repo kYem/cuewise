@@ -40,13 +40,16 @@ test('ticking a habit pill records the day in habitHistory', async () => {
 
   const page = await openNewTab(launched);
   await page.getByRole('button', { name: /reminders\. Click to expand/ }).click();
+  const today = new Date().toLocaleDateString('en-CA');
   await page.getByRole('button', { name: `Mark ${HABIT.text} done` }).click();
 
   await expect(async () => {
     const days = await launched.worker.evaluate(
       async () => (await chrome.storage.local.get('habitHistory')).habitHistory ?? []
     );
-    expect(days).toEqual([expect.objectContaining({ reminderId: HABIT.id, count: 1 })]);
+    expect(days).toEqual([
+      { id: `${HABIT.id}:${today}`, reminderId: HABIT.id, date: today, count: 1 },
+    ]);
   }).toPass({ timeout: 5_000 });
   await launched.context.close();
 });
