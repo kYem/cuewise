@@ -4,6 +4,7 @@ import {
   logger,
   type Reminder as SharedReminder,
 } from '@cuewise/shared';
+import { recordHabitDone } from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -465,6 +466,7 @@ describe('background: notification action buttons', () => {
         date: formatDateString(new Date()),
         count: 1,
       });
+      expect(recordHabitDone).toHaveBeenCalledWith('water', formatDateString(new Date()));
     });
   });
 
