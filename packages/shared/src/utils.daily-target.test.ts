@@ -159,8 +159,17 @@ describe('resolveReminderNotificationAction with a daily target', () => {
     });
   });
 
-  it('still only dismisses a Done on a recurring reminder without a target', () => {
+  it('counts a Done on an interval habit without a target', () => {
     const plain = baseReminder({ recurring: { frequency: 'interval', intervalMinutes: 60 } });
+
+    expect(resolveReminderNotificationAction(plain, 0, at(14))).toEqual({ type: 'count' });
+  });
+
+  it('only dismisses a Done on a paused interval habit without a target', () => {
+    const plain = baseReminder({
+      recurring: { frequency: 'interval', intervalMinutes: 60 },
+      paused: true,
+    });
 
     expect(resolveReminderNotificationAction(plain, 0, at(14))).toEqual({ type: 'dismiss' });
   });

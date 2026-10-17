@@ -2336,7 +2336,8 @@ export function resolveReminderNotificationAction(
     if (!reminder.recurring) {
       return { type: 'complete' };
     }
-    if (dailyTargetOf(reminder) !== undefined && !reminder.paused) {
+    // Every active habit counts, target or not, so its day lands in the habit history.
+    if (reminder.recurring.frequency === 'interval' && !reminder.paused) {
       return { type: 'count' };
     }
     return { type: 'dismiss' };
