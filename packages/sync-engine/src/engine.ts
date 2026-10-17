@@ -1702,6 +1702,11 @@ export class SyncEngine {
       return;
     }
 
+    // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
+    await this.resetCursorForNewBindings();
+    if (this.startSuperseded(epoch)) {
+      return;
+    }
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
     if (check === 'restored') {
@@ -1719,10 +1724,6 @@ export class SyncEngine {
       if (this.startSuperseded(epoch)) {
         return;
       }
-    }
-    await this.resetCursorForNewBindings();
-    if (this.startSuperseded(epoch)) {
-      return;
     }
     this.setStatus('active');
     await this.syncNowLoopSafe();

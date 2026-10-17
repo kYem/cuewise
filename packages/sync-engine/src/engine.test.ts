@@ -3773,6 +3773,30 @@ describe('SyncEngine with a key stored before keys recorded their account', () =
     expect(await loadPersistedDataKey(device.kv)).toMatchObject({ userId: 'fake-user' });
   });
 
+  it('starts the cursor over before a cycle can run while the key is being bound', async () => {
+    const device = await enabledWithUnboundKey();
+    await new SyncMetadataStore(device.kv).update((meta) => {
+      meta.cursor = 42;
+      delete meta.boundCollections;
+    });
+    const account = heldAnswer<{ userId: string; email: string | null }>();
+    vi.spyOn(device.apiClient, 'getAccount').mockImplementation(() => {
+      account.start();
+      return account.held;
+    });
+    const pulls = vi.spyOn(device.apiClient, 'getChanges');
+    const restarted = restart(device);
+
+    const started = restarted.start();
+    await account.awaited;
+    await restarted.syncNow();
+    account.release({ userId: 'fake-user', email: null });
+    await started;
+
+    expect(pulls).toHaveBeenCalled();
+    expect(pulls.mock.calls.map((call) => call[0])).not.toContain(42);
+  });
+
   it('leaves it unbound on a start without a session', async () => {
     const device = await enabledWithUnboundKey();
     await device.kv.remove(SYNC_SESSION_KEY, 'local');
