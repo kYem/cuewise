@@ -537,6 +537,7 @@ async function buildDirtyRecords(
   only?: Set<string>
 ): Promise<DirtyRecord[]> {
   const dirtyRecords: DirtyRecord[] = [];
+  const pushedAt = (deps.now ?? Date.now)();
 
   for (const collection of Object.keys(meta.dirty)) {
     const binding = deps.bindings.find((b) => b.name === collection);
@@ -564,7 +565,7 @@ async function buildDirtyRecords(
       const entity = all[entityId] ?? null;
       const body: RecordBody = { entity, hlc };
       const record: ConditionalPushRecord = {
-        ...(await toPushRecord(deps.dk, deps.keyId, collection, entityId, body)),
+        ...(await toPushRecord(deps.dk, deps.keyId, collection, entityId, body, pushedAt)),
         // 0 matches no row: a key this device never saw a seq for lands only where none exists.
         baseSeq: meta.seqs[key] ?? 0,
       };

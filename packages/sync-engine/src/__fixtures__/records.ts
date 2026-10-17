@@ -1,5 +1,5 @@
 import type { DataKey } from '@cuewise/crypto';
-import { hlcEncode, type KeyValueStore, type SyncRecord } from '@cuewise/shared';
+import { hlcDecode, hlcEncode, type KeyValueStore, type SyncRecord } from '@cuewise/shared';
 import type { CycleDeps } from '../cycle';
 import { loadPersistedDataKey } from '../key-lifecycle';
 import { SyncMetadataStore } from '../metadata-store';
@@ -17,7 +17,14 @@ export async function sealServerRecord(
   body: RecordBody,
   seq: number
 ): Promise<SyncRecord> {
-  const pushRecord = await toPushRecord(dk, keyId, collection, entityId, body);
+  const pushRecord = await toPushRecord(
+    dk,
+    keyId,
+    collection,
+    entityId,
+    body,
+    hlcDecode(body.hlc).physical
+  );
   return { ...pushRecord, seq };
 }
 
@@ -56,7 +63,14 @@ export async function pushWithoutBase(
   if (stored === null) {
     throw new Error('expected a persisted data key');
   }
-  const record = await toPushRecord(stored.dk, stored.keyId, collection, entityId, body);
+  const record = await toPushRecord(
+    stored.dk,
+    stored.keyId,
+    collection,
+    entityId,
+    body,
+    hlcDecode(body.hlc).physical
+  );
   const seq = server.pushChanges([record]).applied[0]?.seq;
   if (seq === undefined) {
     throw new Error(`expected ${collection}/${entityId} to land`);

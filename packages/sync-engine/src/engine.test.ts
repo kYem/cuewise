@@ -43,6 +43,8 @@ import {
 import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 interface Device {
   kv: FakeKvStore;
   apiClient: FakeApiClient;
@@ -1205,6 +1207,24 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.syncNow();
 
     expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  it('pushes an edit marked more than a day before the push', async () => {
+    const server = new FakeSyncServer();
+    server.maxClockDriftMs = DAY_MS;
+    let t = Date.now();
+    const device = createDevice(server, { now: () => t });
+    device.apiClient.now = () => t;
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const goal = goalFactory.build();
+    await setGoals([goal]);
+    await device.engine.markMutated('goals', goal.id);
+
+    t += 3 * DAY_MS;
+    await device.engine.syncNow();
+
+    expect(server.rows().some((row) => row.entityId === goal.id)).toBe(true);
   });
 
   it('a 401 mid-sync drops to signed_out without clearing the DK or touching local data', async () => {
