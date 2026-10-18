@@ -17,6 +17,11 @@ const syncMutationMarkSchema = z.union([
     collection: z.string(),
     entityIds: z.array(z.string()),
   }),
+  z.object({
+    op: z.literal('deletedBulk'),
+    collection: z.string(),
+    entityIds: z.array(z.string()),
+  }),
 ]);
 
 export type SyncMutationMark = z.infer<typeof syncMutationMarkSchema>;

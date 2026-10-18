@@ -1,21 +1,23 @@
 import { type DataKey, EnvelopeParseError, openRecord, sealRecord } from '@cuewise/crypto';
-import { hlcDecode, type PushRecord, type SyncRecord } from '@cuewise/shared';
+import type { PushRecord, SyncRecord } from '@cuewise/shared';
 import type { RecordBody } from './strategy';
 
-/** Seals the full body (including tombstones) so its HLC survives for delete-vs-edit LWW. */
+/** Seals the full body (tombstones too) so its HLC survives for delete-vs-edit LWW. The server
+ * drift-checks `clientUpdatedAt`, so it is the push time: a mark-time stamp refuses a stale edit. */
 export async function toPushRecord(
   dk: DataKey,
   keyId: string,
   collection: string,
   entityId: string,
-  body: RecordBody
+  body: RecordBody,
+  clientUpdatedAt: number
 ): Promise<PushRecord> {
   const ciphertext = await sealRecord(dk, keyId, collection, entityId, JSON.stringify(body));
   return {
     collection,
     entityId,
     ciphertext,
-    clientUpdatedAt: hlcDecode(body.hlc).physical,
+    clientUpdatedAt,
     deleted: body.entity === null,
   };
 }

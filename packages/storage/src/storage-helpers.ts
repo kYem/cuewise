@@ -21,6 +21,8 @@ import {
   getStorage,
   getTodayDateString,
   goalSchema,
+  type HabitDay,
+  habitDaySchema,
   logger,
   type PlaylistProgress,
   type PomodoroSession,
@@ -35,6 +37,7 @@ import {
   quoteCollectionSchema,
   quoteSchema,
   type Reminder,
+  recordHabitDay,
   reminderSchema,
   type Settings,
   STORAGE_KEYS,
@@ -395,6 +398,7 @@ export const COLLECTION_LOCKS = [
   'conceptCards', // not synced — locked for the two realms, not the pull
   'reminderActivity', // device-local, never synced — locked for the two realms, not the pull
   'reminderPrompts', // device-local, never synced — locked for the two realms, not the pull
+  'habitHistory', // always local, cloud sync only — locked for the two realms and the pull
 ] as const;
 
 export type CollectionLock = (typeof COLLECTION_LOCKS)[number];
@@ -514,6 +518,51 @@ export async function updateConceptCards(
   return withCollectionLock('conceptCards', async () => {
     const cards = mutate(await getConceptCards());
     return { result: await setConceptCards(cards), cards };
+  });
+}
+
+// Habit history: always local whatever syncEnabled says — one Chrome sync key caps at 8 KB.
+export async function getHabitHistory(): Promise<HabitDay[]> {
+  const raw = await getListRaw<unknown>(STORAGE_KEYS.HABIT_HISTORY, 'local');
+  return keepValidListItems<HabitDay>(raw, habitDaySchema, STORAGE_KEYS.HABIT_HISTORY, 'local');
+}
+
+export async function getHabitHistoryRaw(): Promise<HabitDay[]> {
+  return getListRaw<HabitDay>(STORAGE_KEYS.HABIT_HISTORY, 'local');
+}
+
+export async function setHabitHistoryRaw(days: HabitDay[]): Promise<StorageResult> {
+  return setInStorage(STORAGE_KEYS.HABIT_HISTORY, days, 'local');
+}
+
+/** One more done on `date`, pruning that habit's expired days; raw so a newer build's rows survive. */
+export async function recordHabitDone(
+  reminderId: string,
+  date: string
+): Promise<{ result: StorageResult; changedId: string; prunedIds: string[] }> {
+  return withCollectionLock('habitHistory', async () => {
+    const { next, changedId, prunedIds } = recordHabitDay(
+      await getHabitHistoryRaw(),
+      reminderId,
+      date
+    );
+    return { result: await setHabitHistoryRaw(next), changedId, prunedIds };
+  });
+}
+
+export async function removeHabitDays(
+  reminderId: string
+): Promise<{ result: StorageResult; removedIds: string[] }> {
+  return withCollectionLock('habitHistory', async () => {
+    const days = await getHabitHistoryRaw();
+    const removedIds = days.filter((entry) => entry.reminderId === reminderId).map((e) => e.id);
+    if (removedIds.length === 0) {
+      return { result: { success: true }, removedIds };
+    }
+    const result = await setHabitHistoryRaw(
+      days.filter((entry) => entry.reminderId !== reminderId)
+    );
+    return { result, removedIds };
   });
 }
 

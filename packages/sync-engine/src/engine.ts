@@ -1702,6 +1702,11 @@ export class SyncEngine {
       return;
     }
 
+    // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
+    await this.bestEffort(() => this.resetCursorForNewBindings(), 'bound-collections cursor reset');
+    if (this.startSuperseded(epoch)) {
+      return;
+    }
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
     if (check === 'restored') {
@@ -1812,6 +1817,12 @@ export class SyncEngine {
     this.schedulePush();
   }
 
+  /** Bulk form of markDeleted: one meta load/save for the whole id list. */
+  async markDeletedBulk(collection: string, entityIds: string[]): Promise<void> {
+    await this.tracker.markDeletedBulk(collection, entityIds);
+    this.schedulePush();
+  }
+
   private schedulePush(): void {
     // Statuses whose wake is cancelled or whose cycles cannot complete; enableSync re-arms.
     if (
@@ -1900,6 +1911,7 @@ export class SyncEngine {
     await this.meta.update((meta) => {
       meta.cursor = 0;
       meta.seqs = {};
+      meta.boundCollections = this.bindingsFingerprint();
     });
   }
 
@@ -1912,6 +1924,27 @@ export class SyncEngine {
       meta.tombstones = [];
       meta.quarantine = [];
       delete meta.relistOwed;
+      meta.boundCollections = this.bindingsFingerprint();
+    });
+  }
+
+  private bindingsFingerprint(): string {
+    return this.bindings
+      .map((binding) => binding.name)
+      .sort()
+      .join(',');
+  }
+
+  // Loaded first so the common case writes nothing: start() runs on every worker spawn.
+  private async resetCursorForNewBindings(): Promise<void> {
+    const fingerprint = this.bindingsFingerprint();
+    const meta = await this.meta.load();
+    if (meta.boundCollections === fingerprint) {
+      return;
+    }
+    await this.meta.update((fresh) => {
+      fresh.cursor = 0;
+      fresh.boundCollections = fingerprint;
     });
   }
 

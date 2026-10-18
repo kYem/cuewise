@@ -123,6 +123,14 @@ export interface Reminder {
   completedAt?: string; // ISO timestamp when marked complete (for suggestions)
 }
 
+/** Times an interval habit was done on one day; per-day entities keep sync conflicts to that day. */
+export interface HabitDay {
+  id: string; // `${reminderId}:${date}`
+  reminderId: string;
+  date: string; // YYYY-MM-DD, the day the habit's window opened
+  count: number;
+}
+
 // Reminder template for quick creation
 export interface ReminderTemplate {
   id: string;
@@ -558,6 +566,7 @@ export const STORAGE_KEYS = {
   CALENDAR: 'calendar', // Google Calendar connection + cached events
   POSTURE_STATS: 'postureStats', // Daily posture rollups (macOS tracking)
   WEATHER: 'weather', // Chosen location + last forecast reading (device-local)
+  HABIT_HISTORY: 'habitHistory', // Per-day habit counts (always local; syncs with cloud sync only)
 } as const;
 
 // Daily background image data (persisted to change only once per day)

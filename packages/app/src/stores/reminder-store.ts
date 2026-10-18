@@ -3,6 +3,7 @@ import {
   generateId,
   getNotifier,
   getScheduler,
+  type HabitDay,
   isDailyTargetMet,
   isUpcomingRecurringOccurrence,
   logger,
@@ -18,6 +19,7 @@ import {
   skipReminderOccurrence,
 } from '@cuewise/shared';
 import {
+  getHabitHistory,
   getReminders,
   getReminders as loadAllReminders,
   setReminders as saveAllReminders,
@@ -25,6 +27,7 @@ import {
   withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
+import { forgetHabit, recordHabitTick } from '../services/habit-history';
 import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
 import { armMissingReminderAlarms, reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
@@ -35,6 +38,7 @@ interface ReminderStore {
   reminders: Reminder[];
   upcomingReminders: Reminder[];
   overdueReminders: Reminder[];
+  habitHistory: HabitDay[];
   isLoading: boolean;
   error: string | null;
 
@@ -148,19 +152,34 @@ function commitReminders(
 const STALE_REMINDERS_MESSAGE =
   "Cuewise couldn't re-read your reminders just now, so what you see may be out of date.";
 
+/** Null when unreadable: the history is display-only, so it must never fail a reminder refresh. */
+async function readHabitHistory(): Promise<HabitDay[] | null> {
+  try {
+    return await getHabitHistory();
+  } catch (error) {
+    logger.error(`Could not read habit history: ${describeThrown(error)}`, error);
+    return null;
+  }
+}
+
 /**
  * Known gap: a pulled reminder is shown but not armed — the re-arm loop below is skipped where the
  * scheduler persists its own wakes, so a pulled one-off waits for a local edit.
  */
 const remindersObserver = createStorageObserver(
   'reminders',
-  [STORAGE_KEYS.REMINDERS],
+  [STORAGE_KEYS.REMINDERS, STORAGE_KEYS.HABIT_HISTORY],
   async () => {
-    const reminders = await getReminders();
-    if (sameEntities(useReminderStore.getState().reminders, reminders)) {
+    const [reminders, readHistory] = await Promise.all([getReminders(), readHabitHistory()]);
+    const state = useReminderStore.getState();
+    const habitHistory = readHistory ?? state.habitHistory;
+    if (
+      sameEntities(state.reminders, reminders) &&
+      sameEntities(state.habitHistory, habitHistory)
+    ) {
       return;
     }
-    commitReminders((partial) => useReminderStore.setState(partial), reminders);
+    commitReminders((partial) => useReminderStore.setState(partial), reminders, { habitHistory });
   },
   createStaleLatch((message) => useToastStore.getState().warning(message), STALE_REMINDERS_MESSAGE)
 );
@@ -169,6 +188,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
   reminders: [],
   upcomingReminders: [],
   overdueReminders: [],
+  habitHistory: [],
   isLoading: true,
   error: null,
 
@@ -370,6 +390,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyMutated('reminders', reminderId);
+      if (done.outcome === 'advanced') {
+        await recordHabitTick(done.written, now);
+      }
       await removeReminderPrompt(reminderId);
 
       if (done.outcome === 'advanced') {
@@ -420,6 +443,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyDeleted('reminders', reminderId);
+      await forgetHabit(reminderId);
       await removeReminderPrompt(reminderId);
 
       // Cancel alarm

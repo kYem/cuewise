@@ -1,6 +1,8 @@
 import { createSettingsStoreMock, reminderFactory } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useReminderStore } from '../../stores/reminder-store';
 import { useSettingsStore } from '../../stores/settings-store';
 import { ComposedReminderPanel } from './ComposedReminderPanel';
 
@@ -44,6 +46,10 @@ function buildMixedReminders() {
     recurring: { frequency: 'daily' },
   });
   return { habit, scheduled, notified };
+}
+
+function historyFor(id: string, dates: string[]) {
+  return dates.map((date) => ({ id: `${id}:${date}`, reminderId: id, date, count: 1 }));
 }
 
 function defaultProps() {
@@ -236,5 +242,83 @@ describe('ComposedReminderPanel', () => {
     // The setting flows setting → panel → row: 24h shows "17:30" with no AM/PM.
     expect(screen.getByText('17:30')).toBeInTheDocument();
     expect(screen.queryByText(/PM/)).not.toBeInTheDocument();
+  });
+});
+
+describe('habit streaks', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-15T09:00:00'));
+    mockTimeFormat('12h');
+  });
+
+  afterEach(() => {
+    useReminderStore.setState({ habitHistory: [] });
+    vi.useRealTimers();
+  });
+
+  it('shows a streak chip from two kept days', () => {
+    const { habit } = buildMixedReminders();
+    useReminderStore.setState({
+      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
+    });
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    expect(screen.getByTestId('habit-streak-habit-1')).toHaveTextContent('2');
+  });
+
+  it('shows no chip for a one-day streak', () => {
+    const { habit } = buildMixedReminders();
+    useReminderStore.setState({ habitHistory: historyFor('habit-1', ['2026-06-14']) });
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    expect(screen.queryByTestId('habit-streak-habit-1')).toBeNull();
+  });
+
+  it('opens the stats card when the pill takes focus', async () => {
+    const { habit } = buildMixedReminders();
+    useReminderStore.setState({
+      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
+    });
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Mark Drink water done' }));
+
+    expect(await screen.findByText('best this year')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View in Insights' })).toHaveAttribute(
+      'href',
+      '#insights'
+    );
+  });
+
+  it('opens the stats card on hover', async () => {
+    const { habit } = buildMixedReminders();
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    await userEvent.hover(screen.getByRole('button', { name: 'Mark Drink water done' }));
+
+    expect(await screen.findByText('best this year')).toBeInTheDocument();
+  });
+
+  it('still resumes a paused habit on click', () => {
+    const { habit } = buildMixedReminders();
+    const props = defaultProps();
+    render(<ComposedReminderPanel reminders={[{ ...habit, paused: true }]} {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Drink water' }));
+
+    expect(props.onPauseToggle).toHaveBeenCalledWith('habit-1', false);
+  });
+
+  it('drops the native tooltip from the pill', () => {
+    const { habit } = buildMixedReminders();
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    expect(screen.getByRole('button', { name: 'Mark Drink water done' })).not.toHaveAttribute(
+      'title'
+    );
   });
 });

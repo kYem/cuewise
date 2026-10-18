@@ -3,6 +3,7 @@ import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { recordHabitTick } from './habit-history';
 import { recordReminderActivity } from './reminder-activity';
 import {
   armMissingReminderAlarms,
@@ -27,10 +28,16 @@ const addPrompt = vi.mocked(addReminderPrompt);
 const removePrompt = vi.mocked(removeReminderPrompt);
 const markMutated = vi.fn();
 
+vi.mock('./habit-history', () => ({
+  recordHabitTick: vi.fn(() => Promise.resolve()),
+}));
+const recordTick = vi.mocked(recordHabitTick);
+
 vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
   getSettings: vi.fn(),
+  withCollectionLock: vi.fn(<T>(_lock: string, apply: () => Promise<T>) => apply()),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -159,6 +166,83 @@ describe('respondToReminder', () => {
 
     expect(setRemindersMock).not.toHaveBeenCalled();
     expect(removePrompt).toHaveBeenCalledWith('r1');
+  });
+});
+
+describe('a Done on a habit', () => {
+  const plainHabit = () =>
+    reminderFactory.build({
+      id: 'h1',
+      recurring: { frequency: 'interval', intervalMinutes: 60 },
+    });
+  const targetedHabit = () =>
+    reminderFactory.build({
+      id: 'h1',
+      recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 3 },
+    });
+
+  it('records the day without rewriting a habit that has no target', async () => {
+    getRemindersMock.mockResolvedValue([plainHabit()]);
+
+    await expect(respondToReminder('h1', REMINDER_DONE_BUTTON)).resolves.toBe(true);
+
+    expect(recordTick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'h1' }),
+      expect.any(Date)
+    );
+    expect(setRemindersMock).not.toHaveBeenCalled();
+    expect(markMutated).not.toHaveBeenCalledWith('reminders', 'h1');
+    expect(recordActivity).toHaveBeenCalledWith(expect.objectContaining({ event: 'done' }));
+    expect(removePrompt).toHaveBeenCalledWith('h1');
+  });
+
+  it('records the day and counts toward a target', async () => {
+    getRemindersMock.mockResolvedValue([targetedHabit()]);
+
+    await respondToReminder('h1', REMINDER_DONE_BUTTON);
+
+    expect(setRemindersMock).toHaveBeenCalledTimes(1);
+    expect(markMutated).toHaveBeenCalledWith('reminders', 'h1');
+    expect(recordTick).toHaveBeenCalledTimes(1);
+  });
+
+  it('records nothing when the count did not persist', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota', key: 'reminders', area: 'local' },
+    });
+    getRemindersMock.mockResolvedValue([targetedHabit()]);
+
+    await expect(respondToReminder('h1', REMINDER_DONE_BUTTON)).resolves.toBe(false);
+
+    expect(recordTick).not.toHaveBeenCalled();
+  });
+
+  it('records the day even when re-arming the met target fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    scheduleAt.mockRejectedValueOnce(new Error('alarm limit'));
+    getRemindersMock.mockResolvedValue([
+      reminderFactory.build({
+        id: 'h1',
+        recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 1 },
+      }),
+    ]);
+
+    await respondToReminder('h1', REMINDER_DONE_BUTTON);
+
+    expect(scheduleAt).toHaveBeenCalledWith('reminder-h1', expect.any(Date));
+    expect(recordTick).toHaveBeenCalledTimes(1);
+  });
+
+  it('records nothing for a habit paused before the lock was taken', async () => {
+    getRemindersMock
+      .mockResolvedValueOnce([plainHabit()])
+      .mockResolvedValue([{ ...plainHabit(), paused: true }]);
+
+    await respondToReminder('h1', REMINDER_DONE_BUTTON);
+
+    expect(recordTick).not.toHaveBeenCalled();
   });
 });
 

@@ -5,6 +5,7 @@ import type {
   ConceptCard,
   DailyBackground,
   Goal,
+  HabitDay,
   PlaylistProgress,
   PomodoroSession,
   PostureDailyStat,
@@ -62,6 +63,17 @@ export const reminderSchema = z.object({
   completedAt: z.optional(z.string()),
 });
 assertNoDrift<z.infer<typeof reminderSchema>, Reminder>();
+
+// Pruning compares dates as strings, so only zero-padded YYYY-MM-DD sorts correctly.
+export const habitDaySchema = z
+  .object({
+    id: z.string(),
+    reminderId: z.string(),
+    date: z.string().check(z.regex(/^\d{4}-\d{2}-\d{2}$/)),
+    count: z.int().check(z.positive()),
+  })
+  .check(z.refine((day) => day.id === `${day.reminderId}:${day.date}`));
+assertNoDrift<z.infer<typeof habitDaySchema>, HabitDay>();
 
 export const pomodoroSessionSchema = z.object({
   id: z.string(),

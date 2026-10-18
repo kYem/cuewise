@@ -4,6 +4,7 @@ import {
   logger,
   type Reminder as SharedReminder,
 } from '@cuewise/shared';
+import { recordHabitDone } from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,6 +34,12 @@ vi.mock('@cuewise/storage', () => ({
     const reminders = mutate((await getRemindersMock()) ?? []);
     return { result: await setRemindersMock(reminders), reminders };
   }),
+  withCollectionLock: vi.fn((_lock: string, apply: () => Promise<unknown>) => apply()),
+  recordHabitDone: vi.fn(async () => ({
+    result: { success: true },
+    changedId: 'habit-day',
+    prunedIds: [],
+  })),
   // Runs at module load now, sync or no sync — must resolve, background.ts chains off it.
   ensureSettingsMigrated: vi.fn(() => Promise.resolve()),
   // The fire path checks the Notifications switch before it notifies.
@@ -459,6 +466,7 @@ describe('background: notification action buttons', () => {
         date: formatDateString(new Date()),
         count: 1,
       });
+      expect(recordHabitDone).toHaveBeenCalledWith('water', formatDateString(new Date()));
     });
   });
 

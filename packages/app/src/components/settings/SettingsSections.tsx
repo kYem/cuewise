@@ -36,6 +36,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
+import { HABIT_HISTORY_SYNC_NOTICE } from '../HabitsSection';
 import {
   type HomeWidget,
   type HomeWidgetKey,
@@ -62,6 +63,8 @@ import { ThumbPicker } from './ThumbPicker';
 import { pomodoroWorkStep } from './timer-presets';
 import { WeatherLocationPicker } from './WeatherLocationPicker';
 import { WorldClockSettings } from './WorldClockSettings';
+
+const CHROME_SYNC_HELP = `Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item. ${HABIT_HISTORY_SYNC_NOTICE}`;
 
 const SOUND_OPTIONS = Object.entries(NOTIFICATION_SOUNDS).map(([value, label]) => ({
   value,
@@ -890,7 +893,7 @@ function AdvancedSection({ s, set, filter, onReset }: SettingsSectionProps) {
         <SettingRow
           label="Chrome sync"
           filter={filter}
-          help="Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item."
+          help={CHROME_SYNC_HELP}
           keywords="chrome sync cloud cross device storage"
         >
           <Switch

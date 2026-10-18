@@ -5,12 +5,14 @@ import {
   logger,
   type Reminder,
   resetPlatform,
+  STORAGE_KEYS,
   type SyncMutationSink,
 } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { forgetHabit, recordHabitTick } from '../services/habit-history';
 import { recordReminderActivity } from '../services/reminder-activity';
 import { reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
@@ -27,6 +29,13 @@ vi.mock('../services/reminder-prompts', () => ({
   addReminderPrompt: vi.fn(() => Promise.resolve(true)),
   removeReminderPrompt: vi.fn(() => Promise.resolve(true)),
 }));
+vi.mock('../services/habit-history', () => ({
+  recordHabitTick: vi.fn(() => Promise.resolve()),
+  forgetHabit: vi.fn(() => Promise.resolve()),
+}));
+const recordTick = vi.mocked(recordHabitTick);
+const forget = vi.mocked(forgetHabit);
+
 const addPrompt = vi.mocked(addReminderPrompt);
 const removePrompt = vi.mocked(removeReminderPrompt);
 
@@ -35,6 +44,7 @@ vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(),
   setReminders: vi.fn(),
   getSettings: vi.fn(),
+  getHabitHistory: vi.fn(),
   // Faithful, not a stub: reading inside the write is the property under test, so a mock that
   // took the caller's list would let a read hoisted back out of the lock pass.
   updateReminders: vi.fn(async (mutate: (reminders: Reminder[]) => Reminder[]) => {
@@ -61,6 +71,7 @@ vi.mock('./toast-store', () => ({
 const getRemindersMock = vi.mocked(storage.getReminders);
 const setRemindersMock = vi.mocked(storage.setReminders);
 const getSettingsMock = vi.mocked(storage.getSettings);
+const getHabitHistoryMock = vi.mocked(storage.getHabitHistory);
 
 // The Scheduler is injected; assert against it instead of poking chrome.alarms.
 const fakeScheduler = {
@@ -97,11 +108,13 @@ beforeEach(() => {
   getRemindersMock.mockImplementation(async () => useReminderStore.getState().reminders);
   setRemindersMock.mockResolvedValue({ success: true });
   getSettingsMock.mockResolvedValue(DEFAULT_SETTINGS);
+  getHabitHistoryMock.mockResolvedValue([]);
   configurePlatform({ scheduler: fakeScheduler });
   useReminderStore.setState({
     reminders: [],
     upcomingReminders: [],
     overdueReminders: [],
+    habitHistory: [],
     isLoading: false,
     error: null,
   });
@@ -997,6 +1010,46 @@ describe('converging on reminders written elsewhere', () => {
     expect(useReminderStore.getState().error).toBeNull();
   });
 
+  it('picks up a history-only change written elsewhere', async () => {
+    const fake = await initializeObserving();
+    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
+    getHabitHistoryMock.mockResolvedValue([day]);
+
+    fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([day]));
+  });
+
+  it('still adopts pulled reminders when the habit history cannot be read, keeping the history it has', async () => {
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
+    getHabitHistoryMock.mockResolvedValue([day]);
+    const fake = await initializeObserving();
+    getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
+    getRemindersMock.mockResolvedValue([mine, theirs]);
+
+    fake.emit([STORAGE_KEYS.REMINDERS, STORAGE_KEYS.HABIT_HISTORY]);
+
+    await vi.waitFor(() => expect(useReminderStore.getState().reminders).toHaveLength(2));
+    expect(useReminderStore.getState().habitHistory).toEqual([day]);
+    expect(logError).toHaveBeenCalledWith(
+      expect.stringContaining('habit history'),
+      expect.any(Error)
+    );
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+
+  it('loads reminders with an empty history when the habit history cannot be read at launch', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
+
+    await initializeObserving();
+
+    expect(useReminderStore.getState().reminders).toEqual([mine]);
+    expect(useReminderStore.getState().habitHistory).toEqual([]);
+    expect(useReminderStore.getState().error).toBeNull();
+  });
+
   // ReminderWidget chains fireDueReminders off initialize(), and that rewrites the whole array
   // from the in-memory copy — without the awaited reconcile it writes the pre-pull one.
   it('picks up a pull that landed while it was still loading', async () => {
@@ -1436,5 +1489,107 @@ describe('re-arming on load', () => {
 
     expect(toastWarning).toHaveBeenCalledWith("Some reminders couldn't be re-armed after launch.");
     expect(toastError).not.toHaveBeenCalled();
+  });
+});
+
+describe('habit history', () => {
+  it('records a panel tick on a habit, against the written copy', async () => {
+    const habit = reminderFactory.build({
+      id: 'h1',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    useReminderStore.setState({ reminders: [habit] });
+
+    await useReminderStore.getState().toggleReminder('h1');
+
+    const written = useReminderStore.getState().reminders[0];
+    expect(recordTick).toHaveBeenCalledWith(written, expect.any(Date));
+  });
+
+  it('records a saved tick even when clearing the prompt fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    removePrompt.mockRejectedValueOnce(new Error('prompts unreadable'));
+    const habit = reminderFactory.build({
+      id: 'h1',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    useReminderStore.setState({ reminders: [habit] });
+
+    await useReminderStore.getState().toggleReminder('h1');
+
+    expect(recordTick).toHaveBeenCalledTimes(1);
+  });
+
+  it('records an early skip on a paused habit', async () => {
+    const habit = reminderFactory.build({
+      id: 'h1',
+      dueDate: new Date(Date.now() + 10 * 60_000).toISOString(),
+      paused: true,
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    useReminderStore.setState({ reminders: [habit] });
+
+    await useReminderStore.getState().toggleReminder('h1');
+
+    expect(recordTick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'h1', paused: true }),
+      expect.any(Date)
+    );
+  });
+
+  it('records nothing when the write failed', async () => {
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota', key: 'reminders', area: 'local' },
+    });
+    const habit = reminderFactory.build({
+      id: 'h1',
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    useReminderStore.setState({ reminders: [habit] });
+
+    await useReminderStore.getState().toggleReminder('h1');
+
+    expect(recordTick).not.toHaveBeenCalled();
+  });
+
+  it('records nothing when a one-off is completed', async () => {
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'r1' })] });
+
+    await useReminderStore.getState().toggleReminder('r1');
+
+    expect(recordTick).not.toHaveBeenCalled();
+  });
+
+  it('forgets a deleted reminder’s history', async () => {
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'h1' })] });
+
+    await useReminderStore.getState().deleteReminder('h1');
+
+    expect(forget).toHaveBeenCalledWith('h1');
+  });
+
+  it('forgets a deleted reminder’s history even when clearing the prompt fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    removePrompt.mockRejectedValueOnce(new Error('prompts unreadable'));
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'h1' })] });
+
+    await useReminderStore.getState().deleteReminder('h1');
+
+    expect(forget).toHaveBeenCalledWith('h1');
+  });
+
+  it('keeps a failed delete’s history', async () => {
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota', key: 'reminders', area: 'local' },
+    });
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'h1' })] });
+
+    await useReminderStore.getState().deleteReminder('h1');
+
+    expect(forget).not.toHaveBeenCalled();
   });
 });

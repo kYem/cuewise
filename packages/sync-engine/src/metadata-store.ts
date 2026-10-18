@@ -18,6 +18,11 @@ export interface SyncMeta {
    * purge means what it no longer holds was deleted, a restore that it was lost and must re-push.
    */
   relistOwed?: 'purged' | 'restored';
+  /**
+   * The collections bound when the cursor last started over. An older build skips records of a
+   * collection it does not bind yet still moves the cursor past them.
+   */
+  boundCollections?: string;
 }
 
 export function defaultMeta(deviceNode: string): SyncMeta {

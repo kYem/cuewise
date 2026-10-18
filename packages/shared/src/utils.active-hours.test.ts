@@ -6,6 +6,7 @@ import {
   firesPerActiveDay,
   fitToActiveHours,
   intervalDueDateFromNow,
+  isActiveDay,
   nextReminderDueDate,
   skipReminderOccurrence,
 } from './utils';
@@ -125,6 +126,12 @@ describe('interval reminders with active hours', () => {
     vi.setSystemTime(at(5, 6));
 
     expect(intervalDueDateFromNow(60, WORKDAY)).toEqual(at(5, 9));
+  });
+});
+
+describe('isActiveDay', () => {
+  it('treats a habit without active hours as active every day', () => {
+    expect(isActiveDay(at(10, 12), undefined)).toBe(true);
   });
 });
 

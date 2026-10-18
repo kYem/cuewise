@@ -1,6 +1,6 @@
 import { type InsightsData, QUOTE_CATEGORIES, type QuoteCategory } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
-import { conceptCardFactory } from '@cuewise/test-utils/factories';
+import { conceptCardFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
@@ -43,13 +43,21 @@ interface SetupOptions {
     sevenDayPercent: number | null;
     trackedHoursToday: number;
   } | null;
+  habitReminders?: ReturnType<typeof reminderFactory.build>[];
 }
 
-function setup({ enabled = true, cards = [], postureSummary = null }: SetupOptions = {}) {
+function setup({
+  enabled = true,
+  cards = [],
+  postureSummary = null,
+  habitReminders = [],
+}: SetupOptions = {}) {
   vi.mocked(useInsightsStore).mockReturnValue({
     insights: makeInsights(),
     analytics: null,
     postureSummary,
+    habitReminders,
+    habitHistory: [],
     isLoading: false,
     initialize: vi.fn(),
     exportAsJSON: vi.fn(),
@@ -65,7 +73,7 @@ function setup({ enabled = true, cards = [], postureSummary = null }: SetupOptio
     createSelectorMock({ cards, initialize: vi.fn() })
   );
   vi.mocked(useSettingsStore).mockImplementation(
-    createSelectorMock({ settings: { conceptCardsEnabled: enabled } })
+    createSelectorMock({ settings: { conceptCardsEnabled: enabled, syncEnabled: false } })
   );
 }
 
@@ -160,5 +168,31 @@ describe('InsightsPage — Concepts tab', () => {
     // The reset effect must have switched activeTab back to Overview — this fails
     // if that effect is removed (activeTab would stay 'concepts', Overview hidden).
     expect(screen.getByText('Category Insights')).toBeInTheDocument();
+  });
+});
+
+describe('InsightsPage — habits', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hides the Habits section without habits', () => {
+    setup();
+
+    render(<InsightsPage />);
+
+    expect(screen.queryByRole('heading', { name: 'Habits' })).toBeNull();
+  });
+
+  it('shows the Habits section for an interval habit', () => {
+    setup({
+      habitReminders: [
+        reminderFactory.build({ recurring: { frequency: 'interval', intervalMinutes: 60 } }),
+      ],
+    });
+
+    render(<InsightsPage />);
+
+    expect(screen.getByRole('heading', { name: 'Habits' })).toBeInTheDocument();
   });
 });

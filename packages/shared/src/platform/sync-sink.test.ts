@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../logger';
 import { configurePlatform, getSyncSink } from './registry';
-import { notifyDeleted, notifyMutated, notifyMutatedBulk } from './sync-sink';
+import { notifyDeleted, notifyDeletedBulk, notifyMutated, notifyMutatedBulk } from './sync-sink';
 import type { SyncMutationSink } from './types';
 
 describe('sync-sink', () => {
@@ -150,5 +150,24 @@ describe('sync-sink', () => {
     expect(() => notifyMutatedBulk('goals', ['goal-1'])).not.toThrow();
 
     expect(markMutated).not.toHaveBeenCalled();
+  });
+
+  it('notifyDeletedBulk sends one bulk mark when the sink takes them', () => {
+    const fake = { markMutated: vi.fn(), markDeleted: vi.fn(), markDeletedBulk: vi.fn() };
+    configurePlatform({ syncSink: fake });
+
+    notifyDeletedBulk('habitHistory', ['a', 'b']);
+
+    expect(fake.markDeletedBulk).toHaveBeenCalledWith('habitHistory', ['a', 'b']);
+    expect(fake.markDeleted).not.toHaveBeenCalled();
+  });
+
+  it('notifyDeletedBulk falls back to one mark per id for a sink without the bulk form', () => {
+    const fake = { markMutated: vi.fn(), markDeleted: vi.fn() };
+    configurePlatform({ syncSink: fake });
+
+    notifyDeletedBulk('habitHistory', ['a', 'b']);
+
+    expect(fake.markDeleted).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,6 +3,7 @@ import {
   type CollectionLock,
   getCollectionsRaw,
   getGoalsRaw,
+  getHabitHistoryRaw,
   getQuotesRaw,
   getRemindersRaw,
   getSettingsForSync,
@@ -10,6 +11,7 @@ import {
   type StorageResult,
   setCollectionsRaw,
   setGoalsRaw,
+  setHabitHistoryRaw,
   setQuotesRaw,
   setRemindersRaw,
   setSettingsPatchRaw,
@@ -146,6 +148,8 @@ export function defaultBindings(): CollectionBinding[] {
     arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
     arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
     arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
+    // One entity per habit per day, so devices only conflict on a day both ticked.
+    arrayBinding('habitHistory', getHabitHistoryRaw, setHabitHistoryRaw),
     settingsBinding(),
   ];
 }

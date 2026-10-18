@@ -43,6 +43,8 @@ import {
 import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 interface Device {
   kv: FakeKvStore;
   apiClient: FakeApiClient;
@@ -1205,6 +1207,24 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.syncNow();
 
     expect(device.apiClient.callOrder).toEqual(['getChanges', 'pushChanges']);
+  });
+
+  it('pushes an edit marked more than a day before the push', async () => {
+    const server = new FakeSyncServer();
+    server.maxClockDriftMs = DAY_MS;
+    let t = Date.now();
+    const device = createDevice(server, { now: () => t });
+    device.apiClient.now = () => t;
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const goal = goalFactory.build();
+    await setGoals([goal]);
+    await device.engine.markMutated('goals', goal.id);
+
+    t += 3 * DAY_MS;
+    await device.engine.syncNow();
+
+    expect(server.rows().some((row) => row.entityId === goal.id)).toBe(true);
   });
 
   it('a 401 mid-sync drops to signed_out without clearing the DK or touching local data', async () => {
@@ -2669,6 +2689,52 @@ describe('SyncEngine.start / stop', () => {
     expect(scheduler.scheduled).not.toEqual([]);
   });
 
+  it('re-pulls from zero once when this build binds a collection the ledger has not seen', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build()]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await new SyncMetadataStore(device.kv).update((meta) => {
+      meta.cursor = 42;
+      delete meta.boundCollections;
+    });
+    const pulls = vi.spyOn(device.apiClient, 'getChanges');
+
+    await restart(device).start();
+    expect(pulls.mock.calls[0]?.[0]).toBe(0);
+
+    pulls.mockClear();
+    await restart(device).start();
+    expect(pulls.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  });
+
+  it('still starts when the ledger is unreadable, and re-pulls from zero once it reads again', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await setGoals([goalFactory.build()]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await new SyncMetadataStore(device.kv).update((meta) => {
+      meta.cursor = 42;
+      delete meta.boundCollections;
+    });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    device.kv.unreadableKey = SYNC_META_KEY;
+    const scheduler = new FakeScheduler();
+    const restarted = restart(device, scheduler);
+
+    await restarted.start();
+
+    expect(restarted.getStatus()).toBe('active');
+    expect(scheduler.scheduled).not.toEqual([]);
+
+    device.kv.unreadableKey = null;
+    const pulls = vi.spyOn(device.apiClient, 'getChanges');
+    await restart(device).start();
+    expect(pulls.mock.calls[0]?.[0]).toBe(0);
+  });
+
   it('asks for the recovery code when the key is gone and the server cannot be reached', async () => {
     // The fetch is load-bearing only here, and an unanswerable one must still not leave a keyless
     // device claiming to sync — the fall-through hands it to the key load, which says reconnect.
@@ -3375,6 +3441,21 @@ describe('SyncEngine.markMutatedBulk', () => {
   });
 });
 
+describe('SyncEngine.markDeletedBulk', () => {
+  it('tombstones the full id list through the mutation tracker', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const metaStore = new SyncMetadataStore(device.kv);
+
+    await device.engine.markDeletedBulk('goals', ['g1', 'g2']);
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toEqual(['g1', 'g2']);
+    expect(saved.tombstones).toEqual(['goals/g1', 'goals/g2']);
+  });
+});
+
 // Local rather than in __fixtures__: both build on this file's createDevice.
 async function enabledThenSignedOut(server: FakeSyncServer): Promise<Device> {
   const device = createDevice(server);
@@ -3716,6 +3797,30 @@ describe('SyncEngine with a key stored before keys recorded their account', () =
     await restart(device).start();
 
     expect(await loadPersistedDataKey(device.kv)).toMatchObject({ userId: 'fake-user' });
+  });
+
+  it('starts the cursor over before a cycle can run while the key is being bound', async () => {
+    const device = await enabledWithUnboundKey();
+    await new SyncMetadataStore(device.kv).update((meta) => {
+      meta.cursor = 42;
+      delete meta.boundCollections;
+    });
+    const account = heldAnswer<{ userId: string; email: string | null }>();
+    vi.spyOn(device.apiClient, 'getAccount').mockImplementation(() => {
+      account.start();
+      return account.held;
+    });
+    const pulls = vi.spyOn(device.apiClient, 'getChanges');
+    const restarted = restart(device);
+
+    const started = restarted.start();
+    await account.awaited;
+    await restarted.syncNow();
+    account.release({ userId: 'fake-user', email: null });
+    await started;
+
+    expect(pulls).toHaveBeenCalled();
+    expect(pulls.mock.calls.map((call) => call[0])).not.toContain(42);
   });
 
   it('leaves it unbound on a start without a session', async () => {

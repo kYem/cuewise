@@ -2,13 +2,15 @@ import {
   describeDailyProgress,
   formatCompactInterval,
   formatDailyProgress,
+  getHabitStats,
   REMINDER_CATEGORY_META,
   type Reminder,
 } from '@cuewise/shared';
-import { cn } from '@cuewise/ui';
+import { cn, HoverCard, HoverCardContent, HoverCardTrigger } from '@cuewise/ui';
 import { isToday, parseISO } from 'date-fns';
-import { CheckCircle2, ChevronDown, ChevronUp, Pause, Plus } from 'lucide-react';
-import { type CSSProperties, useEffect, useState } from 'react';
+import { CheckCircle2, ChevronDown, ChevronUp, Flame, Pause, Plus } from 'lucide-react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
+import { useReminderStore } from '../../stores/reminder-store';
 import { useSettingsStore } from '../../stores/settings-store';
 import {
   buildReminderUrgencyNote,
@@ -24,6 +26,7 @@ import {
   ReminderHeroCard,
   ReminderPanelHeader,
 } from './atoms';
+import { HabitStatsCard } from './HabitStatsCard';
 import { REMINDER_STATE_STYLES } from './reminder-state-styles';
 import type { ReminderPanelProps } from './types';
 
@@ -88,6 +91,13 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   const categoryColor = REMINDER_CATEGORY_META[category].color;
   const showCheck = nudging || justAcked || (!paused && hover);
   const cadence = habitCadence(reminder);
+  const habitHistory = useReminderStore((s) => s.habitHistory);
+  // The panel re-renders every second; streaks only change by the minute.
+  const minute = Math.floor(Date.now() / 60_000);
+  const stats = useMemo(
+    () => getHabitStats(reminder, habitHistory, new Date(minute * 60_000)),
+    [reminder, habitHistory, minute]
+  );
 
   // Tint the border (and the glow keyframe's color, while nudging) by category.
   const pillStyle: CSSProperties = {};
@@ -119,36 +129,58 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      aria-label={habitLabel(reminder, paused)}
-      title={paused ? 'Paused — tap to resume' : 'Tap to mark done'}
-      className={cn(
-        'inline-flex max-w-full items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-2xl border transition-all',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
-        nudging && 'habit-glow-pulse',
-        justAcked && 'scale-105',
-        paused
-          ? 'bg-surface-variant border-border text-tertiary'
-          : 'text-primary hover:brightness-110'
-      )}
-      style={pillStyle}
-    >
-      <span className="inline-flex items-center justify-center w-4 h-4 flex-none">
-        {paused ? (
-          <Pause className="w-3 h-3 text-tertiary" />
-        ) : showCheck ? (
-          <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} style={{ color: categoryColor }} />
-        ) : (
-          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: categoryColor }} />
-        )}
-      </span>
-      <span className="min-w-0 break-words text-left text-sm font-medium">{reminder.text}</span>
-      <span className="flex-none text-xs text-tertiary">{paused ? 'paused' : cadence}</span>
-    </button>
+    <HoverCard openDelay={300} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <button
+          type="button"
+          onClick={handleClick}
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          aria-label={habitLabel(reminder, paused)}
+          className={cn(
+            'inline-flex max-w-full items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-2xl border transition-all',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',
+            nudging && 'habit-glow-pulse',
+            justAcked && 'scale-105',
+            paused
+              ? 'bg-surface-variant border-border text-tertiary'
+              : 'text-primary hover:brightness-110'
+          )}
+          style={pillStyle}
+        >
+          <span className="inline-flex items-center justify-center w-4 h-4 flex-none">
+            {paused ? (
+              <Pause className="w-3 h-3 text-tertiary" />
+            ) : showCheck ? (
+              <CheckCircle2
+                className="w-4 h-4"
+                strokeWidth={2.5}
+                style={{ color: categoryColor }}
+              />
+            ) : (
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ backgroundColor: categoryColor }}
+              />
+            )}
+          </span>
+          <span className="min-w-0 break-words text-left text-sm font-medium">{reminder.text}</span>
+          <span className="flex-none text-xs text-tertiary">{paused ? 'paused' : cadence}</span>
+          {stats.current >= STREAK_CHIP_MIN && (
+            <span
+              data-testid={`habit-streak-${reminder.id}`}
+              className="inline-flex flex-none items-center gap-0.5 border-l border-border pl-1.5 text-xs font-bold text-orange-500"
+            >
+              <Flame className="h-3 w-3" strokeWidth={2.5} />
+              {stats.current}
+            </span>
+          )}
+        </button>
+      </HoverCardTrigger>
+      <HoverCardContent>
+        <HabitStatsCard reminder={reminder} stats={stats} />
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
@@ -161,6 +193,8 @@ interface HabitStripProps {
 
 /** The scheduled row list collapses past this many rows. */
 const SCHEDULED_LIMIT = 3;
+
+const STREAK_CHIP_MIN = 2;
 
 /** Collapsed habit count: ~2 rows of pills, fewer for long titles. Clamped 2-4. */
 function visibleHabitCount(ordered: Reminder[]): number {

@@ -1,36 +1,37 @@
 import { DecryptError, EnvelopeParseError, generateDataKey, sealRecord } from '@cuewise/crypto';
-import { hlcDecode, hlcEncode, type SyncRecord } from '@cuewise/shared';
+import { hlcEncode, type SyncRecord } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
 import { fromSyncRecord, toPushRecord } from './record-map';
 import type { RecordBody } from './strategy';
 
 const HLC = hlcEncode({ physical: 1_700_000_000_000, counter: 3, node: 'device-a' });
+const PUSHED_AT = 1_800_000_000_000;
 
 function asSyncRecord(pushRecord: Awaited<ReturnType<typeof toPushRecord>>): SyncRecord {
   return { ...pushRecord, seq: 1 };
 }
 
 describe('toPushRecord', () => {
-  it('seals the body and derives clientUpdatedAt from the hlc physical time', async () => {
+  it('seals the body and stamps clientUpdatedAt with the push time, not the hlc', async () => {
     const dk = generateDataKey();
     const body: RecordBody = { entity: { id: 'g1', text: 'x' }, hlc: HLC };
 
-    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body);
+    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body, PUSHED_AT);
 
     expect(pushRecord.collection).toBe('goals');
     expect(pushRecord.entityId).toBe('g1');
     expect(pushRecord.deleted).toBe(false);
-    expect(pushRecord.clientUpdatedAt).toBe(hlcDecode(HLC).physical);
+    expect(pushRecord.clientUpdatedAt).toBe(PUSHED_AT);
   });
 
   it('marks a tombstone body (entity:null) as deleted', async () => {
     const dk = generateDataKey();
     const body: RecordBody = { entity: null, hlc: HLC };
 
-    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body);
+    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body, PUSHED_AT);
 
     expect(pushRecord.deleted).toBe(true);
-    expect(pushRecord.clientUpdatedAt).toBe(hlcDecode(HLC).physical);
+    expect(pushRecord.clientUpdatedAt).toBe(PUSHED_AT);
   });
 });
 
@@ -38,7 +39,7 @@ describe('fromSyncRecord', () => {
   it('round-trips a live entity body through toPushRecord', async () => {
     const dk = generateDataKey();
     const body: RecordBody = { entity: { id: 'g1', text: 'x' }, hlc: HLC };
-    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body);
+    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body, PUSHED_AT);
 
     const { body: opened } = await fromSyncRecord(dk, asSyncRecord(pushRecord));
 
@@ -48,7 +49,7 @@ describe('fromSyncRecord', () => {
   it('round-trips a tombstone body, preserving its hlc for delete-vs-edit LWW', async () => {
     const dk = generateDataKey();
     const body: RecordBody = { entity: null, hlc: HLC };
-    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body);
+    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body, PUSHED_AT);
 
     const { body: opened } = await fromSyncRecord(dk, asSyncRecord(pushRecord));
 
@@ -59,7 +60,7 @@ describe('fromSyncRecord', () => {
   it('AAD swap defense: a record sealed for g1 refuses to open as g2', async () => {
     const dk = generateDataKey();
     const body: RecordBody = { entity: { id: 'g1', text: 'x' }, hlc: HLC };
-    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body);
+    const pushRecord = await toPushRecord(dk, 'dk-1', 'goals', 'g1', body, PUSHED_AT);
     const forged = asSyncRecord({ ...pushRecord, entityId: 'g2' });
 
     await expect(fromSyncRecord(dk, forged)).rejects.toThrow(DecryptError);

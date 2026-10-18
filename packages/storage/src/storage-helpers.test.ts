@@ -31,6 +31,7 @@ import {
   getConceptCards,
   getCustomBackground,
   getGoals,
+  getHabitHistory,
   getQuotes,
   getReminders,
   getSettings,
@@ -41,6 +42,8 @@ import {
   migrateLegacySettings,
   readLegacySettingsBlob,
   readSettings,
+  recordHabitDone,
+  removeHabitDays,
   resetSettingsMigration,
   SETTINGS_KEYS,
   setCollections,
@@ -312,6 +315,97 @@ describe('updateConceptCards', () => {
     await updateConceptCards(mutate);
 
     expect(mutate).toHaveBeenCalledOnce();
+  });
+});
+
+describe('habit history', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('records a done in the local area even with Chrome sync on', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+    await setSettingsPatch({ syncEnabled: true });
+
+    const { result, changedId } = await recordHabitDone('r1', '2026-10-05');
+
+    expect(result.success).toBe(true);
+    expect(changedId).toBe('r1:2026-10-05');
+    expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toEqual([
+      { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 },
+    ]);
+    expect(areas.sync[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
+  });
+
+  it('lets two concurrent dones both land', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+
+    await Promise.all([recordHabitDone('r1', '2026-10-05'), recordHabitDone('r1', '2026-10-05')]);
+
+    await expect(getHabitHistory()).resolves.toEqual([
+      { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 2 },
+    ]);
+  });
+
+  it('names the expired days it prunes', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    await recordHabitDone('r1', '2025-01-01');
+
+    const { prunedIds } = await recordHabitDone('r1', '2026-10-05');
+
+    expect(prunedIds).toEqual(['r1:2025-01-01']);
+    expect((await getHabitHistory()).map((entry) => entry.id)).toEqual(['r1:2026-10-05']);
+  });
+
+  it('keeps a stored row this build cannot validate when recording', async () => {
+    const newerRow = { id: 'r9:2026-10-01', reminderId: 'r9', date: '2026-10-01', count: 'many' };
+    const { store, areas } = recordingStore({
+      local: { [STORAGE_KEYS.HABIT_HISTORY]: [newerRow] },
+    });
+    configurePlatform({ storage: store });
+
+    await recordHabitDone('r1', '2026-10-05');
+
+    expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toEqual([
+      newerRow,
+      { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 },
+    ]);
+    expect((await getHabitHistory()).map((entry) => entry.id)).toEqual(['r1:2026-10-05']);
+  });
+
+  it.each([
+    ['an unpadded date', { id: 'r1:2026-1-5', reminderId: 'r1', date: '2026-1-5', count: 1 }],
+    ['an id off its key', { id: 'x', reminderId: 'r1', date: '2026-10-04', count: 1 }],
+    ['a zero count', { id: 'r1:2026-10-04', reminderId: 'r1', date: '2026-10-04', count: 0 }],
+  ])('hides a stored day with %s from the typed read', async (_label, row) => {
+    const { store } = recordingStore({ local: { [STORAGE_KEYS.HABIT_HISTORY]: [row] } });
+    configurePlatform({ storage: store });
+
+    await expect(getHabitHistory()).resolves.toEqual([]);
+  });
+
+  it('removes every day of one habit and names them', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    await recordHabitDone('r1', '2026-10-04');
+    await recordHabitDone('r1', '2026-10-05');
+    await recordHabitDone('r2', '2026-10-05');
+
+    const { removedIds } = await removeHabitDays('r1');
+
+    expect(removedIds).toEqual(['r1:2026-10-04', 'r1:2026-10-05']);
+    expect((await getHabitHistory()).map((entry) => entry.id)).toEqual(['r2:2026-10-05']);
+  });
+
+  it('writes nothing when the habit has no days', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: store });
+
+    const { result, removedIds } = await removeHabitDays('r1');
+
+    expect(result.success).toBe(true);
+    expect(removedIds).toEqual([]);
+    expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
   });
 });
 

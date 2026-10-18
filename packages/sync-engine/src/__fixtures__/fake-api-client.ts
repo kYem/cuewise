@@ -52,6 +52,8 @@ export class FakeSyncServer {
   private recoveryEnvelope: string | null = null;
   /** Bumped by an account delete: older tokens 401, and the next sign-in names a new user. */
   accountGeneration = 0;
+  /** The real server's clock-drift check, off unless a test sets it: most tests run fake clocks. */
+  maxClockDriftMs: number | null = null;
   private readonly records: SyncRecord[] = [];
   // One server is one account, so every row here is already scoped the way the real store
   // scopes by userId; what still has to be told apart is which session made the call.
@@ -75,7 +77,11 @@ export class FakeSyncServer {
    * Upsert-by-id with compare-and-set, like the real store: a record whose `baseSeq` is not the
    * row's current seq is refused under `conflicts`; one without `baseSeq` overwrites.
    */
-  pushChanges(records: PushRecord[]): PushResponse {
+  pushChanges(records: PushRecord[], now: number = Date.now()): PushResponse {
+    const limit = this.maxClockDriftMs;
+    if (limit !== null && records.some((rec) => Math.abs(rec.clientUpdatedAt - now) > limit)) {
+      throw new ApiError('invalid_record', 422);
+    }
     const response: PushResponse = { cursor: this.nextSeq, applied: [], conflicts: [] };
     for (const rec of records) {
       const idx = this.records.findIndex(
@@ -589,7 +595,7 @@ export class FakeApiClient implements EngineApiClient {
       this.nextPushChangesError = null;
       throw err;
     }
-    return this.server.pushChanges(records);
+    return this.server.pushChanges(records, this.now());
   }
 
   private assertAuthorized(): void {

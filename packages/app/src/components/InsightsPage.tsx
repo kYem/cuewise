@@ -23,6 +23,7 @@ import { ConceptInsights } from './ConceptInsights';
 import { ExportControls } from './ExportControls';
 import { FocusHeatmap } from './FocusHeatmap';
 import { GoalCompletionChart } from './GoalCompletionChart';
+import { HabitsSection } from './HabitsSection';
 import { ImportControls } from './ImportControls';
 import { PageHeader } from './PageHeader';
 import { PomodoroHeatmap } from './PomodoroHeatmap';
@@ -34,6 +35,8 @@ export const InsightsPage: React.FC = () => {
     insights,
     analytics,
     postureSummary,
+    habitReminders,
+    habitHistory,
     isLoading,
     initialize,
     exportAsJSON,
@@ -51,6 +54,8 @@ export const InsightsPage: React.FC = () => {
   const conceptCards = useConceptCardsStore((state) => state.cards);
   const initializeConcepts = useConceptCardsStore((state) => state.initialize);
   const conceptsEnabled = useSettingsStore((state) => state.settings.conceptCardsEnabled);
+  // Turning on cloud sync turns syncEnabled off, so this alone means Chrome sync without an account.
+  const chromeSyncOn = useSettingsStore((state) => state.settings.syncEnabled);
   const showConcepts = conceptsEnabled && conceptCards.length > 0;
 
   useEffect(() => {
@@ -275,6 +280,12 @@ export const InsightsPage: React.FC = () => {
             {analytics ? (
               <FocusHeatmap data={analytics.pomodoroHeatmap.weekdayHourDistribution} />
             ) : null}
+
+            <HabitsSection
+              habits={habitReminders}
+              habitHistory={habitHistory}
+              chromeSyncOn={chromeSyncOn}
+            />
 
             {/* Category Heatmap */}
             <div className="bg-surface rounded-xl shadow-lg p-8 mb-8">

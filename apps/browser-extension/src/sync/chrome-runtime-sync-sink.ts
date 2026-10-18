@@ -32,6 +32,10 @@ export class ChromeRuntimeSyncSink implements SyncMutationSink {
     this.enqueue({ op: 'mutatedBulk', collection, entityIds });
   }
 
+  markDeletedBulk(collection: string, entityIds: string[]): void {
+    this.enqueue({ op: 'deletedBulk', collection, entityIds });
+  }
+
   private enqueue(mark: SyncMutationMark): void {
     this.pending.push(mark);
     if (!this.draining) {

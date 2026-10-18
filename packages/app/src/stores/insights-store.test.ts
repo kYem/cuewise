@@ -1,7 +1,12 @@
 import type { Goal, PostureDailyStat, Quote } from '@cuewise/shared';
 import * as shared from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
-import { goalFactory, pomodoroFactory, quoteFactory } from '@cuewise/test-utils/factories';
+import {
+  goalFactory,
+  pomodoroFactory,
+  quoteFactory,
+  reminderFactory,
+} from '@cuewise/test-utils/factories';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fileUtils from '../utils/file-utils';
 import {
@@ -50,6 +55,8 @@ vi.mock('@cuewise/storage', () => ({
   // Defaults to empty so refresh-after-import paths don't error on posture reads.
   getPostureStats: vi.fn(async () => []),
   setPostureStats: vi.fn(),
+  getReminders: vi.fn(async () => []),
+  getHabitHistory: vi.fn(async () => []),
   // The real predicate, not a vi.fn(): the export's completeness depends on what it answers, so a
   // stub would make these assertions pass for any rule. storage-helpers.test.ts pins the original
   // against this copy.
@@ -551,5 +558,66 @@ describe('Insights Store - posture summary wiring', () => {
     await useInsightsStore.getState().refresh();
 
     expect(useInsightsStore.getState().postureSummary).toMatchObject({ todayPercent: 50 });
+  });
+});
+
+describe('Insights Store - habits', () => {
+  const habit = reminderFactory.build({
+    id: 'h1',
+    recurring: { frequency: 'interval', intervalMinutes: 60 },
+  });
+  const daily = reminderFactory.build({ id: 'd1', recurring: { frequency: 'daily' } });
+  const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
+
+  beforeEach(() => {
+    useInsightsStore.setState({ habitReminders: [], habitHistory: [], error: null });
+    vi.clearAllMocks();
+    mockStorageWithData();
+    vi.mocked(storage.getReminders).mockResolvedValue([habit, daily]);
+    vi.mocked(storage.getHabitHistory).mockResolvedValue([day]);
+  });
+
+  it('loads interval habits and their history', async () => {
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().habitReminders.map((r) => r.id)).toEqual(['h1']);
+    expect(useInsightsStore.getState().habitHistory).toEqual([day]);
+  });
+
+  it('refresh reloads habits and their history', async () => {
+    await useInsightsStore.getState().refresh();
+
+    expect(useInsightsStore.getState().habitReminders.map((r) => r.id)).toEqual(['h1']);
+    expect(useInsightsStore.getState().habitHistory).toEqual([day]);
+  });
+
+  it('keeps the page loaded when habit history is unreadable', async () => {
+    const loggerError = vi.spyOn(shared.logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.getHabitHistory).mockRejectedValue(new Error('corrupt'));
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().error).toBeNull();
+    expect(useInsightsStore.getState().insights).not.toBeNull();
+    expect(useInsightsStore.getState().habitReminders.map((r) => r.id)).toEqual(['h1']);
+    expect(useInsightsStore.getState().habitHistory).toEqual([]);
+    expect(loggerError).toHaveBeenCalledWith('Error reading habit history', expect.any(Error));
+    loggerError.mockRestore();
+  });
+
+  it('keeps the page loaded when reminders are unreadable', async () => {
+    const loggerError = vi.spyOn(shared.logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.getReminders).mockRejectedValue(new Error('corrupt'));
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().error).toBeNull();
+    expect(useInsightsStore.getState().insights).not.toBeNull();
+    expect(useInsightsStore.getState().habitReminders).toEqual([]);
+    expect(loggerError).toHaveBeenCalledWith(
+      'Error reading reminders for habits',
+      expect.any(Error)
+    );
+    loggerError.mockRestore();
   });
 });
