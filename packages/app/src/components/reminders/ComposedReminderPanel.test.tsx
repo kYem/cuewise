@@ -109,7 +109,9 @@ describe('ComposedReminderPanel', () => {
 
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
-    expect(screen.getByRole('button', { name: 'Mark Drink water done' })).toHaveTextContent('3/8');
+    expect(
+      screen.getByRole('button', { name: 'Mark Drink water done, 3 of 8 done today' })
+    ).toHaveTextContent('3/8');
   });
 
   it('shows a met daily target as a tick with the count, not a fraction', () => {
@@ -124,7 +126,7 @@ describe('ComposedReminderPanel', () => {
 
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
-    const pill = screen.getByRole('button', { name: 'Mark Drink water done' });
+    const pill = screen.getByRole('button', { name: 'Mark Drink water done, 9 of 8 done today' });
     expect(pill).toHaveTextContent('✓ 9');
     expect(pill).not.toHaveTextContent('9/8');
   });

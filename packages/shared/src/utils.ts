@@ -2232,6 +2232,28 @@ export function isDailyTargetMet(reminder: Reminder, now: Date): boolean {
   return target !== undefined && doneCountToday(reminder, now) >= target;
 }
 
+/** `1/3` toward today's target, or `✓ 4` once met, since Dones past it still count. */
+export function formatDailyProgress(reminder: Reminder, now: Date): string | undefined {
+  const target = dailyTargetOf(reminder);
+  if (target === undefined) {
+    return undefined;
+  }
+  const done = doneCountToday(reminder, now);
+  if (done >= target) {
+    return `✓ ${done}`;
+  }
+  return `${done}/${target}`;
+}
+
+/** Spoken form of `formatDailyProgress`: a screen reader may read `1/3` as a fraction or date. */
+export function describeDailyProgress(reminder: Reminder, now: Date): string | undefined {
+  const target = dailyTargetOf(reminder);
+  if (target === undefined) {
+    return undefined;
+  }
+  return `${doneCountToday(reminder, now)} of ${target} done today`;
+}
+
 /** One more done toward today's target; a reminder with no target is returned as is. */
 export function recordReminderDone(reminder: Reminder, now: Date): Reminder {
   if (dailyTargetOf(reminder) === undefined) {

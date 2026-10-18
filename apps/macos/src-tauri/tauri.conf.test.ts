@@ -110,3 +110,29 @@ describe('glow overlay transparency prerequisites', () => {
     expect(cargoToml).toMatch(/tauri\s*=\s*\{[^}]*"macos-private-api"/);
   });
 });
+
+// ENG-70: the app checks the newest GitHub release for the updater manifest, and only the
+// release overlay produces the signed archive it points at — so a local `pnpm bundle` works
+// without the private signing key.
+describe('updater wiring', () => {
+  const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+  const release = JSON.parse(
+    readFileSync(path.join(__dirname, 'tauri.release.conf.json'), 'utf-8')
+  );
+
+  it('points the updater at the latest GitHub release manifest', () => {
+    expect(config.plugins.updater.endpoints).toEqual([
+      'https://github.com/kYem/cuewise/releases/latest/download/latest.json',
+    ]);
+  });
+
+  it('carries a minisign public key', () => {
+    const decoded = Buffer.from(config.plugins.updater.pubkey, 'base64').toString('utf-8');
+    expect(decoded).toMatch(/^untrusted comment: minisign public key/);
+  });
+
+  it('creates updater artifacts only in the release overlay', () => {
+    expect(config.bundle.createUpdaterArtifacts).toBeUndefined();
+    expect(release.bundle.createUpdaterArtifacts).toBe(true);
+  });
+});

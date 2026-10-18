@@ -270,14 +270,24 @@ fn append_fixed_tail(
     let show = MenuItem::with_id(app, "show", "Open Cuewise", true, None::<&str>)?;
     let insights = MenuItem::with_id(app, "insights", "View Insights", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let updates = MenuItem::with_id(
+        app,
+        "check-updates",
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Quit Cuewise", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     menu.append(&show)?;
     menu.append(&insights)?;
     menu.append(&settings)?;
+    menu.append(&updates)?;
     menu.append(&separator)?;
     menu.append(&quit)?;
-    generation.tail.extend([show, insights, settings, quit]);
+    generation
+        .tail
+        .extend([show, insights, settings, updates, quit]);
     generation.separators.push(separator);
     Ok(())
 }

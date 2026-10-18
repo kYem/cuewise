@@ -1,4 +1,4 @@
-import { Ticker, TickerUtils } from '@tombcato/smart-ticker';
+import { Presets, Ticker } from '@tombcato/smart-ticker';
 import '@tombcato/smart-ticker/style.css';
 import type React from 'react';
 
@@ -8,10 +8,9 @@ interface AuthorTickerProps {
 }
 
 // Character lists for author name scrolling
-// Alphabetical list from TickerUtils + common punctuation and spaces
 const AUTHOR_CHARACTER_LISTS = [
-  TickerUtils.provideAlphabeticalList(), // A-Za-z
-  TickerUtils.provideNumberList(), // 0-9 (for names like "Lao Tzu" or dates)
+  Presets.ALPHABET,
+  Presets.NUMBER,
   ' .-\'",', // Space and common punctuation
 ];
 

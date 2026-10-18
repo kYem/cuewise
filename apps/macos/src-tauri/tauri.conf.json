@@ -57,6 +57,10 @@
       "desktop": {
         "schemes": ["cuewise"]
       }
+    },
+    "updater": {
+      "endpoints": ["https://github.com/kYem/cuewise/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBRTZBMjUxNjdCMTJCOTIKUldTU0s3Rm5VYUxtaWhwekRxL2hwWWtMbnpKTGRIRGcvYVkzL0RIakVSRUlpMzl1amZSUmtaUHQK"
     }
   }
 }

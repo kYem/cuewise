@@ -309,7 +309,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
   const greeting = getGreeting(currentTime);
   const longDate = formatLongDate(currentTime);
 
-  const renderNavControls = (menuRef: React.RefObject<HTMLDivElement>) => (
+  const renderNavControls = (menuRef: React.RefObject<HTMLDivElement | null>) => (
     <>
       {pomodoroStatus !== 'idle' ? (
         <ActivePomodoroWidget />

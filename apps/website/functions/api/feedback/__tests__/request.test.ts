@@ -29,12 +29,15 @@ describe('handleFeatureRequest', () => {
     [makeRequestFeatureRequest({ ...validRequest, area: 'aliens' }), testEnv],
     [makeRequestFeatureRequest({ ...validRequest, details: '  ' }), testEnv],
     [makeRequestFeatureRequest({ ...validRequest, details: 'x'.repeat(2001) }), testEnv],
-  ])('ends every refusal as a sentence, since the form appends a contact line after it', async (request, env) => {
-    const response = await handleFeatureRequest(request, env);
-    const body = (await response.json()) as { error?: string };
+  ])(
+    'ends every refusal as a sentence, since the form appends a contact line after it',
+    async (request, env) => {
+      const response = await handleFeatureRequest(request, env);
+      const body = (await response.json()) as { error?: string };
 
-    expect(body.error).toMatch(/[.!?]$/);
-  });
+      expect(body.error).toMatch(/[.!?]$/);
+    }
+  );
 
   it('returns 500 when the Resend key is missing', async () => {
     const response = await handleFeatureRequest(makeRequestFeatureRequest(validRequest), emptyEnv);
@@ -356,18 +359,19 @@ describe('handleFeatureRequest', () => {
     expect(response.status).toBe(400);
   });
 
-  it.each(
-    FEEDBACK_AREAS.map((a) => a.value)
-  )('accepts %s, so no radio on the form can 400 a typed-out request', async (area) => {
-    const fetchMock = stubResendFetch(200);
-    const response = await handleFeatureRequest(
-      makeRequestFeatureRequest({ ...validRequest, area }),
-      testEnv
-    );
+  it.each(FEEDBACK_AREAS.map((a) => a.value))(
+    'accepts %s, so no radio on the form can 400 a typed-out request',
+    async (area) => {
+      const fetchMock = stubResendFetch(200);
+      const response = await handleFeatureRequest(
+        makeRequestFeatureRequest({ ...validRequest, area }),
+        testEnv
+      );
 
-    expect(response.status).toBe(200);
-    expect(sentEmail(fetchMock).subject).toContain(area);
-  });
+      expect(response.status).toBe(200);
+      expect(sentEmail(fetchMock).subject).toContain(area);
+    }
+  );
 
   it('echoes a valid version, so a request can be read against what they saw', async () => {
     const fetchMock = stubResendFetch(200);

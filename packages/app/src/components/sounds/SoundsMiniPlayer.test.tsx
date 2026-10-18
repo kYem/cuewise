@@ -124,14 +124,14 @@ describe('SoundsMiniPlayer chrome variant', () => {
     expect(renderedClasses(screen.getByTestId('playing-indicator'))).toContain('bg-primary-600');
   });
 
-  it.each([
-    undefined,
-    'surface',
-  ] as const)('names no undefined accent colour (variant: %s)', (variant) => {
-    mockStores({ isPlaying: true });
+  it.each([undefined, 'surface'] as const)(
+    'names no undefined accent colour (variant: %s)',
+    (variant) => {
+      mockStores({ isPlaying: true });
 
-    const { container } = render(<SoundsMiniPlayer variant={variant} />);
+      const { container } = render(<SoundsMiniPlayer variant={variant} />);
 
-    expect(renderedClasses(container).filter((c) => UNDEFINED_ACCENT.test(c))).toEqual([]);
-  });
+      expect(renderedClasses(container).filter((c) => UNDEFINED_ACCENT.test(c))).toEqual([]);
+    }
+  );
 });

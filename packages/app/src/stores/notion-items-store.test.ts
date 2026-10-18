@@ -68,21 +68,20 @@ describe('load', () => {
     expect(useNotionItemsStore.getState().list).toEqual(expected);
   });
 
-  it.each([
-    'upstream_unavailable',
-    'network_error',
-    'internal',
-  ])('keeps the last rows, marked stale, when a refresh fails with %s', async (code) => {
-    const host = await loaded();
-    host.api.listNotionItems.mockRejectedValue(problem(code));
+  it.each(['upstream_unavailable', 'network_error', 'internal'])(
+    'keeps the last rows, marked stale, when a refresh fails with %s',
+    async (code) => {
+      const host = await loaded();
+      host.api.listNotionItems.mockRejectedValue(problem(code));
 
-    await useNotionItemsStore.getState().load(host, TABLE_ID);
+      await useNotionItemsStore.getState().load(host, TABLE_ID);
 
-    expect(useNotionItemsStore.getState().list).toMatchObject({
-      items: [brief, review],
-      stale: true,
-    });
-  });
+      expect(useNotionItemsStore.getState().list).toMatchObject({
+        items: [brief, review],
+        stale: true,
+      });
+    }
+  );
 
   it('drops a slower read that a newer one overtook', async () => {
     const host = fakeNotionHost();
@@ -199,17 +198,17 @@ describe('setDone', () => {
     expect(errorToast).toHaveBeenCalledExactlyOnceWith(message);
   });
 
-  it.each([
-    'upstream_unavailable',
-    'network_error',
-  ])('marks the list stale when a tick fails with %s', async (code) => {
-    const host = await loaded();
-    host.api.setNotionItemDone.mockRejectedValue(problem(code));
+  it.each(['upstream_unavailable', 'network_error'])(
+    'marks the list stale when a tick fails with %s',
+    async (code) => {
+      const host = await loaded();
+      host.api.setNotionItemDone.mockRejectedValue(problem(code));
 
-    await useNotionItemsStore.getState().setDone(host, brief.pageId, true);
+      await useNotionItemsStore.getState().setDone(host, brief.pageId, true);
 
-    expect(useNotionItemsStore.getState().list).toMatchObject({ stale: true });
-  });
+      expect(useNotionItemsStore.getState().list).toMatchObject({ stale: true });
+    }
+  );
 
   it('drops a row Notion no longer has, then reads the table again', async () => {
     const host = await loaded();

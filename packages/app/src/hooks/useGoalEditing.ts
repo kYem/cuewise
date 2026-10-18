@@ -30,10 +30,10 @@ interface UseGoalEditingReturn {
   linkPickerOpenFor: string | null;
 
   /** Ref to attach to the edit input */
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
 
   /** Ref to attach to the actions container (to prevent blur on action click) */
-  actionsRef: React.RefObject<HTMLDivElement>;
+  actionsRef: React.RefObject<HTMLDivElement | null>;
 
   /** Start editing a goal */
   startEditing: (goalId: string, currentText: string) => void;

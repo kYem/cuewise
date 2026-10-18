@@ -32,16 +32,17 @@ describe('PageHeader transparency', () => {
     expect(header()).toHaveClass('bg-transparent');
   });
 
-  it.each(
-    PLAIN_THEMES
-  )('is opaque on the %s theme, where there is no photo behind it', (colorTheme) => {
-    setup(colorTheme);
+  it.each(PLAIN_THEMES)(
+    'is opaque on the %s theme, where there is no photo behind it',
+    (colorTheme) => {
+      setup(colorTheme);
 
-    render(<PageHeader currentPage="pomodoro" />);
+      render(<PageHeader currentPage="pomodoro" />);
 
-    expect(header()).not.toHaveClass('bg-transparent');
-    expect(header()).toHaveClass('bg-surface/95');
-  });
+      expect(header()).not.toHaveClass('bg-transparent');
+      expect(header()).toHaveClass('bg-surface/95');
+    }
+  );
 
   it('lets an explicit prop override the theme it would have detected', () => {
     setup('purple');

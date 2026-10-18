@@ -109,14 +109,12 @@ describe('isShortcutKeyEvent', () => {
     expect(press({ on: input })).toBe(false);
   });
 
-  it.each([
-    'checkbox',
-    'radio',
-    'range',
-    'button',
-  ])('allows keypresses on a focused %s, which takes no typing', (type) => {
-    expect(press({ on: appendWith('input', { type }) })).toBe(true);
-  });
+  it.each(['checkbox', 'radio', 'range', 'button'])(
+    'allows keypresses on a focused %s, which takes no typing',
+    (type) => {
+      expect(press({ on: appendWith('input', { type }) })).toBe(true);
+    }
+  );
 
   it.each(['text', 'search', 'email', 'number'])('rejects keypresses in a %s input', (type) => {
     expect(press({ on: appendWith('input', { type }) })).toBe(false);

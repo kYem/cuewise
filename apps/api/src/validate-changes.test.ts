@@ -221,19 +221,20 @@ describe('validatePushBody baseSeq', () => {
     expect('baseSeq' in result.records[3]).toBe(false);
   });
 
-  it.each([
-    -1,
-    1.5,
-    Number.MAX_SAFE_INTEGER + 1,
-    '7',
-    null,
-  ])('rejects baseSeq %p as a non-negative safe integer fault', (baseSeq) => {
-    const result = validatePushBody({ records: [{ ...record(), baseSeq }] }, Date.now());
-    expect(result).toEqual({
-      problemCode: 'invalid_record',
-      issues: [
-        { index: 0, pointer: '/records/0/baseSeq', detail: 'must be a non-negative safe integer' },
-      ],
-    });
-  });
+  it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '7', null])(
+    'rejects baseSeq %p as a non-negative safe integer fault',
+    (baseSeq) => {
+      const result = validatePushBody({ records: [{ ...record(), baseSeq }] }, Date.now());
+      expect(result).toEqual({
+        problemCode: 'invalid_record',
+        issues: [
+          {
+            index: 0,
+            pointer: '/records/0/baseSeq',
+            detail: 'must be a non-negative safe integer',
+          },
+        ],
+      });
+    }
+  );
 });

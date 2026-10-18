@@ -14,6 +14,8 @@ import { CapturePopup, CLOSE_AFTER_SAVE_MS, DRAFT_WRITE_DELAY_MS } from './Captu
 async function renderPopup(api: FakeCaptureApi) {
   render(<CapturePopup api={api} />);
   await screen.findByRole('button', { name: 'Save' });
+  // The field focuses in an effect that can land after Save renders; typing before it is lost.
+  await waitFor(() => expect(document.activeElement).toBeInstanceOf(HTMLInputElement));
 }
 
 afterEach(() => {

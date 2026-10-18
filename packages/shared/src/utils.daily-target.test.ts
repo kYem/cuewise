@@ -4,7 +4,9 @@ import { DEFAULT_REMINDER_ACTIVE_HOURS, REMINDER_TEMPLATES } from './constants';
 import type { Reminder, ReminderActiveHours } from './types';
 import {
   buildReminderRecurring,
+  describeDailyProgress,
   doneCountToday,
+  formatDailyProgress,
   nextReminderDueDate,
   recordReminderDone,
   resolveReminderNotificationAction,
@@ -37,6 +39,40 @@ describe('doneCountToday', () => {
 
   it('is zero before anything was marked done', () => {
     expect(doneCountToday(water(), at(14))).toBe(0);
+  });
+});
+
+describe('formatDailyProgress', () => {
+  it('reads as done over target', () => {
+    expect(formatDailyProgress(water({ date: '2026-10-05', count: 1 }), at(14))).toBe('1/3');
+  });
+
+  it('shows a tick the moment the target is reached', () => {
+    expect(formatDailyProgress(water({ date: '2026-10-05', count: 3 }), at(14))).toBe('✓ 3');
+  });
+
+  it('keeps counting Dones past a met target', () => {
+    expect(formatDailyProgress(water({ date: '2026-10-05', count: 4 }), at(14))).toBe('✓ 4');
+  });
+
+  it('has nothing to show without a daily target', () => {
+    const plain = baseReminder({ recurring: { frequency: 'interval', intervalMinutes: 60 } });
+
+    expect(formatDailyProgress(plain, at(14))).toBeUndefined();
+  });
+});
+
+describe('describeDailyProgress', () => {
+  it('spells out done of target', () => {
+    expect(describeDailyProgress(water({ date: '2026-10-05', count: 1 }), at(14))).toBe(
+      '1 of 3 done today'
+    );
+  });
+
+  it('has nothing to say without a daily target', () => {
+    const plain = baseReminder({ recurring: { frequency: 'interval', intervalMinutes: 60 } });
+
+    expect(describeDailyProgress(plain, at(14))).toBeUndefined();
   });
 });
 

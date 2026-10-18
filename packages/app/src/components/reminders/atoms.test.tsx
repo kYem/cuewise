@@ -1,7 +1,12 @@
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { ReminderCategoryCheck, ReminderHeroCard, ReminderPanelHeader } from './atoms';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  RecurrencePauseControl,
+  ReminderCategoryCheck,
+  ReminderHeroCard,
+  ReminderPanelHeader,
+} from './atoms';
 
 describe('ReminderCategoryCheck', () => {
   it('calls onToggle when clicked', () => {
@@ -30,6 +35,46 @@ describe('ReminderCategoryCheck', () => {
 
     expect(screen.getByRole('button', { name: 'Skip to next occurrence' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark done' })).not.toBeInTheDocument();
+  });
+});
+
+describe('RecurrencePauseControl', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows today’s progress next to the cadence of an interval with a daily target', () => {
+    const reminder = recurringReminderFactory.build({
+      recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 3 },
+      doneToday: { date: '2026-06-15', count: 1 },
+    });
+    render(<RecurrencePauseControl reminder={reminder} onPauseToggle={vi.fn()} />);
+
+    expect(screen.getByText('· 1/3 today')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('spells out today’s progress for screen readers', () => {
+    const reminder = recurringReminderFactory.build({
+      recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 3 },
+      doneToday: { date: '2026-06-15', count: 1 },
+    });
+    render(<RecurrencePauseControl reminder={reminder} onPauseToggle={vi.fn()} />);
+
+    expect(screen.getByText('1 of 3 done today')).toHaveClass('sr-only');
+  });
+
+  it('shows only the cadence of an interval without a daily target', () => {
+    const reminder = recurringReminderFactory.build({
+      recurring: { frequency: 'interval', intervalMinutes: 60 },
+    });
+    render(<RecurrencePauseControl reminder={reminder} onPauseToggle={vi.fn()} />);
+
+    expect(screen.getByText('every 60 min')).toBeInTheDocument();
   });
 });
 

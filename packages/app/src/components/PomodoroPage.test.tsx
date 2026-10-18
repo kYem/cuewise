@@ -160,28 +160,28 @@ describe('PomodoroPage - companion selection', () => {
 // App paints the Glass photo app-wide (App.background.test.tsx covers it); this page must
 // not resolve or render a second copy on any theme.
 describe('PomodoroPage - background', () => {
-  it.each([
-    ...PLAIN_THEMES,
-    'glass',
-  ] as const)('renders no background layer of its own on the %s theme', (colorTheme) => {
-    setup('quote', false, { colorTheme });
+  it.each([...PLAIN_THEMES, 'glass'] as const)(
+    'renders no background layer of its own on the %s theme',
+    (colorTheme) => {
+      setup('quote', false, { colorTheme });
 
-    render(<PomodoroPage />);
+      render(<PomodoroPage />);
 
-    expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
-  });
+      expect(screen.queryByTestId('pomodoro-background')).not.toBeInTheDocument();
+    }
+  );
 
-  it.each([
-    ...PLAIN_THEMES,
-    'glass',
-  ] as const)('resolves no image of its own on the %s theme', async (colorTheme) => {
-    setup('quote', false, { colorTheme });
+  it.each([...PLAIN_THEMES, 'glass'] as const)(
+    'resolves no image of its own on the %s theme',
+    async (colorTheme) => {
+      setup('quote', false, { colorTheme });
 
-    render(<PomodoroPage />);
+      render(<PomodoroPage />);
 
-    await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
-    expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
-  });
+      await waitFor(() => expect(screen.queryByTestId('quote-display')).toBeInTheDocument());
+      expect(vi.mocked(preloadImages)).not.toHaveBeenCalled();
+    }
+  );
 });
 
 // The children are stubbed here, so these cover the wiring only — that each child is handed

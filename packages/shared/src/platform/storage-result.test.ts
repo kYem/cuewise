@@ -6,12 +6,12 @@ const FULL = 'Storage is full. Free up some space to continue.';
 
 describe('storageWriteErrorMessage', () => {
   // The collection writers pass the StorageError itself; the rest pass what assertPersisted threw.
-  it.each([
-    ['quota_exceeded' as const],
-    ['per_item_quota_exceeded' as const],
-  ])('answers the quota copy for a raw %s error', (type) => {
-    expect(storageWriteErrorMessage({ type, message: 'full' }, FALLBACK)).toBe(FULL);
-  });
+  it.each([['quota_exceeded' as const], ['per_item_quota_exceeded' as const]])(
+    'answers the quota copy for a raw %s error',
+    (type) => {
+      expect(storageWriteErrorMessage({ type, message: 'full' }, FALLBACK)).toBe(FULL);
+    }
+  );
 
   it('answers the quota copy through the cause assertPersisted attaches', () => {
     const thrown = new Error('boom', { cause: { type: 'quota_exceeded', message: 'full' } });

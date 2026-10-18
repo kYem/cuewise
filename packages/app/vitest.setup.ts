@@ -2,7 +2,7 @@ import { configureLogger, configurePlatform } from '@cuewise/shared';
 import { fakeNotifier, installChromeStorageMock } from '@cuewise/test-utils/mocks';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 
 // Expected-error paths log through the shared logger; silence it so failures
 // stand out. Suites that assert on logging vi.mock @cuewise/shared instead.
