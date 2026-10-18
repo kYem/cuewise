@@ -123,7 +123,7 @@ export interface Reminder {
   completedAt?: string; // ISO timestamp when marked complete (for suggestions)
 }
 
-/** Times an interval habit was done on one day; one entity per habit per day, so syncs merge by day. */
+/** Times an interval habit was done on one day; per-day entities keep sync conflicts to that day. */
 export interface HabitDay {
   id: string; // `${reminderId}:${date}`
   reminderId: string;

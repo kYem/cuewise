@@ -374,6 +374,17 @@ describe('habit history', () => {
     expect((await getHabitHistory()).map((entry) => entry.id)).toEqual(['r1:2026-10-05']);
   });
 
+  it.each([
+    ['an unpadded date', { id: 'r1:2026-1-5', reminderId: 'r1', date: '2026-1-5', count: 1 }],
+    ['an id off its key', { id: 'x', reminderId: 'r1', date: '2026-10-04', count: 1 }],
+    ['a zero count', { id: 'r1:2026-10-04', reminderId: 'r1', date: '2026-10-04', count: 0 }],
+  ])('hides a stored day with %s from the typed read', async (_label, row) => {
+    const { store } = recordingStore({ local: { [STORAGE_KEYS.HABIT_HISTORY]: [row] } });
+    configurePlatform({ storage: store });
+
+    await expect(getHabitHistory()).resolves.toEqual([]);
+  });
+
   it('removes every day of one habit and names them', async () => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     await recordHabitDone('r1', '2026-10-04');

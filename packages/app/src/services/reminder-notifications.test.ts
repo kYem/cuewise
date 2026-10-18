@@ -219,6 +219,22 @@ describe('a Done on a habit', () => {
     expect(recordTick).not.toHaveBeenCalled();
   });
 
+  it('records the day even when re-arming the met target fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    scheduleAt.mockRejectedValueOnce(new Error('alarm limit'));
+    getRemindersMock.mockResolvedValue([
+      reminderFactory.build({
+        id: 'h1',
+        recurring: { frequency: 'interval', intervalMinutes: 60, dailyTarget: 1 },
+      }),
+    ]);
+
+    await respondToReminder('h1', REMINDER_DONE_BUTTON);
+
+    expect(scheduleAt).toHaveBeenCalledWith('reminder-h1', expect.any(Date));
+    expect(recordTick).toHaveBeenCalledTimes(1);
+  });
+
   it('records nothing for a habit paused before the lock was taken', async () => {
     getRemindersMock
       .mockResolvedValueOnce([plainHabit()])

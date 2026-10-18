@@ -604,4 +604,20 @@ describe('Insights Store - habits', () => {
     expect(loggerError).toHaveBeenCalledWith('Error reading habit history', expect.any(Error));
     loggerError.mockRestore();
   });
+
+  it('keeps the page loaded when reminders are unreadable', async () => {
+    const loggerError = vi.spyOn(shared.logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.getReminders).mockRejectedValue(new Error('corrupt'));
+
+    await useInsightsStore.getState().initialize();
+
+    expect(useInsightsStore.getState().error).toBeNull();
+    expect(useInsightsStore.getState().insights).not.toBeNull();
+    expect(useInsightsStore.getState().habitReminders).toEqual([]);
+    expect(loggerError).toHaveBeenCalledWith(
+      'Error reading reminders for habits',
+      expect.any(Error)
+    );
+    loggerError.mockRestore();
+  });
 });

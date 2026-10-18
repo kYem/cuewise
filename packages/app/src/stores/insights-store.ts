@@ -80,12 +80,21 @@ function mergeImport<T extends { id: string }>(
   };
 }
 
-// An unreadable history must not blank the rest of the page.
+// Unreadable habit data must not blank the rest of the page.
 async function readHabitHistory(): Promise<HabitDay[]> {
   try {
     return await getHabitHistory();
   } catch (error) {
     logger.error('Error reading habit history', error);
+    return [];
+  }
+}
+
+async function readHabitReminders(): Promise<Reminder[]> {
+  try {
+    return splitReminders(await getReminders()).habits;
+  } catch (error) {
+    logger.error('Error reading reminders for habits', error);
     return [];
   }
 }
@@ -141,13 +150,13 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Load all data needed for insights
-      const [quotes, goals, pomodoroSessions, rawPostureStats, reminders, habitHistory] =
+      const [quotes, goals, pomodoroSessions, rawPostureStats, habitReminders, habitHistory] =
         await Promise.all([
           getQuotes(),
           getGoals(),
           getPomodoroSessions(),
           getPostureStats(),
-          getReminders(),
+          readHabitReminders(),
           readHabitHistory(),
         ]);
       // Read through the same shape guard the controller flushes through, so a
@@ -164,7 +173,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         insights,
         analytics,
         postureSummary,
-        habitReminders: splitReminders(reminders).habits,
+        habitReminders,
         habitHistory,
         quotes,
         goals,
@@ -184,13 +193,13 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
       set({ error: null });
 
       // Reload data and recalculate insights
-      const [quotes, goals, pomodoroSessions, rawPostureStats, reminders, habitHistory] =
+      const [quotes, goals, pomodoroSessions, rawPostureStats, habitReminders, habitHistory] =
         await Promise.all([
           getQuotes(),
           getGoals(),
           getPomodoroSessions(),
           getPostureStats(),
-          getReminders(),
+          readHabitReminders(),
           readHabitHistory(),
         ]);
       // Read through the same shape guard the controller flushes through, so a
@@ -206,7 +215,7 @@ export const useInsightsStore = create<InsightsStore>((set, get) => ({
         insights,
         analytics,
         postureSummary,
-        habitReminders: splitReminders(reminders).habits,
+        habitReminders,
         habitHistory,
         quotes,
         goals,

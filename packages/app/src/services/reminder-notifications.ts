@@ -291,6 +291,9 @@ export async function respondToReminder(
         if (counted.changed) {
           notifyMutated('reminders', reminderId);
         }
+        if (counted.habit) {
+          await recordHabitTick(counted.reminder, now);
+        }
         if (isDailyTargetMet(counted.reminder, now)) {
           await getScheduler().scheduleAt(
             reminderAlarmId(reminderId),
@@ -298,9 +301,6 @@ export async function respondToReminder(
           );
         }
         await recordReminderActivity({ event: 'done', ...activitySubject(counted.reminder) });
-        if (counted.habit) {
-          await recordHabitTick(counted.reminder, now);
-        }
       }
     } else if (action.type === 'snooze') {
       const { result } = await updateReminders((current) =>

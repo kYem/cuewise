@@ -390,6 +390,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyMutated('reminders', reminderId);
+      if (done.outcome === 'advanced') {
+        await recordHabitTick(done.written, now);
+      }
       await removeReminderPrompt(reminderId);
 
       if (done.outcome === 'advanced') {
@@ -398,7 +401,6 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         if (!done.written.paused) {
           await armReminderAlarm(reminderId, new Date(done.written.dueDate).getTime());
         }
-        await recordHabitTick(done.written, now);
         if (isDailyTargetMet(done.written, now)) {
           useToastStore.getState().success('Daily target reached — back tomorrow');
           return;
@@ -441,11 +443,11 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyDeleted('reminders', reminderId);
+      await forgetHabit(reminderId);
       await removeReminderPrompt(reminderId);
 
       // Cancel alarm
       await clearReminderAlarm(reminderId);
-      await forgetHabit(reminderId);
     } catch (error) {
       logger.error('Error deleting reminder', error);
       const errorMessage = 'Failed to delete reminder. Please try again.';

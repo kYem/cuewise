@@ -148,7 +148,7 @@ export function defaultBindings(): CollectionBinding[] {
     arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
     arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
     arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
-    // One entity per habit per day, so two devices' days never overwrite each other.
+    // One entity per habit per day, so devices only conflict on a day both ticked.
     arrayBinding('habitHistory', getHabitHistoryRaw, setHabitHistoryRaw),
     settingsBinding(),
   ];

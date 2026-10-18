@@ -1507,6 +1507,21 @@ describe('habit history', () => {
     expect(recordTick).toHaveBeenCalledWith(written, expect.any(Date));
   });
 
+  it('records a saved tick even when clearing the prompt fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    removePrompt.mockRejectedValueOnce(new Error('prompts unreadable'));
+    const habit = reminderFactory.build({
+      id: 'h1',
+      dueDate: new Date(Date.now() - 60_000).toISOString(),
+      recurring: { frequency: 'interval', intervalMinutes: 30 },
+    });
+    useReminderStore.setState({ reminders: [habit] });
+
+    await useReminderStore.getState().toggleReminder('h1');
+
+    expect(recordTick).toHaveBeenCalledTimes(1);
+  });
+
   it('records an early skip on a paused habit', async () => {
     const habit = reminderFactory.build({
       id: 'h1',
@@ -1549,6 +1564,16 @@ describe('habit history', () => {
   });
 
   it('forgets a deleted reminder’s history', async () => {
+    useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'h1' })] });
+
+    await useReminderStore.getState().deleteReminder('h1');
+
+    expect(forget).toHaveBeenCalledWith('h1');
+  });
+
+  it('forgets a deleted reminder’s history even when clearing the prompt fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    removePrompt.mockRejectedValueOnce(new Error('prompts unreadable'));
     useReminderStore.setState({ reminders: [reminderFactory.build({ id: 'h1' })] });
 
     await useReminderStore.getState().deleteReminder('h1');
