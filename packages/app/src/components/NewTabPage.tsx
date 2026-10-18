@@ -396,7 +396,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
               className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-surface-variant transition-colors border-t border-divider"
             >
               <Keyboard className="w-5 h-5 text-primary-600" />
-              <span className="text-sm font-medium">Keyboard shortcuts</span>
+              <span className="text-sm font-medium">Shortcuts</span>
             </button>
             <button
               type="button"
