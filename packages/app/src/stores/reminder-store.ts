@@ -199,8 +199,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      // Read together so habit streak chips render with the panel instead of popping in after it.
-      const [storedReminders, habitHistory] = await Promise.all([
+      // Read here, not left to reconcile, so streak chips paint with the panel.
+      const historyAtStart = get().habitHistory;
+      const [storedReminders, readHistory] = await Promise.all([
         getReminders(),
         readHabitHistory(),
       ]);
@@ -256,9 +257,11 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         }
       }
 
+      // The observer may have committed a newer history while this load was still running.
+      const historyUntouched = get().habitHistory === historyAtStart;
       commitReminders(set, reminders, {
         isLoading: false,
-        habitHistory: habitHistory ?? get().habitHistory,
+        habitHistory: historyUntouched && readHistory !== null ? readHistory : get().habitHistory,
       });
 
       // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the

@@ -1053,6 +1053,26 @@ describe('converging on reminders written elsewhere', () => {
     expect(historyWhenLoaded).toEqual([[day]]);
   });
 
+  it('keeps a history the observer committed while it was still loading', async () => {
+    const newer = { ...day, count: 2 };
+    getHabitHistoryMock.mockResolvedValue([day]);
+    getRemindersMock.mockImplementationOnce(async () => {
+      useReminderStore.setState({ habitHistory: [newer] });
+      return [mine];
+    });
+    const historyWhenLoaded: unknown[] = [];
+    const unsubscribe = useReminderStore.subscribe((state, previous) => {
+      if (previous.isLoading && !state.isLoading) {
+        historyWhenLoaded.push(state.habitHistory);
+      }
+    });
+
+    await initializeObserving();
+    unsubscribe();
+
+    expect(historyWhenLoaded).toEqual([[newer]]);
+  });
+
   it('loads reminders with an empty history when the habit history cannot be read at launch', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
