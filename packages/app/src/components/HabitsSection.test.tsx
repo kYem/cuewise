@@ -1,4 +1,4 @@
-import { HABIT_HISTORY_SYNC_NOTICE } from '@cuewise/shared';
+import { HABIT_HISTORY_SYNC_NOTICE, habitDayId } from '@cuewise/shared';
 import { reminderFactory } from '@cuewise/test-utils/factories';
 import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,8 +20,8 @@ const weekendStretch = reminderFactory.build({
   },
 });
 
-function kept(date: string) {
-  return { id: `h1:${date}`, reminderId: 'h1', date, count: 1 };
+function kept(date: string, reminderId = 'h1') {
+  return { id: habitDayId(reminderId, date), reminderId, date, count: 1 };
 }
 
 describe('HabitsSection', () => {
@@ -69,19 +69,31 @@ describe('HabitsSection', () => {
       />
     );
 
-    expect(screen.getByText('1/1')).toBeInTheDocument();
+    expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/1')).toBeInTheDocument();
+  });
+
+  it('leaves paused habits out of Kept Today', () => {
+    render(
+      <HabitsSection
+        habits={[water, { ...water, id: 'h3', paused: true }]}
+        habitHistory={[kept('2026-10-05')]}
+        chromeSyncOn={false}
+      />
+    );
+
+    expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/1')).toBeInTheDocument();
   });
 
   it('counts a habit kept on its off day as due and kept', () => {
     render(
       <HabitsSection
         habits={[water, weekendStretch]}
-        habitHistory={[{ id: 'h2:2026-10-05', reminderId: 'h2', date: '2026-10-05', count: 1 }]}
+        habitHistory={[kept('2026-10-05', 'h2')]}
         chromeSyncOn={false}
       />
     );
 
-    expect(screen.getByText('1/2')).toBeInTheDocument();
+    expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/2')).toBeInTheDocument();
   });
 
   it('shows a dash when every habit is off today', () => {

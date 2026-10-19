@@ -32,7 +32,9 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
     reminder,
     stats: getHabitStats(reminder, habitHistory, now),
   }));
-  const todayStates = rows.map((row) => row.stats.last30.at(-1)?.state);
+  const todayStates = rows
+    .filter((row) => row.reminder.paused !== true)
+    .map((row) => row.stats.last30.at(-1)?.state);
   const dueToday = todayStates.filter((state) => state !== 'off').length;
   const keptToday = todayStates.filter((state) => state === 'kept').length;
   const steadiest = rows.reduce((top, row) => (row.stats.current > top.stats.current ? row : top));
