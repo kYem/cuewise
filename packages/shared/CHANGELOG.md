@@ -1,5 +1,15 @@
 # @cuewise/shared
 
+## 1.28.0
+
+### Minor Changes
+
+- 0fb4598: Habits show streaks on their pills and in a new Insights section.
+
+### Patch Changes
+
+- 51f01b9: Scheduled reminders with a daily target show today's progress.
+
 ## 1.27.0
 
 ### Minor Changes

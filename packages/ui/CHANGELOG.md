@@ -1,5 +1,17 @@
 # @cuewise/ui
 
+## 1.28.0
+
+### Minor Changes
+
+- 0fb4598: Habits show streaks on their pills and in a new Insights section.
+
+### Patch Changes
+
+- Updated dependencies [0fb4598]
+- Updated dependencies [51f01b9]
+  - @cuewise/shared@1.28.0
+
 ## 1.27.0
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @cuewise/app
 
+## 1.26.0
+
+### Minor Changes
+
+- 0fb4598: Habits show streaks on their pills and in a new Insights section.
+
+### Patch Changes
+
+- 51f01b9: Scheduled reminders with a daily target show today's progress.
+- Updated dependencies [0fb4598]
+- Updated dependencies [51f01b9]
+  - @cuewise/shared@1.28.0
+  - @cuewise/storage@1.28.0
+  - @cuewise/sync-engine@0.5.0
+  - @cuewise/ui@1.28.0
+
 ## 1.25.0
 
 ### Minor Changes

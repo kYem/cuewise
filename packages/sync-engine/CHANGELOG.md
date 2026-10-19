@@ -1,5 +1,19 @@
 # @cuewise/sync-engine
 
+## 0.5.0
+
+### Minor Changes
+
+- 0fb4598: Habits show streaks on their pills and in a new Insights section.
+
+### Patch Changes
+
+- Updated dependencies [0fb4598]
+- Updated dependencies [51f01b9]
+  - @cuewise/shared@1.28.0
+  - @cuewise/storage@1.28.0
+  - @cuewise/sync-client@0.3.2
+
 ## 0.4.1
 
 ### Patch Changes
