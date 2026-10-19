@@ -901,6 +901,7 @@ describe('converging on reminders written elsewhere', () => {
 
   const mine = reminderFactory.build({ text: 'mine' });
   const theirs = reminderFactory.build({ text: 'pulled from the other device' });
+  const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
 
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
@@ -1012,7 +1013,6 @@ describe('converging on reminders written elsewhere', () => {
 
   it('picks up a history-only change written elsewhere', async () => {
     const fake = await initializeObserving();
-    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
     getHabitHistoryMock.mockResolvedValue([day]);
 
     fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
@@ -1022,7 +1022,6 @@ describe('converging on reminders written elsewhere', () => {
 
   it('still adopts pulled reminders when the habit history cannot be read, keeping the history it has', async () => {
     const logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
     getHabitHistoryMock.mockResolvedValue([day]);
     const fake = await initializeObserving();
     getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
@@ -1040,7 +1039,6 @@ describe('converging on reminders written elsewhere', () => {
   });
 
   it('has the habit history in place when reminders first finish loading', async () => {
-    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
     getHabitHistoryMock.mockResolvedValue([day]);
     const historyWhenLoaded: unknown[] = [];
     const unsubscribe = useReminderStore.subscribe((state, previous) => {
