@@ -11,7 +11,7 @@ import {
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { forgetHabit, recordHabitTick } from '../services/habit-history';
 import { recordReminderActivity } from '../services/reminder-activity';
 import { reminderNotification } from '../services/reminder-notifications';
@@ -903,6 +903,18 @@ describe('converging on reminders written elsewhere', () => {
   const theirs = reminderFactory.build({ text: 'pulled from the other device' });
   const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
 
+  function historyEachTimeLoaded(): unknown[] {
+    const seen: unknown[] = [];
+    onTestFinished(
+      useReminderStore.subscribe((state, previous) => {
+        if (previous.isLoading && !state.isLoading) {
+          seen.push(state.habitHistory);
+        }
+      })
+    );
+    return seen;
+  }
+
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: fakeSink });
@@ -1040,35 +1052,33 @@ describe('converging on reminders written elsewhere', () => {
 
   it('has the habit history in place when reminders first finish loading', async () => {
     getHabitHistoryMock.mockResolvedValue([day]);
-    const historyWhenLoaded: unknown[] = [];
-    const unsubscribe = useReminderStore.subscribe((state, previous) => {
-      if (previous.isLoading && !state.isLoading) {
-        historyWhenLoaded.push(state.habitHistory);
-      }
-    });
+    const historyWhenLoaded = historyEachTimeLoaded();
 
     await initializeObserving();
-    unsubscribe();
 
     expect(historyWhenLoaded).toEqual([[day]]);
   });
 
   it('keeps a history the observer committed while it was still loading', async () => {
     const newer = { ...day, count: 2 };
-    getHabitHistoryMock.mockResolvedValue([day]);
-    getRemindersMock.mockImplementationOnce(async () => {
-      useReminderStore.setState({ habitHistory: [newer] });
-      return [mine];
-    });
-    const historyWhenLoaded: unknown[] = [];
-    const unsubscribe = useReminderStore.subscribe((state, previous) => {
-      if (previous.isLoading && !state.isLoading) {
-        historyWhenLoaded.push(state.habitHistory);
-      }
-    });
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    let finishLaunchRead: (reminders: Reminder[]) => void = () => {};
+    getRemindersMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishLaunchRead = resolve;
+        })
+      )
+      .mockResolvedValue([mine]);
+    getHabitHistoryMock.mockResolvedValueOnce([day]).mockResolvedValue([newer]);
+    const historyWhenLoaded = historyEachTimeLoaded();
 
-    await initializeObserving();
-    unsubscribe();
+    const loaded = useReminderStore.getState().initialize();
+    fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
+    await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([newer]));
+    finishLaunchRead([mine]);
+    await loaded;
 
     expect(historyWhenLoaded).toEqual([[newer]]);
   });
