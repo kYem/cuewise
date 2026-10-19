@@ -199,7 +199,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      let reminders = await getReminders();
+      // Read together so habit streak chips render with the panel instead of popping in after it.
+      const [storedReminders, habitHistory] = await Promise.all([
+        getReminders(),
+        readHabitHistory(),
+      ]);
+      let reminders = storedReminders;
 
       // Auto-advance overdue recurring reminders to their next future occurrence
       const now = new Date();
@@ -251,7 +256,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         }
       }
 
-      commitReminders(set, reminders, { isLoading: false });
+      commitReminders(set, reminders, {
+        isLoading: false,
+        habitHistory: habitHistory ?? get().habitHistory,
+      });
 
       // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the
       // extension's service worker reconciles its own, so its page does not.
