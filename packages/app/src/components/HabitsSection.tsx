@@ -46,7 +46,10 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+        <div
+          data-testid="habit-kept-tile"
+          className="bg-surface rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
               <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />

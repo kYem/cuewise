@@ -72,10 +72,24 @@ describe('HabitsSection', () => {
     expect(screen.getByText('1/1')).toBeInTheDocument();
   });
 
-  it('says no habit is due when every habit is off today', () => {
+  it('counts a habit kept on its off day as due and kept', () => {
+    render(
+      <HabitsSection
+        habits={[water, weekendStretch]}
+        habitHistory={[{ id: 'h2:2026-10-05', reminderId: 'h2', date: '2026-10-05', count: 1 }]}
+        chromeSyncOn={false}
+      />
+    );
+
+    expect(screen.getByText('1/2')).toBeInTheDocument();
+  });
+
+  it('shows a dash when every habit is off today', () => {
     render(<HabitsSection habits={[weekendStretch]} habitHistory={[]} chromeSyncOn={false} />);
 
-    expect(screen.getByText('No habits due today')).toBeInTheDocument();
+    const tile = within(screen.getByTestId('habit-kept-tile'));
+    expect(tile.getByText('—')).toBeInTheDocument();
+    expect(tile.getByText('No habits due today')).toBeInTheDocument();
   });
 
   it('names the habit behind the longest running streak and its best', () => {
