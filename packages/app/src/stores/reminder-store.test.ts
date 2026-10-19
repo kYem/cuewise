@@ -2,6 +2,7 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   formatDateString,
+  type HabitDay,
   logger,
   type Reminder,
   resetPlatform,
@@ -903,8 +904,8 @@ describe('converging on reminders written elsewhere', () => {
   const theirs = reminderFactory.build({ text: 'pulled from the other device' });
   const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
 
-  function historyEachTimeLoaded(): unknown[] {
-    const seen: unknown[] = [];
+  function historyEachTimeLoaded(): HabitDay[][] {
+    const seen: HabitDay[][] = [];
     onTestFinished(
       useReminderStore.subscribe((state, previous) => {
         if (previous.isLoading && !state.isLoading) {
@@ -1081,6 +1082,38 @@ describe('converging on reminders written elsewhere', () => {
     await loaded;
 
     expect(historyWhenLoaded).toEqual([[newer]]);
+  });
+
+  it('keeps its own read over an older one the observer committed while it reloaded', async () => {
+    const older = { ...day, count: 0 };
+    const fake = await initializeObserving();
+    let finishObserverRead: (history: HabitDay[]) => void = () => {};
+    getHabitHistoryMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishObserverRead = resolve;
+      })
+    );
+    const readsBeforePull = getHabitHistoryMock.mock.calls.length;
+    fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
+    await vi.waitFor(() =>
+      expect(getHabitHistoryMock.mock.calls.length).toBeGreaterThan(readsBeforePull)
+    );
+    let finishLaunchRead: (reminders: Reminder[]) => void = () => {};
+    getRemindersMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLaunchRead = resolve;
+      })
+    );
+    getHabitHistoryMock.mockResolvedValue([day]);
+    const historyWhenLoaded = historyEachTimeLoaded();
+
+    const reloaded = useReminderStore.getState().initialize();
+    finishObserverRead([older]);
+    await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([older]));
+    finishLaunchRead([mine]);
+    await reloaded;
+
+    expect(historyWhenLoaded).toEqual([[day]]);
   });
 
   it('loads reminders with an empty history when the habit history cannot be read at launch', async () => {
