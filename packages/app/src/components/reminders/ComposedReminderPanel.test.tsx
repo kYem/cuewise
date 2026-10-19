@@ -268,6 +268,17 @@ describe('habit streaks', () => {
     expect(screen.getByTestId('habit-streak-habit-1')).toHaveTextContent('2');
   });
 
+  it('names the streak in the pill for screen readers', () => {
+    const { habit } = buildMixedReminders();
+    useReminderStore.setState({
+      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
+    });
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    expect(screen.getByRole('button', { name: /, 2 day streak$/ })).toBeInTheDocument();
+  });
+
   it('shows no chip for a one-day streak', () => {
     const { habit } = buildMixedReminders();
     useReminderStore.setState({ habitHistory: historyFor('habit-1', ['2026-06-14']) });
@@ -284,7 +295,7 @@ describe('habit streaks', () => {
     });
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
-    fireEvent.focus(screen.getByRole('button', { name: 'Mark Drink water done' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'Mark Drink water done, 2 day streak' }));
 
     expect(await screen.findByText('best this year')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View in Insights' })).toHaveAttribute(
