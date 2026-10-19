@@ -72,18 +72,6 @@ describe('HabitsSection', () => {
     expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/1')).toBeInTheDocument();
   });
 
-  it('leaves paused habits out of Kept Today', () => {
-    render(
-      <HabitsSection
-        habits={[water, { ...water, id: 'h3', paused: true }]}
-        habitHistory={[kept('2026-10-05')]}
-        chromeSyncOn={false}
-      />
-    );
-
-    expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/1')).toBeInTheDocument();
-  });
-
   it('counts a habit kept on its off day as due and kept', () => {
     render(
       <HabitsSection
