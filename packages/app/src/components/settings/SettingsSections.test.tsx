@@ -1,11 +1,10 @@
-import type { Settings } from '@cuewise/shared';
+import { HABIT_HISTORY_SYNC_NOTICE, type Settings } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
-import { HABIT_HISTORY_SYNC_NOTICE } from '../HabitsSection';
 import { SETTINGS_SECTIONS, settingsHomeWidgets } from './SettingsSections';
 import { settingsMatch } from './settings-match';
 import type { SettingsSectionProps } from './settings-types';

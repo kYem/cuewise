@@ -1,5 +1,6 @@
 import {
   getHabitStats,
+  HABIT_HISTORY_SYNC_NOTICE,
   type HabitDay,
   type HabitStats,
   REMINDER_CATEGORY_META,
@@ -7,9 +8,6 @@ import {
 } from '@cuewise/shared';
 import { CheckCircle2, Flame, TrendingUp } from 'lucide-react';
 import { HabitDayStrip } from './reminders/HabitDayStrip';
-
-export const HABIT_HISTORY_SYNC_NOTICE =
-  'Habit history stays on this device; it syncs with a Cuewise account.';
 
 const COLUMN_LABEL = 'text-xs text-tertiary';
 const ROW_CELL = 'border-t border-border/60 py-3.5';

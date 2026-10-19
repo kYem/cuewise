@@ -1,7 +1,8 @@
+import { HABIT_HISTORY_SYNC_NOTICE } from '@cuewise/shared';
 import { reminderFactory } from '@cuewise/test-utils/factories';
 import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HABIT_HISTORY_SYNC_NOTICE, HabitsSection } from './HabitsSection';
+import { HabitsSection } from './HabitsSection';
 
 const water = reminderFactory.build({
   id: 'h1',
