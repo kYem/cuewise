@@ -52,6 +52,10 @@ function historyFor(id: string, dates: string[]) {
   return dates.map((date) => ({ id: `${id}:${date}`, reminderId: id, date, count: 1 }));
 }
 
+function keepTwoDays() {
+  useReminderStore.setState({ habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']) });
+}
+
 function defaultProps() {
   return {
     onToggle: vi.fn(),
@@ -259,9 +263,7 @@ describe('habit streaks', () => {
 
   it('shows a streak chip from two kept days', () => {
     const { habit } = buildMixedReminders();
-    useReminderStore.setState({
-      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
-    });
+    keepTwoDays();
 
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
@@ -270,9 +272,7 @@ describe('habit streaks', () => {
 
   it('names the streak in the pill for screen readers', () => {
     const { habit } = buildMixedReminders();
-    useReminderStore.setState({
-      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
-    });
+    keepTwoDays();
 
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
@@ -281,9 +281,7 @@ describe('habit streaks', () => {
 
   it('names the streak on a paused pill too', () => {
     const { habit } = buildMixedReminders();
-    useReminderStore.setState({
-      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
-    });
+    keepTwoDays();
 
     render(<ComposedReminderPanel reminders={[{ ...habit, paused: true }]} {...defaultProps()} />);
 
@@ -303,9 +301,7 @@ describe('habit streaks', () => {
 
   it('opens the stats card when the pill takes focus', async () => {
     const { habit } = buildMixedReminders();
-    useReminderStore.setState({
-      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
-    });
+    keepTwoDays();
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
     fireEvent.focus(screen.getByRole('button', { name: 'Mark Drink water done, 2 day streak' }));

@@ -21,7 +21,7 @@ const SHAPE_STYLES: Record<CellShape, CSSProperties> = {
   },
   outline: {
     backgroundColor: INTENSITY_COLORS.none,
-    boxShadow: `inset 0 0 0 1.5px ${INTENSITY_COLORS.medium}`,
+    boxShadow: `inset 0 0 0 1.5px ${INTENSITY_COLORS.peak}`,
   },
   empty: { backgroundColor: INTENSITY_COLORS.none },
 };
