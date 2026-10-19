@@ -32,7 +32,9 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
     reminder,
     stats: getHabitStats(reminder, habitHistory, now),
   }));
-  const keptToday = rows.filter((row) => row.stats.last30.at(-1)?.state === 'kept').length;
+  const todayStates = rows.map((row) => row.stats.last30.at(-1)?.state);
+  const dueToday = todayStates.filter((state) => state !== 'off').length;
+  const keptToday = todayStates.filter((state) => state === 'kept').length;
   const steadiest = rows.reduce((top, row) => (row.stats.current > top.stats.current ? row : top));
   const hasStreak = steadiest.stats.current > 0;
   const rated = rows.flatMap((row) => (row.stats.rate30 === null ? [] : [row.stats.rate30]));
@@ -50,11 +52,13 @@ export function HabitsSection({ habits, habitHistory, chromeSyncOn }: HabitsSect
               <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-              {keptToday}/{rows.length}
+              {dueToday === 0 ? '—' : `${keptToday}/${dueToday}`}
             </span>
           </div>
           <h3 className="text-secondary text-sm font-medium mb-1">Kept Today</h3>
-          <p className="text-xs text-tertiary">Habits whose day is already done</p>
+          <p className="text-xs text-tertiary">
+            {dueToday === 0 ? 'No habits due today' : 'Habits whose day is already done'}
+          </p>
         </div>
         <div
           data-testid="habit-streak-tile"

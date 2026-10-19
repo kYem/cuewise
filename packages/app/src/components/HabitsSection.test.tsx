@@ -10,6 +10,16 @@ const water = reminderFactory.build({
   recurring: { frequency: 'interval', intervalMinutes: 60 },
 });
 
+const weekendStretch = reminderFactory.build({
+  id: 'h2',
+  text: 'Stretch',
+  recurring: {
+    frequency: 'interval',
+    intervalMinutes: 60,
+    activeHours: { start: '09:00', end: '18:00', days: [0, 6] },
+  },
+});
+
 function kept(date: string) {
   return { id: `h1:${date}`, reminderId: 'h1', date, count: 1 };
 }
@@ -48,6 +58,24 @@ describe('HabitsSection', () => {
     expect(
       screen.getByRole('img', { name: 'Drink water: 2 of the last 30 days kept' })
     ).toBeInTheDocument();
+  });
+
+  it('leaves habits that are off today out of Kept Today', () => {
+    render(
+      <HabitsSection
+        habits={[water, weekendStretch]}
+        habitHistory={[kept('2026-10-05')]}
+        chromeSyncOn={false}
+      />
+    );
+
+    expect(screen.getByText('1/1')).toBeInTheDocument();
+  });
+
+  it('says no habit is due when every habit is off today', () => {
+    render(<HabitsSection habits={[weekendStretch]} habitHistory={[]} chromeSyncOn={false} />);
+
+    expect(screen.getByText('No habits due today')).toBeInTheDocument();
   });
 
   it('names the habit behind the longest running streak and its best', () => {
