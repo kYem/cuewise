@@ -6,6 +6,7 @@ import {
   type FocusPosition,
   formatHourMinute,
   getStorage,
+  HABIT_HISTORY_SYNC_NOTICE,
   NOTIFICATION_SOUNDS,
   type NotificationSoundType,
   POMODORO_DURATION_BOUNDS,
@@ -36,7 +37,6 @@ import { Fragment, useEffect, useState } from 'react';
 import { type SyncUiStatus, useSyncController } from '../../sync/sync-controller';
 import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import { previewSound } from '../../utils/sounds';
-import { HABIT_HISTORY_SYNC_NOTICE } from '../HabitsSection';
 import {
   type HomeWidget,
   type HomeWidgetKey,

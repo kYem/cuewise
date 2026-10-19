@@ -460,6 +460,9 @@ export const REMINDER_INTERVAL_PRESETS = [30, 45, 60, 90] as const;
 // Minutes a reminder notification's "Snooze" button defers the next alarm.
 export const REMINDER_SNOOZE_MINUTES = 5;
 
+export const HABIT_HISTORY_SYNC_NOTICE =
+  'Habit history stays on this device; it syncs with a Cuewise account.';
+
 // Curated concept-card starter packs — each is ~10 common terms for a topic,
 // added in one click and tagged so they group cleanly in the deck. Content is
 // intentionally concise (one or two sentences) to match the recall UI. Users
