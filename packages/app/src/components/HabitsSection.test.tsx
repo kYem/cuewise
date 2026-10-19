@@ -1,4 +1,4 @@
-import { HABIT_HISTORY_SYNC_NOTICE } from '@cuewise/shared';
+import { HABIT_HISTORY_SYNC_NOTICE, habitDayId } from '@cuewise/shared';
 import { reminderFactory } from '@cuewise/test-utils/factories';
 import { render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,8 +10,18 @@ const water = reminderFactory.build({
   recurring: { frequency: 'interval', intervalMinutes: 60 },
 });
 
-function kept(date: string) {
-  return { id: `h1:${date}`, reminderId: 'h1', date, count: 1 };
+const weekendStretch = reminderFactory.build({
+  id: 'h2',
+  text: 'Stretch',
+  recurring: {
+    frequency: 'interval',
+    intervalMinutes: 60,
+    activeHours: { start: '09:00', end: '18:00', days: [0, 6] },
+  },
+});
+
+function kept(date: string, reminderId = 'h1') {
+  return { id: habitDayId(reminderId, date), reminderId, date, count: 1 };
 }
 
 describe('HabitsSection', () => {
@@ -48,6 +58,38 @@ describe('HabitsSection', () => {
     expect(
       screen.getByRole('img', { name: 'Drink water: 2 of the last 30 days kept' })
     ).toBeInTheDocument();
+  });
+
+  it('leaves habits that are off today out of Kept Today', () => {
+    render(
+      <HabitsSection
+        habits={[water, weekendStretch]}
+        habitHistory={[kept('2026-10-05')]}
+        chromeSyncOn={false}
+      />
+    );
+
+    expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/1')).toBeInTheDocument();
+  });
+
+  it('counts a habit kept on its off day as due and kept', () => {
+    render(
+      <HabitsSection
+        habits={[water, weekendStretch]}
+        habitHistory={[kept('2026-10-05', 'h2')]}
+        chromeSyncOn={false}
+      />
+    );
+
+    expect(within(screen.getByTestId('habit-kept-tile')).getByText('1/2')).toBeInTheDocument();
+  });
+
+  it('shows a dash when every habit is off today', () => {
+    render(<HabitsSection habits={[weekendStretch]} habitHistory={[]} chromeSyncOn={false} />);
+
+    const tile = within(screen.getByTestId('habit-kept-tile'));
+    expect(tile.getByText('—')).toBeInTheDocument();
+    expect(tile.getByText('No habits due today')).toBeInTheDocument();
   });
 
   it('names the habit behind the longest running streak and its best', () => {
