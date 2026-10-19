@@ -1,5 +1,13 @@
 # @cuewise/sync-client
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [0fb4598]
+- Updated dependencies [51f01b9]
+  - @cuewise/shared@1.28.0
+
 ## 0.3.1
 
 ### Patch Changes
