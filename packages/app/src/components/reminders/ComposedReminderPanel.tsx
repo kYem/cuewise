@@ -64,15 +64,16 @@ function habitCadence(reminder: Reminder): string {
 }
 
 // The visible cadence is replaced by this label, so it carries today's progress in words.
-function habitLabel(reminder: Reminder, paused: boolean): string {
-  if (paused) {
-    return `Resume ${reminder.text}`;
+function habitLabel(reminder: Reminder, paused: boolean, streak: number): string {
+  const parts = [paused ? `Resume ${reminder.text}` : `Mark ${reminder.text} done`];
+  const progress = paused ? undefined : describeDailyProgress(reminder, new Date());
+  if (progress !== undefined) {
+    parts.push(progress);
   }
-  const progress = describeDailyProgress(reminder, new Date());
-  if (progress === undefined) {
-    return `Mark ${reminder.text} done`;
+  if (streak >= STREAK_CHIP_MIN) {
+    parts.push(`${streak} day streak`);
   }
-  return `Mark ${reminder.text} done, ${progress}`;
+  return parts.join(', ');
 }
 
 /**
@@ -136,7 +137,7 @@ function HabitPill({ reminder, state, onToggle, onPauseToggle }: HabitPillProps)
           onClick={handleClick}
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
-          aria-label={habitLabel(reminder, paused)}
+          aria-label={habitLabel(reminder, paused, stats.current)}
           className={cn(
             'inline-flex max-w-full items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-2xl border transition-all',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-1',

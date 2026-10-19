@@ -52,6 +52,10 @@ function historyFor(id: string, dates: string[]) {
   return dates.map((date) => ({ id: `${id}:${date}`, reminderId: id, date, count: 1 }));
 }
 
+function keepTwoDays() {
+  useReminderStore.setState({ habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']) });
+}
+
 function defaultProps() {
   return {
     onToggle: vi.fn(),
@@ -259,13 +263,31 @@ describe('habit streaks', () => {
 
   it('shows a streak chip from two kept days', () => {
     const { habit } = buildMixedReminders();
-    useReminderStore.setState({
-      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
-    });
+    keepTwoDays();
 
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
     expect(screen.getByTestId('habit-streak-habit-1')).toHaveTextContent('2');
+  });
+
+  it('names the streak in the pill for screen readers', () => {
+    const { habit } = buildMixedReminders();
+    keepTwoDays();
+
+    render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
+
+    expect(screen.getByRole('button', { name: /, 2 day streak$/ })).toBeInTheDocument();
+  });
+
+  it('names the streak on a paused pill too', () => {
+    const { habit } = buildMixedReminders();
+    keepTwoDays();
+
+    render(<ComposedReminderPanel reminders={[{ ...habit, paused: true }]} {...defaultProps()} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Resume Drink water, 2 day streak' })
+    ).toBeInTheDocument();
   });
 
   it('shows no chip for a one-day streak', () => {
@@ -279,12 +301,10 @@ describe('habit streaks', () => {
 
   it('opens the stats card when the pill takes focus', async () => {
     const { habit } = buildMixedReminders();
-    useReminderStore.setState({
-      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
-    });
+    keepTwoDays();
     render(<ComposedReminderPanel reminders={[habit]} {...defaultProps()} />);
 
-    fireEvent.focus(screen.getByRole('button', { name: 'Mark Drink water done' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'Mark Drink water done, 2 day streak' }));
 
     expect(await screen.findByText('best this year')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View in Insights' })).toHaveAttribute(
