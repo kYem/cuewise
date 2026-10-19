@@ -65,11 +65,8 @@ function habitCadence(reminder: Reminder): string {
 
 // The visible cadence is replaced by this label, so it carries today's progress in words.
 function habitLabel(reminder: Reminder, paused: boolean, streak: number): string {
-  if (paused) {
-    return `Resume ${reminder.text}`;
-  }
-  const progress = describeDailyProgress(reminder, new Date());
-  const parts = [`Mark ${reminder.text} done`];
+  const parts = [paused ? `Resume ${reminder.text}` : `Mark ${reminder.text} done`];
+  const progress = paused ? undefined : describeDailyProgress(reminder, new Date());
   if (progress !== undefined) {
     parts.push(progress);
   }

@@ -279,6 +279,19 @@ describe('habit streaks', () => {
     expect(screen.getByRole('button', { name: /, 2 day streak$/ })).toBeInTheDocument();
   });
 
+  it('names the streak on a paused pill too', () => {
+    const { habit } = buildMixedReminders();
+    useReminderStore.setState({
+      habitHistory: historyFor('habit-1', ['2026-06-13', '2026-06-14']),
+    });
+
+    render(<ComposedReminderPanel reminders={[{ ...habit, paused: true }]} {...defaultProps()} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Resume Drink water, 2 day streak' })
+    ).toBeInTheDocument();
+  });
+
   it('shows no chip for a one-day streak', () => {
     const { habit } = buildMixedReminders();
     useReminderStore.setState({ habitHistory: historyFor('habit-1', ['2026-06-14']) });

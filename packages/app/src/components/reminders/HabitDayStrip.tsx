@@ -16,7 +16,8 @@ type CellShape = 'full' | 'half' | 'outline' | 'empty';
 const SHAPE_STYLES: Record<CellShape, CSSProperties> = {
   full: { backgroundColor: INTENSITY_COLORS.peak },
   half: {
-    background: `linear-gradient(to top, ${INTENSITY_COLORS.peak} 50%, ${INTENSITY_COLORS.none} 50%)`,
+    backgroundColor: INTENSITY_COLORS.none,
+    backgroundImage: `linear-gradient(to top, ${INTENSITY_COLORS.peak} 50%, transparent 50%)`,
   },
   outline: {
     backgroundColor: INTENSITY_COLORS.none,

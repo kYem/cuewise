@@ -31,4 +31,16 @@ describe('HabitDayStrip', () => {
     expect(shapeOf('2026-10-04')).toBe('outline');
     expect(shapeOf('2026-10-05')).toBe('empty');
   });
+
+  it('half-fills today once it has progress', () => {
+    const today = (count: number): HabitDayCell[] => [
+      { date: '2026-10-06', state: 'pending', count },
+    ];
+
+    const { rerender } = render(<HabitDayStrip cells={today(0)} label="Drink water" />);
+    expect(shapeOf('2026-10-06')).toBe('empty');
+
+    rerender(<HabitDayStrip cells={today(1)} label="Drink water" />);
+    expect(shapeOf('2026-10-06')).toBe('half');
+  });
 });
