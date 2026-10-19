@@ -2,6 +2,7 @@ import {
   configurePlatform,
   DEFAULT_SETTINGS,
   formatDateString,
+  type HabitDay,
   logger,
   type Reminder,
   resetPlatform,
@@ -11,12 +12,13 @@ import {
 import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { forgetHabit, recordHabitTick } from '../services/habit-history';
 import { recordReminderActivity } from '../services/reminder-activity';
 import { reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
+import { deferred } from './__fixtures__/weather-store.fixtures';
 import { useReminderStore } from './reminder-store';
 
 vi.mock('../services/reminder-activity', async (importOriginal) => ({
@@ -901,6 +903,19 @@ describe('converging on reminders written elsewhere', () => {
 
   const mine = reminderFactory.build({ text: 'mine' });
   const theirs = reminderFactory.build({ text: 'pulled from the other device' });
+  const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
+
+  function historyEachTimeLoaded(): HabitDay[][] {
+    const seen: HabitDay[][] = [];
+    onTestFinished(
+      useReminderStore.subscribe((state, previous) => {
+        if (previous.isLoading && !state.isLoading) {
+          seen.push(state.habitHistory);
+        }
+      })
+    );
+    return seen;
+  }
 
   async function initializeObserving(): Promise<ReturnType<typeof fakeObservableStore>> {
     const fake = fakeObservableStore();
@@ -1012,7 +1027,6 @@ describe('converging on reminders written elsewhere', () => {
 
   it('picks up a history-only change written elsewhere', async () => {
     const fake = await initializeObserving();
-    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
     getHabitHistoryMock.mockResolvedValue([day]);
 
     fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
@@ -1022,7 +1036,6 @@ describe('converging on reminders written elsewhere', () => {
 
   it('still adopts pulled reminders when the habit history cannot be read, keeping the history it has', async () => {
     const logError = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const day = { id: 'h1:2026-10-05', reminderId: 'h1', date: '2026-10-05', count: 1 };
     getHabitHistoryMock.mockResolvedValue([day]);
     const fake = await initializeObserving();
     getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
@@ -1039,6 +1052,57 @@ describe('converging on reminders written elsewhere', () => {
     expect(toastWarning).not.toHaveBeenCalled();
   });
 
+  it('has the habit history in place when reminders first finish loading', async () => {
+    getHabitHistoryMock.mockResolvedValue([day]);
+    const historyWhenLoaded = historyEachTimeLoaded();
+
+    await initializeObserving();
+
+    expect(historyWhenLoaded).toEqual([[day]]);
+  });
+
+  it('keeps a history the observer committed while it was still loading', async () => {
+    const newer = { ...day, count: 2 };
+    const fake = fakeObservableStore();
+    configurePlatform({ storage: fake.store, syncSink: fakeSink });
+    const launchRead = deferred<Reminder[]>();
+    getRemindersMock.mockReturnValueOnce(launchRead.promise).mockResolvedValue([mine]);
+    getHabitHistoryMock.mockResolvedValueOnce([day]).mockResolvedValue([newer]);
+    const historyWhenLoaded = historyEachTimeLoaded();
+
+    const loaded = useReminderStore.getState().initialize();
+    fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
+    await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([newer]));
+    launchRead.release([mine]);
+    await loaded;
+
+    expect(historyWhenLoaded).toEqual([[newer]]);
+  });
+
+  it('keeps its own read over an older one the observer committed while it reloaded', async () => {
+    const older = { ...day, count: 0 };
+    const fake = await initializeObserving();
+    const observerRead = deferred<HabitDay[]>();
+    getHabitHistoryMock.mockReturnValueOnce(observerRead.promise);
+    const readsBeforePull = getHabitHistoryMock.mock.calls.length;
+    fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
+    await vi.waitFor(() =>
+      expect(getHabitHistoryMock.mock.calls.length).toBeGreaterThan(readsBeforePull)
+    );
+    const launchRead = deferred<Reminder[]>();
+    getRemindersMock.mockReturnValueOnce(launchRead.promise);
+    getHabitHistoryMock.mockResolvedValue([day]);
+    const historyWhenLoaded = historyEachTimeLoaded();
+
+    const reloaded = useReminderStore.getState().initialize();
+    observerRead.release([older]);
+    await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([older]));
+    launchRead.release([mine]);
+    await reloaded;
+
+    expect(historyWhenLoaded).toEqual([[day]]);
+  });
+
   it('loads reminders with an empty history when the habit history cannot be read at launch', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
@@ -1048,6 +1112,18 @@ describe('converging on reminders written elsewhere', () => {
     expect(useReminderStore.getState().reminders).toEqual([mine]);
     expect(useReminderStore.getState().habitHistory).toEqual([]);
     expect(useReminderStore.getState().error).toBeNull();
+  });
+
+  it('keeps the history it has when a reload cannot read it', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getHabitHistoryMock.mockResolvedValue([day]);
+    await initializeObserving();
+    getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
+    const historyWhenLoaded = historyEachTimeLoaded();
+
+    await useReminderStore.getState().initialize();
+
+    expect(historyWhenLoaded).toEqual([[day]]);
   });
 
   // ReminderWidget chains fireDueReminders off initialize(), and that rewrites the whole array

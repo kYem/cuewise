@@ -152,14 +152,33 @@ function commitReminders(
 const STALE_REMINDERS_MESSAGE =
   "Cuewise couldn't re-read your reminders just now, so what you see may be out of date.";
 
-/** Null when unreadable: the history is display-only, so it must never fail a reminder refresh. */
-async function readHabitHistory(): Promise<HabitDay[] | null> {
+interface HistoryRead {
+  /** Null when unreadable: the history is display-only, so it must never fail a reminder refresh. */
+  history: HabitDay[] | null;
+  startedAt: number;
+}
+
+let historyReadsStarted = 0;
+let committedHistoryRead = 0;
+
+async function readHabitHistory(): Promise<HistoryRead> {
+  historyReadsStarted += 1;
+  const startedAt = historyReadsStarted;
   try {
-    return await getHabitHistory();
+    return { history: await getHabitHistory(), startedAt };
   } catch (error) {
     logger.error(`Could not read habit history: ${describeThrown(error)}`, error);
+    return { history: null, startedAt };
+  }
+}
+
+/** Null keeps the store's: the launch read and observer passes overlap and finish in any order. */
+function newerHistory(read: HistoryRead): HabitDay[] | null {
+  if (read.history === null || read.startedAt < committedHistoryRead) {
     return null;
   }
+  committedHistoryRead = read.startedAt;
+  return read.history;
 }
 
 /**
@@ -170,9 +189,9 @@ const remindersObserver = createStorageObserver(
   'reminders',
   [STORAGE_KEYS.REMINDERS, STORAGE_KEYS.HABIT_HISTORY],
   async () => {
-    const [reminders, readHistory] = await Promise.all([getReminders(), readHabitHistory()]);
+    const [reminders, historyRead] = await Promise.all([getReminders(), readHabitHistory()]);
     const state = useReminderStore.getState();
-    const habitHistory = readHistory ?? state.habitHistory;
+    const habitHistory = newerHistory(historyRead) ?? state.habitHistory;
     if (
       sameEntities(state.reminders, reminders) &&
       sameEntities(state.habitHistory, habitHistory)
@@ -199,7 +218,12 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      let reminders = await getReminders();
+      // Committed with isLoading: false, so streak chips paint with the panel.
+      const [storedReminders, historyRead] = await Promise.all([
+        getReminders(),
+        readHabitHistory(),
+      ]);
+      let reminders = storedReminders;
 
       // Auto-advance overdue recurring reminders to their next future occurrence
       const now = new Date();
@@ -251,7 +275,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         }
       }
 
-      commitReminders(set, reminders, { isLoading: false });
+      const habitHistory = newerHistory(historyRead);
+      commitReminders(set, reminders, { isLoading: false, ...(habitHistory && { habitHistory }) });
 
       // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the
       // extension's service worker reconciles its own, so its page does not.
