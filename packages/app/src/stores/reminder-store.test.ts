@@ -18,6 +18,7 @@ import { recordReminderActivity } from '../services/reminder-activity';
 import { reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
 import { fakeObservableStore } from './__fixtures__/storage-changes.fixtures';
+import { deferred } from './__fixtures__/weather-store.fixtures';
 import { useReminderStore } from './reminder-store';
 
 vi.mock('../services/reminder-activity', async (importOriginal) => ({
@@ -1064,21 +1065,15 @@ describe('converging on reminders written elsewhere', () => {
     const newer = { ...day, count: 2 };
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store, syncSink: fakeSink });
-    let finishLaunchRead: (reminders: Reminder[]) => void = () => {};
-    getRemindersMock
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          finishLaunchRead = resolve;
-        })
-      )
-      .mockResolvedValue([mine]);
+    const launchRead = deferred<Reminder[]>();
+    getRemindersMock.mockReturnValueOnce(launchRead.promise).mockResolvedValue([mine]);
     getHabitHistoryMock.mockResolvedValueOnce([day]).mockResolvedValue([newer]);
     const historyWhenLoaded = historyEachTimeLoaded();
 
     const loaded = useReminderStore.getState().initialize();
     fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
     await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([newer]));
-    finishLaunchRead([mine]);
+    launchRead.release([mine]);
     await loaded;
 
     expect(historyWhenLoaded).toEqual([[newer]]);
@@ -1087,30 +1082,22 @@ describe('converging on reminders written elsewhere', () => {
   it('keeps its own read over an older one the observer committed while it reloaded', async () => {
     const older = { ...day, count: 0 };
     const fake = await initializeObserving();
-    let finishObserverRead: (history: HabitDay[]) => void = () => {};
-    getHabitHistoryMock.mockReturnValueOnce(
-      new Promise((resolve) => {
-        finishObserverRead = resolve;
-      })
-    );
+    const observerRead = deferred<HabitDay[]>();
+    getHabitHistoryMock.mockReturnValueOnce(observerRead.promise);
     const readsBeforePull = getHabitHistoryMock.mock.calls.length;
     fake.emit([STORAGE_KEYS.HABIT_HISTORY]);
     await vi.waitFor(() =>
       expect(getHabitHistoryMock.mock.calls.length).toBeGreaterThan(readsBeforePull)
     );
-    let finishLaunchRead: (reminders: Reminder[]) => void = () => {};
-    getRemindersMock.mockReturnValueOnce(
-      new Promise((resolve) => {
-        finishLaunchRead = resolve;
-      })
-    );
+    const launchRead = deferred<Reminder[]>();
+    getRemindersMock.mockReturnValueOnce(launchRead.promise);
     getHabitHistoryMock.mockResolvedValue([day]);
     const historyWhenLoaded = historyEachTimeLoaded();
 
     const reloaded = useReminderStore.getState().initialize();
-    finishObserverRead([older]);
+    observerRead.release([older]);
     await vi.waitFor(() => expect(useReminderStore.getState().habitHistory).toEqual([older]));
-    finishLaunchRead([mine]);
+    launchRead.release([mine]);
     await reloaded;
 
     expect(historyWhenLoaded).toEqual([[day]]);
@@ -1125,6 +1112,18 @@ describe('converging on reminders written elsewhere', () => {
     expect(useReminderStore.getState().reminders).toEqual([mine]);
     expect(useReminderStore.getState().habitHistory).toEqual([]);
     expect(useReminderStore.getState().error).toBeNull();
+  });
+
+  it('keeps the history it has when a reload cannot read it', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    getHabitHistoryMock.mockResolvedValue([day]);
+    await initializeObserving();
+    getHabitHistoryMock.mockRejectedValue(new Error('Could not read the stored habit history'));
+    const historyWhenLoaded = historyEachTimeLoaded();
+
+    await useReminderStore.getState().initialize();
+
+    expect(historyWhenLoaded).toEqual([[day]]);
   });
 
   // ReminderWidget chains fireDueReminders off initialize(), and that rewrites the whole array
