@@ -199,8 +199,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      // Committed with isLoading: false, so streak chips paint with the panel.
       const historyAtStart = get().habitHistory;
+      // Committed with isLoading: false, so streak chips paint with the panel.
       const [storedReminders, readHistory] = await Promise.all([
         getReminders(),
         readHabitHistory(),
