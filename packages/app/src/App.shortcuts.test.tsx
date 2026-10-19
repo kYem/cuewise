@@ -72,7 +72,7 @@ describe('App keyboard shortcuts', () => {
     await renderHome();
     fireEvent.click(screen.getAllByTitle('Menu')[0]);
 
-    fireEvent.click(screen.getAllByRole('menuitem', { name: 'Keyboard shortcuts' })[0]);
+    fireEvent.click(screen.getAllByRole('menuitem', { name: 'Shortcuts' })[0]);
 
     expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
