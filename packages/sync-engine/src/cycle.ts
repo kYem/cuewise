@@ -12,7 +12,7 @@ import {
 } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import { type CollectionBinding, DEVICE_LOCAL_SETTINGS_KEYS } from './collections';
-import { isServerSeq, type SyncMeta, SyncMetadataStore } from './metadata-store';
+import { cursorResetsOf, isServerSeq, type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { fromSyncRecord, toPushRecord } from './record-map';
 import type { ConflictStrategy, RecordBody } from './strategy';
 
@@ -66,6 +66,8 @@ interface PullState {
   repairsQuarantined: boolean;
   /** Each collection as last read, kept current with this pull's own writes. */
   local: LocalCopies;
+  /** Cursor resets when this cycle's work began; a reset since owns cursor, seqs and relist. */
+  cursorResets: number;
 }
 
 /**
@@ -100,8 +102,13 @@ class LocalCopies {
 
 type Relist = NonNullable<SyncMeta['relistOwed']>;
 
-function newPullState(meta: SyncMeta, repairsQuarantined = false): PullState {
+function newPullState(
+  meta: SyncMeta,
+  repairsQuarantined = false,
+  cursorResets = cursorResetsOf(meta)
+): PullState {
   return {
+    cursorResets,
     meta,
     applied: new Set(),
     quarantined: new Set(),
@@ -145,22 +152,9 @@ function withMembership(list: string[], key: string, member: boolean): string[] 
 
 /** Applies only what the pull owns onto a freshly-loaded ledger; see PullState. */
 function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
-  // A restored server reassigns seqs, so none held from before it can serve as a push base.
-  if (pull.relistRaised === 'restored') {
-    fresh.seqs = {};
-    fresh.relistOwed = 'restored';
-  }
-  // Never over an owed restore: that relist re-pushes what is missing, where a purge deletes it.
-  if (pull.relistRaised === 'purged' && fresh.relistOwed !== 'restored') {
-    fresh.relistOwed = 'purged';
-  }
-  if (pull.relistSettled !== null && fresh.relistOwed === pull.relistSettled) {
-    delete fresh.relistOwed;
-  }
-  if (pull.cursorReset) {
-    fresh.cursor = 0;
-  } else {
-    fresh.cursor = Math.max(fresh.cursor, pull.meta.cursor);
+  const sameCursor = cursorResetsOf(fresh) === pull.cursorResets;
+  if (sameCursor) {
+    mergeServerPosition(fresh, pull);
   }
   fresh.clock = hlcEncode(hlcReceive(hlcDecode(fresh.clock), hlcDecode(pull.meta.clock), wallMs));
   for (const key of pull.quarantined) {
@@ -178,7 +172,7 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
     fresh.tombstones = withMembership(fresh.tombstones, key, pull.meta.tombstones.includes(key));
   }
   // Seqs this pull saw before a restore refused it predate that restore too.
-  if (pull.relistRaised !== 'restored') {
+  if (sameCursor && pull.relistRaised !== 'restored') {
     for (const [key, seq] of pull.seqs) {
       fresh.seqs[key] = Math.max(fresh.seqs[key] ?? 0, seq);
     }
@@ -188,13 +182,35 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
   }
   // A purged key's entity was still held here, so the engine never tombstoned it.
   for (const [key, judged] of pull.purged) {
-    // Moved since it was judged: an edit or an ack owns the key now, not the purge.
-    if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
+    // Moved since it was judged: an edit or an ack owns the key now, not the purge. A cursor reset
+    // may have cleared every seq, so only the hlc can say whether this one moved.
+    if (fresh.hlcs[key] !== judged.hlc || (sameCursor && fresh.seqs[key] !== judged.seq)) {
       logger.error('Sync deleted a purged entity as it was edited; that edit may be lost', { key });
       continue;
     }
     delete fresh.hlcs[key];
     delete fresh.seqs[key];
+  }
+}
+
+/** The cursor and the server's refusals, which only the cursor this pull read can speak for. */
+function mergeServerPosition(fresh: SyncMeta, pull: PullState): void {
+  // A restored server reassigns seqs, so none held from before it can serve as a push base.
+  if (pull.relistRaised === 'restored') {
+    fresh.seqs = {};
+    fresh.relistOwed = 'restored';
+  }
+  // Never over an owed restore: that relist re-pushes what is missing, where a purge deletes it.
+  if (pull.relistRaised === 'purged' && fresh.relistOwed !== 'restored') {
+    fresh.relistOwed = 'purged';
+  }
+  if (pull.relistSettled !== null && fresh.relistOwed === pull.relistSettled) {
+    delete fresh.relistOwed;
+  }
+  if (pull.cursorReset) {
+    fresh.cursor = 0;
+  } else {
+    fresh.cursor = Math.max(fresh.cursor, pull.meta.cursor);
   }
 }
 
@@ -262,7 +278,7 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
     return { kind: 'complete' };
   }
 
-  const first = await pushBatches(deps, dirtyRecords);
+  const first = await pushBatches(deps, dirtyRecords, cursorResetsOf(meta));
   if (first.kind === 'cancelled') {
     return first;
   }
@@ -271,8 +287,9 @@ export async function pushOnce(deps: CycleDeps): Promise<PushResult> {
   if (first.retry.size > 0) {
     // One more round for ids a conflict left dirty under a fresh base. A row still moving after
     // that waits for the next cycle rather than looping here.
-    const again = await buildDirtyRecords(deps, await deps.meta.load(), first.retry);
-    const second = await pushBatches(deps, again);
+    const retryMeta = await deps.meta.load();
+    const again = await buildDirtyRecords(deps, retryMeta, first.retry);
+    const second = await pushBatches(deps, again, cursorResetsOf(retryMeta));
     if (second.kind === 'cancelled') {
       return second;
     }
@@ -292,7 +309,11 @@ type BatchesResult =
   | { kind: 'cancelled' }
   | { kind: 'pushed'; landed: DirtyRecord[]; retry: Set<string> };
 
-async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promise<BatchesResult> {
+async function pushBatches(
+  deps: CycleDeps,
+  dirtyRecords: DirtyRecord[],
+  cursorResets: number
+): Promise<BatchesResult> {
   const landed: DirtyRecord[] = [];
   const retry = new Set<string>();
   let stalled: string | null = null;
@@ -318,14 +339,14 @@ async function pushBatches(deps: CycleDeps, dirtyRecords: DirtyRecord[]): Promis
     const acked = ackedRecords(batch, response);
     // Enqueued synchronously after the check above, so nothing may await between the two. A delta,
     // not the snapshot the batch was sealed from: anything marked dirty meanwhile must survive.
-    await deps.meta.update((fresh) => recordAcks(fresh, acked, response.applied));
+    await deps.meta.update((fresh) => recordAcks(fresh, acked, response.applied, cursorResets));
     landed.push(...acked);
     if (response.conflicts.length > 0) {
       logger.debug(`Sync push had ${response.conflicts.length} record(s) refused`, {
         byCollection: tallyByCollection(response.conflicts.map((c) => c.collection)),
       });
     }
-    const settled = await settleConflicts(deps, response.conflicts);
+    const settled = await settleConflicts(deps, response.conflicts, cursorResets);
     // Re-checked: settling awaited (decrypts, local writes), and the enqueue below must follow a
     // check with no await between them, or a disable's ledger reset could be undone by this delta.
     if (deps.isCancelled()) {
@@ -404,8 +425,17 @@ function ackedRecords(batch: DirtyRecord[], response: PushResponse): DirtyRecord
   return acked;
 }
 
-function recordAcks(fresh: SyncMeta, acked: DirtyRecord[], applied: AppliedRecord[]): void {
+function recordAcks(
+  fresh: SyncMeta,
+  acked: DirtyRecord[],
+  applied: AppliedRecord[],
+  cursorResets: number
+): void {
   clearAcked(fresh, acked);
+  // A cursor reset since this batch was built owns the seqs, so its applied seqs are not recorded.
+  if (cursorResetsOf(fresh) !== cursorResets) {
+    return;
+  }
   const appliedSeqs = new Map(
     applied.map((a) => [SyncMetadataStore.entityKey(a.collection, a.entityId), a.seq])
   );
@@ -443,13 +473,14 @@ interface SettledConflicts {
  */
 async function settleConflicts(
   deps: CycleDeps,
-  conflicts: SyncRecord[]
+  conflicts: SyncRecord[],
+  cursorResets: number
 ): Promise<SettledConflicts> {
   const settled: SettledConflicts = { state: null, decisions: new Map(), stalled: null };
   if (conflicts.length === 0) {
     return settled;
   }
-  const state = newPullState(await deps.meta.load(), true);
+  const state = newPullState(await deps.meta.load(), true, cursorResets);
   settled.state = state;
   const warnedUnknownCollections = new Set<string>();
   for (const [index, conflict] of conflicts.entries()) {
@@ -495,6 +526,22 @@ async function settleConflicts(
   return settled;
 }
 
+function takeConflictSeqs(fresh: SyncMeta, seqs: Map<string, number>): void {
+  for (const [key, seq] of seqs) {
+    const held = fresh.seqs[key];
+    if (held !== undefined && held > seq) {
+      logger.warn('Taking the server seq for a refused record; the held one was higher', {
+        key,
+        held,
+        seq,
+      });
+    }
+    // A conflict row is read after the batch, so its seq is the server's fact, not a max: a held
+    // seq above it would ride every later push as a base the server refuses.
+    fresh.seqs[key] = seq;
+  }
+}
+
 /** One batch's conflict delta: what settling applied, and the dirty marks it may clear. */
 function recordSettled(
   fresh: SyncMeta,
@@ -509,18 +556,8 @@ function recordSettled(
     return decision !== undefined && decision !== 'retry' && fresh.hlcs[item.key] === item.hlc;
   });
   mergePull(fresh, state, wallMs);
-  for (const [key, seq] of state.seqs) {
-    const held = fresh.seqs[key];
-    if (held !== undefined && held > seq) {
-      logger.warn('Taking the server seq for a refused record; the held one was higher', {
-        key,
-        held,
-        seq,
-      });
-    }
-    // A conflict row is read after the batch, so its seq is the server's fact, not a max: a held
-    // seq above it would ride every later push as a base the server refuses.
-    fresh.seqs[key] = seq;
+  if (cursorResetsOf(fresh) === state.cursorResets) {
+    takeConflictSeqs(fresh, state.seqs);
   }
   for (const item of clearable) {
     clearDirty(fresh, item.collection, item.entityId);
