@@ -182,8 +182,9 @@ function mergePull(fresh: SyncMeta, pull: PullState, wallMs: number): void {
   }
   // A purged key's entity was still held here, so the engine never tombstoned it.
   for (const [key, judged] of pull.purged) {
-    // Moved since it was judged: an edit or an ack owns the key now, not the purge.
-    if (fresh.hlcs[key] !== judged.hlc || fresh.seqs[key] !== judged.seq) {
+    // Moved since it was judged: an edit or an ack owns the key now, not the purge. A cursor reset
+    // clears every seq, so only the hlc can say whether this one moved.
+    if (fresh.hlcs[key] !== judged.hlc || (sameCursor && fresh.seqs[key] !== judged.seq)) {
       logger.error('Sync deleted a purged entity as it was edited; that edit may be lost', { key });
       continue;
     }
@@ -431,7 +432,7 @@ function recordAcks(
   cursorResets: number
 ): void {
   clearAcked(fresh, acked);
-  // The base seqs these records were sealed under were cleared with the cursor since.
+  // The cursor reset since these records were built, so their base seqs no longer speak for it.
   if (cursorResetsOf(fresh) !== cursorResets) {
     return;
   }

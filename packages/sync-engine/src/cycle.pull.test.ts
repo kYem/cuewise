@@ -1284,6 +1284,25 @@ describe('pullOnce', () => {
       expect(saved.seqs['goals/g2']).toBe(3);
     });
 
+    it('is still forgotten, without blaming an edit, when the cursor resets after its delete', async () => {
+      const bindings = defaultBindings();
+      const goals = requireBinding(bindings, 'goals');
+      const writeOne = goals.writeOne.bind(goals);
+      vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+        const res = await writeOne(entityId, entity);
+        if (entity === null) {
+          await resetCursor(metaStore);
+        }
+        return res;
+      });
+      const errorSpy = vi.spyOn(logger, 'error');
+
+      await pullOnce(makeDeps({ bindings }));
+
+      expect((await metaStore.load()).hlcs['goals/g1']).toBeUndefined();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
     it('settles the owed check once the listing completes', async () => {
       await pullOnce(makeDeps());
 
