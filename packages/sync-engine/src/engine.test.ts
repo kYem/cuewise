@@ -2203,6 +2203,18 @@ describe('SyncEngine.resumeEnrollWithCode', () => {
 });
 
 describe('SyncEngine.disableSync', () => {
+  it('counts its ledger reset as a cursor reset', async () => {
+    const device = createDevice(new FakeSyncServer());
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    const before = cursorResetsOf(await metaStore.load());
+
+    await device.engine.disableSync();
+
+    expect(cursorResetsOf(await metaStore.load())).toBe(before + 1);
+  });
+
   it('clears status/DK/enabled-flag but leaves local domain data untouched', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
