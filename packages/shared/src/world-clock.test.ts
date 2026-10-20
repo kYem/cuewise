@@ -194,6 +194,7 @@ describe('countryFromTimeZone', () => {
       (zone) => zone.includes('/') && !zone.startsWith('Etc/')
     );
 
+    expect(cities.length).toBeGreaterThan(0);
     expect(cities.filter((zone) => countryFromTimeZone(zone) === null)).toEqual([]);
   });
 });

@@ -142,13 +142,24 @@ describe('WorldClockWidget', () => {
     const home = within(dialog).getByTestId('world-clock-row-home');
     const tokyo = within(dialog).getByTestId(`world-clock-row-${TOKYO_ZONE.id}`);
     expect(home.querySelector('[data-country="GB"]')).toBeInTheDocument();
+    expect(within(home).getByText('Day')).toBeInTheDocument();
     expect(tokyo.querySelector('[data-country="JP"]')).toBeInTheDocument();
     expect(within(tokyo).getByText('Night')).toBeInTheDocument();
+  });
+
+  it('keeps day or night on a row without a flag', () => {
+    mockWorldClockSettings({ worldClocks: [UTC_ZONE] });
+    render(<WorldClockWidget />);
+
+    const utc = within(openPopover()).getByTestId(`world-clock-row-${UTC_ZONE.id}`);
+    expect(utc.querySelector('[data-country]')).not.toBeInTheDocument();
+    expect(within(utc).getByText('Day')).toBeInTheDocument();
   });
 
   it('has a flag for the country of every city zone in this engine', () => {
     const countries = new Set(engineTimeZones().flatMap((zone) => countryFromTimeZone(zone) ?? []));
 
+    expect(countries.size).toBeGreaterThan(0);
     expect([...countries].filter((country) => !(country in Flags))).toEqual([]);
   });
 

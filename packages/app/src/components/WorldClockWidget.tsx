@@ -17,7 +17,7 @@ import { CHIP_CLASS } from './chip-class';
 
 type FlagComponent = (props: { className?: string }) => React.JSX.Element;
 
-// Zones are picked at runtime, so every flag ships (~180 KB of SVG, read from local disk).
+// Zones are picked at runtime, so every flag ships (~230 KB minified, read from local disk).
 const FLAGS: Partial<Record<string, FlagComponent>> = Flags;
 
 function formatReading(reading: ZoneReading): string {
@@ -34,8 +34,11 @@ interface ZoneFlag {
 
 function zoneFlag(timezone: string): ZoneFlag | null {
   const country = countryFromTimeZone(timezone);
-  const Flag = country === null ? undefined : FLAGS[country];
-  if (country === null || Flag === undefined) {
+  if (country === null) {
+    return null;
+  }
+  const Flag = FLAGS[country];
+  if (Flag === undefined) {
     return null;
   }
   return { country, Flag };
@@ -244,10 +247,10 @@ export const WorldClockWidget: React.FC = () => {
         aria-label={`World clock: ${first.label} ${firstTime}`}
         className={CHIP_CLASS}
       >
-        {firstFlag !== null ? (
-          <FlagDisc flag={firstFlag} className="w-5 h-5" />
-        ) : (
+        {firstFlag === null ? (
           <Globe className="w-5 h-5 text-primary-600" />
+        ) : (
+          <FlagDisc flag={firstFlag} className="w-5 h-5" />
         )}
         <span className="hidden sm:inline text-xs font-medium text-secondary">{first.label}</span>
         <span className="text-sm font-bold text-primary tabular-nums">{firstTime}</span>

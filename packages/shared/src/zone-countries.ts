@@ -1,4 +1,4 @@
-// Generated from tzdb 2026c zone.tab: each current IANA zone to its ISO 3166 country.
+// From tzdb 2026c zone.tab: each current IANA zone to its ISO 3166 country.
 export const ZONE_COUNTRIES: Readonly<Record<string, string>> = {
   'Africa/Abidjan': 'CI',
   'Africa/Accra': 'GH',
