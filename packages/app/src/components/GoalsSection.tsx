@@ -19,6 +19,7 @@ import {
   Eye,
   History,
   List,
+  Plus,
   Settings2,
   Target,
 } from 'lucide-react';
@@ -158,17 +159,15 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
     viewMode === 'full' ||
     (viewMode === 'focus' && totalCount === 0) ||
     (viewMode === 'compact' && visibleCount === 0);
-  useShortcutAction(
-    'goal.add',
-    canAddGoal
-      ? () => {
-          if (!addInputAlwaysShown) {
-            setShowAddInput(true);
-          }
-          setAddRequest((count) => count + 1);
-        }
-      : null
-  );
+  const openAddInput = () => {
+    if (!addInputAlwaysShown) {
+      setShowAddInput(true);
+    }
+    setAddRequest((count) => count + 1);
+  };
+  useShortcutAction('goal.add', canAddGoal ? openAddInput : null);
+  const showCompactAddButton =
+    viewMode === 'compact' && canAddGoal && !addInputAlwaysShown && !showAddInput;
   const closeAddInput = () => setShowAddInput(false);
   // An open add row belongs to the state it opened in: once view, source, emptiness or
   // availability changes (the list emptied or filled, an error came and went), it closes.
@@ -534,6 +533,17 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
                 <span className="text-xs text-secondary tabular-nums">
                   {completedCount}/{totalCount}
                 </span>
+              )}
+              {showCompactAddButton && (
+                <button
+                  type="button"
+                  onClick={openAddInput}
+                  aria-label="Add a goal"
+                  title="Add a goal"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-secondary hover:text-primary hover:bg-surface-variant transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
               )}
               {optionsMenu()}
             </div>

@@ -183,6 +183,15 @@ describe('GoalsSection - Notion source', () => {
     expect(await screen.findByText('· Notion · Tasks')).toBeInTheDocument();
   });
 
+  it('offers no compact + while goals come from Notion', async () => {
+    mockStores({ goalsSource: 'notion', goalViewMode: 'compact' });
+
+    renderGoalsWithNotion(connectedHost());
+
+    expect(await screen.findByText('· Notion · Tasks')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a goal' })).toBeNull();
+  });
+
   it('focuses on the first open Notion task, then hands over to the next', async () => {
     const user = userEvent.setup();
     mockStores({ goalsSource: 'notion', goalViewMode: 'focus' });
