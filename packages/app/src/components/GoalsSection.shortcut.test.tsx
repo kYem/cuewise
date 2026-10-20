@@ -26,6 +26,7 @@ vi.mock('@cuewise/storage', () => ({
 
 // The focus view's input keeps its visible label; the others are named "Add a goal".
 const ADD_INPUT = { name: /Add a goal|main goal for today/ };
+const ADD_BUTTON = { name: 'Add a goal' };
 const OPEN_GOAL = goalFactory.build({ completed: false });
 const DONE_GOAL = goalFactory.build({ completed: true });
 const ANOTHER_GOAL = goalFactory.build({ completed: false });
@@ -470,20 +471,20 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode: 'compact' }, [OPEN_GOAL]);
     renderWithShortcuts(<GoalsSection />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add a goal' }));
+    fireEvent.click(screen.getByRole('button', ADD_BUTTON));
 
     expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
-    expect(screen.queryByRole('button', { name: 'Add a goal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', ADD_BUTTON)).not.toBeInTheDocument();
   });
 
   it('brings the compact header + back once Escape closes the row', () => {
     mockStores({ goalViewMode: 'compact' }, [OPEN_GOAL]);
     renderWithShortcuts(<GoalsSection />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add a goal' }));
+    fireEvent.click(screen.getByRole('button', ADD_BUTTON));
 
     fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
 
-    expect(screen.getByRole('button', { name: 'Add a goal' })).toBeInTheDocument();
+    expect(screen.getByRole('button', ADD_BUTTON)).toBeInTheDocument();
   });
 
   it.each([
@@ -493,7 +494,7 @@ describe('GoalsSection - add-goal shortcut', () => {
     mockStores({ goalViewMode }, [...tasks]);
     renderWithShortcuts(<GoalsSection />);
 
-    expect(screen.queryByRole('button', { name: 'Add a goal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', ADD_BUTTON)).not.toBeInTheDocument();
   });
 
   it('switching view closes the add row n opened', () => {
