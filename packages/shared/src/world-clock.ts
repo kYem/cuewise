@@ -1,5 +1,6 @@
 import type { WorldClockZone } from './types';
 import { generateId } from './utils';
+import { ZONE_COUNTRIES } from './zone-countries';
 
 export const MAX_WORLD_CLOCKS = 4;
 export const MAX_WORLD_CLOCK_LABEL = 24;
@@ -123,6 +124,17 @@ const RENAMED_ZONES: Readonly<Record<string, string>> = {
   'America/Godthab': 'America/Nuuk',
   'Atlantic/Faeroe': 'Atlantic/Faroe',
   'Pacific/Enderbury': 'Pacific/Kanton',
+  'Pacific/Ponape': 'Pacific/Pohnpei',
+  'Pacific/Truk': 'Pacific/Chuuk',
+  'Africa/Asmera': 'Africa/Asmara',
+  'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+  'America/Catamarca': 'America/Argentina/Catamarca',
+  'America/Cordoba': 'America/Argentina/Cordoba',
+  'America/Jujuy': 'America/Argentina/Jujuy',
+  'America/Mendoza': 'America/Argentina/Mendoza',
+  'America/Indianapolis': 'America/Indiana/Indianapolis',
+  'America/Louisville': 'America/Kentucky/Louisville',
+  'America/Coral_Harbour': 'America/Atikokan',
 };
 
 const CITY_NAMES: Readonly<Record<string, string>> = {
@@ -141,6 +153,11 @@ function lastSegment(timeZone: string): string {
 export function cityFromTimeZone(timeZone: string): string {
   const current = currentTimeZoneId(timeZone);
   return CITY_NAMES[current] ?? lastSegment(current);
+}
+
+/** ISO 3166 code of the zone's country, or null for zones with none (`UTC`, `Etc/*`). */
+export function countryFromTimeZone(timeZone: string): string | null {
+  return ZONE_COUNTRIES[currentTimeZoneId(timeZone)] ?? null;
 }
 
 export function sameTimeZone(a: string, b: string): boolean {

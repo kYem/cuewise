@@ -30,6 +30,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@tombcato/smart-ticker": "^1.2.4",
     "chrono-node": "catalog:",
+    "country-flag-icons": "catalog:",
     "date-fns": "catalog:",
     "lottie-web": "^5.13.0",
     "lucide-react": "catalog:",

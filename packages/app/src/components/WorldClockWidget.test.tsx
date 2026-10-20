@@ -1,4 +1,6 @@
+import { countryFromTimeZone, engineTimeZones } from '@cuewise/shared';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import * as Flags from 'country-flag-icons/react/1x1';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BROKEN_ZONE,
@@ -7,6 +9,7 @@ import {
   mockWorldClockSettings,
   NEW_YORK_ZONE,
   TOKYO_ZONE,
+  UTC_ZONE,
 } from './__fixtures__/world-clock.fixtures';
 import { WorldClockWidget } from './WorldClockWidget';
 
@@ -112,6 +115,41 @@ describe('WorldClockWidget', () => {
     const broken = within(dialog).getByTestId(`world-clock-row-${BROKEN_ZONE.id}`);
     expect(within(broken).getByText('Unavailable')).toBeInTheDocument();
     expect(within(dialog).getByText('+8h')).toBeInTheDocument();
+  });
+
+  it("leads the chip with the first city's flag", () => {
+    mockWorldClockSettings();
+    render(<WorldClockWidget />);
+
+    const chip = screen.getByRole('button', { name: /world clock/i });
+    expect(chip.querySelector('[data-country="JP"]')).toBeInTheDocument();
+  });
+
+  it('keeps the globe on the chip for a zone without a country', () => {
+    mockWorldClockSettings({ worldClocks: [UTC_ZONE] });
+    render(<WorldClockWidget />);
+
+    const chip = screen.getByRole('button', { name: /world clock/i });
+    expect(chip.querySelector('[data-country]')).not.toBeInTheDocument();
+    expect(chip.querySelector('.lucide-globe')).toBeInTheDocument();
+  });
+
+  it('leads each row with its flag and keeps day or night', () => {
+    mockWorldClockSettings();
+    render(<WorldClockWidget />);
+
+    const dialog = openPopover();
+    const home = within(dialog).getByTestId('world-clock-row-home');
+    const tokyo = within(dialog).getByTestId(`world-clock-row-${TOKYO_ZONE.id}`);
+    expect(home.querySelector('[data-country="GB"]')).toBeInTheDocument();
+    expect(tokyo.querySelector('[data-country="JP"]')).toBeInTheDocument();
+    expect(within(tokyo).getByText('Night')).toBeInTheDocument();
+  });
+
+  it('has a flag for the country of every city zone in this engine', () => {
+    const countries = new Set(engineTimeZones().flatMap((zone) => countryFromTimeZone(zone) ?? []));
+
+    expect([...countries].filter((country) => !(country in Flags))).toEqual([]);
   });
 
   it('closes on Escape', () => {

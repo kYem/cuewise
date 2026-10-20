@@ -23,6 +23,8 @@ export const AUCKLAND_ZONE: WorldClockZone = {
   label: 'Auckland',
   timezone: 'Pacific/Auckland',
 };
+/** A zone with no country, so no flag. */
+export const UTC_ZONE: WorldClockZone = { id: 'utc', label: 'UTC', timezone: 'UTC' };
 /** A zone a newer engine could have synced that this one cannot format. */
 export const BROKEN_ZONE: WorldClockZone = {
   id: 'broken',
