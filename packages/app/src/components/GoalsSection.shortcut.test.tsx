@@ -466,6 +466,36 @@ describe('GoalsSection - add-goal shortcut', () => {
     expect(screen.queryByRole('textbox', ADD_INPUT)).not.toBeInTheDocument();
   });
 
+  it('the compact header + opens and focuses the add row, then steps aside for it', () => {
+    mockStores({ goalViewMode: 'compact' }, [OPEN_GOAL]);
+    renderWithShortcuts(<GoalsSection />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a goal' }));
+
+    expect(screen.getByRole('textbox', ADD_INPUT)).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Add a goal' })).not.toBeInTheDocument();
+  });
+
+  it('brings the compact header + back once Escape closes the row', () => {
+    mockStores({ goalViewMode: 'compact' }, [OPEN_GOAL]);
+    renderWithShortcuts(<GoalsSection />);
+    fireEvent.click(screen.getByRole('button', { name: 'Add a goal' }));
+
+    fireEvent.keyDown(screen.getByRole('textbox', ADD_INPUT), { key: 'Escape' });
+
+    expect(screen.getByRole('button', { name: 'Add a goal' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['an empty compact list, which shows the add row anyway', 'compact', []],
+    ['full view, which has its own add input', 'full', [OPEN_GOAL]],
+  ] as const)('shows no header + in %s', (_label, goalViewMode, tasks) => {
+    mockStores({ goalViewMode }, [...tasks]);
+    renderWithShortcuts(<GoalsSection />);
+
+    expect(screen.queryByRole('button', { name: 'Add a goal' })).not.toBeInTheDocument();
+  });
+
   it('switching view closes the add row n opened', () => {
     mockStores({ goalViewMode: 'compact' });
     const { rerender } = renderWithShortcuts(<GoalsSection />);
