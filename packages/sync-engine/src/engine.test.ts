@@ -40,8 +40,9 @@ import {
   SYNC_PARKED_DATA_KEYS,
   SYNC_UNBOUND_DATA_KEY,
 } from './key-lifecycle';
-import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
+import { SYNC_META_KEY, type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
+import type { SyncNowResult } from './sync-outcome';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -217,6 +218,21 @@ function disableBeforeWriting(kv: FakeKvStore, key: string, engine: SyncEngine):
       await engine.disableSync();
     }
     return set(written, value, area);
+  });
+}
+
+/** Starts a cycle as the ledger's cursor is first written back to zero; resolves to its outcome. */
+function cycleDuringCursorReset(kv: FakeKvStore, engine: SyncEngine): Promise<SyncNowResult> {
+  const set = kv.set.bind(kv);
+  return new Promise((resolve) => {
+    let started = false;
+    vi.spyOn(kv, 'set').mockImplementation(async (written, value, area) => {
+      if (written === SYNC_META_KEY && (value as SyncMeta).cursor === 0 && !started) {
+        started = true;
+        engine.syncNow().then(resolve);
+      }
+      return set(written, value, area);
+    });
   });
 }
 
@@ -2416,6 +2432,17 @@ describe('SyncEngine ledger seqs on enable, before the initial sync', () => {
 
     expect((await metaStore.load()).seqs['goals/g1']).toBeUndefined();
   });
+
+  it('holds no key while the cursor resets, so no cycle pulls from the old one', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    const cycle = cycleDuringCursorReset(device.kv, device.engine);
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await cycle).toEqual({ kind: 'no-key' });
+  });
 });
 
 describe('SyncEngine.refreshRecoveryEnvelope', () => {
@@ -3712,6 +3739,19 @@ describe('SyncEngine re-auth after auth loss', () => {
     await restart(device).start();
 
     expect(serverGoal(serverA, 'made-on-b')).toBeDefined();
+  });
+
+  it('holds no restored key while the cursor resets, so no cycle pulls from the old one', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    await enableFailingToNameAccount(device);
+    const restarted = restart(device);
+    const cycle = cycleDuringCursorReset(device.kv, restarted);
+
+    await restarted.start();
+
+    expect(await cycle).toEqual({ kind: 'no-key' });
   });
 
   it('backfills the retry of a return to an account whose first attempt was interrupted', async () => {

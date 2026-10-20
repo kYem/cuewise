@@ -885,6 +885,12 @@ export class SyncEngine {
     mintedCode: boolean,
     backfill: boolean
   ): Promise<void> {
+    // The enabled flag survives handleAuthLoss, so it cannot mean the cursor is this account's;
+    // skipping the backfill does. Kept, that cursor lets the server refuse it if it purged since.
+    // Reset before the key is set, as in start().
+    if (backfill) {
+      await this.resetPullCursor();
+    }
     this.dk = dk;
     this.keyId = keyId;
     // Both enrol paths prove one: initNewKey PUT it, enrollFromEnvelope unwrapped it. Without
@@ -892,10 +898,7 @@ export class SyncEngine {
     await this.recordRecoveryEnvelope(true, epoch);
 
     this.setStatus('initial_sync');
-    // The enabled flag survives handleAuthLoss, so it cannot mean the cursor is this account's;
-    // skipping the backfill does. Kept, that cursor lets the server refuse it if it purged since.
     if (backfill) {
-      await this.resetPullCursor();
       await this.backfillDirty();
     }
     // backfillDirty wrote to the ledger disableSync had just cleared, so a disable landing across
@@ -1704,14 +1707,16 @@ export class SyncEngine {
 
     // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
     await this.bestEffort(() => this.resetCursorForNewBindings(), 'bound-collections cursor reset');
+    if (check === 'restored') {
+      // The ledger may describe the account whose key was set aside in this one's place.
+      await this.resetPullCursor();
+    }
     if (this.startSuperseded(epoch)) {
       return;
     }
     this.dk = persisted.dk;
     this.keyId = persisted.keyId;
     if (check === 'restored') {
-      // The ledger may describe the account whose key was set aside in this one's place.
-      await this.resetPullCursor();
       await this.backfillDirty();
       if (this.startSuperseded(epoch)) {
         await this.bestEffort(() => this.resetMeta(), 'abandoned start ledger rollback');
