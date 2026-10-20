@@ -179,6 +179,11 @@ describe('countryFromTimeZone', () => {
     expect(countryFromTimeZone('America/Buenos_Aires')).toBe('AR');
   });
 
+  it("keeps a linked zone's own town name while finding its country", () => {
+    expect(cityFromTimeZone('America/Coral_Harbour')).toBe('Coral Harbour');
+    expect(countryFromTimeZone('America/Coral_Harbour')).toBe('CA');
+  });
+
   it('has no country for UTC or Etc zones', () => {
     expect(countryFromTimeZone('UTC')).toBeNull();
     expect(countryFromTimeZone('Etc/GMT+1')).toBeNull();

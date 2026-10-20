@@ -134,7 +134,11 @@ const RENAMED_ZONES: Readonly<Record<string, string>> = {
   'America/Mendoza': 'America/Argentina/Mendoza',
   'America/Indianapolis': 'America/Indiana/Indianapolis',
   'America/Louisville': 'America/Kentucky/Louisville',
-  'America/Coral_Harbour': 'America/Atikokan',
+};
+
+// Engine ids that link to a different town's zone, so they keep their own name.
+const LINKED_ZONE_COUNTRIES: Readonly<Record<string, string>> = {
+  'America/Coral_Harbour': 'CA',
 };
 
 const CITY_NAMES: Readonly<Record<string, string>> = {
@@ -157,7 +161,7 @@ export function cityFromTimeZone(timeZone: string): string {
 
 /** ISO 3166 code of the zone's country, or null for zones with none (`UTC`, `Etc/*`). */
 export function countryFromTimeZone(timeZone: string): string | null {
-  return ZONE_COUNTRIES[currentTimeZoneId(timeZone)] ?? null;
+  return ZONE_COUNTRIES[currentTimeZoneId(timeZone)] ?? LINKED_ZONE_COUNTRIES[timeZone] ?? null;
 }
 
 export function sameTimeZone(a: string, b: string): boolean {
