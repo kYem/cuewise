@@ -20,6 +20,7 @@ import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { onCursorReset } from './__fixtures__/ledger';
 import { unbindPersistedDataKey } from './__fixtures__/legacy-data-key';
 import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
@@ -40,7 +41,7 @@ import {
   SYNC_PARKED_DATA_KEYS,
   SYNC_UNBOUND_DATA_KEY,
 } from './key-lifecycle';
-import { SYNC_META_KEY, type SyncMeta, SyncMetadataStore } from './metadata-store';
+import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import type { SyncNowResult } from './sync-outcome';
 
@@ -216,22 +217,6 @@ function disableBeforeWriting(kv: FakeKvStore, key: string, engine: SyncEngine):
     if (written === key && !disabled) {
       disabled = true;
       await engine.disableSync();
-    }
-    return set(written, value, area);
-  });
-}
-
-/** Runs `during` once, as a ledger write moves a non-zero cursor back to zero. */
-function onCursorReset(kv: FakeKvStore, during: () => void): void {
-  const set = kv.set.bind(kv);
-  let ran = false;
-  vi.spyOn(kv, 'set').mockImplementation(async (written, value, area) => {
-    if (written === SYNC_META_KEY && !ran && (value as SyncMeta).cursor === 0) {
-      const stored = await kv.get<SyncMeta>(SYNC_META_KEY, 'local');
-      if (stored !== null && stored.cursor > 0) {
-        ran = true;
-        during();
-      }
     }
     return set(written, value, area);
   });

@@ -17,6 +17,7 @@ import {
 } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
+import { resetCursor } from './__fixtures__/ledger';
 import { sealServerRecord } from './__fixtures__/records';
 import { defaultBindings } from './collections';
 import { type CycleDeps, PULL_PAGE, pullOnce } from './cycle';
@@ -300,6 +301,21 @@ describe('pullOnce', () => {
     expect(saved.seqs['goals/g1']).toBe(7);
     expect(saved.hlcs['goals/g1']).not.toBe(NEWER_HLC);
     expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('leaves the cursor and seqs to a reset that landed during the round trip', async () => {
+    const goal = goalFactory.build({ id: 'g1' });
+    transport.pullRecords = [
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 7),
+    ];
+    duringPull(transport, () => resetCursor(metaStore));
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(0);
+    expect(saved.seqs).toEqual({});
+    expect(await getGoals()).toEqual([goal]);
   });
 
   it('never lowers a seq the ledger already holds', async () => {

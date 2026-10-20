@@ -58,7 +58,7 @@ import {
   SYNC_UNBOUND_DATA_KEY,
   setAsideDataKey,
 } from './key-lifecycle';
-import { SyncMetadataStore } from './metadata-store';
+import { countCursorReset, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
 import {
@@ -888,7 +888,6 @@ export class SyncEngine {
     // The enabled flag survives handleAuthLoss, so it cannot mean the cursor is this account's;
     // skipping the backfill does. Kept, that cursor lets the server refuse it if it purged since.
     if (backfill) {
-      // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
       await this.resetPullCursor();
       if (this.enrollSuperseded(epoch)) {
         await this.abandonEnroll(mintedCode);
@@ -1709,11 +1708,15 @@ export class SyncEngine {
       return;
     }
 
-    // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
-    await this.bestEffort(() => this.resetCursorForNewBindings(), 'bound-collections cursor reset');
+    // Before the key is set, so no cycle this start runs pulls from the old cursor.
     if (check === 'restored') {
       // The ledger may describe the account whose key was set aside in this one's place.
       await this.resetPullCursor();
+    } else {
+      await this.bestEffort(
+        () => this.resetCursorForNewBindings(),
+        'bound-collections cursor reset'
+      );
     }
     if (this.startSuperseded(epoch)) {
       return;
@@ -1921,6 +1924,7 @@ export class SyncEngine {
       meta.cursor = 0;
       meta.seqs = {};
       meta.boundCollections = this.bindingsFingerprint();
+      countCursorReset(meta);
     });
   }
 
@@ -1934,6 +1938,7 @@ export class SyncEngine {
       meta.quarantine = [];
       delete meta.relistOwed;
       meta.boundCollections = this.bindingsFingerprint();
+      countCursorReset(meta);
     });
   }
 
@@ -1954,6 +1959,7 @@ export class SyncEngine {
     await this.meta.update((fresh) => {
       fresh.cursor = 0;
       fresh.boundCollections = fingerprint;
+      countCursorReset(fresh);
     });
   }
 
