@@ -41,7 +41,7 @@ import {
   SYNC_PARKED_DATA_KEYS,
   SYNC_UNBOUND_DATA_KEY,
 } from './key-lifecycle';
-import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
+import { cursorResetsOf, SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import type { SyncNowResult } from './sync-outcome';
 
@@ -2711,6 +2711,22 @@ describe('SyncEngine.start / stop', () => {
     expect(pulls.mock.calls[0]?.[0]).toBeGreaterThan(0);
   });
 
+  it('counts the reset when this build binds a collection the ledger has not seen', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      delete meta.boundCollections;
+    });
+    const before = cursorResetsOf(await metaStore.load());
+
+    await restart(device).start();
+
+    expect(cursorResetsOf(await metaStore.load())).toBe(before + 1);
+  });
+
   it('still starts when the ledger is unreadable, and re-pulls from zero once it reads again', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -3742,7 +3758,7 @@ describe('SyncEngine re-auth after auth loss', () => {
     expect(await Promise.all(cycles)).toEqual([{ kind: 'no-key' }]);
   });
 
-  it('abandons a re-auth whose cursor reset a disable lands on, before taking the key', async () => {
+  it('abandons a re-auth whose cursor reset a disable lands on, before its backfill', async () => {
     const serverA = new FakeSyncServer();
     const device = await signedOutAfterGoalOnB(serverA);
     device.apiClient.switchAccount(serverA, 'fake-user');

@@ -66,7 +66,7 @@ interface PullState {
   repairsQuarantined: boolean;
   /** Each collection as last read, kept current with this pull's own writes. */
   local: LocalCopies;
-  /** The ledger's cursor resets when this read began; a reset since owns the cursor and seqs. */
+  /** Cursor resets when this cycle's work began; a reset since owns cursor, seqs and relist. */
   cursorResets: number;
 }
 
@@ -432,7 +432,7 @@ function recordAcks(
   cursorResets: number
 ): void {
   clearAcked(fresh, acked);
-  // The cursor reset since these records were built, so their base seqs no longer speak for it.
+  // A cursor reset since this batch was built owns the seqs, so its applied seqs are not recorded.
   if (cursorResetsOf(fresh) !== cursorResets) {
     return;
   }

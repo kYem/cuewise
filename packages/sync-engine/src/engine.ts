@@ -1708,7 +1708,7 @@ export class SyncEngine {
       return;
     }
 
-    // Before the key is set, so no cycle this start runs pulls from the old cursor.
+    // Before the key is set, so no cycle can pull from the old cursor while it resets.
     if (check === 'restored') {
       // The ledger may describe the account whose key was set aside in this one's place.
       await this.resetPullCursor();

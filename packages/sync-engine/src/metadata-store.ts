@@ -23,7 +23,10 @@ export interface SyncMeta {
    * collection it does not bind yet still moves the cursor past them.
    */
   boundCollections?: string;
-  /** Bumped by every reset of the cursor, so a cycle that read the old one cannot write it back. */
+  /**
+   * Bumped by every engine reset of the cursor, not a cycle's own rewind, so a cycle that read the
+   * old cursor cannot write it back.
+   */
   cursorResets?: number;
 }
 

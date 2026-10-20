@@ -673,9 +673,6 @@ describe('SyncEngine.pollPairing', () => {
     const side = await commitAsApprover(flow);
     await flow.requester.engine.pollPairing();
     await wrapKeyAsApprover(flow, side);
-    await new SyncMetadataStore(flow.requester.kv).update((meta) => {
-      meta.cursor = 42;
-    });
     const backfill = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
     const disables: Promise<void>[] = [];
     onCursorReset(flow.requester.kv, () => disables.push(flow.requester.engine.disableSync()));
