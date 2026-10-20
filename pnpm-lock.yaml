@@ -88,6 +88,9 @@ catalogs:
     clsx:
       specifier: ^2.1.1
       version: 2.1.1
+    country-flag-icons:
+      specifier: ^1.6.20
+      version: 1.6.20
     date-fns:
       specifier: ^4.4.0
       version: 4.4.0
@@ -505,6 +508,9 @@ importers:
       chrono-node:
         specifier: 'catalog:'
         version: 2.10.1
+      country-flag-icons:
+        specifier: 'catalog:'
+        version: 1.6.20
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -3132,6 +3138,9 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  country-flag-icons@1.6.20:
+    resolution: {integrity: sha512-py8JiEKzjhYw6HPJ0L7SxLgCYim36UPRTZX43/kqGueUCZLSvnrqAiwW8HtQibur7mdkFQUkjOgdK+o/9FBtaw==}
 
   crc-32@1.2.2:
     resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
@@ -7041,6 +7050,8 @@ snapshots:
       parse-json: 5.2.0
     optionalDependencies:
       typescript: 7.0.2
+
+  country-flag-icons@1.6.20: {}
 
   crc-32@1.2.2: {}
 

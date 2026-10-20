@@ -65,6 +65,7 @@ catalog:
   autoprefixer: ^10.6.1
   chrono-node: ^2.10.1
   clsx: ^2.1.1
+  country-flag-icons: ^1.6.20
   date-fns: ^4.4.0
   fishery: ^2.4.0
   hono: ^4.13.9

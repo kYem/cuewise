@@ -1,10 +1,12 @@
 import {
   cityFromTimeZone,
+  countryFromTimeZone,
   deviceTimeZone,
   shownWorldClocks,
   type WorldClockZone,
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
+import * as Flags from 'country-flag-icons/react/1x1';
 import { Globe, Moon, Sun } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -13,6 +15,11 @@ import { useSettingsStore } from '../stores/settings-store';
 import { readZone, type ZoneReading } from '../utils/world-clock';
 import { CHIP_CLASS } from './chip-class';
 
+type FlagComponent = (props: { className?: string }) => React.JSX.Element;
+
+// Zones are picked at runtime, so every flag ships (~230 KB minified, read from local disk).
+const FLAGS: Partial<Record<string, FlagComponent>> = Flags;
+
 function formatReading(reading: ZoneReading): string {
   if (reading.period === '') {
     return reading.time;
@@ -20,12 +27,78 @@ function formatReading(reading: ZoneReading): string {
   return `${reading.time} ${reading.period}`;
 }
 
+interface ZoneFlag {
+  country: string;
+  Flag: FlagComponent;
+}
+
+function zoneFlag(timezone: string): ZoneFlag | null {
+  const country = countryFromTimeZone(timezone);
+  if (country === null) {
+    return null;
+  }
+  const Flag = FLAGS[country];
+  if (Flag === undefined) {
+    return null;
+  }
+  return { country, Flag };
+}
+
+const FlagDisc: React.FC<{ flag: ZoneFlag; className: string }> = ({
+  flag: { country, Flag },
+  className,
+}) => (
+  <span
+    data-country={country}
+    aria-hidden="true"
+    className={cn(
+      'block rounded-full overflow-hidden ring-1 ring-black/15 dark:ring-white/15',
+      className
+    )}
+  >
+    <Flag className="w-full h-full" />
+  </span>
+);
+
+const DayNight: React.FC<{ reading: ZoneReading; timezone: string }> = ({ reading, timezone }) => {
+  const DayIcon = reading.isDay ? Sun : Moon;
+  const label = reading.isDay ? 'Day' : 'Night';
+  const tone = reading.isDay ? 'text-warning' : 'text-primary-600';
+  const flag = zoneFlag(timezone);
+  if (flag === null) {
+    return (
+      <span
+        className={cn('w-7 h-7 rounded-full grid place-items-center bg-surface-variant', tone)}
+        title={label}
+      >
+        <DayIcon className="w-4 h-4" aria-hidden="true" />
+        <span className="sr-only">{label}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="relative w-7 h-7" title={label}>
+      <FlagDisc flag={flag} className="w-7 h-7" />
+      <span
+        className={cn(
+          'absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full grid place-items-center bg-surface-elevated',
+          tone
+        )}
+      >
+        <DayIcon className="w-2.5 h-2.5" aria-hidden="true" />
+      </span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+};
+
 const ZoneRow: React.FC<{
   rowId: string;
   label: string;
+  timezone: string;
   reading: ZoneReading | null;
   isHome?: boolean;
-}> = ({ rowId, label, reading, isHome = false }) => {
+}> = ({ rowId, label, timezone, reading, isHome = false }) => {
   if (reading === null) {
     return (
       <div
@@ -39,7 +112,6 @@ const ZoneRow: React.FC<{
     );
   }
 
-  const DayIcon = reading.isDay ? Sun : Moon;
   return (
     <div
       data-testid={`world-clock-row-${rowId}`}
@@ -48,16 +120,7 @@ const ZoneRow: React.FC<{
         isHome && 'bg-primary-100/60'
       )}
     >
-      <span
-        className={cn(
-          'w-7 h-7 rounded-full grid place-items-center bg-surface-variant',
-          reading.isDay ? 'text-warning' : 'text-primary-600'
-        )}
-        title={reading.isDay ? 'Day' : 'Night'}
-      >
-        <DayIcon className="w-4 h-4" aria-hidden="true" />
-        <span className="sr-only">{reading.isDay ? 'Day' : 'Night'}</span>
-      </span>
+      <DayNight reading={reading} timezone={timezone} />
       <div className="min-w-0">
         <div className="text-sm font-semibold text-primary truncate leading-tight">{label}</div>
         <div className="text-xs text-secondary">
@@ -113,6 +176,7 @@ const WorldClockPopover: React.FC<{
       <ZoneRow
         rowId="home"
         label={`${cityFromTimeZone(homeZone)} (you)`}
+        timezone={homeZone}
         reading={readZone({ timezone: homeZone }, now, homeZone, timeFormat)}
         isHome
       />
@@ -121,6 +185,7 @@ const WorldClockPopover: React.FC<{
           key={zone.id}
           rowId={zone.id}
           label={zone.label}
+          timezone={zone.timezone}
           reading={readZone(zone, now, homeZone, timeFormat)}
         />
       ))}
@@ -170,6 +235,7 @@ export const WorldClockWidget: React.FC = () => {
   const firstReading = readZone(first, now, homeZone, timeFormat);
   const firstTime = firstReading === null ? '—' : formatReading(firstReading);
   const others = zones.length - 1;
+  const firstFlag = zoneFlag(first.timezone);
 
   return (
     <div className="relative" ref={containerRef}>
@@ -181,7 +247,11 @@ export const WorldClockWidget: React.FC = () => {
         aria-label={`World clock: ${first.label} ${firstTime}`}
         className={CHIP_CLASS}
       >
-        <Globe className="w-5 h-5 text-primary-600" />
+        {firstFlag === null ? (
+          <Globe className="w-5 h-5 text-primary-600" />
+        ) : (
+          <FlagDisc flag={firstFlag} className="w-5 h-5" />
+        )}
         <span className="hidden sm:inline text-xs font-medium text-secondary">{first.label}</span>
         <span className="text-sm font-bold text-primary tabular-nums">{firstTime}</span>
         {others > 0 && (

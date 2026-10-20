@@ -4,6 +4,8 @@ import { formatWallClockTime } from './utils';
 import {
   addWorldClock,
   cityFromTimeZone,
+  countryFromTimeZone,
+  engineTimeZones,
   formatZoneDifference,
   isZoneDaytime,
   isZoneWorkingHours,
@@ -163,6 +165,37 @@ describe('renamed zones', () => {
   it('treats an old and a new zone id as the same zone', () => {
     expect(sameTimeZone('Asia/Calcutta', 'Asia/Kolkata')).toBe(true);
     expect(sameTimeZone('Asia/Tokyo', 'Asia/Seoul')).toBe(false);
+  });
+});
+
+describe('countryFromTimeZone', () => {
+  it("gives a city zone's country", () => {
+    expect(countryFromTimeZone('Europe/London')).toBe('GB');
+    expect(countryFromTimeZone('America/Argentina/Buenos_Aires')).toBe('AR');
+  });
+
+  it('finds the country of a zone the engine reports by its old id', () => {
+    expect(countryFromTimeZone('Asia/Saigon')).toBe('VN');
+    expect(countryFromTimeZone('America/Buenos_Aires')).toBe('AR');
+  });
+
+  it("keeps a linked zone's own town name while finding its country", () => {
+    expect(cityFromTimeZone('America/Coral_Harbour')).toBe('Coral Harbour');
+    expect(countryFromTimeZone('America/Coral_Harbour')).toBe('CA');
+  });
+
+  it('has no country for UTC or Etc zones', () => {
+    expect(countryFromTimeZone('UTC')).toBeNull();
+    expect(countryFromTimeZone('Etc/GMT+1')).toBeNull();
+  });
+
+  it("knows the country of every city zone in this engine's list", () => {
+    const cities = engineTimeZones().filter(
+      (zone) => zone.includes('/') && !zone.startsWith('Etc/')
+    );
+
+    expect(cities.length).toBeGreaterThan(0);
+    expect(cities.filter((zone) => countryFromTimeZone(zone) === null)).toEqual([]);
   });
 });
 
