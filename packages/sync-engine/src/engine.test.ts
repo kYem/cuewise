@@ -221,18 +221,19 @@ function disableBeforeWriting(kv: FakeKvStore, key: string, engine: SyncEngine):
   });
 }
 
-/** Starts a cycle as the ledger's cursor is first written back to zero; resolves to its outcome. */
-function cycleDuringCursorReset(kv: FakeKvStore, engine: SyncEngine): Promise<SyncNowResult> {
+/** Runs `during` once, as a ledger write moves a non-zero cursor back to zero. */
+function onCursorReset(kv: FakeKvStore, during: () => void): void {
   const set = kv.set.bind(kv);
-  return new Promise((resolve) => {
-    let started = false;
-    vi.spyOn(kv, 'set').mockImplementation(async (written, value, area) => {
-      if (written === SYNC_META_KEY && (value as SyncMeta).cursor === 0 && !started) {
-        started = true;
-        engine.syncNow().then(resolve);
+  let ran = false;
+  vi.spyOn(kv, 'set').mockImplementation(async (written, value, area) => {
+    if (written === SYNC_META_KEY && !ran && (value as SyncMeta).cursor === 0) {
+      const stored = await kv.get<SyncMeta>(SYNC_META_KEY, 'local');
+      if (stored !== null && stored.cursor > 0) {
+        ran = true;
+        during();
       }
-      return set(written, value, area);
-    });
+    }
+    return set(written, value, area);
   });
 }
 
@@ -2432,17 +2433,6 @@ describe('SyncEngine ledger seqs on enable, before the initial sync', () => {
 
     expect((await metaStore.load()).seqs['goals/g1']).toBeUndefined();
   });
-
-  it('holds no key while the cursor resets, so no cycle pulls from the old one', async () => {
-    const server = new FakeSyncServer();
-    const device = createDevice(server);
-    useStorage(device);
-    const cycle = cycleDuringCursorReset(device.kv, device.engine);
-
-    await device.engine.enableSync('dev', 'cred-a', 'Device A');
-
-    expect(await cycle).toEqual({ kind: 'no-key' });
-  });
 });
 
 describe('SyncEngine.refreshRecoveryEnvelope', () => {
@@ -3741,17 +3731,46 @@ describe('SyncEngine re-auth after auth loss', () => {
     expect(serverGoal(serverA, 'made-on-b')).toBeDefined();
   });
 
+  it('holds no key while a re-auth resets the cursor, so no cycle pulls from the old one', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    const cycles: Promise<SyncNowResult>[] = [];
+    onCursorReset(device.kv, () => cycles.push(device.engine.syncNow()));
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await Promise.all(cycles)).toEqual([{ kind: 'no-key' }]);
+  });
+
   it('holds no restored key while the cursor resets, so no cycle pulls from the old one', async () => {
     const serverA = new FakeSyncServer();
     const device = await signedOutAfterGoalOnB(serverA);
     device.apiClient.switchAccount(serverA, 'fake-user');
     await enableFailingToNameAccount(device);
     const restarted = restart(device);
-    const cycle = cycleDuringCursorReset(device.kv, restarted);
+    const cycles: Promise<SyncNowResult>[] = [];
+    onCursorReset(device.kv, () => cycles.push(restarted.syncNow()));
 
     await restarted.start();
 
-    expect(await cycle).toEqual({ kind: 'no-key' });
+    expect(await Promise.all(cycles)).toEqual([{ kind: 'no-key' }]);
+  });
+
+  it('abandons a re-auth whose cursor reset a disable lands on, before taking the key', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    const backfill = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
+    const disables: Promise<void>[] = [];
+    onCursorReset(device.kv, () => disables.push(device.engine.disableSync()));
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await Promise.all(disables);
+
+    expect(disables).toHaveLength(1);
+    expect(backfill).not.toHaveBeenCalled();
+    expect(device.engine.getStatus()).toBe('disabled');
   });
 
   it('backfills the retry of a return to an account whose first attempt was interrupted', async () => {

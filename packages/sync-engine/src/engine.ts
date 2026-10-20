@@ -887,9 +887,13 @@ export class SyncEngine {
   ): Promise<void> {
     // The enabled flag survives handleAuthLoss, so it cannot mean the cursor is this account's;
     // skipping the backfill does. Kept, that cursor lets the server refuse it if it purged since.
-    // Reset before the key is set, as in start().
     if (backfill) {
+      // Before the key is set: a cycle that pulled from the old cursor would merge it back over 0.
       await this.resetPullCursor();
+      if (this.enrollSuperseded(epoch)) {
+        await this.abandonEnroll(mintedCode);
+        return;
+      }
     }
     this.dk = dk;
     this.keyId = keyId;
