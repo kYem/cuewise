@@ -13,7 +13,7 @@ import * as storage from '@cuewise/storage';
 import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/factories';
 import { fakeNotifier } from '@cuewise/test-utils/mocks';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { forgetHabit, recordHabitTick } from '../services/habit-history';
+import { forgetHabit, pruneExpiredHabitDays, recordHabitTick } from '../services/habit-history';
 import { recordReminderActivity } from '../services/reminder-activity';
 import { reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
@@ -34,9 +34,11 @@ vi.mock('../services/reminder-prompts', () => ({
 vi.mock('../services/habit-history', () => ({
   recordHabitTick: vi.fn(() => Promise.resolve()),
   forgetHabit: vi.fn(() => Promise.resolve()),
+  pruneExpiredHabitDays: vi.fn(() => Promise.resolve()),
 }));
 const recordTick = vi.mocked(recordHabitTick);
 const forget = vi.mocked(forgetHabit);
+const pruneExpired = vi.mocked(pruneExpiredHabitDays);
 
 const addPrompt = vi.mocked(addReminderPrompt);
 const removePrompt = vi.mocked(removeReminderPrompt);
@@ -1667,5 +1669,77 @@ describe('habit history', () => {
     await useReminderStore.getState().deleteReminder('h1');
 
     expect(forget).not.toHaveBeenCalled();
+  });
+
+  it('forgets a habit’s history when it becomes a scheduled reminder', async () => {
+    useReminderStore.setState({
+      reminders: [
+        reminderFactory.build({
+          id: 'h1',
+          recurring: { frequency: 'interval', intervalMinutes: 30 },
+        }),
+      ],
+    });
+
+    await useReminderStore.getState().updateReminder('h1', { recurring: { frequency: 'daily' } });
+
+    expect(forget).toHaveBeenCalledWith('h1');
+  });
+
+  it('forgets a habit’s history when its recurrence is dropped', async () => {
+    useReminderStore.setState({
+      reminders: [
+        reminderFactory.build({
+          id: 'h1',
+          recurring: { frequency: 'interval', intervalMinutes: 30 },
+        }),
+      ],
+    });
+
+    await useReminderStore.getState().updateReminder('h1', { recurring: undefined });
+
+    expect(forget).toHaveBeenCalledWith('h1');
+  });
+
+  it('keeps a habit’s history when only its interval changes', async () => {
+    useReminderStore.setState({
+      reminders: [
+        reminderFactory.build({
+          id: 'h1',
+          recurring: { frequency: 'interval', intervalMinutes: 30 },
+        }),
+      ],
+    });
+
+    await useReminderStore
+      .getState()
+      .updateReminder('h1', { recurring: { frequency: 'interval', intervalMinutes: 60 } });
+
+    expect(forget).not.toHaveBeenCalled();
+  });
+
+  it('keeps a habit’s history when the conversion did not land', async () => {
+    setRemindersMock.mockResolvedValue({
+      success: false,
+      error: { type: 'quota_exceeded', message: 'quota', key: 'reminders', area: 'local' },
+    });
+    useReminderStore.setState({
+      reminders: [
+        reminderFactory.build({
+          id: 'h1',
+          recurring: { frequency: 'interval', intervalMinutes: 30 },
+        }),
+      ],
+    });
+
+    await useReminderStore.getState().updateReminder('h1', { recurring: { frequency: 'daily' } });
+
+    expect(forget).not.toHaveBeenCalled();
+  });
+
+  it('sweeps expired habit days on launch', async () => {
+    await useReminderStore.getState().initialize();
+
+    expect(pruneExpired).toHaveBeenCalledWith(expect.any(Date));
   });
 });

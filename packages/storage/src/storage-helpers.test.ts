@@ -44,6 +44,7 @@ import {
   readSettings,
   recordHabitDone,
   removeHabitDays,
+  removeHabitDaysBefore,
   resetSettingsMigration,
   SETTINGS_KEYS,
   setCollections,
@@ -406,6 +407,31 @@ describe('habit history', () => {
     expect(result.success).toBe(true);
     expect(removedIds).toEqual([]);
     expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
+  });
+
+  it('removes every habit’s days before the cutoff and names them', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    await recordHabitDone('r1', '2025-10-04');
+    await recordHabitDone('r2', '2025-10-04');
+    await recordHabitDone('r2', '2025-10-05');
+
+    const { removedIds } = await removeHabitDaysBefore('2025-10-05');
+
+    expect(removedIds).toEqual(['r1:2025-10-04', 'r2:2025-10-04']);
+    expect((await getHabitHistory()).map((entry) => entry.id)).toEqual(['r2:2025-10-05']);
+  });
+
+  it('writes nothing when no day is before the cutoff', async () => {
+    const day = { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 };
+    const { store, areas } = recordingStore({ local: { [STORAGE_KEYS.HABIT_HISTORY]: [day] } });
+    configurePlatform({ storage: store });
+    const write = vi.spyOn(store, 'set');
+
+    const { removedIds } = await removeHabitDaysBefore('2025-10-05');
+
+    expect(removedIds).toEqual([]);
+    expect(write).not.toHaveBeenCalled();
+    expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toEqual([day]);
   });
 });
 

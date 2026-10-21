@@ -2,11 +2,12 @@ import { configurePlatform, logger, type Reminder } from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { reminderFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { forgetHabit, recordHabitTick } from './habit-history';
+import { forgetHabit, pruneExpiredHabitDays, recordHabitTick } from './habit-history';
 
 vi.mock('@cuewise/storage', () => ({
   recordHabitDone: vi.fn(),
   removeHabitDays: vi.fn(),
+  removeHabitDaysBefore: vi.fn(),
 }));
 
 const markMutated = vi.fn();
@@ -126,5 +127,28 @@ describe('forgetHabit', () => {
 
     await expect(forgetHabit('h1')).resolves.toBeUndefined();
     expect(error).toHaveBeenCalled();
+  });
+});
+
+describe('pruneExpiredHabitDays', () => {
+  it('removes days a year and a day old and tombstones them', async () => {
+    vi.mocked(storage.removeHabitDaysBefore).mockResolvedValue({
+      result: { success: true },
+      removedIds: ['h2:2025-10-01'],
+    });
+
+    await pruneExpiredHabitDays(new Date(2026, 9, 5, 14));
+
+    expect(storage.removeHabitDaysBefore).toHaveBeenCalledWith('2025-10-05');
+    expect(markDeletedBulk).toHaveBeenCalledWith('habitHistory', ['h2:2025-10-01']);
+  });
+
+  it('logs rather than throws when the sweep rejects', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.mocked(storage.removeHabitDaysBefore).mockRejectedValue(new Error('unreadable'));
+
+    await expect(pruneExpiredHabitDays(new Date(2026, 9, 5, 14))).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalled();
+    expect(markDeletedBulk).not.toHaveBeenCalled();
   });
 });

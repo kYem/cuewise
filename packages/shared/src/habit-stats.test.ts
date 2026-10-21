@@ -4,6 +4,7 @@ import {
   getHabitStats,
   HABIT_HISTORY_RETENTION_DAYS,
   habitDayId,
+  habitHistorySweepCutoff,
   recordHabitDay,
 } from './habit-stats';
 import type { HabitDay, Reminder } from './types';
@@ -37,6 +38,15 @@ describe('recordHabitDay', () => {
     expect(HABIT_HISTORY_RETENTION_DAYS).toBe(365);
     expect(prunedIds).toEqual([old.id]);
     expect(next.map((d) => d.id)).toEqual([edge.id, otherHabit.id, 'r1:2026-10-05']);
+  });
+});
+
+describe('habitHistorySweepCutoff', () => {
+  it('keeps the oldest day of a window that opened yesterday', () => {
+    const { prunedIds } = recordHabitDay([day('r1', '2025-10-05', 1)], 'r1', '2026-10-04');
+
+    expect(prunedIds).toEqual([]);
+    expect(habitHistorySweepCutoff(at(2))).toBe('2025-10-05');
   });
 });
 

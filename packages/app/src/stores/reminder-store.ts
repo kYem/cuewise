@@ -27,7 +27,7 @@ import {
   withCollectionLock,
 } from '@cuewise/storage';
 import { create } from 'zustand';
-import { forgetHabit, recordHabitTick } from '../services/habit-history';
+import { forgetHabit, pruneExpiredHabitDays, recordHabitTick } from '../services/habit-history';
 import { activitySubject, recordReminderActivity } from '../services/reminder-activity';
 import { armMissingReminderAlarms, reminderNotification } from '../services/reminder-notifications';
 import { addReminderPrompt, removeReminderPrompt } from '../services/reminder-prompts';
@@ -277,6 +277,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const habitHistory = newerHistory(historyRead);
       commitReminders(set, reminders, { isLoading: false, ...(habitHistory && { habitHistory }) });
+      await pruneExpiredHabitDays(now);
 
       // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the
       // extension's service worker reconciles its own, so its page does not.
@@ -493,9 +494,10 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       }
 
       // Honor the persist result before committing state or updating the alarm.
-      const applied: { found: boolean; dueDate: string | undefined } = {
+      const applied: { found: boolean; dueDate: string | undefined; leftHabit: boolean } = {
         found: false,
         dueDate: updates.dueDate,
+        leftHabit: false,
       };
       const now = new Date();
       const { result, reminders: updatedReminders } = await updateReminders((current) =>
@@ -505,6 +507,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
           }
           applied.found = true;
           const edited = { ...reminder, ...updates };
+          applied.leftHabit =
+            reminder.recurring?.frequency === 'interval' &&
+            edited.recurring?.frequency !== 'interval';
           // A form re-times every interval edit; one whose target is met today stays quiet.
           if (updates.dueDate !== undefined && isDailyTargetMet(edited, now)) {
             applied.dueDate = nextReminderDueDate(edited, now).toISOString();
@@ -530,6 +535,9 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       commitReminders(set, updatedReminders);
       notifyMutated('reminders', reminderId);
+      if (applied.leftHabit) {
+        await forgetHabit(reminderId);
+      }
 
       // Update alarm if dueDate changed
       if (applied.dueDate) {
