@@ -375,9 +375,9 @@ describe('habit history', () => {
   });
 
   it.each([
-    ['corrupt bytes', '{not json'],
-    ['a value that is not a list', JSON.stringify({ days: [] })],
-  ])('starts afresh over history stored as %s, so days record again', async (_label, item) => {
+    ['corrupt bytes', '{not json', 'unparseable'],
+    ['a value that is not a list', JSON.stringify({ days: [] }), 'object'],
+  ])('starts afresh over history stored as %s, so days record', async (_label, item, kind) => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, item);
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -388,6 +388,7 @@ describe('habit history', () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining('afresh'), {
       key: STORAGE_KEYS.HABIT_HISTORY,
       area: 'local',
+      kind,
     });
     await expect(getHabitHistory()).resolves.toEqual([
       { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 },
