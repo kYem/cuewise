@@ -375,6 +375,31 @@ describe('habit history', () => {
   });
 
   it.each([
+    ['corrupt bytes', '{not json'],
+    ['a value that is not a list', JSON.stringify({ days: [] })],
+  ])('starts afresh over history stored as %s, so days record again', async (_label, item) => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, item);
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const { result } = await recordHabitDone('r1', '2026-10-05');
+
+    expect(result.success).toBe(true);
+    await expect(getHabitHistory()).resolves.toEqual([
+      { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 },
+    ]);
+  });
+
+  it('still refuses to record when the history read itself fails', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: { ...store, getMany: async () => null } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(recordHabitDone('r1', '2026-10-05')).rejects.toThrow(/could not read/i);
+    expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
+  });
+
+  it.each([
     ['an unpadded date', { id: 'r1:2026-1-5', reminderId: 'r1', date: '2026-1-5', count: 1 }],
     ['an id off its key', { id: 'x', reminderId: 'r1', date: '2026-10-04', count: 1 }],
     ['a zero count', { id: 'r1:2026-10-04', reminderId: 'r1', date: '2026-10-04', count: 0 }],

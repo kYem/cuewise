@@ -542,7 +542,7 @@ export async function recordHabitDone(
 ): Promise<{ result: StorageResult; changedId: string; prunedIds: string[] }> {
   return withCollectionLock('habitHistory', async () => {
     const { next, changedId, prunedIds } = recordHabitDay(
-      await getHabitHistoryRaw(),
+      await getListRaw<HabitDay>(STORAGE_KEYS.HABIT_HISTORY, 'local', { resetUnreadable: true }),
       reminderId,
       date
     );
@@ -1096,7 +1096,12 @@ export function resetSettingsMigration(): void {
  * build cannot use both throw: a wedged collection is recoverable, a fleet-wide erase is not.
  * The batch read is what separates the two — `get` answers `null` for either.
  */
-async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
+async function getListRaw<T>(
+  key: string,
+  area: StorageArea,
+  // For a list no build writes as anything but an array, where refusing would block every write.
+  { resetUnreadable = false } = {}
+): Promise<T[]> {
   const stored = await getManyFromStorage([key], area);
   if (stored === null) {
     throw new Error(`Could not read the stored ${key} list`);
@@ -1106,6 +1111,13 @@ async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
     return [];
   }
   if (!entry.readable || !Array.isArray(entry.value)) {
+    if (resetUnreadable) {
+      logger.error('Starting a stored list afresh over a value this build cannot use', {
+        key,
+        area,
+      });
+      return [];
+    }
     logger.error('Refusing to read a stored list this build cannot use', { key, area });
     throw new Error(`The stored ${key} list is unreadable`);
   }
