@@ -377,6 +377,7 @@ describe('habit history', () => {
   it.each([
     ['corrupt bytes', '{not json', 'unparseable'],
     ['a value that is not a list', JSON.stringify({ days: [] }), 'object'],
+    ['null', JSON.stringify(null), 'null'],
   ])('starts afresh over history stored as %s, so days record', async (_label, item, kind) => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, item);
@@ -402,6 +403,15 @@ describe('habit history', () => {
 
     await expect(recordHabitDone('r1', '2026-10-05')).rejects.toThrow(/could not read/i);
     expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
+  });
+
+  it('leaves unreadable history for the next tick when removing a habit', async () => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, '{not json');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(removeHabitDays('r1')).rejects.toThrow(/unreadable/i);
+    expect(localStorage.getItem(STORAGE_KEYS.HABIT_HISTORY)).toBe('{not json');
   });
 
   it.each([

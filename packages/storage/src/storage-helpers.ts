@@ -1117,7 +1117,11 @@ async function getListRaw<T>(
   if (!entry.readable || !Array.isArray(entry.value)) {
     if (resetUnreadable) {
       // The shape, never the content: it tells corruption from a newer build's format afterwards.
-      const kind = entry.readable ? typeof entry.value : 'unparseable';
+      const kind = !entry.readable
+        ? 'unparseable'
+        : entry.value === null
+          ? 'null'
+          : typeof entry.value;
       logger.error('Starting afresh over a stored list this build cannot use', { key, area, kind });
       return [];
     }
