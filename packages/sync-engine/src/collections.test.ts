@@ -272,6 +272,18 @@ describe('habitHistory binding', () => {
     expect(areasWritten(STORAGE_KEYS.HABIT_HISTORY)).toEqual(['local']);
     expect(areasWritten(STORAGE_KEYS.GOALS)).toEqual(['sync']);
   });
+
+  it.each([
+    ['unreadable', (kv: FakeKvStore) => (kv.unreadableKey = STORAGE_KEYS.HABIT_HISTORY)],
+    ['not a list', (kv: FakeKvStore) => kv.set(STORAGE_KEYS.HABIT_HISTORY, { days: [] }, 'local')],
+  ])('refuses history stored as %s rather than reading it as empty', async (_label, corrupt) => {
+    const kv = new FakeKvStore();
+    configurePlatform({ storage: kv });
+    await corrupt(kv);
+
+    await expect(habitHistoryBinding().readAll()).rejects.toThrow(/unreadable/i);
+    expect(await habitHistoryBinding().writeOne(oct4.id, oct4)).toMatchObject({ success: false });
+  });
 });
 
 describe('DEVICE_LOCAL_SETTINGS_KEYS', () => {

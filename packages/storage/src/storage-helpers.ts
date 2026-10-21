@@ -535,7 +535,10 @@ export async function setHabitHistoryRaw(days: HabitDay[]): Promise<StorageResul
   return setInStorage(STORAGE_KEYS.HABIT_HISTORY, days, 'local');
 }
 
-/** One more done on `date`, pruning that habit's expired days; raw so a newer build's rows survive. */
+/**
+ * One more done on `date`, pruning that habit's expired days; raw so a newer build's rows survive.
+ * A whole value this build cannot read is started afresh, or no tick could ever record again.
+ */
 export async function recordHabitDone(
   reminderId: string,
   date: string
@@ -1099,7 +1102,8 @@ export function resetSettingsMigration(): void {
 async function getListRaw<T>(
   key: string,
   area: StorageArea,
-  // Only for a local write that would otherwise be blocked for good; never for the sync readers.
+  // Unreadable reads as [] instead of throwing — only for a local write that would otherwise be
+  // blocked for good, never a sync reader (see above).
   { resetUnreadable = false } = {}
 ): Promise<T[]> {
   const stored = await getManyFromStorage([key], area);
@@ -1112,10 +1116,7 @@ async function getListRaw<T>(
   }
   if (!entry.readable || !Array.isArray(entry.value)) {
     if (resetUnreadable) {
-      logger.error('Starting a stored list afresh over a value this build cannot use', {
-        key,
-        area,
-      });
+      logger.error('Starting afresh over a stored list this build cannot use', { key, area });
       return [];
     }
     logger.error('Refusing to read a stored list this build cannot use', { key, area });
