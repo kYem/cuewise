@@ -380,11 +380,15 @@ describe('habit history', () => {
   ])('starts afresh over history stored as %s, so days record again', async (_label, item) => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, item);
-    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     const { result } = await recordHabitDone('r1', '2026-10-05');
 
     expect(result.success).toBe(true);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('afresh'), {
+      key: STORAGE_KEYS.HABIT_HISTORY,
+      area: 'local',
+    });
     await expect(getHabitHistory()).resolves.toEqual([
       { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 },
     ]);

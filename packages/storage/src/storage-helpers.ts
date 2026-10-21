@@ -1099,7 +1099,7 @@ export function resetSettingsMigration(): void {
 async function getListRaw<T>(
   key: string,
   area: StorageArea,
-  // For a list no build writes as anything but an array, where refusing would block every write.
+  // Only for a local write that would otherwise be blocked for good; never for the sync readers.
   { resetUnreadable = false } = {}
 ): Promise<T[]> {
   const stored = await getManyFromStorage([key], area);
