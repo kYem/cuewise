@@ -1718,6 +1718,21 @@ describe('habit history', () => {
     expect(forget).not.toHaveBeenCalled();
   });
 
+  it('keeps a habit’s history when an edit leaves its recurrence alone', async () => {
+    useReminderStore.setState({
+      reminders: [
+        reminderFactory.build({
+          id: 'h1',
+          recurring: { frequency: 'interval', intervalMinutes: 30 },
+        }),
+      ],
+    });
+
+    await useReminderStore.getState().updateReminder('h1', { text: 'renamed' });
+
+    expect(forget).not.toHaveBeenCalled();
+  });
+
   it('keeps a habit’s history when the conversion did not land', async () => {
     setRemindersMock.mockResolvedValue({
       success: false,

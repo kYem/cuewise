@@ -277,7 +277,8 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const habitHistory = newerHistory(historyRead);
       commitReminders(set, reminders, { isLoading: false, ...(habitHistory && { habitHistory }) });
-      await pruneExpiredHabitDays(now);
+      // Not awaited: it can queue behind a pull on the history lock, and never rejects.
+      void pruneExpiredHabitDays(now);
 
       // Rust-backed schedulers lose their wakes on restart, so the page re-arms from storage; the
       // extension's service worker reconciles its own, so its page does not.

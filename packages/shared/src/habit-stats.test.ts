@@ -43,10 +43,12 @@ describe('recordHabitDay', () => {
 
 describe('habitHistorySweepCutoff', () => {
   it('keeps the oldest day of a window that opened yesterday', () => {
-    const { prunedIds } = recordHabitDay([day('r1', '2025-10-05', 1)], 'r1', '2026-10-04');
+    const cutoff = habitHistorySweepCutoff(at(2));
 
+    const { prunedIds } = recordHabitDay([day('r1', cutoff, 1)], 'r1', '2026-10-04');
+
+    expect(cutoff).toBe('2025-10-05');
     expect(prunedIds).toEqual([]);
-    expect(habitHistorySweepCutoff(at(2))).toBe('2025-10-05');
   });
 });
 
