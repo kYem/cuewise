@@ -47,6 +47,7 @@ import { EmptyState } from './EmptyState';
 import { GoalInput } from './GoalInput';
 import { GoalLinkPopover } from './goals/GoalLinkPopover';
 import { getFilteredReorder, SortableTaskItem } from './SortableTaskItem';
+import { SubtaskCheckIcon, subtaskToggleLabel } from './SubtaskCheckIcon';
 import { UnfinishedTasks } from './UnfinishedTasks';
 import { UpcomingTasks } from './UpcomingTasks';
 
@@ -59,17 +60,8 @@ interface GoalsListProps {
   onCloseAddInput?: () => void;
 }
 
-// Checkbox-style icon shared by the read-only and editable subtask rows.
-function SubtaskCheckIcon({ completed }: { completed: boolean }): React.ReactElement {
-  return <AnimatedCheckbox checked={completed} size="sm" className="flex-shrink-0" />;
-}
-
 function subtaskTextClass(completed: boolean): string {
   return cn('text-sm', completed ? 'text-tertiary line-through' : 'text-primary');
-}
-
-function subtaskToggleLabel(text: string, completed: boolean): string {
-  return completed ? `Mark "${text}" incomplete` : `Mark "${text}" complete`;
 }
 
 // Resting badge showing the objective a task is linked to (null if it resolves to none).
@@ -233,9 +225,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                         setExpandedSubtaskId(expandedSubtaskId === goal.id ? null : goal.id)
                       }
                       onToggleSubtask={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
-                      addingSubtask={addingSubtaskId === goal.id}
-                      onStartAddingSubtask={() => setAddingSubtaskId(goal.id)}
-                      onStopAddingSubtask={() => setAddingSubtaskId(null)}
                       onAddSubtask={(text) => addSubtask(goal.id, text)}
                     />
                   ) : (

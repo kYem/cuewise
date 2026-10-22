@@ -39,16 +39,23 @@ describe('CompactGoalRow', () => {
     expect(onToggleSubtask).toHaveBeenCalledWith('sub-1');
   });
 
-  it('expands a goal without subtasks so one can be added', async () => {
+  it('expands a goal without subtasks from its text', async () => {
     const user = userEvent.setup();
     const onToggleExpand = vi.fn();
     const goal = goalFactory.build({ text: 'Walk', completed: false });
 
     renderCompactRow({ goal, onToggleExpand });
 
-    expect(screen.queryByText('0/0')).not.toBeInTheDocument();
-    await user.click(screen.getByText('Walk'));
+    const text = screen.getByRole('button', { name: 'Walk' });
+    expect(text).toHaveAttribute('aria-expanded', 'false');
+    await user.click(text);
     expect(onToggleExpand).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the goal text as expanded while the panel is open', () => {
+    renderCompactRow({ goal: goalFactory.build({ text: 'Walk' }), expanded: true });
+
+    expect(screen.getByRole('button', { name: 'Walk' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('names the chevron for details when there are no subtasks to show', () => {
@@ -63,55 +70,37 @@ describe('CompactGoalRow', () => {
     expect(screen.queryByRole('button', { name: 'Add subtask' })).not.toBeInTheDocument();
   });
 
-  it('opens the add field from the expanded row', async () => {
+  it('opens a focused add field from the expanded row', async () => {
     const user = userEvent.setup();
-    const onStartAddingSubtask = vi.fn();
 
-    renderCompactRow({
-      goal: goalFactory.build({ text: 'Walk' }),
-      expanded: true,
-      onStartAddingSubtask,
-    });
+    renderCompactRow({ goal: goalFactory.build({ text: 'Walk' }), expanded: true });
 
     await user.click(screen.getByRole('button', { name: 'Add subtask' }));
-    expect(onStartAddingSubtask).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Add a subtask')).toHaveFocus();
   });
 
-  it('saves a typed subtask on Enter', async () => {
+  it('saves a typed subtask once on Enter and closes the field', async () => {
     const user = userEvent.setup();
     const onAddSubtask = vi.fn();
-    const onStopAddingSubtask = vi.fn();
-    const goal = goalFactory.build({ text: 'Walk' });
 
-    renderCompactRow({
-      goal,
-      expanded: true,
-      addingSubtask: true,
-      onAddSubtask,
-      onStopAddingSubtask,
-    });
+    renderCompactRow({ goal: goalFactory.build({ text: 'Walk' }), expanded: true, onAddSubtask });
 
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
     await user.type(screen.getByLabelText('Add a subtask'), '  Stretch  {Enter}');
+    expect(onAddSubtask).toHaveBeenCalledTimes(1);
     expect(onAddSubtask).toHaveBeenCalledWith('Stretch');
-    expect(onStopAddingSubtask).toHaveBeenCalled();
+    expect(screen.queryByLabelText('Add a subtask')).not.toBeInTheDocument();
   });
 
   it('discards the draft on Escape', async () => {
     const user = userEvent.setup();
     const onAddSubtask = vi.fn();
-    const onStopAddingSubtask = vi.fn();
-    const goal = goalFactory.build({ text: 'Walk' });
 
-    renderCompactRow({
-      goal,
-      expanded: true,
-      addingSubtask: true,
-      onAddSubtask,
-      onStopAddingSubtask,
-    });
+    renderCompactRow({ goal: goalFactory.build({ text: 'Walk' }), expanded: true, onAddSubtask });
 
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
     await user.type(screen.getByLabelText('Add a subtask'), 'Stretch{Escape}');
-    expect(onStopAddingSubtask).toHaveBeenCalled();
+    expect(screen.queryByLabelText('Add a subtask')).not.toBeInTheDocument();
     expect(onAddSubtask).not.toHaveBeenCalled();
   });
 });

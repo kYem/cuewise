@@ -2,8 +2,14 @@ import { type Goal, getDueDateLabel, getSubtaskProgress } from '@cuewise/shared'
 import { cn } from '@cuewise/ui';
 import { CalendarClock, ChevronRight } from 'lucide-react';
 import type React from 'react';
+import { useState } from 'react';
 import { AddSubtask } from './AddSubtask';
 import { AnimatedCheckbox } from './AnimatedCheckbox';
+import { SubtaskCheckIcon, subtaskToggleLabel } from './SubtaskCheckIcon';
+
+// Tinted through currentColor, so it reads light on glass and dark on the light themes.
+const PROGRESS_FILL_CLASS =
+  'block h-full rounded-full bg-current text-primary/80 transition-all duration-300 ease-out';
 
 interface CompactGoalRowProps {
   goal: Goal;
@@ -11,9 +17,6 @@ interface CompactGoalRowProps {
   onToggleComplete: () => void;
   onToggleExpand: () => void;
   onToggleSubtask: (subtaskId: string) => void;
-  addingSubtask: boolean;
-  onStartAddingSubtask: () => void;
-  onStopAddingSubtask: () => void;
   onAddSubtask: (text: string) => void;
 }
 
@@ -28,11 +31,9 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
   onToggleComplete,
   onToggleExpand,
   onToggleSubtask,
-  addingSubtask,
-  onStartAddingSubtask,
-  onStopAddingSubtask,
   onAddSubtask,
 }) => {
+  const [addingSubtask, setAddingSubtask] = useState(false);
   const subtasks = goal.subtasks ?? [];
   const hasSubtasks = subtasks.length > 0;
   const { completed, total } = getSubtaskProgress(goal);
@@ -44,6 +45,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
     ratio = completed / total;
   }
   const progressPercentage = Math.min(1, Math.max(0, ratio)) * 100;
+  const panelId = `compact-goal-${goal.id}`;
 
   return (
     <div
@@ -62,7 +64,13 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           <AnimatedCheckbox checked={goal.completed} size="md" />
         </button>
 
-        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="min-w-0 flex-1 text-left"
+        >
           <span
             className={cn(
               'block truncate text-sm',
@@ -74,11 +82,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           {hasSubtasks && (
             <span className="mt-1 flex items-center gap-2">
               <span className="h-1 flex-1 overflow-hidden rounded-full bg-divider">
-                {/* Foreground-tinted fill via currentColor: light on glass, dark on light themes */}
-                <span
-                  className="block h-full rounded-full bg-current text-primary/80 transition-all duration-300 ease-out"
-                  style={{ width: `${progressPercentage}%` }}
-                />
+                <span className={PROGRESS_FILL_CLASS} style={{ width: `${progressPercentage}%` }} />
               </span>
               <span className="text-[10px] tabular-nums text-tertiary">
                 {completed}/{total}
@@ -90,6 +94,8 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
         <button
           type="button"
           onClick={onToggleExpand}
+          aria-expanded={expanded}
+          aria-controls={panelId}
           aria-label={`${expanded ? 'Hide' : 'Show'} ${hasSubtasks ? 'subtasks' : 'details'}`}
           className="flex-shrink-0 text-tertiary hover:text-secondary transition-transform"
           style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
@@ -99,20 +105,16 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
       </div>
 
       {expanded && (
-        <div className="space-y-1 px-2 pb-2 pl-10">
+        <div id={panelId} className="space-y-1 px-2 pb-2 pl-10">
           {subtasks.map((subtask) => (
             <button
               key={subtask.id}
               type="button"
               onClick={() => onToggleSubtask(subtask.id)}
               className="flex w-full items-center gap-2 text-left"
-              aria-label={
-                subtask.completed
-                  ? `Mark "${subtask.text}" incomplete`
-                  : `Mark "${subtask.text}" complete`
-              }
+              aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
             >
-              <AnimatedCheckbox checked={subtask.completed} size="sm" className="flex-shrink-0" />
+              <SubtaskCheckIcon completed={subtask.completed} />
               <span
                 className={cn(
                   'text-xs',
@@ -125,8 +127,8 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           ))}
           <AddSubtask
             open={addingSubtask}
-            onOpen={onStartAddingSubtask}
-            onClose={onStopAddingSubtask}
+            onOpen={() => setAddingSubtask(true)}
+            onClose={() => setAddingSubtask(false)}
             onAdd={onAddSubtask}
             compact
           />

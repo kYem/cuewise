@@ -15,9 +15,6 @@ export function renderCompactRow(
       onToggleComplete={noop}
       onToggleExpand={noop}
       onToggleSubtask={noop}
-      addingSubtask={false}
-      onStartAddingSubtask={noop}
-      onStopAddingSubtask={noop}
       onAddSubtask={noop}
       {...props}
     />

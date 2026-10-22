@@ -163,6 +163,7 @@ describe('GoalsList - Subtasks', () => {
     await user.click(screen.getByRole('button', { name: 'Add subtask' }));
     await user.type(screen.getByLabelText('Add a subtask'), 'Outline sections{Enter}');
 
+    expect(store.addSubtask).toHaveBeenCalledTimes(1);
     expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
     expect(screen.queryByLabelText('Add a subtask')).not.toBeInTheDocument();
   });
