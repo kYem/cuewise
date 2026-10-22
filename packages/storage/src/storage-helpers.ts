@@ -550,20 +550,31 @@ export async function recordHabitDone(
   });
 }
 
-export async function removeHabitDays(
-  reminderId: string
+async function removeHabitDaysWhere(
+  matches: (entry: HabitDay) => boolean
 ): Promise<{ result: StorageResult; removedIds: string[] }> {
   return withCollectionLock('habitHistory', async () => {
     const days = await getHabitHistoryRaw();
-    const removedIds = days.filter((entry) => entry.reminderId === reminderId).map((e) => e.id);
+    const removedIds = days.filter(matches).map((entry) => entry.id);
     if (removedIds.length === 0) {
       return { result: { success: true }, removedIds };
     }
-    const result = await setHabitHistoryRaw(
-      days.filter((entry) => entry.reminderId !== reminderId)
-    );
+    const result = await setHabitHistoryRaw(days.filter((entry) => !matches(entry)));
     return { result, removedIds };
   });
+}
+
+export async function removeHabitDays(
+  reminderId: string
+): Promise<{ result: StorageResult; removedIds: string[] }> {
+  return removeHabitDaysWhere((entry) => entry.reminderId === reminderId);
+}
+
+/** Every habit's days before `cutoff`, including those of habits never ticked again. */
+export async function removeHabitDaysBefore(
+  cutoff: string
+): Promise<{ result: StorageResult; removedIds: string[] }> {
+  return removeHabitDaysWhere((entry) => entry.date < cutoff);
 }
 
 // Posture daily rollups (macOS tracking; always local — device-specific data)
