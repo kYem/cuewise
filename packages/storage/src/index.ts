@@ -57,6 +57,7 @@ export {
   readSettings,
   recordHabitDone,
   removeHabitDays,
+  removeHabitDaysBefore,
   SETTINGS_KEY_PREFIX,
   SETTINGS_KEYS,
   setCalendarState,

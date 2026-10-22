@@ -23,6 +23,19 @@ export interface SyncMeta {
    * collection it does not bind yet still moves the cursor past them.
    */
   boundCollections?: string;
+  /**
+   * Bumped by every engine reset of the cursor, not a cycle's own rewind, so a cycle that read the
+   * old cursor cannot write it back.
+   */
+  cursorResets?: number;
+}
+
+export function countCursorReset(meta: SyncMeta): void {
+  meta.cursorResets = cursorResetsOf(meta) + 1;
+}
+
+export function cursorResetsOf(meta: SyncMeta): number {
+  return meta.cursorResets ?? 0;
 }
 
 export function defaultMeta(deviceNode: string): SyncMeta {

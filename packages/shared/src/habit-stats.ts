@@ -29,6 +29,11 @@ export function recordHabitDay(days: HabitDay[], reminderId: string, date: strin
   return { next, changedId: id, prunedIds };
 }
 
+/** One day wider than a record's window: a habit's day can open the day before `now`. */
+export function habitHistorySweepCutoff(now: Date): string {
+  return formatDateString(subDays(now, HABIT_HISTORY_RETENTION_DAYS));
+}
+
 const RECENT_DAYS = 30;
 
 export type HabitDayState = 'kept' | 'partial' | 'missed' | 'off' | 'pending';

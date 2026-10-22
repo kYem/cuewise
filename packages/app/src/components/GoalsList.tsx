@@ -30,16 +30,16 @@ import {
   ChevronUp,
   Copy,
   Flag,
-  Plus,
   Trash2,
   X,
 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import emptyTasksAnimation from '../assets/lottie/empty/tasks.json';
 import { useGoalEditing } from '../hooks/useGoalEditing';
 import { useGoalStore } from '../stores/goal-store';
 import { useSettingsStore } from '../stores/settings-store';
+import { AddSubtask } from './AddSubtask';
 import { AnimatedCheckbox } from './AnimatedCheckbox';
 import { CompactGoalRow } from './CompactGoalRow';
 import { DueDateControl } from './DueDateControl';
@@ -47,6 +47,7 @@ import { EmptyState } from './EmptyState';
 import { GoalInput } from './GoalInput';
 import { GoalLinkPopover } from './goals/GoalLinkPopover';
 import { getFilteredReorder, SortableTaskItem } from './SortableTaskItem';
+import { SubtaskCheckIcon, subtaskToggleLabel } from './SubtaskCheckIcon';
 import { UnfinishedTasks } from './UnfinishedTasks';
 import { UpcomingTasks } from './UpcomingTasks';
 
@@ -59,17 +60,8 @@ interface GoalsListProps {
   onCloseAddInput?: () => void;
 }
 
-// Checkbox-style icon shared by the read-only and editable subtask rows.
-function SubtaskCheckIcon({ completed }: { completed: boolean }): React.ReactElement {
-  return <AnimatedCheckbox checked={completed} size="sm" className="flex-shrink-0" />;
-}
-
 function subtaskTextClass(completed: boolean): string {
   return cn('text-sm', completed ? 'text-tertiary line-through' : 'text-primary');
-}
-
-function subtaskToggleLabel(text: string, completed: boolean): string {
-  return completed ? `Mark "${text}" incomplete` : `Mark "${text}" complete`;
 }
 
 // Resting badge showing the objective a task is linked to (null if it resolves to none).
@@ -173,15 +165,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
   // Which row's subtasks are expanded (one at a time) and the inline add field
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
   const [addingSubtaskId, setAddingSubtaskId] = useState<string | null>(null);
-  const [subtaskDraft, setSubtaskDraft] = useState('');
-  const subtaskInputRef = useRef<HTMLInputElement>(null);
-
-  // Focus the inline subtask field when it opens (once, not on every keystroke)
-  useEffect(() => {
-    if (addingSubtaskId) {
-      subtaskInputRef.current?.focus();
-    }
-  }, [addingSubtaskId]);
 
   const showsUnfinished =
     settings.showIncompleteGoals && getRecentIncompleteTasks(goals).length > 0;
@@ -242,6 +225,7 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                         setExpandedSubtaskId(expandedSubtaskId === goal.id ? null : goal.id)
                       }
                       onToggleSubtask={(subtaskId) => toggleSubtask(goal.id, subtaskId)}
+                      onAddSubtask={(text) => addSubtask(goal.id, text)}
                     />
                   ) : (
                     <div
@@ -475,57 +459,12 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                               </div>
                             ))}
 
-                            {addingSubtaskId === goal.id ? (
-                              <form
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  const text = subtaskDraft.trim();
-                                  if (text) {
-                                    addSubtask(goal.id, text);
-                                  }
-                                  setSubtaskDraft('');
-                                  setAddingSubtaskId(null);
-                                }}
-                                className="flex items-center gap-2"
-                              >
-                                <Plus className="w-4 h-4 text-tertiary flex-shrink-0" />
-                                <input
-                                  ref={subtaskInputRef}
-                                  type="text"
-                                  aria-label="Add a subtask"
-                                  placeholder="Add a subtask"
-                                  value={subtaskDraft}
-                                  onChange={(e) => setSubtaskDraft(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Escape') {
-                                      setSubtaskDraft('');
-                                      setAddingSubtaskId(null);
-                                    }
-                                  }}
-                                  onBlur={() => {
-                                    const text = subtaskDraft.trim();
-                                    if (text) {
-                                      addSubtask(goal.id, text);
-                                    }
-                                    setSubtaskDraft('');
-                                    setAddingSubtaskId(null);
-                                  }}
-                                  maxLength={200}
-                                  className="min-w-0 flex-1 border-b border-border bg-transparent px-2 py-1 text-sm text-primary placeholder:text-tertiary focus:border-primary-500 focus:outline-none"
-                                />
-                              </form>
-                            ) : (
-                              <button
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => setAddingSubtaskId(goal.id)}
-                                aria-label="Add subtask"
-                                className="flex items-center gap-1 text-xs text-tertiary hover:text-primary-600 transition-colors"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Add subtask</span>
-                              </button>
-                            )}
+                            <AddSubtask
+                              open={addingSubtaskId === goal.id}
+                              onOpen={() => setAddingSubtaskId(goal.id)}
+                              onClose={() => setAddingSubtaskId(null)}
+                              onAdd={(text) => addSubtask(goal.id, text)}
+                            />
                           </div>
                         )}
                     </div>

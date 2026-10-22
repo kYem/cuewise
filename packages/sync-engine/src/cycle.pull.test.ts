@@ -17,6 +17,7 @@ import {
 } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
+import { resetCursor } from './__fixtures__/ledger';
 import { sealServerRecord } from './__fixtures__/records';
 import { defaultBindings } from './collections';
 import { type CycleDeps, PULL_PAGE, pullOnce } from './cycle';
@@ -300,6 +301,21 @@ describe('pullOnce', () => {
     expect(saved.seqs['goals/g1']).toBe(7);
     expect(saved.hlcs['goals/g1']).not.toBe(NEWER_HLC);
     expect(saved.dirty.goals).toEqual(['g1']);
+  });
+
+  it('leaves the cursor and seqs to a reset that landed during the round trip', async () => {
+    const goal = goalFactory.build({ id: 'g1' });
+    transport.pullRecords = [
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 7),
+    ];
+    duringPull(transport, () => resetCursor(metaStore));
+
+    await pullOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(0);
+    expect(saved.seqs).toEqual({});
+    expect(await getGoals()).toEqual([goal]);
   });
 
   it('never lowers a seq the ledger already holds', async () => {
@@ -1266,6 +1282,25 @@ describe('pullOnce', () => {
       expect(saved.hlcs['goals/g1']).toBeUndefined();
       expect(saved.seqs['goals/g1']).toBeUndefined();
       expect(saved.seqs['goals/g2']).toBe(3);
+    });
+
+    it('is still forgotten, without blaming an edit, when the cursor resets after its delete', async () => {
+      const bindings = defaultBindings();
+      const goals = requireBinding(bindings, 'goals');
+      const writeOne = goals.writeOne.bind(goals);
+      vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+        const res = await writeOne(entityId, entity);
+        if (entity === null) {
+          await resetCursor(metaStore);
+        }
+        return res;
+      });
+      const errorSpy = vi.spyOn(logger, 'error');
+
+      await pullOnce(makeDeps({ bindings }));
+
+      expect((await metaStore.load()).hlcs['goals/g1']).toBeUndefined();
+      expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('settles the owed check once the listing completes', async () => {

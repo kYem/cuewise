@@ -20,6 +20,7 @@ import { requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { onCursorReset } from './__fixtures__/ledger';
 import { unbindPersistedDataKey } from './__fixtures__/legacy-data-key';
 import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
@@ -40,8 +41,9 @@ import {
   SYNC_PARKED_DATA_KEYS,
   SYNC_UNBOUND_DATA_KEY,
 } from './key-lifecycle';
-import { SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
+import { cursorResetsOf, SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
+import type { SyncNowResult } from './sync-outcome';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -2201,6 +2203,18 @@ describe('SyncEngine.resumeEnrollWithCode', () => {
 });
 
 describe('SyncEngine.disableSync', () => {
+  it('counts its ledger reset as a cursor reset', async () => {
+    const device = createDevice(new FakeSyncServer());
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    const before = cursorResetsOf(await metaStore.load());
+
+    await device.engine.disableSync();
+
+    expect(cursorResetsOf(await metaStore.load())).toBe(before + 1);
+  });
+
   it('clears status/DK/enabled-flag but leaves local domain data untouched', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
@@ -2707,6 +2721,22 @@ describe('SyncEngine.start / stop', () => {
     pulls.mockClear();
     await restart(device).start();
     expect(pulls.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  });
+
+  it('counts the reset when this build binds a collection the ledger has not seen', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    const metaStore = new SyncMetadataStore(device.kv);
+    await metaStore.update((meta) => {
+      delete meta.boundCollections;
+    });
+    const before = cursorResetsOf(await metaStore.load());
+
+    await restart(device).start();
+
+    expect(cursorResetsOf(await metaStore.load())).toBe(before + 1);
   });
 
   it('still starts when the ledger is unreadable, and re-pulls from zero once it reads again', async () => {
@@ -3712,6 +3742,48 @@ describe('SyncEngine re-auth after auth loss', () => {
     await restart(device).start();
 
     expect(serverGoal(serverA, 'made-on-b')).toBeDefined();
+  });
+
+  it('holds no key while a re-auth resets the cursor, so no cycle pulls from the old one', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    const cycles: Promise<SyncNowResult>[] = [];
+    onCursorReset(device.kv, () => cycles.push(device.engine.syncNow()));
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+
+    expect(await Promise.all(cycles)).toEqual([{ kind: 'no-key' }]);
+  });
+
+  it('holds no restored key while the cursor resets, so no cycle pulls from the old one', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    await enableFailingToNameAccount(device);
+    const restarted = restart(device);
+    const cycles: Promise<SyncNowResult>[] = [];
+    onCursorReset(device.kv, () => cycles.push(restarted.syncNow()));
+
+    await restarted.start();
+
+    expect(await Promise.all(cycles)).toEqual([{ kind: 'no-key' }]);
+  });
+
+  it('abandons a re-auth whose cursor reset a disable lands on, before its backfill', async () => {
+    const serverA = new FakeSyncServer();
+    const device = await signedOutAfterGoalOnB(serverA);
+    device.apiClient.switchAccount(serverA, 'fake-user');
+    const backfill = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
+    const disables: Promise<void>[] = [];
+    onCursorReset(device.kv, () => disables.push(device.engine.disableSync()));
+
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await Promise.all(disables);
+
+    expect(disables).toHaveLength(1);
+    expect(backfill).not.toHaveBeenCalled();
+    expect(device.engine.getStatus()).toBe('disabled');
   });
 
   it('backfills the retry of a return to an account whose first attempt was interrupted', async () => {

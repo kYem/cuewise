@@ -23,9 +23,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeApiClient, FakeSyncServer, PAIRING_TTL_MS } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
+import { onCursorReset } from './__fixtures__/ledger';
 import { CLOUD_SYNC_ENABLED_KEY, SyncEngine, type SyncEngineDeps, type SyncStatus } from './engine';
 import { loadPersistedDataKey, RecoveryCodeRequiredError, SYNC_DATA_KEY } from './key-lifecycle';
 import { SyncMetadataStore } from './metadata-store';
+import { MutationTracker } from './mutation-tracker';
 
 interface Device {
   kv: FakeKvStore;
@@ -662,6 +664,25 @@ describe('SyncEngine.pollPairing', () => {
     expect(await polled).toEqual({ kind: 'failed', reason: 'error' });
     expect(flow.requester.engine.getStatus()).toBe('disabled');
     expect(await flow.requester.kv.get(CLOUD_SYNC_ENABLED_KEY, 'local')).toBeNull();
+    expect(await flow.requester.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
+  });
+
+  it('abandons adopting a paired key when a disable lands on its cursor reset', async () => {
+    const flow = await pairingFlow();
+    await beginPairing(flow.requester.engine);
+    const side = await commitAsApprover(flow);
+    await flow.requester.engine.pollPairing();
+    await wrapKeyAsApprover(flow, side);
+    const backfill = vi.spyOn(MutationTracker.prototype, 'markMutatedBulk');
+    const disables: Promise<void>[] = [];
+    onCursorReset(flow.requester.kv, () => disables.push(flow.requester.engine.disableSync()));
+
+    expect(await flow.requester.engine.pollPairing()).toEqual({ kind: 'failed', reason: 'error' });
+    await Promise.all(disables);
+
+    expect(disables).toHaveLength(1);
+    expect(backfill).not.toHaveBeenCalled();
+    expect(flow.requester.engine.getStatus()).toBe('disabled');
     expect(await flow.requester.kv.get(SYNC_DATA_KEY, 'local')).toBeNull();
   });
 

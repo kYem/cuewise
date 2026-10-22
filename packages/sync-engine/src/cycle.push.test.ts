@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableAfterFirstWrite, requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeTransport } from './__fixtures__/fake-transport';
+import { resetCursor } from './__fixtures__/ledger';
 import { sealServerRecord, seedServerRow } from './__fixtures__/records';
 import { defaultBindings } from './collections';
 import { type CycleDeps, pushOnce } from './cycle';
@@ -310,6 +311,37 @@ describe('pushOnce', () => {
     const saved = await metaStore.load();
     expect(saved.dirty.goals).toEqual(['g1']);
     expect(saved.seqs['goals/g1']).toBe(1);
+  });
+
+  it('clears the acked id but records no seq when the cursor reset during the round trip', async () => {
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await seedDirty('goals', ['g1']);
+    duringPush(transport, () => resetCursor(metaStore));
+
+    await pushOnce(makeDeps());
+
+    const saved = await metaStore.load();
+    expect(saved.dirty.goals).toBeUndefined();
+    expect(saved.seqs).toEqual({});
+  });
+
+  it('takes no seq from a refusal settled after the cursor reset, retrying from base 0', async () => {
+    await setGoals([goalFactory.build({ id: 'g1', text: 'mine' })]);
+    await seedDirty('goals', ['g1'], { 'goals/g1': 50 });
+    const deps = makeDeps();
+    const stale = goalFactory.build({ id: 'g1', text: 'stale' });
+    await seedServerRow(transport, deps, 'goals', 'g1', { entity: stale, hlc: OLDER_HLC }, 3);
+    let resets = 0;
+    duringPush(transport, async () => {
+      if (resets === 0) {
+        resets += 1;
+        await resetCursor(metaStore);
+      }
+    });
+
+    await pushOnce(deps);
+
+    expect(transport.pushedBatches.map((batch) => batch[0].baseSeq)).toEqual([50, 0]);
   });
 
   it('clears dirty and learns nothing about seqs from a server that predates compare-and-set', async () => {
