@@ -384,9 +384,10 @@ describe('habit history', () => {
     localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, item);
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    const { result } = await recordHabitDone('r1', '2026-10-05');
+    const { result, prunedIds } = await recordHabitDone('r1', '2026-10-05');
 
     expect(result.success).toBe(true);
+    expect(prunedIds).toEqual([]);
     expect(error).toHaveBeenCalledWith(expect.stringContaining('afresh'), {
       key: STORAGE_KEYS.HABIT_HISTORY,
       area: 'local',
@@ -406,12 +407,15 @@ describe('habit history', () => {
     expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
   });
 
-  it('leaves unreadable history for the next tick when removing a habit', async () => {
+  it.each([
+    ['removing a habit', () => removeHabitDays('r1')],
+    ['sweeping expired days', () => removeHabitDaysBefore('2026-01-01')],
+  ])('leaves unreadable history for the next tick when %s', async (_label, remove) => {
     configurePlatform({ storage: new LocalStorageKeyValueStore() });
     localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, '{not json');
     vi.spyOn(logger, 'error').mockImplementation(() => {});
 
-    await expect(removeHabitDays('r1')).rejects.toThrow(/unreadable/i);
+    await expect(remove()).rejects.toThrow(/unreadable/i);
     expect(localStorage.getItem(STORAGE_KEYS.HABIT_HISTORY)).toBe('{not json');
   });
 

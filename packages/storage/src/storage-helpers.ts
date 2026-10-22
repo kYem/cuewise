@@ -1106,9 +1106,9 @@ export function resetSettingsMigration(): void {
  * Raw list reads for the sync engine. An item hidden from `readAll` is deleted by the next
  * `writeOne`, and its absence is how the cycle infers a tombstone for every other device.
  *
- * So only a key that was never written reads as `[]`, unless the caller opts into `resetUnreadable`.
- * A failed read and an unusable stored value throw: a wedged collection is recoverable, a fleet-wide
- * erase is not.
+ * So only a key that was never written reads as `[]`. A failed read always throws; an unusable value
+ * throws unless the caller opts into `resetUnreadable`: a wedged collection is recoverable, a
+ * fleet-wide erase is not.
  * The batch read is what separates the two — `get` answers `null` for either.
  */
 async function getListRaw<T>(
