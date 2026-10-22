@@ -51,6 +51,12 @@ describe('CompactGoalRow', () => {
     expect(onToggleExpand).toHaveBeenCalledTimes(1);
   });
 
+  it('names the chevron for details when there are no subtasks to show', () => {
+    renderCompactRow({ goal: goalFactory.build({ text: 'Walk' }), expanded: true });
+
+    expect(screen.getByRole('button', { name: 'Hide details' })).toBeInTheDocument();
+  });
+
   it('hides the add-subtask affordance while collapsed', () => {
     renderCompactRow({ goal: goalFactory.build({ text: 'Walk' }) });
 

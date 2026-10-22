@@ -159,7 +159,7 @@ describe('GoalsList - Subtasks', () => {
     vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
 
     render(<GoalsList viewMode="compact" />);
-    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    await user.click(screen.getByRole('button', { name: 'Show details' }));
     await user.click(screen.getByRole('button', { name: 'Add subtask' }));
     await user.type(screen.getByLabelText('Add a subtask'), 'Outline sections{Enter}');
 

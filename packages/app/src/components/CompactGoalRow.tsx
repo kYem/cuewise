@@ -90,7 +90,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
         <button
           type="button"
           onClick={onToggleExpand}
-          aria-label={expanded ? 'Hide subtasks' : 'Show subtasks'}
+          aria-label={`${expanded ? 'Hide' : 'Show'} ${hasSubtasks ? 'subtasks' : 'details'}`}
           className="flex-shrink-0 text-tertiary hover:text-secondary transition-transform"
           style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
         >
@@ -128,6 +128,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
             onOpen={onStartAddingSubtask}
             onClose={onStopAddingSubtask}
             onAdd={onAddSubtask}
+            compact
           />
           {goal.dueDate && (
             <span className="flex items-center gap-1 text-[10px] text-tertiary">
