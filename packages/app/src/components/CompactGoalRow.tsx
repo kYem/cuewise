@@ -2,6 +2,7 @@ import { type Goal, getDueDateLabel, getSubtaskProgress } from '@cuewise/shared'
 import { cn } from '@cuewise/ui';
 import { CalendarClock, ChevronRight } from 'lucide-react';
 import type React from 'react';
+import { AddSubtask } from './AddSubtask';
 import { AnimatedCheckbox } from './AnimatedCheckbox';
 
 interface CompactGoalRowProps {
@@ -10,12 +11,16 @@ interface CompactGoalRowProps {
   onToggleComplete: () => void;
   onToggleExpand: () => void;
   onToggleSubtask: (subtaskId: string) => void;
+  addingSubtask: boolean;
+  onStartAddingSubtask: () => void;
+  onStopAddingSubtask: () => void;
+  onAddSubtask: (text: string) => void;
 }
 
 /**
  * Slim glanceable goal row for compact view: a completion ring, the goal text
  * with an inline subtask progress bar, and an accordion chevron. Completing and
- * toggling subtasks is allowed; renaming/deleting/reordering live in full view.
+ * adding or toggling subtasks is allowed; renaming/deleting/reordering live in full view.
  */
 export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
   goal,
@@ -23,6 +28,10 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
   onToggleComplete,
   onToggleExpand,
   onToggleSubtask,
+  addingSubtask,
+  onStartAddingSubtask,
+  onStopAddingSubtask,
+  onAddSubtask,
 }) => {
   const subtasks = goal.subtasks ?? [];
   const hasSubtasks = subtasks.length > 0;
@@ -44,7 +53,6 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
       )}
     >
       <div className="flex items-center gap-2.5 px-2 py-1.5">
-        {/* Completion toggle */}
         <button
           type="button"
           onClick={onToggleComplete}
@@ -54,16 +62,7 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           <AnimatedCheckbox checked={goal.completed} size="md" />
         </button>
 
-        {/* Text + inline progress bar */}
-        <button
-          type="button"
-          onClick={() => {
-            if (hasSubtasks) {
-              onToggleExpand();
-            }
-          }}
-          className={cn('min-w-0 flex-1 text-left', !hasSubtasks && 'cursor-default')}
-        >
+        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
           <span
             className={cn(
               'block truncate text-sm',
@@ -88,24 +87,18 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
           )}
         </button>
 
-        {/* Accordion chevron (only when there are subtasks) */}
-        {hasSubtasks ? (
-          <button
-            type="button"
-            onClick={onToggleExpand}
-            aria-label={expanded ? 'Hide subtasks' : 'Show subtasks'}
-            className="flex-shrink-0 text-tertiary hover:text-secondary transition-transform"
-            style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        ) : (
-          <span className="w-4 flex-shrink-0" aria-hidden="true" />
-        )}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-label={expanded ? 'Hide subtasks' : 'Show subtasks'}
+          className="flex-shrink-0 text-tertiary hover:text-secondary transition-transform"
+          style={{ transform: expanded ? 'rotate(90deg)' : 'none' }}
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Expanded subtasks + due date */}
-      {expanded && hasSubtasks && (
+      {expanded && (
         <div className="space-y-1 px-2 pb-2 pl-10">
           {subtasks.map((subtask) => (
             <button
@@ -130,6 +123,12 @@ export const CompactGoalRow: React.FC<CompactGoalRowProps> = ({
               </span>
             </button>
           ))}
+          <AddSubtask
+            open={addingSubtask}
+            onOpen={onStartAddingSubtask}
+            onClose={onStopAddingSubtask}
+            onAdd={onAddSubtask}
+          />
           {goal.dueDate && (
             <span className="flex items-center gap-1 text-[10px] text-tertiary">
               <CalendarClock className="w-3 h-3" />

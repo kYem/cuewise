@@ -152,6 +152,21 @@ describe('GoalsList - Subtasks', () => {
     expect(screen.getByText('0/2')).toBeInTheDocument();
   });
 
+  it('adds a first subtask from compact view', async () => {
+    const user = userEvent.setup();
+    const task = goalFactory.build({ text: 'Write report', completed: false });
+    const store = createMockGoalStore({ todayTasks: [task], goals: [task] });
+    vi.mocked(useGoalStore).mockImplementation(createGoalStoreMock(store));
+
+    render(<GoalsList viewMode="compact" />);
+    await user.click(screen.getByRole('button', { name: 'Show subtasks' }));
+    await user.click(screen.getByRole('button', { name: 'Add subtask' }));
+    await user.type(screen.getByLabelText('Add a subtask'), 'Outline sections{Enter}');
+
+    expect(store.addSubtask).toHaveBeenCalledWith(task.id, 'Outline sections');
+    expect(screen.queryByLabelText('Add a subtask')).not.toBeInTheDocument();
+  });
+
   it('calls toggleSubtask with the task id and subtask id', async () => {
     const user = userEvent.setup();
     const task = taskWithSubtasksFactory.build({ text: 'Plan trip' });
