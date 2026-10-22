@@ -535,14 +535,17 @@ export async function setHabitHistoryRaw(days: HabitDay[]): Promise<StorageResul
   return setInStorage(STORAGE_KEYS.HABIT_HISTORY, days, 'local');
 }
 
-/** One more done on `date`, pruning that habit's expired days; raw so a newer build's rows survive. */
+/**
+ * One more done on `date`, pruning that habit's expired days; raw so a newer build's rows survive.
+ * A whole value this build cannot read is started afresh, or no tick could ever record again.
+ */
 export async function recordHabitDone(
   reminderId: string,
   date: string
 ): Promise<{ result: StorageResult; changedId: string; prunedIds: string[] }> {
   return withCollectionLock('habitHistory', async () => {
     const { next, changedId, prunedIds } = recordHabitDay(
-      await getHabitHistoryRaw(),
+      await getListRaw<HabitDay>(STORAGE_KEYS.HABIT_HISTORY, 'local', { resetUnreadable: true }),
       reminderId,
       date
     );
@@ -1103,11 +1106,18 @@ export function resetSettingsMigration(): void {
  * Raw list reads for the sync engine. An item hidden from `readAll` is deleted by the next
  * `writeOne`, and its absence is how the cycle infers a tombstone for every other device.
  *
- * So only a key that was never written reads as `[]`. A read that failed and a stored value this
- * build cannot use both throw: a wedged collection is recoverable, a fleet-wide erase is not.
+ * So only a key that was never written reads as `[]`. A failed read always throws; an unusable value
+ * throws unless the caller opts into `resetUnreadable`: a wedged collection is recoverable, a
+ * fleet-wide erase is not.
  * The batch read is what separates the two — `get` answers `null` for either.
  */
-async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
+async function getListRaw<T>(
+  key: string,
+  area: StorageArea,
+  // Unreadable reads as [] instead of throwing — only for a local write that would otherwise be
+  // blocked for good, never a sync reader (see above).
+  { resetUnreadable = false } = {}
+): Promise<T[]> {
   const stored = await getManyFromStorage([key], area);
   if (stored === null) {
     throw new Error(`Could not read the stored ${key} list`);
@@ -1117,6 +1127,16 @@ async function getListRaw<T>(key: string, area: StorageArea): Promise<T[]> {
     return [];
   }
   if (!entry.readable || !Array.isArray(entry.value)) {
+    if (resetUnreadable) {
+      // The shape, never the content: it tells corruption from a newer build's format afterwards.
+      const kind = !entry.readable
+        ? 'unparseable'
+        : entry.value === null
+          ? 'null'
+          : typeof entry.value;
+      logger.error('Starting afresh over a stored list this build cannot use', { key, area, kind });
+      return [];
+    }
     logger.error('Refusing to read a stored list this build cannot use', { key, area });
     throw new Error(`The stored ${key} list is unreadable`);
   }

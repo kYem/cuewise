@@ -376,6 +376,50 @@ describe('habit history', () => {
   });
 
   it.each([
+    ['corrupt bytes', '{not json', 'unparseable'],
+    ['a value that is not a list', JSON.stringify({ days: [] }), 'object'],
+    ['null', JSON.stringify(null), 'null'],
+  ])('starts afresh over history stored as %s, so days record', async (_label, item, kind) => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, item);
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    const { result, prunedIds } = await recordHabitDone('r1', '2026-10-05');
+
+    expect(result.success).toBe(true);
+    expect(prunedIds).toEqual([]);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('afresh'), {
+      key: STORAGE_KEYS.HABIT_HISTORY,
+      area: 'local',
+      kind,
+    });
+    await expect(getHabitHistory()).resolves.toEqual([
+      { id: 'r1:2026-10-05', reminderId: 'r1', date: '2026-10-05', count: 1 },
+    ]);
+  });
+
+  it('still refuses to record when the history read itself fails', async () => {
+    const { store, areas } = recordingStore();
+    configurePlatform({ storage: { ...store, getMany: async () => null } });
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(recordHabitDone('r1', '2026-10-05')).rejects.toThrow(/could not read/i);
+    expect(areas.local[STORAGE_KEYS.HABIT_HISTORY]).toBeUndefined();
+  });
+
+  it.each([
+    ['removing a habit', () => removeHabitDays('r1')],
+    ['sweeping expired days', () => removeHabitDaysBefore('2026-01-01')],
+  ])('leaves unreadable history for the next tick when %s', async (_label, remove) => {
+    configurePlatform({ storage: new LocalStorageKeyValueStore() });
+    localStorage.setItem(STORAGE_KEYS.HABIT_HISTORY, '{not json');
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await expect(remove()).rejects.toThrow(/unreadable/i);
+    expect(localStorage.getItem(STORAGE_KEYS.HABIT_HISTORY)).toBe('{not json');
+  });
+
+  it.each([
     ['an unpadded date', { id: 'r1:2026-1-5', reminderId: 'r1', date: '2026-1-5', count: 1 }],
     ['an id off its key', { id: 'x', reminderId: 'r1', date: '2026-10-04', count: 1 }],
     ['a zero count', { id: 'r1:2026-10-04', reminderId: 'r1', date: '2026-10-04', count: 0 }],
