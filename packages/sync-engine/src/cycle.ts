@@ -706,16 +706,22 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
       }
     }
 
+    if (pageSize === 0) {
+      continue;
+    }
     // A page lands as one write per collection; one that fails replays record by record, which
-    // finds the record that stalls exactly as before.
+    // finds the record that stalls.
     const before = snapshotPull(pull);
     let page = await applyPage(deps, pull, result.records, warnedUnknownCollections, true);
+    // What a failed batch landed before it failed, which a cancelled replay must still own up to.
+    let landedFirst = 0;
     if (page.kind === 'failed') {
+      landedFirst = page.wrote.length;
       restorePull(pull, before);
       page = await applyPage(deps, pull, result.records, warnedUnknownCollections, false);
     }
     if (page.kind === 'cancelled') {
-      return cancelledPull(appliedCount + page.wrote.length);
+      return cancelledPull(appliedCount + Math.max(landedFirst, page.wrote.length));
     }
     appliedCount += page.wrote.length;
     appliedCollections.push(...page.wrote);
@@ -813,7 +819,7 @@ async function applyPage(
       logger.warn(`Sync could not write a page of ${collection} at once; retrying one by one`, {
         error: res.error,
       });
-      return { kind: 'failed', wrote: [], collection, entityId: '*' };
+      return { kind: 'failed', wrote: landed, collection, entityId: '*' };
     }
     landed.push(...wrote.filter((name) => name === collection));
   }

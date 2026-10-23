@@ -23,7 +23,7 @@ export interface CollectionBinding {
   name: string;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
-  /** Every entry in one write, all or nothing: a null entity deletes. */
+  /** Every entry in one storage write where the backend allows; a null entity deletes. */
   writeMany(entities: ReadonlyMap<string, unknown | null>): Promise<StorageResult>;
   /** False where a delete is never written, so an entity missing from a listing was not purged. */
   deletable?: false;

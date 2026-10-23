@@ -306,11 +306,11 @@ describe('pullOnce', () => {
     );
     transport.pullRecords = [rec];
     const bindings = defaultBindings();
-    const writeOneSpy = vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne');
+    const writeManySpy = vi.spyOn(requireBinding(bindings, 'goals'), 'writeMany');
 
     await pullOnce(makeDeps({ bindings }));
 
-    expect(writeOneSpy).not.toHaveBeenCalled();
+    expect(writeManySpy).not.toHaveBeenCalled();
     const goals = await getGoals();
     expect(goals).toEqual([local]);
     const saved = await metaStore.load();
@@ -943,7 +943,7 @@ describe('pullOnce', () => {
     const goals = requireBinding(bindings, 'goals');
     const write = goals.writeOne.bind(goals);
     let disabled = false;
-    batchThroughWriteOne(goals);
+    vi.spyOn(goals, 'writeMany').mockResolvedValue(storageFailure('quota exceeded'));
     vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
       if (entityId === 'g2') {
         disabled = true;
@@ -1392,7 +1392,6 @@ describe('pullOnce', () => {
       const bindings = defaultBindings();
       const goals = requireBinding(bindings, 'goals');
       const writeOne = goals.writeOne.bind(goals);
-      batchThroughWriteOne(goals);
       vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
         const res = await writeOne(entityId, entity);
         if (entity === null) {
@@ -1512,7 +1511,6 @@ describe('pullOnce', () => {
       const goals = requireBinding(bindings, 'goals');
       const writeOne = goals.writeOne.bind(goals);
       const tracker = new MutationTracker(metaStore, () => AHEAD_OF_PULL_MS);
-      batchThroughWriteOne(goals);
       vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
         const res = await writeOne(entityId, entity);
         await tracker.markMutated('goals', entityId);
@@ -1574,10 +1572,9 @@ describe('pullOnce', () => {
     it('is deleted by the next pull once a stall in the pull from zero clears', async () => {
       vi.spyOn(logger, 'error').mockImplementation(() => {});
       const bindings = defaultBindings();
-      batchThroughWriteOne(requireBinding(bindings, 'goals'));
-      vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValueOnce(
-        storageFailure('quota exceeded')
-      );
+      const goals = requireBinding(bindings, 'goals');
+      vi.spyOn(goals, 'writeMany').mockResolvedValueOnce(storageFailure('quota exceeded'));
+      vi.spyOn(goals, 'writeOne').mockResolvedValueOnce(storageFailure('quota exceeded'));
       const newer = goalFactory.build({ id: 'g2', text: 'newer' });
       transport.pullRecords = [
         await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: null, hlc: OLDER_HLC }, 1),
@@ -1586,7 +1583,11 @@ describe('pullOnce', () => {
       const meta = await metaStore.load();
       delete meta.hlcs['goals/g2'];
       await metaStore.save(meta);
-      await pullOnce(makeDeps({ bindings }));
+      await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({
+        kind: 'stalled',
+        collection: 'goals',
+        entityId: 'g2',
+      });
 
       await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({ kind: 'complete' });
 
