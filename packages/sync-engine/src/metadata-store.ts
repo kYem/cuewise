@@ -28,6 +28,8 @@ export interface SyncMeta {
    * old cursor cannot write it back.
    */
   cursorResets?: number;
+  /** Wall ms of the last `forgetSettledDeletes` run, which runs at most daily. */
+  ledgerSweptAt?: number;
 }
 
 export function countCursorReset(meta: SyncMeta): void {
