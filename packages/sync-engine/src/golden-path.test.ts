@@ -250,12 +250,12 @@ describe('an edit made while a pull is in flight still reaches the other device'
 
     const bEdit = goalFactory.build({ id: 'g1', text: 'B typed over the pull' });
     const bGoals = requireBinding(bBindings, 'goals');
-    const write = bGoals.writeOne.bind(bGoals);
+    const writeMany = bGoals.writeMany.bind(bGoals);
     let stampedByEdit: string | undefined;
-    vi.spyOn(bGoals, 'writeOne').mockImplementation(async (entityId, entity) => {
-      const result = await write(entityId, entity);
-      if (entityId === 'g1' && stampedByEdit === undefined) {
-        await write('g1', bEdit);
+    vi.spyOn(bGoals, 'writeMany').mockImplementation(async (entities) => {
+      const result = await writeMany(entities);
+      if (entities.has('g1') && stampedByEdit === undefined) {
+        await bGoals.writeOne('g1', bEdit);
         await deviceB.engine.markMutated('goals', 'g1');
         stampedByEdit = (await new SyncMetadataStore(deviceB.kv).load()).hlcs['goals/g1'];
       }

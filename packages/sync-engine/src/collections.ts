@@ -23,6 +23,8 @@ export interface CollectionBinding {
   name: string;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
+  /** Every entry in one write, all or nothing: a null entity deletes. */
+  writeMany(entities: ReadonlyMap<string, unknown | null>): Promise<StorageResult>;
   /** False where a delete is never written, so an entity missing from a listing was not purged. */
   deletable?: false;
   /**
@@ -60,6 +62,34 @@ function arrayBinding<T extends HasId>(
   getAll: () => Promise<T[]>,
   setAll: (items: T[]) => Promise<StorageResult>
 ): CollectionBinding {
+  // Reads inside the lock: the service worker runs this while the page writes the same array
+  // from its own read, so a read hoisted above the lock would erase whichever landed first.
+  const writeEntities = (entities: ReadonlyMap<string, unknown | null>) =>
+    withCollectionLock(name, async (): Promise<StorageResult> => {
+      let items: T[];
+      try {
+        items = await getAll();
+      } catch (error) {
+        logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
+        return storageFailure(`Could not read the ${name} collection`);
+      }
+      // An entity already held keeps its place; a new one is appended.
+      const next: T[] = [];
+      const held = new Set<string>();
+      for (const item of items) {
+        held.add(item.id);
+        const entity = entities.has(item.id) ? entities.get(item.id) : item;
+        if (entity !== null) {
+          next.push(entity as T);
+        }
+      }
+      for (const [entityId, entity] of entities) {
+        if (entity !== null && !held.has(entityId)) {
+          next.push(entity as T);
+        }
+      }
+      return setAll(next);
+    });
   return {
     name,
     async readAll() {
@@ -74,33 +104,32 @@ function arrayBinding<T extends HasId>(
       }
       return Object.fromEntries(usable.map((item) => [item.id, item]));
     },
-    async writeOne(entityId, entity) {
-      // Reads inside the lock: the service worker runs this while the page writes the same array
-      // from its own read, so a read hoisted above the lock would erase whichever landed first.
-      return withCollectionLock(name, async (): Promise<StorageResult> => {
-        let items: T[];
-        try {
-          items = await getAll();
-        } catch (error) {
-          logger.error(`Could not read the ${name} collection; refusing to rewrite it`, error);
-          return storageFailure(`Could not read the ${name} collection`);
-        }
-        if (entity === null) {
-          return setAll(items.filter((item) => item.id !== entityId));
-        }
-        const exists = items.some((item) => item.id === entityId);
-        const next = exists
-          ? items.map((item) => (item.id === entityId ? (entity as T) : item))
-          : [...items, entity as T];
-        return setAll(next);
-      });
-    },
+    writeOne: (entityId, entity) => writeEntities(new Map([[entityId, entity]])),
+    writeMany: writeEntities,
   };
 }
 
 interface SettingsEntity {
   key: string;
   value: unknown;
+}
+
+async function writeSettings(
+  entities: ReadonlyMap<string, unknown | null>
+): Promise<StorageResult> {
+  const patch: Record<string, unknown> = {};
+  for (const [entityId, entity] of entities) {
+    // Settings keys aren't deletable, and device-local keys never accept a synced write.
+    if (entity !== null && !DEVICE_LOCAL_SETTINGS_KEYS.includes(entityId)) {
+      patch[entityId] = (entity as SettingsEntity).value;
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    return { success: true };
+  }
+  // Raw and only these keys: the peer may be on a version whose values ours cannot parse, and
+  // refusing the write here would stall the pull cycle on that record forever.
+  return setSettingsPatchRaw(patch as Partial<Settings>);
 }
 
 /** Per-key settings binding: each non-device-local setting is a pseudo-entity `{key, value}`. */
@@ -123,19 +152,8 @@ function settingsBinding(): CollectionBinding {
       const stored = await getStoredSettingsKeys();
       return stored.filter((key) => !DEVICE_LOCAL_SETTINGS_KEYS.includes(key));
     },
-    async writeOne(entityId, entity) {
-      // Settings keys aren't deletable, and device-local keys never accept a synced write.
-      if (entity === null) {
-        return { success: true };
-      }
-      if (DEVICE_LOCAL_SETTINGS_KEYS.includes(entityId)) {
-        return { success: true };
-      }
-      const { value } = entity as SettingsEntity;
-      // Raw and one key: the peer may be on a version whose values ours cannot parse, and
-      // refusing the write here would stall the pull cycle on that record forever.
-      return setSettingsPatchRaw({ [entityId]: value } as Partial<Settings>);
-    },
+    writeOne: (entityId, entity) => writeSettings(new Map([[entityId, entity]])),
+    writeMany: writeSettings,
   };
 }
 

@@ -10,6 +10,7 @@ import {
   type PushResponse,
   type SyncRecord,
 } from '@cuewise/shared';
+import type { StorageResult } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
 import { type CollectionBinding, DEVICE_LOCAL_SETTINGS_KEYS } from './collections';
 import { cursorResetsOf, isServerSeq, type SyncMeta, SyncMetadataStore } from './metadata-store';
@@ -68,6 +69,10 @@ interface PullState {
   local: LocalCopies;
   /** Cursor resets when this cycle's work began; a reset since owns cursor, seqs and relist. */
   cursorResets: number;
+  /** Winners held for the page's one write per collection; null writes each as it is resolved. */
+  staged: Map<string, { binding: CollectionBinding; entities: Map<string, unknown | null> }> | null;
+  /** Quarantines a staged page found, told to the host only once the page lands. */
+  heldQuarantineNotices: string[];
 }
 
 /**
@@ -120,6 +125,8 @@ function newPullState(
     relistSettled: null,
     repairsQuarantined,
     local: new LocalCopies(),
+    staged: null,
+    heldQuarantineNotices: [],
   };
 }
 
@@ -693,30 +700,33 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     }
     pageSize = result.records.length;
     pageCursor = result.cursor;
-    // Re-read per page, so an edit landing mid-listing is seen within one page of it.
-    pull.local = new LocalCopies();
-
-    for (const rec of result.records) {
-      if (deps.isCancelled()) {
-        return cancelledPull(appliedCount);
-      }
-      if (relist !== null) {
+    if (relist !== null) {
+      for (const rec of result.records) {
         listed.add(SyncMetadataStore.entityKey(rec.collection, rec.entityId));
       }
-      const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
-      if (applied === 'failed') {
-        // Apply-before-advance: the write failed, so stop here and leave the cursor before it. A
-        // pull owing a relist restarts at 0 instead: reconciling needs the whole listing.
-        pull.cursorReset = relist !== null;
-        if (!(await savePullUnlessCancelled(deps, pull))) {
-          return cancelledPull(appliedCount);
-        }
-        return { kind: 'stalled', collection: rec.collection, entityId: rec.entityId };
+    }
+
+    // A page lands as one write per collection; one that fails replays record by record, which
+    // finds the record that stalls exactly as before.
+    const before = snapshotPull(pull);
+    let page = await applyPage(deps, pull, result.records, warnedUnknownCollections, true);
+    if (page.kind === 'failed') {
+      restorePull(pull, before);
+      page = await applyPage(deps, pull, result.records, warnedUnknownCollections, false);
+    }
+    if (page.kind === 'cancelled') {
+      return cancelledPull(appliedCount + page.wrote.length);
+    }
+    appliedCount += page.wrote.length;
+    appliedCollections.push(...page.wrote);
+    if (page.kind === 'failed') {
+      // Apply-before-advance: the write failed, so stop here and leave the cursor before it. A
+      // pull owing a relist restarts at 0 instead: reconciling needs the whole listing.
+      pull.cursorReset = relist !== null;
+      if (!(await savePullUnlessCancelled(deps, pull))) {
+        return cancelledPull(appliedCount);
       }
-      if (applied === 'wrote') {
-        appliedCount += 1;
-        appliedCollections.push(rec.collection);
-      }
+      return { kind: 'stalled', collection: page.collection, entityId: page.entityId };
     }
   }
 
@@ -752,6 +762,102 @@ export async function pullOnce(deps: CycleDeps): Promise<PullResult> {
     cursor: `${startCursor} -> ${pull.meta.cursor}`,
   });
   return { kind: 'complete' };
+}
+
+/** One page's outcome; `wrote` names the collection of each record that landed, in seq order. */
+type PageResult =
+  | { kind: 'done'; wrote: string[] }
+  | { kind: 'cancelled'; wrote: string[] }
+  | { kind: 'failed'; wrote: string[]; collection: string; entityId: string };
+
+/**
+ * Resolves and applies one page. `batched` stages every winner and lands each collection's in one
+ * `writeMany` at the end; a failed one leaves `pull` half-applied, for the caller to restore.
+ */
+async function applyPage(
+  deps: CycleDeps,
+  pull: PullState,
+  records: SyncRecord[],
+  warnedUnknownCollections: Set<string>,
+  batched: boolean
+): Promise<PageResult> {
+  // Re-read per page, so an edit landing mid-listing is seen within one page of it.
+  pull.local = new LocalCopies();
+  pull.staged = batched ? new Map() : null;
+  pull.heldQuarantineNotices = [];
+  const wrote: string[] = [];
+  for (const rec of records) {
+    if (deps.isCancelled()) {
+      return { kind: 'cancelled', wrote: batched ? [] : wrote };
+    }
+    const applied = await applyPulledRecord(deps, pull, rec, warnedUnknownCollections);
+    if (applied === 'failed') {
+      return { kind: 'failed', wrote, collection: rec.collection, entityId: rec.entityId };
+    }
+    if (applied === 'wrote') {
+      wrote.push(rec.collection);
+    }
+  }
+  const staged = pull.staged;
+  pull.staged = null;
+  if (staged === null) {
+    return { kind: 'done', wrote };
+  }
+  const landed: string[] = [];
+  for (const [collection, { binding, entities }] of staged) {
+    if (deps.isCancelled()) {
+      return { kind: 'cancelled', wrote: landed };
+    }
+    const res = await binding.writeMany(entities);
+    if (!res.success) {
+      logger.warn(`Sync could not write a page of ${collection} at once; retrying one by one`, {
+        error: res.error,
+      });
+      return { kind: 'failed', wrote: [], collection, entityId: '*' };
+    }
+    landed.push(...wrote.filter((name) => name === collection));
+  }
+  if (!pull.repairsQuarantined) {
+    for (const key of pull.heldQuarantineNotices) {
+      deps.onQuarantine?.(key);
+    }
+  }
+  return { kind: 'done', wrote };
+}
+
+/** What a page may change in `pull`, copied so a failed batch can be undone. */
+function snapshotPull(pull: PullState): PullState {
+  return {
+    ...pull,
+    meta: structuredClone(pull.meta),
+    applied: new Set(pull.applied),
+    quarantined: new Set(pull.quarantined),
+    seqs: new Map(pull.seqs),
+    redirtied: new Map(pull.redirtied),
+  };
+}
+
+function restorePull(pull: PullState, snapshot: PullState): void {
+  Object.assign(pull, snapshot);
+}
+
+/** Lands one winner now, or stages it for the page's batched write. */
+function writeEntity(
+  pull: PullState,
+  binding: CollectionBinding,
+  entityId: string,
+  entity: unknown | null
+): Promise<StorageResult> {
+  if (pull.staged === null) {
+    return binding.writeOne(entityId, entity);
+  }
+  let pending = pull.staged.get(binding.name);
+  if (pending === undefined) {
+    pending = { binding, entities: new Map() };
+    pull.staged.set(binding.name, pending);
+  }
+  pending.entities.set(entityId, entity);
+  return Promise.resolve({ success: true });
 }
 
 /** The ledger's owed relist, if it names one this build knows. */
@@ -936,7 +1042,9 @@ async function resolveAndApply(
     if (!meta.quarantine.includes(key)) {
       meta.quarantine.push(key);
       pull.quarantined.add(key);
-      if (!pull.repairsQuarantined) {
+      if (pull.staged !== null) {
+        pull.heldQuarantineNotices.push(key);
+      } else if (!pull.repairsQuarantined) {
         deps.onQuarantine?.(key);
       }
       // Metadata only — collection/entityId/seq — never the ciphertext or decoded payload.
@@ -983,7 +1091,7 @@ async function resolveAndApply(
     return { kind: 'kept', reason: resolution.reason };
   }
 
-  const res = await binding.writeOne(rec.entityId, resolution.body.entity);
+  const res = await writeEntity(pull, binding, rec.entityId, resolution.body.entity);
   if (!res.success) {
     // Neither this seq nor a repair mark may outlive the failure: the next push would use them to
     // land the older local version over the very one it just judged newer.
