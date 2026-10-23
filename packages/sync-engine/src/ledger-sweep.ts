@@ -1,12 +1,12 @@
-import { DAY_IN_MS, hlcDecode, logger } from '@cuewise/shared';
+import { DAY_IN_MS, hlcDecode, logger, SYNC_SESSION_TTL_MS } from '@cuewise/shared';
 import type { CollectionBinding } from './collections';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 
 /**
- * Mirrors the server's TOMBSTONE_RETENTION_MS: past it the server may have reclaimed the deleted
- * row too, and a device idle that long re-bootstraps from zero, so nothing still needs the entry.
+ * The server's tombstone retention, timed from the delete's hlc rather than its receipt. Past it
+ * a peer idle that long re-lists from zero, so the entry only re-asserts a delete the server forgot.
  */
-export const LEDGER_RETENTION_MS = 90 * DAY_IN_MS;
+export const LEDGER_RETENTION_MS = SYNC_SESSION_TTL_MS;
 const SWEEP_EVERY_MS = DAY_IN_MS;
 
 export interface LedgerSweepDeps {
@@ -81,12 +81,26 @@ function settledDeletes(
     if (meta.seqs[key] === undefined || isDirty(meta, key) || meta.quarantine.includes(key)) {
       continue;
     }
-    if (wallMs - hlcDecode(hlc).physical < LEDGER_RETENTION_MS) {
+    const deletedAt = physicalOf(hlc);
+    if (deletedAt === null || wallMs - deletedAt < LEDGER_RETENTION_MS) {
       continue;
     }
     keys.push(key);
   }
   return keys;
+}
+
+// The sweep is the one reader of every stored hlc, so one malformed entry must not stop it.
+function physicalOf(hlc: unknown): number | null {
+  if (typeof hlc !== 'string') {
+    return null;
+  }
+  try {
+    const { physical } = hlcDecode(hlc);
+    return Number.isFinite(physical) ? physical : null;
+  } catch {
+    return null;
+  }
 }
 
 function isDirty(meta: SyncMeta, key: string): boolean {

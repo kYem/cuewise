@@ -2,8 +2,9 @@ import { configurePlatform, DAY_IN_MS, hlcEncode } from '@cuewise/shared';
 import { setGoals } from '@cuewise/storage';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
-import { defaultBindings } from './collections';
+import { type CollectionBinding, defaultBindings } from './collections';
 import { forgetSettledDeletes, LEDGER_RETENTION_MS } from './ledger-sweep';
 import { type SyncMeta, SyncMetadataStore } from './metadata-store';
 
@@ -16,19 +17,21 @@ function hlcAgo(ms: number): string {
 
 describe('forgetSettledDeletes', () => {
   let metaStore: SyncMetadataStore;
+  let bindings: CollectionBinding[];
   let cancelled: boolean;
 
   beforeEach(() => {
     const kv = new FakeKvStore();
     configurePlatform({ storage: kv });
     metaStore = new SyncMetadataStore(kv);
+    bindings = defaultBindings();
     cancelled = false;
   });
 
   function sweep(now = NOW): Promise<number> {
     return forgetSettledDeletes({
       meta: metaStore,
-      bindings: defaultBindings(),
+      bindings,
       now: () => now,
       isCancelled: () => cancelled,
     });
@@ -90,8 +93,8 @@ describe('forgetSettledDeletes', () => {
     expect(await ledgerHolds(GOAL_KEY)).toBe(true);
   });
 
-  it('keeps a settings key, which reads as absent at its default', async () => {
-    const key = SyncMetadataStore.entityKey('settings', 'theme');
+  it('keeps a settings key even when it reads as absent locally', async () => {
+    const key = SyncMetadataStore.entityKey('settings', 'retiredKey');
     await metaStore.update((meta) => {
       meta.hlcs[key] = hlcAgo(LEDGER_RETENTION_MS + DAY_IN_MS);
       meta.seqs[key] = 3;
@@ -101,19 +104,58 @@ describe('forgetSettledDeletes', () => {
     expect(await ledgerHolds(key)).toBe(true);
   });
 
-  it('keeps a key re-stamped while the sweep was reading', async () => {
+  it('keeps a quarantined key', async () => {
+    await seedDelete(LEDGER_RETENTION_MS + DAY_IN_MS, (meta) => {
+      meta.quarantine.push(GOAL_KEY);
+    });
+
+    expect(await sweep()).toBe(0);
+    expect(await ledgerHolds(GOAL_KEY)).toBe(true);
+  });
+
+  it('skips a collection it cannot read', async () => {
+    await seedDelete(LEDGER_RETENTION_MS + DAY_IN_MS);
+    vi.spyOn(requireBinding(bindings, 'goals'), 'readAll').mockRejectedValue(new Error('io'));
+
+    expect(await sweep()).toBe(0);
+    expect(await ledgerHolds(GOAL_KEY)).toBe(true);
+  });
+
+  it('skips an hlc it cannot decode and forgets the rest', async () => {
+    const broken = SyncMetadataStore.entityKey('goals', 'g2');
+    await seedDelete(LEDGER_RETENTION_MS + DAY_IN_MS, (meta) => {
+      meta.hlcs[broken] = 'not-an-hlc';
+      meta.seqs[broken] = 8;
+    });
+
+    expect(await sweep()).toBe(1);
+    expect(await ledgerHolds(broken)).toBe(true);
+  });
+
+  it.each([
+    [
+      're-stamped',
+      (meta: SyncMeta) => {
+        meta.hlcs[GOAL_KEY] = hlcAgo(0);
+      },
+    ],
+    [
+      'marked dirty',
+      (meta: SyncMeta) => {
+        meta.dirty.goals = ['g1'];
+      },
+    ],
+  ])('keeps a key %s while the sweep was reading', async (_, landing) => {
     await seedDelete(LEDGER_RETENTION_MS + DAY_IN_MS);
     const load = metaStore.load.bind(metaStore);
     vi.spyOn(metaStore, 'load').mockImplementationOnce(async () => {
       const snapshot = await load();
-      await metaStore.update((meta) => {
-        meta.hlcs[GOAL_KEY] = hlcAgo(0);
-      });
+      await metaStore.update(landing);
       return snapshot;
     });
 
     expect(await sweep()).toBe(0);
-    expect((await metaStore.load()).hlcs[GOAL_KEY]).toBe(hlcAgo(0));
+    expect(await ledgerHolds(GOAL_KEY)).toBe(true);
   });
 
   it('writes nothing once the cycle is cancelled', async () => {
