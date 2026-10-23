@@ -121,10 +121,13 @@ describe('forgetSettledDeletes', () => {
     expect(await ledgerHolds(GOAL_KEY)).toBe(true);
   });
 
-  it('skips an hlc it cannot decode and forgets the rest', async () => {
+  it.each([
+    ['cannot decode', 'not-an-hlc'],
+    ['decodes to no time', 'x:0:device-a'],
+  ])('skips an hlc it %s and forgets the rest', async (_, hlc) => {
     const broken = SyncMetadataStore.entityKey('goals', 'g2');
     await seedDelete(LEDGER_RETENTION_MS + DAY_IN_MS, (meta) => {
-      meta.hlcs[broken] = 'not-an-hlc';
+      meta.hlcs[broken] = hlc;
       meta.seqs[broken] = 8;
     });
 

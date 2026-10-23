@@ -77,7 +77,7 @@ function settledDeletes(
     if (!key.startsWith(prefix) || key.slice(prefix.length) in local) {
       continue;
     }
-    // No seq: the server never acked it, so the delete may still have to be pushed.
+    // No seq: unacked, so the delete may still need pushing, or a cursor reset cleared it.
     if (meta.seqs[key] === undefined || isDirty(meta, key) || meta.quarantine.includes(key)) {
       continue;
     }
