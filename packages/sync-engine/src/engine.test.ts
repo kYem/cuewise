@@ -41,6 +41,7 @@ import {
   SYNC_PARKED_DATA_KEYS,
   SYNC_UNBOUND_DATA_KEY,
 } from './key-lifecycle';
+import { LEDGER_RETENTION_MS } from './ledger-sweep';
 import { cursorResetsOf, SYNC_META_KEY, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import type { SyncNowResult } from './sync-outcome';
@@ -1234,6 +1235,28 @@ describe('SyncEngine.syncNow', () => {
     await device.engine.syncNow();
 
     expect(server.rows().some((row) => row.entityId === goal.id)).toBe(true);
+  });
+
+  it('forgets a pushed delete once it is older than the retention window', async () => {
+    let t = Date.now();
+    const server = new FakeSyncServer();
+    const device = createDevice(server, { now: () => t });
+    device.apiClient.now = () => t;
+    useStorage(device);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await setGoals([]);
+    await device.engine.markDeleted('goals', 'g1');
+    await device.engine.syncNow();
+    const key = SyncMetadataStore.entityKey('goals', 'g1');
+    expect(key in (await new SyncMetadataStore(device.kv).load()).hlcs).toBe(true);
+
+    t += LEDGER_RETENTION_MS + DAY_MS;
+    await device.engine.syncNow();
+
+    const meta = await new SyncMetadataStore(device.kv).load();
+    expect(key in meta.hlcs || key in meta.seqs).toBe(false);
+    expect(await getGoals()).toEqual([]);
   });
 
   it('a 401 mid-sync drops to signed_out without clearing the DK or touching local data', async () => {

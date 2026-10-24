@@ -15,6 +15,9 @@ import type {
 /** 24 hours in ms — use for day arithmetic instead of inline literals. */
 export const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
+/** A cloud-sync session's sliding TTL, which also bounds how long the server keeps tombstones. */
+export const SYNC_SESSION_TTL_MS = 90 * DAY_IN_MS;
+
 // Quote categories with display names
 export const QUOTE_CATEGORIES: Record<QuoteCategory, string> = {
   inspiration: 'Inspiration',

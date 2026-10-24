@@ -4,7 +4,7 @@ import type {
   PairingPublicKeyB64,
   PeerWrappedEnvelope,
 } from '@cuewise/crypto';
-import { DAY_IN_MS, logger } from '@cuewise/shared';
+import { logger, SYNC_SESSION_TTL_MS } from '@cuewise/shared';
 import {
   hashSessionToken,
   type RawSessionToken,
@@ -42,7 +42,7 @@ import {
   type SyncStore,
 } from './store';
 
-export const SESSION_TTL_MS = 90 * DAY_IN_MS;
+export const SESSION_TTL_MS = SYNC_SESSION_TTL_MS;
 export const AUTH_CODE_TTL_MS = 60_000;
 
 // D1 caps bound parameters per statement at 100; a conflict lookup binds two per row plus the user.

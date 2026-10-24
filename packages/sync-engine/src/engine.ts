@@ -58,6 +58,7 @@ import {
   SYNC_UNBOUND_DATA_KEY,
   setAsideDataKey,
 } from './key-lifecycle';
+import { forgetSettledDeletes } from './ledger-sweep';
 import { countCursorReset, SyncMetadataStore } from './metadata-store';
 import { MutationTracker } from './mutation-tracker';
 import { type ConflictStrategy, LwwHlcStrategy } from './strategy';
@@ -1241,7 +1242,20 @@ export class SyncEngine {
         ),
       };
     }
-    return pull.kind === 'resynced' ? { kind: 'resynced' } : { kind: 'synced' };
+    if (pull.kind === 'resynced') {
+      return { kind: 'resynced' };
+    }
+    await this.sweepLedger(cycleDeps);
+    return { kind: 'synced' };
+  }
+
+  /** Best-effort: a sweep that fails only leaves the ledger as large as it was. */
+  private async sweepLedger(cycleDeps: CycleDeps): Promise<void> {
+    try {
+      await forgetSettledDeletes({ ...cycleDeps, now: this.now });
+    } catch (error) {
+      logger.error('Sync ledger sweep failed; it is retried on a later cycle', error);
+    }
   }
 
   /** Maps a thrown cycle error to its outcome: a 401 is auth loss, anything else is classified. */
