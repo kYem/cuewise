@@ -6,11 +6,12 @@ import {
   type SyncRecord,
   storageFailure,
 } from '@cuewise/shared';
-import { getGoals, setGoals } from '@cuewise/storage';
+import { getGoals, getQuotes, setGoals } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
 import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  batchThroughWriteOne,
   disableAfterFirstWrite,
   failReadsAfterFirst,
   requireBinding,
@@ -123,6 +124,101 @@ describe('pullOnce', () => {
     expect((await getGoals()).map((g) => g.id)).toEqual(['g1', 'g2', 'g3']);
   });
 
+  it('lands a page in one write per collection', async () => {
+    transport.pullRecords = await Promise.all(
+      ['g1', 'g2', 'g3'].map((id, i) =>
+        sealServerRecord(
+          dk,
+          KEY_ID,
+          'goals',
+          id,
+          { entity: goalFactory.build({ id }), hlc: NEWER_HLC },
+          i + 1
+        )
+      )
+    );
+    const bindings = defaultBindings();
+    const goals = requireBinding(bindings, 'goals');
+    const writeMany = vi.spyOn(goals, 'writeMany');
+    const writeOne = vi.spyOn(goals, 'writeOne');
+
+    await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({ kind: 'complete' });
+
+    expect(writeMany).toHaveBeenCalledTimes(1);
+    expect(writeOne).not.toHaveBeenCalled();
+    expect((await metaStore.load()).cursor).toBe(3);
+  });
+
+  it('replays a page whose batched write failed one record at a time, stalling on the one that fails', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    transport.pullRecords = await Promise.all(
+      ['g1', 'g2', 'g3'].map((id, i) =>
+        sealServerRecord(
+          dk,
+          KEY_ID,
+          'goals',
+          id,
+          { entity: goalFactory.build({ id }), hlc: NEWER_HLC },
+          i + 1
+        )
+      )
+    );
+    const bindings = defaultBindings();
+    const goals = requireBinding(bindings, 'goals');
+    vi.spyOn(goals, 'writeMany').mockResolvedValue(storageFailure('quota exceeded'));
+    const writeOne = goals.writeOne.bind(goals);
+    vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
+      if (entityId === 'g2') {
+        return storageFailure('quota exceeded');
+      }
+      return writeOne(entityId, entity);
+    });
+
+    const result = await pullOnce(makeDeps({ bindings }));
+
+    expect(result).toEqual({ kind: 'stalled', collection: 'goals', entityId: 'g2' });
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g1']);
+    const saved = await metaStore.load();
+    expect(saved.cursor).toBe(1);
+    expect(Object.keys(saved.hlcs)).toEqual(['goals/g1']);
+  });
+
+  it('tells the host of a quarantine once when its page is replayed', async () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const sealed = await sealServerRecord(
+      dk,
+      KEY_ID,
+      'goals',
+      'g1',
+      { entity: null, hlc: NEWER_HLC },
+      1
+    );
+    transport.pullRecords = [
+      { ...sealed, ciphertext: 'garbage' },
+      await sealServerRecord(
+        dk,
+        KEY_ID,
+        'goals',
+        'g2',
+        { entity: goalFactory.build({ id: 'g2' }), hlc: NEWER_HLC },
+        2
+      ),
+    ];
+    const bindings = defaultBindings();
+    vi.spyOn(requireBinding(bindings, 'goals'), 'writeMany').mockResolvedValueOnce(
+      storageFailure('quota exceeded')
+    );
+    const onQuarantine = vi.fn();
+
+    await expect(pullOnce(makeDeps({ bindings, onQuarantine }))).resolves.toEqual({
+      kind: 'complete',
+    });
+
+    expect(onQuarantine).toHaveBeenCalledTimes(1);
+    expect((await getGoals()).map((g) => g.id)).toEqual(['g2']);
+  });
+
   it('resolves a later record of a page against what an earlier one wrote to the same key', async () => {
     const first = goalFactory.build({ id: 'g1', text: 'first' });
     transport.pullRecords = [
@@ -210,11 +306,11 @@ describe('pullOnce', () => {
     );
     transport.pullRecords = [rec];
     const bindings = defaultBindings();
-    const writeOneSpy = vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne');
+    const writeManySpy = vi.spyOn(requireBinding(bindings, 'goals'), 'writeMany');
 
     await pullOnce(makeDeps({ bindings }));
 
-    expect(writeOneSpy).not.toHaveBeenCalled();
+    expect(writeManySpy).not.toHaveBeenCalled();
     const goals = await getGoals();
     expect(goals).toEqual([local]);
     const saved = await metaStore.load();
@@ -411,6 +507,7 @@ describe('pullOnce', () => {
     );
     transport.pullRecords = [rec];
     const bindings = defaultBindings();
+    batchThroughWriteOne(requireBinding(bindings, 'goals'));
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
       storageFailure('quota exceeded')
     );
@@ -449,6 +546,7 @@ describe('pullOnce', () => {
       await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: theirs, hlc: NEWER_HLC }, 5),
     ];
     const bindings = defaultBindings();
+    batchThroughWriteOne(requireBinding(bindings, 'goals'));
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
       storageFailure('quota exceeded')
     );
@@ -473,6 +571,7 @@ describe('pullOnce', () => {
       await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 5),
     ];
     const bindings = defaultBindings();
+    batchThroughWriteOne(requireBinding(bindings, 'goals'));
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
       storageFailure('quota exceeded')
     );
@@ -497,6 +596,7 @@ describe('pullOnce', () => {
       await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: null, hlc: NEWER_HLC }, 12),
     ];
     const bindings = defaultBindings();
+    batchThroughWriteOne(requireBinding(bindings, 'goals'));
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
       storageFailure('quota exceeded')
     );
@@ -567,6 +667,7 @@ describe('pullOnce', () => {
     );
     transport.pullRecords = [poisoned, wedging];
     const bindings = defaultBindings();
+    batchThroughWriteOne(requireBinding(bindings, 'goals'));
     vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
       storageFailure('quota exceeded')
     );
@@ -731,11 +832,11 @@ describe('pullOnce', () => {
   });
 
   it('stops mid-page once cancelled, so the rest of the removed account’s records never land', async () => {
-    const first = goalFactory.build({ id: 'g1', text: 'first' });
-    const second = goalFactory.build({ id: 'g2', text: 'second' });
+    const goal = goalFactory.build({ id: 'g1' });
+    const quote = quoteFactory.build({ id: 'q1' });
     transport.pullRecords = [
-      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: first, hlc: NEWER_HLC }, 1),
-      await sealServerRecord(dk, KEY_ID, 'goals', 'g2', { entity: second, hlc: NEWER_HLC }, 2),
+      await sealServerRecord(dk, KEY_ID, 'goals', 'g1', { entity: goal, hlc: NEWER_HLC }, 1),
+      await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: quote, hlc: NEWER_HLC }, 2),
     ];
     const bindings = defaultBindings();
     const { isCancelled } = disableAfterFirstWrite(requireBinding(bindings, 'goals'));
@@ -745,7 +846,8 @@ describe('pullOnce', () => {
     const result = await pullOnce(makeDeps({ bindings, isCancelled }));
 
     expect(result).toEqual({ kind: 'cancelled' });
-    expect(await getGoals()).toEqual([first]);
+    expect(await getGoals()).toEqual([goal]);
+    expect(await getQuotes()).toEqual([]);
     const saved = await metaStore.load();
     expect(saved.cursor).toBe(0);
     // The record that did land has no hlc left to explain it, so this count is its only trace.
@@ -841,6 +943,7 @@ describe('pullOnce', () => {
     const goals = requireBinding(bindings, 'goals');
     const write = goals.writeOne.bind(goals);
     let disabled = false;
+    vi.spyOn(goals, 'writeMany').mockResolvedValue(storageFailure('quota exceeded'));
     vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
       if (entityId === 'g2') {
         disabled = true;
@@ -1232,6 +1335,7 @@ describe('pullOnce', () => {
         await sealServerRecord(dk, KEY_ID, 'goals', 'g2', { entity: null, hlc: NEWER_HLC }, 2),
       ];
       const bindings = defaultBindings();
+      batchThroughWriteOne(requireBinding(bindings, 'goals'));
       vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
         storageFailure('quota exceeded')
       );
@@ -1448,6 +1552,7 @@ describe('pullOnce', () => {
       const bindings = defaultBindings();
       const goals = requireBinding(bindings, 'goals');
       const writeOne = goals.writeOne.bind(goals);
+      batchThroughWriteOne(goals);
       vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
         if (entityId === 'g2') {
           return storageFailure('quota exceeded');
@@ -1467,9 +1572,9 @@ describe('pullOnce', () => {
     it('is deleted by the next pull once a stall in the pull from zero clears', async () => {
       vi.spyOn(logger, 'error').mockImplementation(() => {});
       const bindings = defaultBindings();
-      vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValueOnce(
-        storageFailure('quota exceeded')
-      );
+      const goals = requireBinding(bindings, 'goals');
+      vi.spyOn(goals, 'writeMany').mockResolvedValueOnce(storageFailure('quota exceeded'));
+      vi.spyOn(goals, 'writeOne').mockResolvedValueOnce(storageFailure('quota exceeded'));
       const newer = goalFactory.build({ id: 'g2', text: 'newer' });
       transport.pullRecords = [
         await sealServerRecord(dk, KEY_ID, 'quotes', 'q1', { entity: null, hlc: OLDER_HLC }, 1),
@@ -1478,7 +1583,11 @@ describe('pullOnce', () => {
       const meta = await metaStore.load();
       delete meta.hlcs['goals/g2'];
       await metaStore.save(meta);
-      await pullOnce(makeDeps({ bindings }));
+      await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({
+        kind: 'stalled',
+        collection: 'goals',
+        entityId: 'g2',
+      });
 
       await expect(pullOnce(makeDeps({ bindings }))).resolves.toEqual({ kind: 'complete' });
 
@@ -1488,6 +1597,7 @@ describe('pullOnce', () => {
     it('stalls on a delete that fails, keeping the entity and its seq to try again', async () => {
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
       const bindings = defaultBindings();
+      batchThroughWriteOne(requireBinding(bindings, 'goals'));
       vi.spyOn(requireBinding(bindings, 'goals'), 'writeOne').mockResolvedValue(
         storageFailure('quota exceeded')
       );

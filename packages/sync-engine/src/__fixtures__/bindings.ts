@@ -10,12 +10,34 @@ export function requireBinding(bindings: CollectionBinding[], name: string): Col
   return binding;
 }
 
-/** A disable landing mid-apply: the flag flips once one record has been written via `binding`. */
+/**
+ * Routes `binding`'s batched writes through its `writeOne`, one entity at a time, so a test that
+ * stubs `writeOne` decides what a pulled page's write does too.
+ */
+export function batchThroughWriteOne(binding: CollectionBinding): void {
+  vi.spyOn(binding, 'writeMany').mockImplementation(async (entities) => {
+    for (const [entityId, entity] of entities) {
+      const result = await binding.writeOne(entityId, entity);
+      if (!result.success) {
+        return result;
+      }
+    }
+    return { success: true };
+  });
+}
+
+/** A disable landing mid-apply: the flag flips once one write, single or batched, lands via `binding`. */
 export function disableAfterFirstWrite(binding: CollectionBinding): { isCancelled: () => boolean } {
-  const write = binding.writeOne.bind(binding);
+  const writeOne = binding.writeOne.bind(binding);
+  const writeMany = binding.writeMany.bind(binding);
   let disabled = false;
   vi.spyOn(binding, 'writeOne').mockImplementation(async (entityId, entity) => {
-    const result = await write(entityId, entity);
+    const result = await writeOne(entityId, entity);
+    disabled = true;
+    return result;
+  });
+  vi.spyOn(binding, 'writeMany').mockImplementation(async (entities) => {
+    const result = await writeMany(entities);
     disabled = true;
     return result;
   });

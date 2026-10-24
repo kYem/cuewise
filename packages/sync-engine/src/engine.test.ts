@@ -6,7 +6,7 @@ import {
   unwrapDataKey,
 } from '@cuewise/crypto';
 import { configurePlatform, hlcEncode, logger, storageFailure } from '@cuewise/shared';
-import { getGoals, setGoals } from '@cuewise/storage';
+import { getGoals, getQuotes, setGoals, setQuotes } from '@cuewise/storage';
 import {
   ApiError,
   SessionManager,
@@ -14,9 +14,9 @@ import {
   SYNC_PULL_WAKE_ID,
   SYNC_SESSION_KEY,
 } from '@cuewise/sync-client';
-import { goalFactory } from '@cuewise/test-utils/factories';
+import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { requireBinding } from './__fixtures__/bindings';
+import { batchThroughWriteOne, requireBinding } from './__fixtures__/bindings';
 import { FakeApiClient, FakeSyncServer } from './__fixtures__/fake-api-client';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
 import { FakeScheduler } from './__fixtures__/fake-scheduler';
@@ -194,19 +194,25 @@ function seedServerVersion(
   });
 }
 
-/** A disable landing mid-pull: it fires once, while the first pulled goal is being written. */
-function disableWhileWritingGoals(bindings: CollectionBinding[], engine: SyncEngine): void {
-  const goals = requireBinding(bindings, 'goals');
-  const write = goals.writeOne.bind(goals);
+/** A disable landing mid-pull: it fires once, as the first of these collections is written. */
+function disableWhileWriting(
+  bindings: CollectionBinding[],
+  names: string[],
+  engine: SyncEngine
+): void {
   let disabled = false;
-  vi.spyOn(goals, 'writeOne').mockImplementation(async (entityId, entity) => {
-    const result = await write(entityId, entity);
-    if (!disabled) {
-      disabled = true;
-      await engine.disableSync();
-    }
-    return result;
-  });
+  for (const name of names) {
+    const binding = requireBinding(bindings, name);
+    const write = binding.writeMany.bind(binding);
+    vi.spyOn(binding, 'writeMany').mockImplementation(async (entities) => {
+      const result = await write(entities);
+      if (!disabled) {
+        disabled = true;
+        await engine.disableSync();
+      }
+      return result;
+    });
+  }
 }
 
 /** A disable landing just before the first write to `key`, which then goes ahead regardless. */
@@ -228,7 +234,8 @@ function bindingsThatCannotWriteGoals(): CollectionBinding[] {
     if (binding.name !== 'goals') {
       return binding;
     }
-    return { ...binding, writeOne: async () => storageFailure('quota exceeded') };
+    const quota = async () => storageFailure('quota exceeded');
+    return { ...binding, writeOne: quota, writeMany: quota };
   });
 }
 
@@ -2174,6 +2181,7 @@ describe('SyncEngine.syncNow with a refused push', () => {
     const goalsBinding = requireBinding(bindings, 'goals');
     await goalsBinding.writeOne('g1', goalFactory.build({ id: 'g1', text: 'mine again' }));
     await device.engine.markMutated('goals', 'g1');
+    batchThroughWriteOne(goalsBinding);
     vi.spyOn(goalsBinding, 'writeOne').mockResolvedValue(storageFailure('quota exceeded'));
 
     const outcome = await device.engine.syncNow();
@@ -2252,15 +2260,17 @@ describe('SyncEngine.disableSync', () => {
     const bindings = defaultBindings();
     const device = createDevice(server, { bindings });
     useStorage(device);
-    await setGoals([goalFactory.build({ id: 'g1' }), goalFactory.build({ id: 'g2' })]);
+    await setGoals([goalFactory.build({ id: 'g1' })]);
+    await setQuotes([quoteFactory.build({ id: 'q1' })]);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await replayFromScratch(device);
-    disableWhileWritingGoals(bindings, device.engine);
+    await setQuotes([]);
+    disableWhileWriting(bindings, ['goals', 'quotes'], device.engine);
 
     const outcome = await device.engine.syncNow();
 
     expect(outcome).toEqual({ kind: 'cancelled' });
-    expect(await getGoals()).toHaveLength(1);
+    expect((await getGoals()).length + (await getQuotes()).length).toBe(1);
     expect(await device.kv.get(LAST_SYNCED_AT_KEY, 'local')).toBeNull();
     expect(await device.kv.get(LAST_CYCLE_KEY, 'local')).toBeNull();
   });

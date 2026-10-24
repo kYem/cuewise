@@ -114,9 +114,45 @@ describe('goals binding', () => {
     const goals = await getGoals();
     expect(goals).toEqual([g2]);
   });
+
+  it('writeMany replaces, removes and appends in one write, keeping held goals in place', async () => {
+    const g1 = goalFactory.build({ id: 'g1', text: 'original' });
+    const g2 = goalFactory.build({ id: 'g2' });
+    const g3 = goalFactory.build({ id: 'g3' });
+    const edited = { ...g3, text: 'edited' };
+    const added = goalFactory.build({ id: 'g4' });
+    const kv = new FakeKvStore();
+    configurePlatform({ storage: kv });
+    await setGoals([g1, g2, g3]);
+    const set = vi.spyOn(kv, 'set');
+
+    await goalsBinding().writeMany(
+      new Map<string, unknown>([
+        ['g4', added],
+        ['g3', edited],
+        ['g1', null],
+      ])
+    );
+
+    expect(await getGoals()).toEqual([g2, edited, added]);
+    expect(set.mock.calls.filter(([key]) => key === STORAGE_KEYS.GOALS)).toHaveLength(1);
+  });
 });
 
 describe('settings binding', () => {
+  it('writeMany lands every key in one patch, skipping nulls and device-local keys', async () => {
+    await settingsBinding().writeMany(
+      new Map<string, unknown>([
+        ['theme', { key: 'theme', value: 'dark' }],
+        ['colorTheme', null],
+        ['cloudSyncEnabled', { key: 'cloudSyncEnabled', value: true }],
+      ])
+    );
+
+    const stored = await getManyFromStorage(SETTINGS_KEYS.map(settingsStorageKey));
+    expect(stored).toEqual(toStoredValues({ 'settings.theme': 'dark' }));
+  });
+
   it('readAll excludes device-local keys', async () => {
     const result = await settingsBinding().readAll();
 
