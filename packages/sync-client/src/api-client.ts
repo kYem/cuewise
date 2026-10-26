@@ -39,9 +39,36 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function json(method: string, body: unknown): RequestInit {
+  return {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
+
+function isNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
+}
+
 /** A missing Notion grant is a state the settings UI branches on, never an error. */
 function isNotionNotConnected(err: unknown): boolean {
   return err instanceof ApiError && err.code === 'provider_not_connected';
+}
+
+/** Answers null for the one failure the caller treats as a state; anything else still throws. */
+async function nullOn<T>(
+  isExpected: (err: unknown) => boolean,
+  call: () => Promise<T>
+): Promise<T | null> {
+  try {
+    return await call();
+  } catch (err) {
+    if (isExpected(err)) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 // Reads `seq` off whatever the reply held: a null or primitive entry must answer invalid_response,
@@ -72,15 +99,10 @@ export class ApiClient {
   // google via the macOS deep-link flow); retrying after a lost response or a post-burn 5xx
   // would replay it. Id-token/dev exchanges are idempotent and keep retrying.
   async exchangeToken(req: ExchangeTokenRequest): Promise<{ token: string }> {
-    const res = await this.request(
-      '/v1/auth/token',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
-      },
-      { auth: false, retry: !('codeVerifier' in req) }
-    );
+    const res = await this.request('/v1/auth/token', json('POST', req), {
+      auth: false,
+      retry: !('codeVerifier' in req),
+    });
     return this.parseSuccessBody<{ token: string }>(res);
   }
 
@@ -99,15 +121,7 @@ export class ApiClient {
   }
 
   async pushChanges(records: PushRecord[]): Promise<PushResponse> {
-    const res = await this.request(
-      '/v1/changes',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records }),
-      },
-      { auth: true }
-    );
+    const res = await this.request('/v1/changes', json('POST', { records }), { auth: true });
     const body = await this.parseSuccessBody<Partial<PushResponse> | null>(res);
     // Anything but a push reply must be refused here: treated as a legacy reply, it would ack
     // records that never reached the server.
@@ -179,15 +193,9 @@ export class ApiClient {
   }
 
   async renameSession(id: string, deviceName: string): Promise<void> {
-    await this.request(
-      `/v1/sessions/${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceName }),
-      },
-      { auth: true }
-    );
+    await this.request(`/v1/sessions/${encodeURIComponent(id)}`, json('PATCH', { deviceName }), {
+      auth: true,
+    });
   }
 
   async revokeOtherSessions(): Promise<number> {
@@ -199,18 +207,12 @@ export class ApiClient {
     return (await this.parseSuccessBody<{ revoked: number }>(res)).revoked;
   }
 
-  // 404 means "signed in but keys never initialized" — a valid state, not an error; every
-  // other non-2xx still surfaces as the normal typed ApiError.
+  // 404 means "signed in but keys never initialized" — a valid state, not an error.
   async getRecoveryEnvelope(): Promise<KeyEnvelopeRecord | null> {
-    try {
+    return nullOn(isNotFound, async () => {
       const res = await this.request('/v1/keys/recovery', { method: 'GET' }, { auth: true });
       return await this.parseSuccessBody<KeyEnvelopeRecord>(res);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return null;
-      }
-      throw err;
-    }
+    });
   }
 
   // ifAbsent maps to a create-only PUT (server 409s `key_envelope_exists` if a blob exists) —
@@ -220,29 +222,13 @@ export class ApiClient {
     if (opts?.ifAbsent === true) {
       body.ifAbsent = true;
     }
-    await this.request(
-      '/v1/keys/recovery',
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-      { auth: true }
-    );
+    await this.request('/v1/keys/recovery', json('PUT', body), { auth: true });
   }
 
   // Device pairing (ENG-50): a requester creates the row with only a commitment to its key, an
   // approver commits its own, and the requester then reveals. `id` is the server's row handle.
   async createPairing(commitment: PairingCommitment): Promise<PairingCreated> {
-    const res = await this.request(
-      '/v1/pairings',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commitment }),
-      },
-      { auth: true }
-    );
+    const res = await this.request('/v1/pairings', json('POST', { commitment }), { auth: true });
     return this.parseSuccessBody<PairingCreated>(res);
   }
 
@@ -251,32 +237,22 @@ export class ApiClient {
     return (await this.parseSuccessBody<{ pairings: PendingPairing[] }>(res)).pairings;
   }
 
-  // 404 means expired/denied — a poll state the requester loops on, not an error; every other
-  // non-2xx still surfaces as the normal typed ApiError.
+  // 404 means expired/denied — a poll state the requester loops on, not an error.
   async getPairing(id: string): Promise<PairingForRequester | null> {
-    try {
+    return nullOn(isNotFound, async () => {
       const res = await this.request(
         `/v1/pairings/${encodeURIComponent(id)}`,
         { method: 'GET' },
         { auth: true }
       );
       return await this.parseSuccessBody<PairingForRequester>(res);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return null;
-      }
-      throw err;
-    }
+    });
   }
 
   async commitPairing(id: string, publicKey: PairingPublicKeyB64): Promise<void> {
     await this.request(
       `/v1/pairings/${encodeURIComponent(id)}/commit`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey }),
-      },
+      json('POST', { publicKey }),
       { auth: true }
     );
   }
@@ -289,11 +265,7 @@ export class ApiClient {
   ): Promise<void> {
     await this.request(
       `/v1/pairings/${encodeURIComponent(id)}/reveal`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, nonce }),
-      },
+      json('PUT', { publicKey, nonce }),
       { auth: true }
     );
   }
@@ -301,41 +273,23 @@ export class ApiClient {
   async putPairingEnvelope(id: string, envelope: PeerWrappedEnvelope): Promise<void> {
     await this.request(
       `/v1/pairings/${encodeURIComponent(id)}/envelope`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ envelope }),
-      },
+      json('PUT', { envelope }),
       { auth: true }
     );
   }
 
   // 404 means the row is already gone — denying a vanished pairing is done, not an error.
   async deletePairing(id: string): Promise<void> {
-    try {
-      await this.request(
-        `/v1/pairings/${encodeURIComponent(id)}`,
-        { method: 'DELETE' },
-        { auth: true }
-      );
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return;
-      }
-      throw err;
-    }
+    await nullOn(isNotFound, () =>
+      this.request(`/v1/pairings/${encodeURIComponent(id)}`, { method: 'DELETE' }, { auth: true })
+    );
   }
 
   async getNotionConnection(): Promise<NotionConnection | null> {
-    try {
+    return nullOn(isNotionNotConnected, async () => {
       const res = await this.request('/v1/integrations/notion', { method: 'GET' }, { auth: true });
       return await this.parseSuccessBody<NotionConnection>(res);
-    } catch (err) {
-      if (isNotionNotConnected(err)) {
-        return null;
-      }
-      throw err;
-    }
+    });
   }
 
   /** Answers the Notion consent URL; the state it carries names no account. */
@@ -351,15 +305,10 @@ export class ApiClient {
 
   // Never retried: the server burns the code on first read, so a retry would replay a spent one.
   async claimNotion(code: string, codeVerifier: string): Promise<void> {
-    await this.request(
-      '/v1/integrations/notion/claim',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, codeVerifier }),
-      },
-      { auth: true, retry: false }
-    );
+    await this.request('/v1/integrations/notion/claim', json('POST', { code, codeVerifier }), {
+      auth: true,
+      retry: false,
+    });
   }
 
   async listNotionTables(): Promise<NotionTables> {
@@ -372,15 +321,9 @@ export class ApiClient {
   }
 
   async selectNotionTable(dataSourceId: string, name: string): Promise<void> {
-    await this.request(
-      '/v1/integrations/notion/selection',
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataSourceId, name }),
-      },
-      { auth: true }
-    );
+    await this.request('/v1/integrations/notion/selection', json('PUT', { dataSourceId, name }), {
+      auth: true,
+    });
   }
 
   async listNotionItems(): Promise<NotionItems> {
@@ -395,24 +338,15 @@ export class ApiClient {
   async setNotionItemDone(pageId: string, done: boolean): Promise<void> {
     await this.request(
       `/v1/integrations/notion/items/${encodeURIComponent(pageId)}`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ done }),
-      },
+      json('PATCH', { done }),
       { auth: true }
     );
   }
 
   async disconnectNotion(): Promise<void> {
-    try {
-      await this.request('/v1/integrations/notion', { method: 'DELETE' }, { auth: true });
-    } catch (err) {
-      if (isNotionNotConnected(err)) {
-        return;
-      }
-      throw err;
-    }
+    await nullOn(isNotionNotConnected, () =>
+      this.request('/v1/integrations/notion', { method: 'DELETE' }, { auth: true })
+    );
   }
 
   private async request(

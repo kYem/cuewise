@@ -873,6 +873,39 @@ export function minutesToSeconds(minutes: number): number {
   return minutes * 60;
 }
 
+function isOnOrAfter(date: Date, start: Date): boolean {
+  return isAfter(date, start) || isSameDay(date, start);
+}
+
+function isOnOrBefore(date: Date, end: Date): boolean {
+  return isSameDay(date, end) || !isAfter(date, end);
+}
+
+function countCompletedGoals(goals: Goal[], inRange: (date: Date) => boolean): number {
+  return goals.filter((goal) => goal.completed && inRange(parseISO(goal.date))).length;
+}
+
+function isCompletedWorkSession(session: PomodoroSession): boolean {
+  return !session.interrupted && session.type === 'work';
+}
+
+function sessionDateOf(session: PomodoroSession): Date {
+  return parseISO(session.completedAt || session.startedAt);
+}
+
+function completedWorkSessions(
+  sessions: PomodoroSession[],
+  inRange: (date: Date) => boolean
+): PomodoroSession[] {
+  return sessions.filter(
+    (session) => isCompletedWorkSession(session) && inRange(sessionDateOf(session))
+  );
+}
+
+function totalDuration(sessions: PomodoroSession[]): number {
+  return sessions.reduce((sum, session) => sum + session.duration, 0);
+}
+
 /**
  * Calculate insights data from quotes, goals, and pomodoro sessions
  */
@@ -891,50 +924,18 @@ export function calculateInsights(
 
   // Quotes viewed this week
   const quotesViewedThisWeek = quotes.reduce((sum, quote) => {
-    if (quote.lastViewed) {
-      const viewedDate = parseISO(quote.lastViewed);
-      if (isAfter(viewedDate, weekStart) || isSameDay(viewedDate, weekStart)) {
-        return sum + 1;
-      }
+    if (quote.lastViewed && isOnOrAfter(parseISO(quote.lastViewed), weekStart)) {
+      return sum + 1;
     }
     return sum;
   }, 0);
 
-  // Goals completed today
-  const goalsCompletedToday = goals.filter((goal) => {
-    if (!goal.completed) {
-      return false;
-    }
-    const goalDate = parseISO(goal.date);
-    return isSameDay(goalDate, today);
-  }).length;
-
-  // Goals completed this week
-  const goalsCompletedThisWeek = goals.filter((goal) => {
-    if (!goal.completed) {
-      return false;
-    }
-    const goalDate = parseISO(goal.date);
-    return isAfter(goalDate, weekStart) || isSameDay(goalDate, weekStart);
-  }).length;
-
-  // Goals completed this month
-  const goalsCompletedThisMonth = goals.filter((goal) => {
-    if (!goal.completed) {
-      return false;
-    }
-    const goalDate = parseISO(goal.date);
-    return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
-  }).length;
-
-  // Pomodoros completed today
-  const pomodorosCompletedToday = pomodoroSessions.filter((session) => {
-    if (session.interrupted || session.type !== 'work') {
-      return false;
-    }
-    const sessionDate = parseISO(session.completedAt || session.startedAt);
-    return isSameDay(sessionDate, today);
-  }).length;
+  const goalsCompletedToday = countCompletedGoals(goals, (date) => isSameDay(date, today));
+  const goalsCompletedThisWeek = countCompletedGoals(goals, (date) => isOnOrAfter(date, weekStart));
+  const goalsCompletedThisMonth = countCompletedGoals(goals, (date) =>
+    isOnOrAfter(date, monthStart)
+  );
+  const pomodorosCompletedToday = countFocusSessionsToday(pomodoroSessions);
 
   // Category view counts
   const categoryViewCounts: Record<QuoteCategory, number> = {
@@ -971,13 +972,9 @@ export function calculateInsights(
 
   // Calculate objective analytics
   const activeGoals = getActiveGoals(goals).length;
-  const objectivesCompletedThisMonth = goals.filter((goal) => {
-    if (!isObjective(goal) || !goal.completed) {
-      return false;
-    }
-    const goalDate = parseISO(goal.date);
-    return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
-  }).length;
+  const objectivesCompletedThisMonth = countCompletedGoals(goals.filter(isObjective), (date) =>
+    isOnOrAfter(date, monthStart)
+  );
   const avgGoalProgress = calculateAvgGoalProgress(goals);
 
   return {
@@ -1030,14 +1027,11 @@ export function calculateFocusTime(
   sessions: PomodoroSession[],
   filterFn?: (session: PomodoroSession) => boolean
 ): number {
-  return sessions
-    .filter((session) => {
-      if (session.interrupted || session.type !== 'work') {
-        return false;
-      }
-      return filterFn ? filterFn(session) : true;
-    })
-    .reduce((total, session) => total + session.duration, 0);
+  return totalDuration(
+    sessions.filter(
+      (session) => isCompletedWorkSession(session) && (filterFn ? filterFn(session) : true)
+    )
+  );
 }
 
 /**
@@ -1045,10 +1039,7 @@ export function calculateFocusTime(
  */
 export function calculateFocusTimeToday(sessions: PomodoroSession[]): number {
   const today = startOfDay(new Date());
-  return calculateFocusTime(sessions, (session) => {
-    const sessionDate = parseISO(session.completedAt || session.startedAt);
-    return isSameDay(sessionDate, today);
-  });
+  return totalDuration(completedWorkSessions(sessions, (date) => isSameDay(date, today)));
 }
 
 /**
@@ -1056,13 +1047,7 @@ export function calculateFocusTimeToday(sessions: PomodoroSession[]): number {
  */
 export function countFocusSessionsToday(sessions: PomodoroSession[]): number {
   const today = startOfDay(new Date());
-  return sessions.filter((session) => {
-    if (session.interrupted || session.type !== 'work') {
-      return false;
-    }
-    const sessionDate = parseISO(session.completedAt || session.startedAt);
-    return isSameDay(sessionDate, today);
-  }).length;
+  return completedWorkSessions(sessions, (date) => isSameDay(date, today)).length;
 }
 
 /**
@@ -1070,10 +1055,7 @@ export function countFocusSessionsToday(sessions: PomodoroSession[]): number {
  */
 export function calculateFocusTimeThisWeek(sessions: PomodoroSession[]): number {
   const weekStart = startOfWeek(startOfDay(new Date()), { weekStartsOn: 1 }); // Monday
-  return calculateFocusTime(sessions, (session) => {
-    const sessionDate = parseISO(session.completedAt || session.startedAt);
-    return isAfter(sessionDate, weekStart) || isSameDay(sessionDate, weekStart);
-  });
+  return totalDuration(completedWorkSessions(sessions, (date) => isOnOrAfter(date, weekStart)));
 }
 
 /**
@@ -1109,31 +1091,14 @@ export function calculateDailyTrends(
   return dateRange.map((date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
 
-    // Goals completed on this day
-    const goalsCompleted = goals.filter((goal) => {
-      if (!goal.completed) {
-        return false;
-      }
-      return goal.date === dateStr;
-    }).length;
-
-    // Pomodoros completed on this day
-    const dayPomodoros = pomodoroSessions.filter((session) => {
-      if (session.interrupted || session.type !== 'work') {
-        return false;
-      }
-      const sessionDate = parseISO(session.completedAt || session.startedAt);
-      return isSameDay(sessionDate, date);
-    });
-
-    const pomodorosCompleted = dayPomodoros.length;
-    const focusTime = dayPomodoros.reduce((sum, session) => sum + session.duration, 0);
+    const goalsCompleted = goals.filter((goal) => goal.completed && goal.date === dateStr).length;
+    const dayPomodoros = completedWorkSessions(pomodoroSessions, (d) => isSameDay(d, date));
 
     return {
       date: dateStr,
       goalsCompleted,
-      focusTime,
-      pomodorosCompleted,
+      focusTime: totalDuration(dayPomodoros),
+      pomodorosCompleted: dayPomodoros.length,
     };
   });
 }
@@ -1156,38 +1121,14 @@ export function calculateWeeklyTrends(
     const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
     const weekLabel = `${format(weekStart, 'MMM d')}-${format(weekEnd, 'd')}`;
 
-    // Goals completed in this week
-    const goalsCompleted = goals.filter((goal) => {
-      if (!goal.completed) {
-        return false;
-      }
-      const goalDate = parseISO(goal.date);
-      return (
-        (isAfter(goalDate, weekStart) || isSameDay(goalDate, weekStart)) &&
-        (isSameDay(goalDate, weekEnd) || !isAfter(goalDate, weekEnd))
-      );
-    }).length;
-
-    // Pomodoros completed in this week
-    const weekPomodoros = pomodoroSessions.filter((session) => {
-      if (session.interrupted || session.type !== 'work') {
-        return false;
-      }
-      const sessionDate = parseISO(session.completedAt || session.startedAt);
-      return (
-        (isAfter(sessionDate, weekStart) || isSameDay(sessionDate, weekStart)) &&
-        (isSameDay(sessionDate, weekEnd) || !isAfter(sessionDate, weekEnd))
-      );
-    });
-
-    const pomodorosCompleted = weekPomodoros.length;
-    const focusTime = weekPomodoros.reduce((sum, session) => sum + session.duration, 0);
+    const inWeek = (date: Date) => isOnOrAfter(date, weekStart) && isOnOrBefore(date, weekEnd);
+    const weekPomodoros = completedWorkSessions(pomodoroSessions, inWeek);
 
     return {
       weekLabel,
-      goalsCompleted,
-      focusTime,
-      pomodorosCompleted,
+      goalsCompleted: countCompletedGoals(goals, inWeek),
+      focusTime: totalDuration(weekPomodoros),
+      pomodorosCompleted: weekPomodoros.length,
     };
   });
 }
@@ -1209,38 +1150,14 @@ export function calculateMonthlyTrends(
     const monthEnd = i === 0 ? now : startOfMonth(subMonths(now, i - 1));
     const monthLabel = format(monthDate, 'MMMM yyyy');
 
-    // Goals completed in this month
-    const goalsCompleted = goals.filter((goal) => {
-      if (!goal.completed) {
-        return false;
-      }
-      const goalDate = parseISO(goal.date);
-      return (
-        (isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart)) &&
-        !isAfter(goalDate, monthEnd)
-      );
-    }).length;
-
-    // Pomodoros completed in this month
-    const monthPomodoros = pomodoroSessions.filter((session) => {
-      if (session.interrupted || session.type !== 'work') {
-        return false;
-      }
-      const sessionDate = parseISO(session.completedAt || session.startedAt);
-      return (
-        (isAfter(sessionDate, monthStart) || isSameDay(sessionDate, monthStart)) &&
-        !isAfter(sessionDate, monthEnd)
-      );
-    });
-
-    const pomodorosCompleted = monthPomodoros.length;
-    const focusTime = monthPomodoros.reduce((sum, session) => sum + session.duration, 0);
+    const inMonth = (date: Date) => isOnOrAfter(date, monthStart) && !isAfter(date, monthEnd);
+    const monthPomodoros = completedWorkSessions(pomodoroSessions, inMonth);
 
     trends.push({
       month: monthLabel,
-      goalsCompleted,
-      focusTime,
-      pomodorosCompleted,
+      goalsCompleted: countCompletedGoals(goals, inMonth),
+      focusTime: totalDuration(monthPomodoros),
+      pomodorosCompleted: monthPomodoros.length,
     });
   }
 
@@ -1261,18 +1178,12 @@ export function calculateGoalCompletionRate(goals: Goal[]): GoalCompletionRate {
   const completionRate = totalGoals > 0 ? (completedGoals / totalGoals) * 100 : 0;
 
   // This week
-  const weekGoals = goals.filter((goal) => {
-    const goalDate = parseISO(goal.date);
-    return isAfter(goalDate, weekStart) || isSameDay(goalDate, weekStart);
-  });
+  const weekGoals = goals.filter((goal) => isOnOrAfter(parseISO(goal.date), weekStart));
   const weekCompleted = weekGoals.filter((g) => g.completed).length;
   const weekRate = weekGoals.length > 0 ? (weekCompleted / weekGoals.length) * 100 : 0;
 
   // This month
-  const monthGoals = goals.filter((goal) => {
-    const goalDate = parseISO(goal.date);
-    return isAfter(goalDate, monthStart) || isSameDay(goalDate, monthStart);
-  });
+  const monthGoals = goals.filter((goal) => isOnOrAfter(parseISO(goal.date), monthStart));
   const monthCompleted = monthGoals.filter((g) => g.completed).length;
   const monthRate = monthGoals.length > 0 ? (monthCompleted / monthGoals.length) * 100 : 0;
 
@@ -1297,10 +1208,7 @@ export function calculateGoalCompletionRate(goals: Goal[]): GoalCompletionRate {
  * Calculate pomodoro heatmap data
  */
 export function calculatePomodoroHeatmap(sessions: PomodoroSession[]): PomodoroHeatmapData {
-  // Filter to completed work sessions only
-  const workSessions = sessions.filter(
-    (session) => !session.interrupted && session.type === 'work'
-  );
+  const workSessions = sessions.filter(isCompletedWorkSession);
 
   // Initialize distributions
   const hourlyDistribution: Record<number, number> = {};
@@ -1320,7 +1228,7 @@ export function calculatePomodoroHeatmap(sessions: PomodoroSession[]): PomodoroH
 
   // Process each session
   workSessions.forEach((session) => {
-    const sessionDate = parseISO(session.completedAt || session.startedAt);
+    const sessionDate = sessionDateOf(session);
     const hour = getHours(sessionDate);
     const weekday = getDay(sessionDate);
     const dateStr = format(sessionDate, 'yyyy-MM-dd');
