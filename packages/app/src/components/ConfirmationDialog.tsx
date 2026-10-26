@@ -48,15 +48,15 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 
   useDialogChrome({ open: isOpen, onClose, ignoreEscape: () => isLoading });
 
-  // Focus the cancel button for safety on destructive dialogs
+  // Focus Cancel for safety on open, and again once a failed confirm re-enables it
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || isLoading) {
       return;
     }
     setTimeout(() => {
       cancelButtonRef.current?.focus();
     }, 0);
-  }, [isOpen]);
+  }, [isOpen, isLoading]);
 
   if (!isOpen) {
     return null;

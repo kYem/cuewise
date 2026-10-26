@@ -7,7 +7,31 @@ interface DialogChromeOptions {
   ignoreEscape?: (event: KeyboardEvent) => boolean;
 }
 
-/** While `open`: Escape calls `onClose`, and body scroll is locked, restoring the prior overflow. */
+// Shared across dialogs: React cleans up a deleted tree parent-first, so per-dialog restores of
+// the overflow each saw on open would leave nested ones stuck at 'hidden'.
+let scrollLocks = 0;
+let overflowBeforeLock = '';
+
+function lockBodyScroll(): () => void {
+  if (scrollLocks === 0) {
+    overflowBeforeLock = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLocks++;
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    scrollLocks--;
+    if (scrollLocks === 0) {
+      document.body.style.overflow = overflowBeforeLock;
+    }
+  };
+}
+
+/** While `open`: Escape calls `onClose`, and body scroll is locked until the last dialog closes. */
 export function useDialogChrome({ open, onClose, ignoreEscape }: DialogChromeOptions): void {
   const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.key === 'Escape' && !ignoreEscape?.(event)) {
@@ -19,12 +43,11 @@ export function useDialogChrome({ open, onClose, ignoreEscape }: DialogChromeOpt
     if (!open) {
       return;
     }
-    const previousOverflow = document.body.style.overflow;
+    const unlockScroll = lockBodyScroll();
     document.addEventListener('keydown', handleKeyDown);
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      unlockScroll();
     };
   }, [open]);
 }

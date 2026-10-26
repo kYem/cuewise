@@ -1,4 +1,5 @@
-import { fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useDialogChrome } from './useDialogChrome';
 
@@ -8,15 +9,24 @@ interface HarnessProps {
   ignoreEscape?: (event: KeyboardEvent) => boolean;
 }
 
-function Harness(props: HarnessProps) {
-  useDialogChrome(props);
-  return null;
+function Harness({ children, ...options }: HarnessProps & { children?: ReactNode }) {
+  useDialogChrome(options);
+  return children ?? null;
+}
+
+function NestedHarness({ innerOpen }: { innerOpen: boolean }) {
+  return (
+    <Harness open onClose={vi.fn()}>
+      <Harness open={innerOpen} onClose={vi.fn()} />
+    </Harness>
+  );
 }
 
 const pressEscape = () => fireEvent.keyDown(document, { key: 'Escape' });
 
 describe('useDialogChrome', () => {
   afterEach(() => {
+    cleanup();
     document.body.style.overflow = '';
   });
 
@@ -92,6 +102,28 @@ describe('useDialogChrome', () => {
 
     outer.unmount();
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('restores the original overflow when a parent and its open child unmount together', () => {
+    document.body.style.overflow = 'scroll';
+    const { rerender, unmount } = render(<NestedHarness innerOpen={false} />);
+    rerender(<NestedHarness innerOpen />);
+
+    unmount();
+
+    expect(document.body.style.overflow).toBe('scroll');
+  });
+
+  it('keeps scroll locked until the last of two sibling dialogs closes', () => {
+    document.body.style.overflow = 'scroll';
+    const first = render(<Harness open onClose={vi.fn()} />);
+    const second = render(<Harness open onClose={vi.fn()} />);
+
+    first.unmount();
+    expect(document.body.style.overflow).toBe('hidden');
+
+    second.unmount();
+    expect(document.body.style.overflow).toBe('scroll');
   });
 
   it('calls the latest onClose after a rerender', () => {
