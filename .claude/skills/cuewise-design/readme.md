@@ -131,7 +131,7 @@ with an optional `bg-black/25` legibility overlay.
   no custom SVG icon set, no icon font. Consumers should load Lucide
   (`https://unpkg.com/lucide@latest`) or `lucide-react` and match the 2px
   outline weight.
-- **Semantic mapping** (`src/components/icons.tsx`): Goal → `Flag`, Task →
+- **Semantic mapping:** Goal → `Flag`, Task →
   `ListTodo`, Focus → `Target`. Other recurring icons: `Timer`/`Coffee`
   (Pomodoro), `BookMarked` (quotes), `BarChart3`/`Award` (insights), `Settings`,
   `Heart` (favorite), `RefreshCw` (new quote), `EyeOff` (hide), `Bell`

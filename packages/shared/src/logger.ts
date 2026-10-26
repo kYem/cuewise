@@ -167,27 +167,7 @@ export function describeThrown(error: unknown): string {
 }
 
 // Global logger instance
-let globalLogger: Logger = new ConsoleLogger();
-
-/**
- * Get the global logger instance
- */
-export function getLogger(): Logger {
-  return globalLogger;
-}
-
-/**
- * Set a custom logger implementation globally
- *
- * @example
- * // Use a custom logger in production
- * if (import.meta.env.PROD) {
- *   setGlobalLogger(new CustomLogger());
- * }
- */
-export function setGlobalLogger(logger: Logger): void {
-  globalLogger = logger;
-}
+const globalLogger: Logger = new ConsoleLogger();
 
 /**
  * Create a logger with custom configuration
@@ -234,4 +214,4 @@ export function configureLogger(config: Partial<LoggerConfig>): void {
  * logger.warn('Deprecated API usage');
  * logger.error('Failed to save', error, { operation: 'save-goal' });
  */
-export const logger = getLogger();
+export const logger = globalLogger;

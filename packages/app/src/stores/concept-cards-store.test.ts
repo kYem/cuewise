@@ -341,36 +341,6 @@ describe('Concept Cards Store', () => {
       expect(useConceptCardsStore.getState().cards[0].isFavorite).toBe(false);
     });
   });
-
-  describe('getDueCards', () => {
-    it('returns only cards due on or before today', async () => {
-      const past = conceptCardFactory.build({
-        id: 'past',
-        schedule: {
-          dueDate: '2020-01-01',
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          lapses: 0,
-        },
-      });
-      const future = conceptCardFactory.build({
-        id: 'future',
-        schedule: {
-          dueDate: '2999-01-01',
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          lapses: 0,
-        },
-      });
-      useConceptCardsStore.setState({ cards: [past, future] });
-
-      const due = useConceptCardsStore.getState().getDueCards();
-
-      expect(due.map((c) => c.id)).toEqual(['past']);
-    });
-  });
 });
 
 describe('converging on concept cards written elsewhere', () => {

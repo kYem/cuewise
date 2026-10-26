@@ -83,18 +83,6 @@ export function getPhotoCredit(
 }
 
 /**
- * Get a random image URL for the given category.
- * Uses curated fallback images from images.unsplash.com (direct CDN).
- * Note: source.unsplash.com was deprecated in 2024.
- * @param category - The image category
- * @returns Direct Unsplash CDN image URL
- */
-export function getUnsplashUrl(category: FocusImageCategory): string {
-  // source.unsplash.com is deprecated (2024), use curated images directly
-  return getRandomImageUrl(category);
-}
-
-/**
  * Get a random image URL from our curated collection.
  * Uses random selection but avoids immediate repeats.
  * @param category - The image category

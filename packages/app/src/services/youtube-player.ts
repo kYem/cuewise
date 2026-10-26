@@ -818,22 +818,3 @@ class YouTubePlayerService {
 
 // Singleton instance
 export const youtubePlayer = new YouTubePlayerService();
-
-/**
- * Open YouTube playlist in a popup window as fallback for extension iframe issues
- * Chrome extensions don't send Referer headers with iframes, causing Error 153
- */
-export function openYouTubePopup(playlistId: string, firstVideoId?: string): void {
-  const url = firstVideoId
-    ? `https://www.youtube.com/watch?v=${firstVideoId}&list=${playlistId}`
-    : `https://www.youtube.com/playlist?list=${playlistId}`;
-
-  // Open small popup window for music playback
-  window.open(
-    url,
-    'youtube-music',
-    'width=400,height=300,menubar=no,toolbar=no,location=no,status=no'
-  );
-
-  logger.info('Opened YouTube in popup window', { playlistId });
-}

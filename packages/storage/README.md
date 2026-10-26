@@ -39,5 +39,5 @@ interface KeyValueStore {
 
 ## Low-level access
 
-`getFromStorage` / `setInStorage` / `removeFromStorage` are thin delegators over
+`getManyFromStorage` / `setManyInStorage` are thin delegators over
 `getStorage()`, for the rare cases the typed helpers don't cover.
