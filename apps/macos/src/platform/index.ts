@@ -122,20 +122,3 @@ export class TauriScheduler implements SchedulerHost {
     };
   }
 }
-
-/**
- * No-op scheduler for the web / e2e context where the Tauri IPC isn't present.
- * Delivers nothing in the background, so the reminder store falls back to its
- * in-page poll.
- */
-export class NoopScheduler implements SchedulerHost {
-  readonly deliversInBackground = false;
-  readonly persistsAcrossRestarts = false;
-
-  async scheduleAt(_id: string, _when: Date): Promise<void> {}
-  async cancel(_id: string): Promise<void> {}
-
-  onFire(_handler: (id: string) => void | Promise<void>): () => void {
-    return () => {};
-  }
-}

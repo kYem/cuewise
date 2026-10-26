@@ -24,6 +24,8 @@ export * from './posture-stats';
 export * from './schemas';
 // Export text search helpers
 export * from './search';
+// Export the promise-chain mutex
+export * from './serializer';
 // Export device-local settings-sync scope
 export * from './sync-scope';
 export * from './types';

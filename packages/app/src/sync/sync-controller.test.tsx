@@ -1,7 +1,22 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from './__fixtures__/fake-sync-controller';
-import { SyncControllerContext, useSyncController } from './sync-controller';
+import { mapSyncStatusToUi, SyncControllerContext, useSyncController } from './sync-controller';
+
+describe('mapSyncStatusToUi', () => {
+  it('maps each engine SyncStatus to its UI status', () => {
+    expect(mapSyncStatusToUi('disabled')).toBe('off');
+    expect(mapSyncStatusToUi('signing_in')).toBe('connecting');
+    expect(mapSyncStatusToUi('key_init')).toBe('connecting');
+    expect(mapSyncStatusToUi('enrolling')).toBe('connecting');
+    expect(mapSyncStatusToUi('initial_sync')).toBe('connecting');
+    expect(mapSyncStatusToUi('active')).toBe('active');
+    expect(mapSyncStatusToUi('error')).toBe('error');
+    expect(mapSyncStatusToUi('signed_out')).toBe('needs_reauth');
+    // Collapsing these is one line, and it puts "Sign-in expired" back in front of a keyless user.
+    expect(mapSyncStatusToUi('needs_enroll')).toBe('needs_enroll');
+  });
+});
 
 function Probe() {
   const controller = useSyncController();

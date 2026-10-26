@@ -5,8 +5,10 @@ import type {
   PairingPollResult,
   PendingPairing,
   RecoveryEnvelopeState,
+  SyncEngineControlSurface,
   SyncNowResult,
   SyncOutcome,
+  SyncStatus,
 } from '@cuewise/sync-engine';
 import { createContext, useContext } from 'react';
 
@@ -46,6 +48,45 @@ export function asSyncUiStatus(value: unknown): SyncUiStatus | null {
   }
   return null;
 }
+
+/** Engine SyncStatus -> UI-facing SyncUiStatus, shared by every host adapter. */
+export function mapSyncStatusToUi(status: SyncStatus): SyncUiStatus {
+  if (status === 'disabled') {
+    return 'off';
+  }
+  if (
+    status === 'signing_in' ||
+    status === 'key_init' ||
+    status === 'enrolling' ||
+    status === 'initial_sync'
+  ) {
+    return 'connecting';
+  }
+  if (status === 'active') {
+    return 'active';
+  }
+  if (status === 'error') {
+    return 'error';
+  }
+  if (status === 'signed_out') {
+    return 'needs_reauth';
+  }
+  if (status === 'needs_enroll') {
+    return 'needs_enroll';
+  }
+  // Exhaustiveness guard: a new SyncStatus member is a compile error here, not a silent fallthrough.
+  const exhaustive: never = status;
+  throw new Error(`unmapped sync status: ${String(exhaustive)}`);
+}
+
+/** Storage key for the last-enable creds a host replays on reconnect. */
+export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
+
+// Discriminated on provider so reconnect knows how to re-auth; records persisted before the google
+// flow lack `provider` and read as dev. Never a Google credential — dev's accountId is its fake auth.
+export type LastSyncCreds =
+  | { provider: 'dev'; accountId: string; deviceName: string }
+  | { provider: 'google'; deviceName: string };
 
 export type EnableResult =
   | { ok: true; recoveryCode?: string }
@@ -131,6 +172,21 @@ export function buildSyncDetails(
     lastSyncedAt,
     recoveryEnvelope,
   };
+}
+
+/** Reads the engine's account + freshness into SyncDetails; neither network hop throws. */
+export async function readSyncDetails(
+  engine: SyncEngineControlSurface,
+  refreshRecoveryEnvelope?: boolean
+): Promise<SyncDetails | null> {
+  // Hydration owns lastSyncedAt too; without it the stamp is only right because getAccount's
+  // network hop happens to outlast two local reads.
+  await engine.ensureHydrated();
+  const [account, recoveryEnvelope] = await Promise.all([
+    engine.getAccount(),
+    refreshRecoveryEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelope(),
+  ]);
+  return buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelope);
 }
 
 /**
