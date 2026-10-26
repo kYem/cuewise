@@ -4,6 +4,7 @@ import { ArrowRight, Check, Search, X } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useDialogChrome } from '../hooks/useDialogChrome';
 import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { useSoundsStore } from '../stores/sounds-store';
@@ -137,23 +138,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, initialSection]);
 
-  // Close on Escape and lock body scroll while open.
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
+  useDialogChrome({ open: isOpen, onClose });
 
   // Reset scroll to top when switching section or entering/leaving search.
   useEffect(() => {

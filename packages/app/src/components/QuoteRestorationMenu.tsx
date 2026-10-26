@@ -2,6 +2,7 @@ import { cn } from '@cuewise/ui';
 import { ChevronDown, RotateCcw, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useClickOutside } from '../hooks/useClickOutside';
 
 interface QuoteRestorationMenuProps {
   missingSeedQuoteCount: number;
@@ -19,31 +20,19 @@ export const QuoteRestorationMenu: React.FC<QuoteRestorationMenuProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Handle outside click and escape key
+  useClickOutside(menuRef, () => setIsOpen(false), isOpen);
+
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsOpen(false);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
+    return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen]);
 
   const handleRestoreMissing = async () => {

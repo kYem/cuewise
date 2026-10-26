@@ -2,6 +2,7 @@ import { cn } from '@cuewise/ui';
 import { AlertTriangle } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
+import { useDialogChrome } from '../hooks/useDialogChrome';
 
 export type ConfirmationVariant = 'danger' | 'warning' | 'primary';
 
@@ -45,33 +46,17 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 }) => {
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Handle keyboard events and focus management
+  useDialogChrome({ open: isOpen, onClose, ignoreEscape: () => isLoading });
+
+  // Focus the cancel button for safety on destructive dialogs
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
-    const originalOverflow = document.body.style.overflow;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    document.body.style.overflow = 'hidden';
-
-    // Focus the cancel button for safety on destructive dialogs
     setTimeout(() => {
       cancelButtonRef.current?.focus();
     }, 0);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [isOpen, onClose, isLoading]);
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;

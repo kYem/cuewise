@@ -3,6 +3,7 @@ import { cn } from '@cuewise/ui';
 import { AlertCircle, Bell } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { useNotificationsBlocked } from '../hooks/useNotificationsBlocked';
 import { useReminderStore } from '../stores/reminder-store';
 import { useSettingsStore } from '../stores/settings-store';
@@ -89,22 +90,12 @@ export const ReminderWidget: React.FC = () => {
 
   // Collapse on outside click — but not while a reminder modal (add / edit /
   // manage) is open, so opening the add form keeps the alerts card in place.
-  useEffect(() => {
-    const anyModalOpen = isAddModalOpen || editingReminderId !== null || showAllModal;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (widgetRef.current && !widgetRef.current.contains(event.target as Node)) {
-        setIsExpanded(false);
-      }
-    };
-
-    if (isExpanded && !anyModalOpen && !reminderPanelPinned) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isExpanded, isAddModalOpen, editingReminderId, showAllModal, reminderPanelPinned]);
+  const anyModalOpen = isAddModalOpen || editingReminderId !== null || showAllModal;
+  useClickOutside(
+    widgetRef,
+    () => setIsExpanded(false),
+    isExpanded && !anyModalOpen && !reminderPanelPinned
+  );
 
   // Active reminders drive both the count badge and the chosen panel.
   const allActiveReminders = [...overdueReminders, ...upcomingReminders];

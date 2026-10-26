@@ -14,6 +14,7 @@ import {
 import type React from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { usePomodoroLeader } from '../hooks/usePomodoroLeader';
 import { useSoundsLeader } from '../hooks/useSoundsLeader';
 import { useFocusModeStore } from '../stores/focus-mode-store';
@@ -187,21 +188,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [titleFaded, setTitleFaded] = useState(false);
 
-  // Close the goal dropdown when clicking outside it
-  useEffect(() => {
-    if (!showGoalPicker) {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      if (goalPickerRef.current && !goalPickerRef.current.contains(event.target as Node)) {
-        setShowGoalPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, [showGoalPicker]);
+  useClickOutside(goalPickerRef, () => setShowGoalPicker(false), showGoalPicker);
 
   // Enable cross-tab synchronization
   usePomodoroStorageSync();

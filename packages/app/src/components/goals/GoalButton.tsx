@@ -1,7 +1,8 @@
 import { Flag, Plus } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useClickOutside } from '../../hooks/useClickOutside';
 import { useGoalStore } from '../../stores/goal-store';
 import { Modal } from '../Modal';
 import { GoalDetailView } from './GoalDetailView';
@@ -24,23 +25,7 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
   const activeGoals = getActiveGoals();
   const goalCount = activeGoals.length;
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const clickedTrigger = triggerRef.current?.contains(target);
-      const clickedDropdown = dropdownRef.current?.contains(target);
-
-      if (!clickedTrigger && !clickedDropdown) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
+  useClickOutside([triggerRef, dropdownRef], () => setIsOpen(false), isOpen);
 
   const handleGoalClick = (objectiveId: string) => {
     setSelectedGoalId(objectiveId);

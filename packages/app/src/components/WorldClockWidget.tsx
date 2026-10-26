@@ -10,6 +10,7 @@ import * as Flags from 'country-flag-icons/react/1x1';
 import { Globe, Moon, Sun } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { useMinuteNow } from '../hooks/useMinuteNow';
 import { useSettingsStore } from '../stores/settings-store';
 import { readZone, type ZoneReading } from '../utils/world-clock';
@@ -204,26 +205,19 @@ export const WorldClockWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  useClickOutside(containerRef, () => setIsOpen(false), isOpen);
+
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
   const first = zones[0];

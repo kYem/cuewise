@@ -1,6 +1,6 @@
 import { Star } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useDialogChrome } from '../hooks/useDialogChrome';
 
 interface ReviewPromptModalProps {
   isOpen: boolean;
@@ -22,23 +22,7 @@ export const ReviewPromptModal: React.FC<ReviewPromptModalProps> = ({
   onLater,
   onDismiss,
 }) => {
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onLater();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onLater]);
+  useDialogChrome({ open: isOpen, onClose: onLater });
 
   if (!isOpen) {
     return null;

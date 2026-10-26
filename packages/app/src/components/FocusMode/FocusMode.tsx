@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useDialogChrome } from '../../hooks/useDialogChrome';
 import { useFocusModeStore } from '../../stores/focus-mode-store';
 import {
   selectBackgroundBlur,
@@ -23,29 +23,7 @@ export function FocusMode() {
   const backgroundDim = useSettingsStore(selectBackgroundDim);
   const backgroundBlur = useSettingsStore(selectBackgroundBlur);
 
-  // Handle escape key to exit
-  useEffect(() => {
-    if (!isActive) {
-      return;
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        exitFocusMode();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
-    // Prevent body scroll when focus mode is active
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [isActive, exitFocusMode]);
+  useDialogChrome({ open: isActive, onClose: exitFocusMode });
 
   // Don't render if not active
   if (!isActive) {
