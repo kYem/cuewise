@@ -115,7 +115,6 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
 
   return (
     <div className="space-y-6">
-      {/* Mode Tabs */}
       <div className="flex gap-2 border-b border-border">
         <button
           type="button"
@@ -143,10 +142,8 @@ export const AddReminderForm: React.FC<AddReminderFormProps> = ({ onSuccess }) =
         </button>
       </div>
 
-      {/* Template Mode */}
       {mode === 'template' && <ReminderTemplateGrid onSelectTemplate={handleSelectTemplate} />}
 
-      {/* Custom Mode - Form */}
       {mode === 'custom' && (
         <ReminderFormBody
           submitLabel="Add reminder"

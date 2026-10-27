@@ -138,7 +138,6 @@ export function Select<T extends string = string>({
 
   return (
     <div ref={containerRef} className={cn('relative', className)}>
-      {/* Trigger Button */}
       <button
         type="button"
         onClick={handleToggle}
@@ -184,7 +183,6 @@ export function Select<T extends string = string>({
         />
       </button>
 
-      {/* Dropdown */}
       {isOpen && (
         <div
           ref={dropdownRef}

@@ -404,7 +404,6 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
 
   return (
     <div className="min-h-screen w-full overflow-y-auto relative">
-      {/* Sticky Header - Only visible when scrolled */}
       <div
         className={`fixed top-0 left-0 z-50 bg-background/50 backdrop-blur-md border-b border-border/20 shadow-sm transition-all duration-300 ${
           showStickyHeader
@@ -417,9 +416,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Left: Time, Greeting & Date + Objectives */}
             <div className="flex items-center gap-4">
-              {/* Time */}
               <div className="flex items-center gap-2">
                 <span className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">
                   {time}
@@ -427,17 +424,14 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
                 {period && <span className="text-sm font-medium text-secondary">{period}</span>}
               </div>
 
-              {/* Greeting & Date - Hidden on small screens */}
               <div className="hidden md:flex flex-col">
                 <span className="text-sm font-medium text-primary">{greeting}</span>
                 <span className="text-xs text-secondary">{longDate}</span>
               </div>
 
-              {/* Objectives Button - in sticky header */}
               <GoalButton />
             </div>
 
-            {/* Right: Navigation */}
             <nav aria-label="Main navigation" className="flex items-center gap-density-sm">
               {renderNavControls(stickyMenuRef)}
             </nav>
@@ -445,14 +439,12 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
         </div>
       </div>
 
-      {/* Main Content */}
       <div
         className={cn(
           'w-full flex flex-col items-center px-density-md py-density-lg relative',
           (quoteDisplayMode === 'hidden' || quoteDisplayMode === 'bottom') && 'min-h-screen'
         )}
       >
-        {/* Floating Top Left - Objectives Button */}
         <div
           className={`absolute top-4 left-4 sm:top-8 sm:left-8 z-40 transition-all duration-300 ${
             showStickyHeader ? 'opacity-0 pointer-events-none' : 'opacity-100'
@@ -468,7 +460,6 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
           </div>
         </div>
 
-        {/* Floating Top Right Navigation - Only visible when not scrolled */}
         <nav
           aria-label="Main navigation"
           className={`absolute top-4 right-4 sm:top-8 sm:right-8 flex items-center gap-density-sm z-40 transition-all duration-300 ${
@@ -480,19 +471,14 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
           {renderNavControls(floatingMenuRef)}
         </nav>
 
-        {/* Sentinel element for sticky header detection */}
         <div ref={headerSentinelRef} className="h-1 flex-shrink-0" aria-hidden="true" />
 
-        {/* Spacer for top positioning - pushes content down */}
         {(quoteDisplayMode === 'bottom' || quoteDisplayMode === 'hidden') &&
           focusPosition !== 'top' && <div className="flex-1" />}
 
-        {/* Content wrapper */}
         <div className="w-full max-w-7xl mx-auto space-y-density-xl flex-shrink-0">
-          {/* Clock Section (optional) */}
           {showClock && <Clock />}
 
-          {/* Quote Display Section - Top position (normal or compact) */}
           {quoteDisplayMode !== 'hidden' && quoteDisplayMode !== 'bottom' && (
             <div className="flex justify-center">
               <ConceptRotation
@@ -509,12 +495,10 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
             </div>
           )}
 
-          {/* Goals Section - Centered */}
           <div className="max-w-4xl mx-auto">
             <GoalsSection notionHost={notionHost} onOpenIntegrations={handleOpenIntegrations} />
           </div>
 
-          {/* Concept-cards discovery nudge (engaged users with no cards yet) */}
           {conceptNudge.isVisible && (
             <div className="flex justify-center">
               <ConceptNudge
@@ -525,11 +509,9 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
           )}
         </div>
 
-        {/* Spacer for center/top positioning - pushes quote to bottom */}
         {(quoteDisplayMode === 'bottom' || quoteDisplayMode === 'hidden') &&
           focusPosition !== 'bottom' && <div className="flex-1" />}
 
-        {/* Quote Display Section - Bottom position */}
         {quoteDisplayMode === 'bottom' && (
           <div className="pt-8 pb-4 w-full flex-shrink-0">
             <div className="flex justify-center">
@@ -550,10 +532,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
         )}
       </div>
 
-      {/* Floating Reminder Widget */}
       <ReminderWidget />
 
-      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
@@ -561,7 +541,6 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
         initialSection={settingsSection}
       />
 
-      {/* Add Concept Modal */}
       <Modal
         isOpen={isAddConceptOpen}
         onClose={() => setIsAddConceptOpen(false)}
@@ -574,10 +553,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
         />
       </Modal>
 
-      {/* Welcome Modal - First-time users */}
       <WelcomeModal isOpen={isWelcomeOpen} onClose={handleCloseWelcome} />
 
-      {/* Store review prompt - shown at a delight milestone */}
       <ReviewPromptModal
         isOpen={reviewPrompt.isOpen}
         onReview={reviewPrompt.onReview}

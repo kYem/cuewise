@@ -82,7 +82,6 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         getContainerClasses(reminder.completed, showOverdue, showSoon)
       )}
     >
-      {/* Checkbox */}
       <button
         type="button"
         onClick={() => onToggle(reminder.id)}
@@ -114,9 +113,7 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         )}
       </button>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
-        {/* Reminder Text */}
         <span
           className={cn(
             'block text-base transition-all',
@@ -126,7 +123,6 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
           {reminder.text}
         </span>
 
-        {/* Due Date */}
         <div className="flex items-center gap-2 mt-1">
           <Clock
             className={cn(
@@ -155,7 +151,6 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
             {showSoon && !reminder.completed ? countdown : text}
           </span>
 
-          {/* Recurring Indicator */}
           {reminder.recurring && (
             <div className="flex items-center gap-1 ml-2">
               <Repeat
@@ -184,13 +179,11 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
             </div>
           )}
 
-          {/* Approaching Indicator */}
           {showSoon && !reminder.completed && (
             <Bell className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
           )}
         </div>
 
-        {/* Snooze Buttons (show when approaching, but not on paused reminders) */}
         {isSoon && !reminder.completed && !isPaused && onSnooze && (
           <div className="flex items-center gap-1 mt-2">
             <span className="text-xs text-secondary mr-1">Snooze:</span>
@@ -219,7 +212,6 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         )}
       </div>
 
-      {/* Edit Button */}
       <button
         type="button"
         onClick={() => onEdit(reminder.id)}
@@ -229,7 +221,6 @@ export const ReminderItem: React.FC<ReminderItemProps> = ({
         <Pencil className="w-4 h-4" />
       </button>
 
-      {/* Delete Button */}
       <button
         type="button"
         onClick={() => onDelete(reminder.id)}

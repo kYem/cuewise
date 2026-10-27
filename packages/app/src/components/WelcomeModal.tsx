@@ -47,7 +47,6 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      {/* Backdrop - semi-transparent so users can see the app behind */}
       <button
         type="button"
         className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-default"
@@ -56,14 +55,12 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
         tabIndex={-1}
       />
 
-      {/* Modal Content */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Welcome to Cuewise"
         className="relative flex flex-col bg-surface-elevated rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden animate-slide-up"
       >
-        {/* Header with gradient accent */}
         <div className="flex-shrink-0 px-6 pt-6 pb-4 text-center">
           <div className="flex justify-center mb-3">
             <img

@@ -159,7 +159,6 @@ export const ReminderWidget: React.FC = () => {
         ref={widgetRef}
         className={cn('fixed bottom-4 z-40 transition-all duration-200', rightPosition)}
       >
-        {/* Always visible button */}
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
@@ -180,14 +179,12 @@ export const ReminderWidget: React.FC = () => {
             <Bell className={cn('w-6 h-6', hasOverdue ? 'text-red-400' : 'text-primary-600')} />
           )}
 
-          {/* Error Badge */}
           {error && (
             <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center text-xs font-bold rounded-full bg-orange-500 text-white">
               !
             </span>
           )}
 
-          {/* Count Badge */}
           {!error && totalCount > 0 && (
             <span
               className={cn(
@@ -201,7 +198,6 @@ export const ReminderWidget: React.FC = () => {
           )}
         </button>
 
-        {/* Expanded Panel - positioned above the button; layout chosen by setting */}
         {isExpanded && (
           <div className="absolute bottom-full right-0 mb-2 animate-fade-in">
             {notificationsBlocked && <NotificationsBlockedHint />}
@@ -224,12 +220,10 @@ export const ReminderWidget: React.FC = () => {
 
       <ReminderPromptCard rightPosition={rightPosition} panelOpen={isExpanded} />
 
-      {/* Add Reminder Modal */}
       <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add Reminder">
         <AddReminderForm onSuccess={handleAddSuccess} />
       </Modal>
 
-      {/* Edit Reminder Modal */}
       {editingReminder && (
         <Modal isOpen={!!editingReminderId} onClose={handleEditCancel} title="Edit Reminder">
           <EditReminderForm
@@ -240,10 +234,8 @@ export const ReminderWidget: React.FC = () => {
         </Modal>
       )}
 
-      {/* View All Reminders Modal */}
       <Modal isOpen={showAllModal} onClose={() => setShowAllModal(false)} title="All Reminders">
         <div className="space-y-4">
-          {/* Overdue Section */}
           {overdueReminders.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-red-600 uppercase tracking-wide">
@@ -268,7 +260,6 @@ export const ReminderWidget: React.FC = () => {
             </div>
           )}
 
-          {/* Upcoming Section */}
           {upcomingReminders.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide">
@@ -293,7 +284,6 @@ export const ReminderWidget: React.FC = () => {
             </div>
           )}
 
-          {/* Empty State */}
           {allActiveReminders.length === 0 && <EmptyReminders />}
         </div>
       </Modal>

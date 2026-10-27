@@ -80,7 +80,6 @@ export const NowPlayingTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      {/* Title */}
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-medium text-primary truncate">
           {selectedPlaylist?.name || 'Now Playing'}
@@ -90,15 +89,12 @@ export const NowPlayingTab: React.FC = () => {
         )}
       </div>
 
-      {/* Video Area - YouTube container will be positioned over this */}
       <div ref={videoAreaRef} className="aspect-video bg-black rounded-lg overflow-hidden relative">
-        {/* Loading indicator shown while video is loading */}
         {isYoutubeLoading && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
             <Loader2 className="w-8 h-8 text-white/70 animate-spin" />
           </div>
         )}
-        {/* Placeholder shown when YouTube is not active */}
         {!isYoutubeActive && (
           <div className="w-full h-full flex items-center justify-center text-white/50">
             <p className="text-sm">No video playing</p>

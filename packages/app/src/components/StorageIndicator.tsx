@@ -106,7 +106,6 @@ export const StorageIndicator: React.FC<StorageIndicatorProps> = ({ mode = 'full
       </div>
 
       <div className="space-y-4 pl-7">
-        {/* Warning message if storage is high */}
         {usage.isCritical && (
           <div
             className={`flex items-start gap-3 p-4 ${colors.bgLight} ${colors.border} border rounded-lg`}
@@ -137,7 +136,6 @@ export const StorageIndicator: React.FC<StorageIndicatorProps> = ({ mode = 'full
           </div>
         )}
 
-        {/* Progress bar */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-primary">Used Space</span>
@@ -161,7 +159,6 @@ export const StorageIndicator: React.FC<StorageIndicatorProps> = ({ mode = 'full
           </div>
         </div>
 
-        {/* Info note */}
         {!usage.isWarning && (
           <div className="flex items-start gap-2 text-xs text-secondary">
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />

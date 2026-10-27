@@ -72,7 +72,6 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
       aria-labelledby="confirmation-title"
       aria-describedby="confirmation-message"
     >
-      {/* Backdrop */}
       <button
         type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
@@ -82,10 +81,8 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
         disabled={isLoading}
       />
 
-      {/* Dialog Content */}
       <div className="relative bg-surface-elevated rounded-xl shadow-2xl max-w-md w-full animate-slide-up">
         <div className="p-6">
-          {/* Icon and Title */}
           <div className="flex items-start gap-4">
             <div className={cn('p-2 rounded-full bg-surface-variant', styles.icon)}>
               <AlertTriangle className="w-6 h-6" />
@@ -100,7 +97,6 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-3 mt-6">
             <button
               ref={cancelButtonRef}

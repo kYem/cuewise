@@ -73,7 +73,6 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
 
   return (
     <div className="space-y-4">
-      {/* Category filter tabs */}
       <div className="flex gap-2 flex-wrap">
         {categories.map((category) => (
           <button
@@ -91,7 +90,6 @@ export const ReminderTemplateGrid: React.FC<ReminderTemplateGridProps> = ({ onSe
         ))}
       </div>
 
-      {/* Template grid */}
       <div className="grid grid-cols-2 gap-3">
         {filteredTemplates.map((template) => {
           let Icon = TEMPLATE_ICONS[template.id];

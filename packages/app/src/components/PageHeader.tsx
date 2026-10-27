@@ -48,7 +48,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-4">
-          {/* Left: Back Button + Title */}
           <div className="flex items-center gap-4">
             <button
               type="button"
@@ -106,7 +105,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             )}
           </div>
 
-          {/* Right: Quick Navigation Tabs */}
           <nav
             aria-label="Page navigation"
             className={cn(

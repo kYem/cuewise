@@ -171,7 +171,6 @@ export const QuickLinksWidget: React.FC = () => {
 
   return (
     <div className="flex items-center gap-density-sm">
-      {/* Inline favicon tiles */}
       {visibleLinks.map((link) => (
         <a
           key={link.id}
@@ -186,7 +185,6 @@ export const QuickLinksWidget: React.FC = () => {
         </a>
       ))}
 
-      {/* "More" / add tile + manager dropdown */}
       <div className="relative">
         <button
           type="button"
@@ -273,7 +271,6 @@ export const QuickLinksWidget: React.FC = () => {
                 )}
               </div>
 
-              {/* Footer: add control */}
               {adding ? (
                 <div className="border-t border-border">
                   <QuickLinkForm
