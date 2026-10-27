@@ -218,7 +218,6 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
     <SyncControllerContext.Provider value={syncController ?? null}>
       <ErrorBoundary>
         <ShortcutProvider>
-          {/* Skip to main content link - visible on focus for keyboard users */}
           <a
             href="#main-content"
             className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
@@ -226,13 +225,10 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
             Skip to main content
           </a>
 
-          {/* Glass theme background layers */}
           {showBackgroundImage && (
             <>
-              {/* Fallback dark gradient - always visible as base layer */}
               <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
 
-              {/* Background image - fades in when loaded */}
               <div
                 className={`fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ${
                   imageLoaded && backgroundImage ? 'opacity-100' : 'opacity-0'
@@ -251,12 +247,10 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
                 />
               )}
 
-              {/* Dims the photo so the page's own content stays readable over it. */}
               {!photoIsFeatured && (
                 <div className="fixed inset-0 bg-black/25" data-testid="background-dim" />
               )}
 
-              {/* Credit and refresh sit bottom-left, where content pages need the room. */}
               {imageLoaded && photoIsFeatured && (
                 <BackgroundCredit
                   imageUrl={backgroundImage}
@@ -265,7 +259,6 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
                 />
               )}
 
-              {/* Loading indicator - shown while image loads */}
               {!imageLoaded && (
                 <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
                   <div className="flex flex-col items-center gap-4">
@@ -284,14 +277,12 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
             </>
           )}
 
-          {/* Hide content while settings load or glass theme background loads */}
           <div
             data-testid="app-content"
             className={`flex h-full w-full relative transition-opacity duration-500 ${
               hideContent ? 'opacity-0' : 'opacity-100'
             }`}
           >
-            {/* Main content area */}
             <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>
               {currentPage === 'pomodoro' && <PomodoroPage />}
               {currentPage === 'insights' && <InsightsPage />}
@@ -303,13 +294,10 @@ function App({ extraSections, syncController, notionHost }: AppProps = {}) {
               )}
             </main>
 
-            {/* Live Theme Switcher (pushes content to the left when visible) */}
             <ThemeSwitcher isVisible={settings.showThemeSwitcher} />
           </div>
 
-          {/* Toast notifications */}
           <ToastContainer toasts={toasts} onClose={removeToast} position="top-right" />
-          {/* Completion celebrations */}
           <CelebrationOverlay />
         </ShortcutProvider>
       </ErrorBoundary>

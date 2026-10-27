@@ -59,7 +59,6 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
   return (
     <div className="w-80 flex-shrink-0 bg-surface/95 backdrop-blur-sm border-l border-border overflow-y-auto">
       <div className="p-6 space-y-6">
-        {/* Header with Close Button */}
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-primary">Live Theme Preview</h2>
           <button
@@ -72,7 +71,6 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           </button>
         </div>
 
-        {/* Light/Dark/Auto */}
         <section>
           <h3 className="text-sm font-semibold text-primary mb-3">Mode</h3>
           <div className="grid grid-cols-3 gap-2">
@@ -115,7 +113,6 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           </div>
         </section>
 
-        {/* Color Themes */}
         <section>
           <h3 className="text-sm font-semibold text-primary mb-3">Color Theme</h3>
           <div className="grid grid-cols-3 gap-2">
@@ -176,7 +173,6 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           </section>
         )}
 
-        {/* Density */}
         <section>
           <h3 className="text-sm font-semibold text-primary mb-3">Density</h3>
           <div className="grid grid-cols-3 gap-2">
@@ -201,7 +197,6 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ isVisible }) => {
           </div>
         </section>
 
-        {/* Info */}
         <div className="pt-4 border-t border-border">
           <p className="text-xs text-secondary text-center">
             Changes apply instantly and are saved automatically.

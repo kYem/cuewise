@@ -37,7 +37,6 @@ export const YouTubeTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Add playlist form */}
       <div className="space-y-2">
         {showAddForm ? (
           <div className="space-y-2 p-3 bg-surface-variant/50 rounded-lg">
@@ -90,7 +89,6 @@ export const YouTubeTab: React.FC = () => {
         )}
       </div>
 
-      {/* Playlist Grid */}
       <div className="grid grid-cols-2 gap-3">
         {playlists.map((playlist) => {
           const isSelected = selectedPlaylistId === playlist.id;
@@ -108,7 +106,6 @@ export const YouTubeTab: React.FC = () => {
                     : 'border-transparent hover:border-accent/30'
               )}
             >
-              {/* Thumbnail with click handler */}
               <button
                 type="button"
                 onClick={() => handleSelectPlaylist(playlist.id)}
@@ -126,7 +123,6 @@ export const YouTubeTab: React.FC = () => {
                   </div>
                 )}
 
-                {/* Overlay on hover/selected */}
                 <div
                   className={cn(
                     'absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity',
@@ -145,7 +141,6 @@ export const YouTubeTab: React.FC = () => {
                   {isSelected && !isCurrentlyPlaying && <Check className="w-6 h-6 text-white" />}
                 </div>
 
-                {/* Playing indicator */}
                 {isCurrentlyPlaying && (
                   <span className="absolute top-2 left-2 flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75" />
@@ -154,7 +149,6 @@ export const YouTubeTab: React.FC = () => {
                 )}
               </button>
 
-              {/* Name and remove button */}
               <div className="flex items-center gap-2 p-2 bg-surface">
                 <span className="flex-1 text-xs font-medium text-primary truncate">
                   {playlist.name}
@@ -175,7 +169,6 @@ export const YouTubeTab: React.FC = () => {
         })}
       </div>
 
-      {/* Volume slider - show when YouTube is playing */}
       {isYoutubePlaying && (
         <div className="space-y-2 animate-fade-in">
           <div className="flex items-center justify-between">

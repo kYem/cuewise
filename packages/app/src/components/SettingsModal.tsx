@@ -192,7 +192,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         aria-label="Settings"
         className="relative flex h-[min(620px,88vh)] w-[min(880px,94vw)] flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated shadow-2xl backdrop-blur-xl animate-slide-up"
       >
-        {/* Header */}
         <header className="flex flex-none items-center gap-4 border-b border-divider px-5 py-4">
           <h2 className="mr-auto text-xl font-semibold text-primary">Settings</h2>
           <button
@@ -206,7 +205,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          {/* Sidebar */}
           <aside className="flex w-[210px] flex-none flex-col gap-3 border-r border-divider p-3">
             <SettingsSearch value={query} onChange={setQuery} />
             <nav aria-label="Settings sections" className="flex flex-col gap-0.5">
@@ -253,7 +251,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </aside>
 
-          {/* Body */}
           <div ref={bodyRef} className="flex-1 overflow-y-auto px-6 py-5">
             {searching ? (
               matched.length === 0 ? (
@@ -286,7 +283,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
         <footer className="flex flex-none justify-end border-t border-divider px-5 py-2.5">
           <SavedIndicator tick={savedTick} />
         </footer>

@@ -143,9 +143,7 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
 
   return (
     <div className="group relative flex flex-col items-start gap-1">
-      {/* Main Controls Row */}
       <div className="flex items-center gap-2">
-        {/* Thumbnail/Icon - Click to open popover */}
         <Popover open={isPanelOpen} onOpenChange={handleOpenChange} modal>
           <PopoverTrigger asChild>
             <button
@@ -170,7 +168,6 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
           </PopoverContent>
         </Popover>
 
-        {/* Play/Pause Button - only show if we have an active source */}
         {showControls && (
           <button
             type="button"
@@ -185,7 +182,6 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
           </button>
         )}
 
-        {/* Volume Control - show on hover or when playing */}
         {showControls && (
           <div
             className={cn(
@@ -220,7 +216,6 @@ export const SoundsMiniPlayer: React.FC<SoundsMiniPlayerProps> = ({ variant = 'o
         )}
       </div>
 
-      {/* Source Name - show on hover or when panel is open */}
       {hasActiveSource && (
         <div
           className={cn(

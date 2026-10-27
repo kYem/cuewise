@@ -261,7 +261,6 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Reminder Text */}
       <div>
         <label htmlFor="reminder-text" className={cn(eyebrowClass, 'mb-2')}>
           Reminder <span className="text-red-400">*</span>
@@ -279,7 +278,6 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
         <p className="mt-1 text-xs text-secondary">{text.length}/200 characters</p>
       </div>
 
-      {/* Starts — hidden for interval reminders, which fire one interval from now. */}
       {!isInterval && (
         <div className="space-y-3">
           <span className={eyebrowClass}>
@@ -337,7 +335,6 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
         </div>
       )}
 
-      {/* Repeat toggle */}
       <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-primary">Repeat</p>
@@ -348,7 +345,6 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
         <Switch label="Repeat this reminder" checked={isRecurring} onChange={setIsRecurring} />
       </div>
 
-      {/* Frequency (only when Repeat is on) */}
       {isRecurring && (
         <div className="space-y-3">
           <span className={eyebrowClass}>Frequency</span>
@@ -391,13 +387,11 @@ export const ReminderFormBody: React.FC<ReminderFormBodyProps> = ({
         </div>
       )}
 
-      {/* Schedule preview */}
       <p className="flex items-center gap-1.5 text-xs text-secondary">
         <CalendarClock className="w-3.5 h-3.5 flex-none" />
         {schedulePreview}
       </p>
 
-      {/* Footer */}
       <div className="flex justify-end gap-3 pt-2">
         <button
           type="button"

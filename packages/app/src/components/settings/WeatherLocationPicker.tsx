@@ -61,6 +61,10 @@ export const WeatherLocationPicker: React.FC = () => {
     searchedFor === trimmed &&
     results.length === 0;
 
+  // The debounce only fires on a *change* to the query, so after a transient failure
+  // the text is already right and nothing would re-run without this.
+  const handleRetry = () => search(trimmed);
+
   return (
     <div className="flex flex-col gap-2">
       {location !== null && (
@@ -98,14 +102,12 @@ export const WeatherLocationPicker: React.FC = () => {
         )}
       </div>
 
-      {/* A retry, because the debounce only fires on a *change* to the query — after a
-          transient failure the text is already right and nothing would re-run. */}
       {searchError !== null && (
         <p className="flex items-center gap-2 text-xs text-error">
           <span>{searchError}</span>
           <button
             type="button"
-            onClick={() => search(trimmed)}
+            onClick={handleRetry}
             className="underline underline-offset-2 hover:text-primary transition-colors"
           >
             Try again

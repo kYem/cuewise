@@ -58,7 +58,6 @@ export const SoundsPanel: React.FC = () => {
 
   return (
     <div className="w-[360px] bg-surface-elevated backdrop-blur-xl">
-      {/* Tabs */}
       <div className="flex border-b border-border">
         {tabs.map((tab) => (
           <button
@@ -78,7 +77,6 @@ export const SoundsPanel: React.FC = () => {
         ))}
       </div>
 
-      {/* Tab Content */}
       <div className="overflow-y-auto max-h-[400px] p-3">{renderTabContent()}</div>
     </div>
   );

@@ -35,7 +35,6 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
   // This prevents issues with parent transforms/filters breaking fixed positioning
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      {/* Backdrop */}
       <button
         type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm cursor-default"
@@ -44,14 +43,12 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
         tabIndex={-1}
       />
 
-      {/* Modal Content */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         className={`relative bg-surface-elevated rounded-2xl shadow-2xl ${SIZE_CLASS[size]} w-full max-h-[90vh] overflow-hidden animate-slide-up`}
       >
-        {/* Header - only show if title is provided */}
         {title && (
           <div
             className={`flex items-center justify-between border-b border-border ${isCompact ? 'px-5 py-3.5' : 'p-6'}`}
@@ -73,7 +70,6 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2x
           </div>
         )}
 
-        {/* Body */}
         <div
           className={`overflow-y-auto max-h-[calc(90vh-140px)] ${title ? (isCompact ? 'p-5' : 'p-6') : ''}`}
         >

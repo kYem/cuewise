@@ -366,7 +366,6 @@ export function ReminderHeroCard({
         state === 'notified' && 'reminder-glow-pulse'
       )}
     >
-      {/* Eyebrow: state label + recurrence control */}
       <div className="flex items-center justify-between gap-2">
         <span
           className={cn(
@@ -380,7 +379,6 @@ export function ReminderHeroCard({
         <RecurrencePauseControl reminder={reminder} onPauseToggle={onPauseToggle} />
       </div>
 
-      {/* Body: toggle + text/due (left) + prominent countdown + status (right) */}
       <div className="flex items-center gap-3 mt-3">
         <ReminderCategoryCheck reminder={reminder} state={state} onToggle={onToggle} size={28} />
         <div className="flex-1 min-w-0">
@@ -406,7 +404,6 @@ export function ReminderHeroCard({
         )}
       </div>
 
-      {/* Snooze actions, separated from the body by a hairline divider */}
       {urgent && (
         <div className={cn('mt-3 pt-3 border-t', styles.border)}>
           <ReminderSnoozeRow onSnooze={onSnooze} state={state} />

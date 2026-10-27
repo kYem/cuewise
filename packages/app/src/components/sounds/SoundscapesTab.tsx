@@ -30,7 +30,6 @@ export const SoundscapesTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Soundscape Grid */}
       <div className="grid grid-cols-3 gap-3">
         {SOUNDSCAPE_TILES.map((tile) => {
           const IconComponent = iconMap[tile.icon];
@@ -61,7 +60,6 @@ export const SoundscapesTab: React.FC = () => {
         })}
       </div>
 
-      {/* Volume Slider - only show when ambient is playing */}
       {isAmbientPlaying && (
         <div className="space-y-2 animate-fade-in">
           <div className="flex items-center justify-between">
@@ -82,7 +80,6 @@ export const SoundscapesTab: React.FC = () => {
         </div>
       )}
 
-      {/* Instructions */}
       <p className="text-xs text-tertiary text-center">
         Click a soundscape to play. Click again to stop.
       </p>
