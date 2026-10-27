@@ -2,7 +2,6 @@ import {
   buildConceptCard,
   type ConceptCard,
   type ConceptGrade,
-  getDueConceptCards,
   logger,
   reviewConceptCard,
   STORAGE_KEYS,
@@ -47,9 +46,6 @@ interface ConceptCardsStore {
   deleteCard: (id: string) => Promise<boolean>;
   reviewCard: (id: string, grade: ConceptGrade) => Promise<boolean>;
   toggleFavorite: (id: string) => Promise<boolean>;
-
-  // Selectors
-  getDueCards: () => ConceptCard[];
 }
 
 function reportError(set: (partial: Partial<ConceptCardsStore>) => void, message: string): false {
@@ -311,6 +307,4 @@ export const useConceptCardsStore = create<ConceptCardsStore>((set, get) => ({
       return reportError(set, SAVE_ERROR_MESSAGE);
     }
   },
-
-  getDueCards: () => getDueConceptCards(get().cards, new Date()),
 }));

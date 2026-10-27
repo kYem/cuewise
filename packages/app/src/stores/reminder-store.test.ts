@@ -311,10 +311,10 @@ describe('categorizeReminders with a paused reminder', () => {
     paused: true,
   });
 
-  it('places a paused reminder with a past due date in upcoming, not overdue', () => {
-    useReminderStore.setState({ reminders: [pausedPastReminder] });
+  it('places a paused reminder with a past due date in upcoming, not overdue', async () => {
+    getRemindersMock.mockResolvedValue([pausedPastReminder]);
 
-    useReminderStore.getState().refreshLists();
+    await useReminderStore.getState().initialize();
 
     const { upcomingReminders, overdueReminders } = useReminderStore.getState();
     expect(upcomingReminders).toHaveLength(1);
@@ -322,16 +322,16 @@ describe('categorizeReminders with a paused reminder', () => {
     expect(overdueReminders).toHaveLength(0);
   });
 
-  it('ranks a paused reminder after active ones despite an earlier due date', () => {
+  it('ranks a paused reminder after active ones despite an earlier due date', async () => {
     const activeUpcoming = recurringReminderFactory.build({
       id: 'active-1',
       text: 'Move',
       dueDate: new Date(Date.now() + 30 * 60_000).toISOString(),
       recurring: { frequency: 'interval', intervalMinutes: 30 },
     });
-    useReminderStore.setState({ reminders: [pausedPastReminder, activeUpcoming] });
+    getRemindersMock.mockResolvedValue([pausedPastReminder, activeUpcoming]);
 
-    useReminderStore.getState().refreshLists();
+    await useReminderStore.getState().initialize();
 
     const { upcomingReminders } = useReminderStore.getState();
     expect(upcomingReminders.map((r) => r.id)).toEqual(['active-1', 'paused-2']);
@@ -1164,16 +1164,6 @@ describe('writers read storage, not their own snapshot', () => {
     await useReminderStore.getState().deleteReminder('mine');
 
     expect(persistedIds()).toEqual([incoming.id]);
-  });
-
-  it('markAsNotified keeps it', async () => {
-    const mine = reminderFactory.build({ id: 'mine' });
-    const incoming = pulled();
-    storageAheadOfStore([mine], [mine, incoming]);
-
-    await useReminderStore.getState().markAsNotified('mine');
-
-    expect(persistedIds()).toContain(incoming.id);
   });
 
   it('fireDueReminders keeps it', async () => {

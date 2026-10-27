@@ -1,8 +1,8 @@
+import { NoopScheduler } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
 import { ChromeNotifier } from './chrome-notifier';
 import { ChromeScheduler } from './chrome-scheduler';
 import { configureChromePlatform } from './index';
-import { NoopScheduler } from './noop-scheduler';
 import { WebNotifier } from './web-notifier';
 
 describe('configureChromePlatform', () => {

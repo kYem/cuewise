@@ -1,6 +1,7 @@
 import { type DataKey, DecryptError, EnvelopeParseError } from '@cuewise/crypto';
 import {
   type AppliedRecord,
+  DEVICE_LOCAL_SETTINGS_KEYS,
   hlcCompare,
   hlcDecode,
   hlcEncode,
@@ -12,7 +13,7 @@ import {
 } from '@cuewise/shared';
 import type { StorageResult } from '@cuewise/storage';
 import { ApiError } from '@cuewise/sync-client';
-import { type CollectionBinding, DEVICE_LOCAL_SETTINGS_KEYS } from './collections';
+import type { CollectionBinding } from './collections';
 import { cursorResetsOf, isServerSeq, type SyncMeta, SyncMetadataStore } from './metadata-store';
 import { fromSyncRecord, toPushRecord } from './record-map';
 import type { ConflictStrategy, RecordBody } from './strategy';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, parseImportData } from './utils';
+import { parseImportData } from './utils';
 
 describe('Import Utilities', () => {
   describe('parseImportData', () => {
@@ -202,31 +202,6 @@ describe('Import Utilities', () => {
       expect(result.data?.pomodoroSessions[0].interrupted).toBe(false);
       expect(result.data?.pomodoroSessions[0].duration).toBe(25);
       expect(result.data?.pomodoroSessions[0].type).toBe('work');
-    });
-  });
-
-  describe('compareVersions', () => {
-    it('should return 0 for equal versions', () => {
-      expect(compareVersions('1.0.0', '1.0.0')).toBe(0);
-      expect(compareVersions('2.3.4', '2.3.4')).toBe(0);
-    });
-
-    it('should return -1 when first version is less', () => {
-      expect(compareVersions('1.0.0', '2.0.0')).toBe(-1);
-      expect(compareVersions('1.0.0', '1.1.0')).toBe(-1);
-      expect(compareVersions('1.0.0', '1.0.1')).toBe(-1);
-    });
-
-    it('should return 1 when first version is greater', () => {
-      expect(compareVersions('2.0.0', '1.0.0')).toBe(1);
-      expect(compareVersions('1.1.0', '1.0.0')).toBe(1);
-      expect(compareVersions('1.0.1', '1.0.0')).toBe(1);
-    });
-
-    it('should handle versions with different number of parts', () => {
-      expect(compareVersions('1.0', '1.0.0')).toBe(0);
-      expect(compareVersions('1.0.0', '1.0')).toBe(0);
-      expect(compareVersions('1.0', '1.0.1')).toBe(-1);
     });
   });
 });

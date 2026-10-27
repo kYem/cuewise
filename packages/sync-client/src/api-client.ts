@@ -33,8 +33,6 @@ export interface ApiClientOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-export type { ExchangeTokenRequest };
-
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

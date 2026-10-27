@@ -28,7 +28,6 @@ export interface MockGoalStore {
   getActiveGoals: Mock;
   getGoalProgress: Mock;
   linkTaskToGoal: Mock;
-  clearCompleted: Mock;
   // Task Enhancement actions (Phase 2)
   duplicateTask: Mock;
   setTaskDueDate: Mock;
@@ -52,7 +51,6 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
     getActiveGoals: vi.fn(() => []),
     getGoalProgress: vi.fn(() => null),
     linkTaskToGoal: vi.fn(async () => true),
-    clearCompleted: vi.fn(async () => true),
     duplicateTask: vi.fn(async () => true),
     setTaskDueDate: vi.fn(async () => true),
     addSubtask: vi.fn(async () => true),
@@ -65,8 +63,7 @@ export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): Moc
 
 /**
  * Builds a mock implementation for `useGoalStore` that supports both the
- * bare `useGoalStore()` call and selector functions, and attaches
- * `getState()` (used by GoalsList for clearCompleted).
+ * bare `useGoalStore()` call and selector functions.
  */
 export function createGoalStoreMock(store: MockGoalStore) {
   return createSelectorMock(store);

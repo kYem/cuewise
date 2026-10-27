@@ -1,4 +1,4 @@
-import { computeCodeChallenge } from '@cuewise/app';
+import { computeCodeChallenge, LAST_SYNC_CREDS_KEY } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import type {
@@ -24,11 +24,7 @@ import {
   createDevice,
   useStorage,
 } from './__fixtures__/direct-sync-controller.fixtures';
-import {
-  buildDirectSyncController,
-  GOOGLE_RETURN_URI,
-  LAST_SYNC_CREDS_KEY,
-} from './direct-sync-controller';
+import { buildDirectSyncController, GOOGLE_RETURN_URI } from './direct-sync-controller';
 
 describe('createDirectSyncController: enable()', () => {
   it('returns the captured one-shot recovery code for a brand-new account', async () => {

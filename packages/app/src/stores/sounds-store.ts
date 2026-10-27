@@ -86,7 +86,6 @@ interface SoundsStore {
   setActiveTab: (tab: 'soundscapes' | 'youtube' | 'nowPlaying') => void;
 
   // Playlist management
-  selectPlaylist: (playlistId: string) => Promise<void>;
   addCustomPlaylist: (url: string, name?: string) => Promise<void>;
   removeCustomPlaylist: (id: string) => Promise<void>;
 
@@ -456,38 +455,6 @@ export const useSoundsStore = create<SoundsStore>()(
 
       setActiveTab: (tab: 'soundscapes' | 'youtube' | 'nowPlaying') => {
         set({ activeTab: tab });
-      },
-
-      selectPlaylist: async (playlistId: string) => {
-        const { playlists, isPlaying, isLeader, activeSource } = get();
-
-        const playlist = playlists.find((p) => p.id === playlistId);
-        if (!playlist) {
-          logger.warn('Playlist not found', { playlistId });
-          return;
-        }
-
-        set({ selectedPlaylistId: playlistId });
-
-        // If currently playing YouTube, load the new playlist
-        if (isPlaying && activeSource === 'youtube' && playlist.firstVideoId && isLeader) {
-          // Set loading state
-          set({ isYoutubeLoading: true });
-
-          // Get last played video and timestamp (or fall back to first video)
-          const resumeInfo = await getCurrentVideoForPlaylist(playlist.playlistId);
-          const videoId = resumeInfo?.videoId || playlist.firstVideoId;
-          const startAt = resumeInfo?.timestamp || 0;
-          youtubePlayer.loadPlaylist(
-            playlist.playlistId,
-            videoId,
-            finishYoutubeLoad,
-            startAt,
-            failYoutubeLoad
-          );
-        }
-
-        logger.debug('Playlist selected', { playlistId, name: playlist.name });
       },
 
       addCustomPlaylist: async (url: string, name?: string) => {

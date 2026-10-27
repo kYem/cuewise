@@ -1,7 +1,11 @@
-import { configurePlatform, type NotifierHost, type SchedulerHost } from '@cuewise/shared';
+import {
+  configurePlatform,
+  NoopScheduler,
+  type NotifierHost,
+  type SchedulerHost,
+} from '@cuewise/shared';
 import { ChromeNotifier } from './chrome-notifier';
 import { ChromeScheduler } from './chrome-scheduler';
-import { NoopScheduler } from './noop-scheduler';
 import { WebNotifier } from './web-notifier';
 
 /**

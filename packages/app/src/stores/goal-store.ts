@@ -50,7 +50,6 @@ interface GoalStore {
   updateTask: (goalId: string, text: string) => Promise<boolean>;
   toggleTask: (goalId: string) => Promise<boolean>;
   deleteTask: (goalId: string) => Promise<boolean>;
-  clearCompleted: () => Promise<boolean>;
   transferTaskToNextDay: (goalId: string) => Promise<boolean>;
   moveTaskToToday: (goalId: string) => Promise<boolean>;
   moveTasksToToday: (goalIds: string[]) => Promise<boolean>;
@@ -267,36 +266,6 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     } catch (error) {
       logger.error('Error deleting goal', error);
       const errorMessage = 'Failed to delete goal. Please try again.';
-      set({ error: errorMessage });
-      useToastStore.getState().error(errorMessage);
-      return false;
-    }
-  },
-
-  clearCompleted: async () => {
-    try {
-      const today = getTodayDateString();
-
-      // Captured inside the mutator: the ids notified must be the ones actually removed from
-      // storage, not ones a snapshot still held.
-      let removedIds: string[] = [];
-      const updatedGoals = await persistGoals((goals) => {
-        // Remove completed tasks from today only (don't remove objectives)
-        removedIds = goals
-          .filter((goal) => goal.date === today && goal.completed && isTask(goal))
-          .map((goal) => goal.id);
-        const removedIdSet = new Set(removedIds);
-        return goals.filter((goal) => !removedIdSet.has(goal.id));
-      });
-
-      set({ goals: updatedGoals, todayTasks: filterTodayTasks(updatedGoals) });
-      for (const id of removedIds) {
-        notifyDeleted('goals', id);
-      }
-      return true;
-    } catch (error) {
-      logger.error('Error clearing completed goals', error);
-      const errorMessage = 'Failed to clear completed goals. Please try again.';
       set({ error: errorMessage });
       useToastStore.getState().error(errorMessage);
       return false;
@@ -754,8 +723,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
 
   deleteGoal: async (goalId: string) => {
     try {
-      // Captured inside the mutator, like clearCompleted: the ids notified are the ones the
-      // write actually orphaned.
+      // Captured inside the mutator: the ids notified are the ones the write actually orphaned.
       let orphanedIds: string[] = [];
       const updatedGoals = await persistGoals((goals) => {
         orphanedIds = goals.filter((goal) => goal.parentId === goalId).map((goal) => goal.id);

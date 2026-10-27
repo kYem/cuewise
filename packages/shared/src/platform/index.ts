@@ -1,3 +1,4 @@
+export * from './noop-scheduler';
 export * from './registry';
 export * from './storage-result';
 export * from './stored-value';

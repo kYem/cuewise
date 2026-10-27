@@ -5,7 +5,7 @@ import { useToastStore } from './toast-store';
 const REPEATING = 'Failed to refresh quote. Please try again.';
 
 beforeEach(() => {
-  useToastStore.getState().clearAll();
+  useToastStore.setState({ toasts: [] });
   vi.restoreAllMocks();
 });
 

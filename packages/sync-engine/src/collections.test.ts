@@ -1,6 +1,7 @@
 import {
   configurePlatform,
   DEFAULT_SETTINGS,
+  DEVICE_LOCAL_SETTINGS_KEYS,
   type Goal,
   STORAGE_KEYS,
   toStoredValues,
@@ -29,7 +30,7 @@ import { goalFactory, quoteFactory } from '@cuewise/test-utils/factories';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireBinding } from './__fixtures__/bindings';
 import { FakeKvStore } from './__fixtures__/fake-kv-store';
-import { DEVICE_LOCAL_SETTINGS_KEYS, defaultBindings } from './collections';
+import { defaultBindings } from './collections';
 
 beforeEach(() => {
   configurePlatform({ storage: new FakeKvStore() });

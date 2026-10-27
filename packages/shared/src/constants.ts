@@ -2,7 +2,6 @@ import type {
   ColorTheme,
   ConceptTemplate,
   FocusImageCategory,
-  LayoutDensity,
   QuoteCategory,
   ReminderActiveHours,
   ReminderCategory,
@@ -305,13 +304,6 @@ export const COLOR_THEMES: Record<
     background: 'transparent',
     accent: 'rgba(255, 255, 255, 0.9)',
   },
-};
-
-// Layout density spacing multipliers
-export const LAYOUT_DENSITY_SPACING: Record<LayoutDensity, number> = {
-  compact: 0.75,
-  comfortable: 1,
-  spacious: 1.25,
 };
 
 // Focus mode image categories with display names

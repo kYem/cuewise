@@ -131,23 +131,6 @@ beforeEach(async () => {
   setRemindersMock.mockResolvedValue({ success: true });
 });
 
-describe('background: mapToUi', () => {
-  it('maps each engine SyncStatus to its UI status', async () => {
-    const { mapToUi } = await import('./background');
-
-    expect(mapToUi('disabled')).toBe('off');
-    expect(mapToUi('signing_in')).toBe('connecting');
-    expect(mapToUi('key_init')).toBe('connecting');
-    expect(mapToUi('enrolling')).toBe('connecting');
-    expect(mapToUi('initial_sync')).toBe('connecting');
-    expect(mapToUi('active')).toBe('active');
-    expect(mapToUi('error')).toBe('error');
-    expect(mapToUi('signed_out')).toBe('needs_reauth');
-    // Collapsing these is one line, and it puts "Sign-in expired" back in front of a keyless user.
-    expect(mapToUi('needs_enroll')).toBe('needs_enroll');
-  });
-});
-
 describe('background: reminder alarms re-armed on start', () => {
   it('arms a stored reminder whose alarm is missing after an install or update', async () => {
     const pending = reminderFactory.build({ id: 'r1' });

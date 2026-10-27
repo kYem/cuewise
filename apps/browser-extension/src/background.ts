@@ -3,7 +3,7 @@
  * notifications through the platform Scheduler/Notifier ports.
  */
 
-import type { SyncUiStatus } from '@cuewise/app';
+import { mapSyncStatusToUi } from '@cuewise/app';
 import { recordReminderActivity } from '@cuewise/app/reminder-activity';
 import {
   armMissingReminderAlarms,
@@ -13,7 +13,7 @@ import {
 import { describeThrown, getStorage, logger, reminderIdFromAlarm } from '@cuewise/shared';
 import { ensureSettingsMigrated, getReminders } from '@cuewise/storage';
 import { SYNC_PULL_WAKE_ID } from '@cuewise/sync-client';
-import { createSyncEngine, type SyncStatus } from '@cuewise/sync-engine';
+import { createSyncEngine } from '@cuewise/sync-engine';
 import {
   handleCaptureMenuClick,
   registerCaptureMenus,
@@ -92,37 +92,6 @@ chrome.runtime.setUninstallURL(uninstallUrl).catch((error: unknown) => {
   logger.warn('Failed to set uninstall URL', { error });
 });
 
-// Engine SyncStatus -> UI-facing SyncUiStatus; adapters own this mapping per host.
-// Exported for unit testing.
-export function mapToUi(status: SyncStatus): SyncUiStatus {
-  if (status === 'disabled') {
-    return 'off';
-  }
-  if (
-    status === 'signing_in' ||
-    status === 'key_init' ||
-    status === 'enrolling' ||
-    status === 'initial_sync'
-  ) {
-    return 'connecting';
-  }
-  if (status === 'active') {
-    return 'active';
-  }
-  if (status === 'error') {
-    return 'error';
-  }
-  if (status === 'signed_out') {
-    return 'needs_reauth';
-  }
-  if (status === 'needs_enroll') {
-    return 'needs_enroll';
-  }
-  // Exhaustiveness guard: a new SyncStatus member is a compile error here, not a silent fallthrough.
-  const exhaustive: never = status;
-  throw new Error(`unmapped sync status: ${String(exhaustive)}`);
-}
-
 // A data migration, not a sync concern: this realm runs it whether or not sync is configured.
 // Settles rather than rejects, so a failed migration delays the sync start below instead of
 // cancelling it — every storage helper retries the migration on its own anyway.
@@ -145,7 +114,7 @@ if (syncApiBaseUrl) {
     scheduler,
     onStatus: (status) => {
       chrome.storage.local
-        .set({ [STATUS_KEY]: mapToUi(status) })
+        .set({ [STATUS_KEY]: mapSyncStatusToUi(status) })
         .catch((error) => logger.error('Failed to persist sync status', error));
     },
     onQuarantine: () => {
