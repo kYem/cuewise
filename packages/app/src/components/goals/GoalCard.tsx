@@ -103,7 +103,6 @@ export const GoalCard: React.FC<GoalCardProps> = ({ goal, progress, onClick, com
             <p className="text-sm text-secondary mt-1 line-clamp-2">{goal.description}</p>
           )}
 
-          {/* Progress bar */}
           <div className="mt-3">
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm text-secondary">
@@ -127,7 +126,6 @@ export const GoalCard: React.FC<GoalCardProps> = ({ goal, progress, onClick, com
             </div>
           </div>
 
-          {/* Due date */}
           {daysLabel && (
             <div className="flex items-center gap-1.5 mt-3">
               <Calendar className="w-3.5 h-3.5 text-tertiary" />

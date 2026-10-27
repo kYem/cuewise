@@ -317,9 +317,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
         className={`${t.card} rounded-2xl shadow-lg p-density-lg border`}
         data-testid="pomodoro-timer-card"
       >
-        {/* Header - icon + goal picker (work) or session label (break). During work
-            the title IS the goal selector: the chosen goal or "Focus Session" + a
-            chevron opening today's goals; Clear lives inside that dropdown. */}
         <div ref={goalPickerRef} className="relative mb-density-md">
           <div className="flex items-center gap-density-sm">
             <div className={`p-2 ${bgColor} rounded-lg flex-shrink-0`}>
@@ -374,7 +371,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
             )}
           </div>
 
-          {/* Goal Picker Dropdown */}
           {isWork && showGoalPicker && (
             <div
               className={`absolute left-0 right-0 top-full mt-2 z-20 p-2 ${t.menu} rounded-lg border shadow-lg max-h-48 overflow-y-auto`}
@@ -422,11 +418,8 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
           )}
         </div>
 
-        {/* Timer Display */}
         <div className="flex flex-col items-center mb-density-md">
-          {/* Circular Progress */}
           <div className={`relative ${timerSize.container}`}>
-            {/* Background circle */}
             <svg
               className="w-full h-full transform -rotate-90"
               viewBox={timerSize.viewBox}
@@ -441,7 +434,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
                 strokeWidth={timerSize.strokeWidth}
                 fill="none"
               />
-              {/* Progress circle */}
               <circle
                 cx={timerSize.center}
                 cy={timerSize.center}
@@ -456,7 +448,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
               />
             </svg>
 
-            {/* Time display in center */}
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <div className={`${timerSize.fontSize} font-bold ${t.title} font-mono`}>
                 {formatTimeRemaining(timeRemaining)}
@@ -470,7 +461,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
           </div>
         </div>
 
-        {/* Long Break Progress - dots + "N until long break", below the ring */}
         {isWork && sessionsUntilLongBreak > 0 && (
           <div className="mb-density-md flex items-center justify-center gap-2">
             <div className="flex gap-1">
@@ -488,9 +478,7 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
           </div>
         )}
 
-        {/* Controls */}
         <div className="flex items-center justify-center gap-density-sm">
-          {/* Start/Pause/Resume Button */}
           {status === 'idle' && (
             <button
               type="button"
@@ -527,7 +515,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
             </button>
           )}
 
-          {/* Reset Button */}
           {status !== 'idle' && (
             <button
               type="button"
@@ -539,7 +526,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
             </button>
           )}
 
-          {/* Skip Button */}
           <button
             type="button"
             onClick={skip}
@@ -549,7 +535,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
             <SkipForward className="w-4 h-4" />
           </button>
 
-          {/* Pop-out Button — floating always-on-top timer (Document PiP) */}
           {status !== 'idle' && (
             <PomodoroPipButton
               className={`p-2.5 ${t.iconButton} rounded-lg transition-colors shadow-md hover:shadow-lg`}
@@ -557,7 +542,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
             />
           )}
 
-          {/* Focus Mode Button */}
           {settings.focusModeEnabled && (
             <button
               type="button"
@@ -570,7 +554,6 @@ export const PomodoroTimer: React.FC<PomodoroTimerProps> = ({ variant = 'overlay
           )}
         </div>
 
-        {/* Timer rhythm: tap any value to open the shared mini-settings popover. */}
         <div className="mt-density-md">
           <PomodoroMiniSettings
             settings={settings}

@@ -65,7 +65,6 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
           )}
         </button>
 
-        {/* Compact Dropdown */}
         {isOpen &&
           createPortal(
             <div
@@ -76,7 +75,6 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
                 left: triggerRef.current?.getBoundingClientRect().left ?? 0,
               }}
             >
-              {/* Header */}
               <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
                 <div className="flex items-center gap-2">
                   <Flag className="w-4 h-4 text-primary-600" />
@@ -92,7 +90,6 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
                 </button>
               </div>
 
-              {/* List */}
               <div className="py-1 max-h-[280px] overflow-y-auto">
                 {activeGoals.length === 0 ? (
                   <div className="px-3 py-4 text-center">
@@ -130,14 +127,12 @@ export const GoalButton: React.FC<GoalButtonProps> = ({ className = '' }) => {
           )}
       </div>
 
-      {/* Detail View Modal */}
       {selectedGoalId && (
         <Modal isOpen={true} onClose={handleCloseDetail}>
           <GoalDetailView goalId={selectedGoalId} onClose={handleCloseDetail} />
         </Modal>
       )}
 
-      {/* Form Modal */}
       {showForm && (
         <Modal isOpen={true} onClose={() => setShowForm(false)} title="New Goal" size="md">
           <GoalForm onCancel={() => setShowForm(false)} onSuccess={handleFormSuccess} />

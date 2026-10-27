@@ -162,7 +162,6 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30'
             )}
           >
-            {/* Checkbox - hidden by default, shows on hover */}
             <div
               className={cn(
                 'flex-shrink-0 transition-all duration-200',
@@ -172,7 +171,6 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
               <AnimatedCheckbox checked={displayGoal.completed} size="xl" tone="onImage" />
             </div>
 
-            {/* Goal Text and Parent - stacked vertically */}
             <div className="flex flex-col items-start gap-1">
               <span
                 className={cn(
@@ -190,7 +188,6 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
                 {displayGoal.text}
               </span>
 
-              {/* Read-only due-date + subtask progress for the focused task */}
               {(displayGoal.dueDate || hasSubtasks) && (
                 <div
                   className="flex items-center gap-3 text-sm text-white/70"
@@ -211,7 +208,6 @@ export const GoalFocusView: React.FC<GoalFocusViewProps> = ({
                 </div>
               )}
 
-              {/* Parent objective - shows on hover */}
               {parentObjective && (
                 <span
                   className="text-sm text-white/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200"

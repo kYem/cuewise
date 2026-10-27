@@ -82,7 +82,6 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           description="Create a goal to track what you want to achieve"
         />
 
-        {/* Create Objective Modal */}
         <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal" size="md">
           <GoalForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
         </Modal>
@@ -124,12 +123,10 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
         })}
       </div>
 
-      {/* Create Goal Modal */}
       <Modal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} title="New Goal" size="md">
         <GoalForm onCancel={() => setIsFormOpen(false)} onSuccess={handleFormSuccess} />
       </Modal>
 
-      {/* Goal Detail Modal */}
       {selectedGoal && (
         <Modal isOpen={!!selectedGoal} onClose={handleCloseDetail}>
           <GoalDetailView goalId={selectedGoal.id} onClose={handleCloseDetail} />

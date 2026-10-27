@@ -464,7 +464,6 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
   const goalsContent =
     viewMode === 'focus' ? (
       <div className="group flex items-center justify-center gap-3 w-full max-w-4xl mx-auto">
-        {/* Focus view - centered */}
         {notionListHost === undefined ? (
           <GoalFocusView
             showAddInput={showAddInput}
@@ -480,7 +479,6 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
           />
         )}
 
-        {/* Options menu - inline, appears on hover */}
         <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {showSourcePicker && (
             <GoalsSourcePicker
@@ -500,7 +498,6 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
             minHeight
           )}
         >
-          {/* Header */}
           {viewMode === 'full' ? (
             <div className="flex items-center gap-2.5 mb-4">
               {sourceMark(fullMark)}
@@ -559,10 +556,8 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
             </div>
           )}
 
-          {/* Full Mode Content */}
           {viewMode === 'full' && notionListHost === undefined && (
             <>
-              {/* Storage Warning - only show if warning or critical */}
               {storageUsage?.available === true &&
                 (storageUsage.isWarning || storageUsage.isCritical) && (
                   <div className="mb-4">
@@ -570,14 +565,12 @@ export const GoalsSection: React.FC<GoalsSectionProps> = ({
                   </div>
                 )}
 
-              {/* Goals List (tiles + bottom add input + history + upcoming) */}
               <div className="flex-1">
                 <GoalsList viewMode="full" addRequest={addRequest} />
               </div>
             </>
           )}
 
-          {/* Compact Mode Content */}
           {viewMode === 'compact' && notionListHost === undefined && (
             <div className="flex-1">
               <GoalsList
