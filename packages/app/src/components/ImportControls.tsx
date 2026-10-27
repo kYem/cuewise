@@ -79,7 +79,6 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
         Import Data
       </h2>
 
-      {/* File Selection */}
       <div className="mb-6">
         <label
           htmlFor="import-file"
@@ -103,10 +102,8 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
         </label>
       </div>
 
-      {/* Validation Results */}
       {importValidation && (
         <div className="space-y-4">
-          {/* Status Banner */}
           {importValidation.isValid ? (
             <div className="flex items-center gap-3 p-4 bg-green-600/10 border border-green-600/30 rounded-lg">
               <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -140,7 +137,6 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
             </div>
           )}
 
-          {/* Warnings */}
           {importValidation.warnings.length > 0 && (
             <div className="flex items-start gap-3 p-4 bg-yellow-600/10 border border-yellow-600/30 rounded-lg">
               <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -158,7 +154,6 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
             </div>
           )}
 
-          {/* Data Preview */}
           {hasData && (
             <div className="p-4 bg-surface-variant rounded-lg">
               <div className="font-semibold text-primary mb-3">Data to import:</div>
@@ -181,7 +176,6 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
             </div>
           )}
 
-          {/* Import Options */}
           {importValidation.isValid && hasData && (
             <div className="p-4 border border-border rounded-lg">
               <div className="font-semibold text-primary mb-3">Import options:</div>
@@ -248,7 +242,6 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
             </div>
           )}
 
-          {/* Action Buttons */}
           <div className="flex gap-3">
             <button
               type="button"
@@ -274,7 +267,6 @@ export const ImportControls: React.FC<ImportControlsProps> = ({
         </div>
       )}
 
-      {/* Tip */}
       <div className="mt-4 p-3 bg-primary-600/10 border border-border rounded-lg">
         <p className="text-xs text-primary">
           <span className="font-semibold">Tip:</span> Import data from previous exports to restore

@@ -113,7 +113,6 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-surface rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col mx-4">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
             <h3 className="text-lg font-semibold text-primary">Add Quotes to Collection</h3>
@@ -130,7 +129,6 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
           </button>
         </div>
 
-        {/* Search */}
         <div className="p-4 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary" />
@@ -144,7 +142,6 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
           </div>
         </div>
 
-        {/* Quote List */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-2">
             {filteredQuotes.map((quote) => {
@@ -189,7 +186,6 @@ export const AddQuotesToCollectionModal: React.FC<AddQuotesToCollectionModalProp
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-border bg-surface-variant/50">
           <span className="text-sm text-secondary">
             {changeCount > 0 ? (

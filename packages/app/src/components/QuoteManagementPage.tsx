@@ -313,14 +313,12 @@ export const QuoteManagementPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Page Header with Navigation */}
       <PageHeader
         currentPage="quotes"
         title="Quote Management"
         subtitle={`Manage your collection of ${stats.total} quotes`}
       />
 
-      {/* Tab Navigation */}
       <div className="border-b border-border bg-surface">
         <div className="max-w-7xl mx-auto px-4">
           <nav className="flex gap-4" aria-label="Tabs">
@@ -359,19 +357,15 @@ export const QuoteManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Collections Tab Content */}
       {activeTab === 'collections' && (
         <div className="max-w-4xl mx-auto px-4 py-6">
           <CollectionList />
         </div>
       )}
 
-      {/* Quotes Tab Content */}
       {activeTab === 'quotes' && (
         <>
-          {/* Main Content */}
           <div className="max-w-7xl mx-auto px-4 py-6">
-            {/* Add Quote Button, Import CSV, and Restoration Menu */}
             <div className="flex justify-end gap-3 mb-6">
               <QuoteRestorationMenu
                 missingSeedQuoteCount={missingSeedQuoteCount}
@@ -397,7 +391,6 @@ export const QuoteManagementPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-primary-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-primary-700">{stats.total}</div>
@@ -417,7 +410,6 @@ export const QuoteManagementPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Active Collection Filter */}
             {activeCollectionIds.length > 0 && (
               <div className="flex items-center justify-between p-3 mb-6 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
                 <div className="flex items-center gap-2">
@@ -437,7 +429,6 @@ export const QuoteManagementPage: React.FC = () => {
               </div>
             )}
 
-            {/* Add Quote Form */}
             {showAddForm && (
               <div className="bg-surface-variant rounded-xl p-6 mb-6 border-2 border-border">
                 <AddQuoteForm
@@ -447,9 +438,7 @@ export const QuoteManagementPage: React.FC = () => {
               </div>
             )}
 
-            {/* Search and Filters */}
             <div className="space-y-4">
-              {/* Search Bar */}
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-tertiary" />
                 <input
@@ -461,9 +450,7 @@ export const QuoteManagementPage: React.FC = () => {
                 />
               </div>
 
-              {/* Filters */}
               <div className="flex flex-wrap gap-3">
-                {/* Filter Type */}
                 <div className="flex gap-2">
                   {(['all', 'custom', 'default', 'favorites', 'hidden'] as const).map((type) => (
                     <button
@@ -482,7 +469,6 @@ export const QuoteManagementPage: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Category Filter */}
                 <Select
                   value={selectedCategory}
                   onChange={(value) => setSelectedCategory(value as QuoteCategory | 'all')}
@@ -498,16 +484,13 @@ export const QuoteManagementPage: React.FC = () => {
                 />
               </div>
 
-              {/* Results count */}
               <div className="text-sm text-secondary">
                 Showing {filteredQuotes.length} {filteredQuotes.length === 1 ? 'quote' : 'quotes'}
               </div>
             </div>
           </div>
 
-          {/* Quote Grid */}
           <div className="max-w-7xl mx-auto px-4 py-8">
-            {/* Bulk Actions Toolbar */}
             <BulkActionsToolbar
               selectedCount={selectedQuoteIds.size}
               totalCount={filteredQuotes.length}
@@ -555,7 +538,6 @@ export const QuoteManagementPage: React.FC = () => {
         </>
       )}
 
-      {/* Edit Modal */}
       {editingQuote && (
         <EditQuoteModal
           quote={editingQuote}
@@ -564,7 +546,6 @@ export const QuoteManagementPage: React.FC = () => {
         />
       )}
 
-      {/* Bulk Delete Confirmation Dialog */}
       <ConfirmationDialog
         isOpen={showBulkDeleteConfirm}
         onClose={() => setShowBulkDeleteConfirm(false)}
@@ -576,7 +557,6 @@ export const QuoteManagementPage: React.FC = () => {
         isLoading={isBulkLoading}
       />
 
-      {/* Reset All Confirmation Dialog */}
       <ConfirmationDialog
         isOpen={showResetAllConfirm}
         onClose={() => setShowResetAllConfirm(false)}
@@ -588,7 +568,6 @@ export const QuoteManagementPage: React.FC = () => {
         isLoading={isBulkLoading}
       />
 
-      {/* CSV Import Modal */}
       {showCSVImport && <CSVImportModal onClose={() => setShowCSVImport(false)} />}
     </div>
   );

@@ -47,7 +47,6 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
           : 'border-transparent hover:border-border'
       )}
     >
-      {/* Selection Checkbox */}
       {showCheckbox && (
         <label className="absolute top-3 left-3 z-10 cursor-pointer">
           <input
@@ -70,7 +69,6 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
         </label>
       )}
 
-      {/* Category Badge */}
       <div className={cn('flex items-center justify-between mb-4', showCheckbox && 'ml-8')}>
         <span
           className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium text-white"
@@ -79,7 +77,6 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
           {QUOTE_CATEGORIES[quote.category]}
         </span>
 
-        {/* Custom Badge */}
         {quote.isCustom && (
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary-600/20 text-primary-600">
             Custom
@@ -87,7 +84,6 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
         )}
       </div>
 
-      {/* Quote Text */}
       <blockquote className="mb-4">
         <p className="text-lg font-light text-primary leading-relaxed line-clamp-4">
           "{quote.text}"
@@ -97,13 +93,11 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
         </footer>
       </blockquote>
 
-      {/* Stats */}
       <div className="flex items-center gap-3 text-xs text-secondary mb-4">
         <span>Views: {quote.viewCount}</span>
         {quote.lastViewed && <span>Last: {new Date(quote.lastViewed).toLocaleDateString()}</span>}
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-between pt-4 border-t border-divider">
         <div className="flex items-center gap-2">
           <button
@@ -134,7 +128,6 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
             {quote.isHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
           </button>
 
-          {/* Collection Button */}
           {collections.length > 0 && (
             <CollectionPicker
               quote={quote}

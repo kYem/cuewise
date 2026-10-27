@@ -257,7 +257,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
 
   return (
     <div className="w-full max-w-4xl mx-auto animate-fade-in">
-      {/* Category Badge - Only show at top position */}
       {!isBottom && !hideCategory && (
         <div className="flex justify-center mb-6">
           <span
@@ -273,9 +272,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         </div>
       )}
 
-      {/* Quote Card - aria-live announces quote changes to screen readers */}
       <div className="relative" aria-live="polite" aria-atomic="true">
-        {/* Quote Text */}
         <blockquote
           className={cn(
             'relative z-10 flex flex-col justify-center',
@@ -293,7 +290,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
             {currentQuote.text}
           </p>
           <footer className={cn('text-center', isBottom ? 'space-y-1' : 'space-y-density-sm')}>
-            {/* Author with inline category for bottom position */}
             <div
               className={cn(
                 'flex items-center justify-center gap-2',
@@ -329,7 +325,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
                 </a>
               )}
 
-              {/* Inline category badge for bottom position */}
               {isBottom && (
                 <span
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-white"
@@ -344,7 +339,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
               )}
             </div>
 
-            {/* Personal Notes (for custom quotes) - hide in bottom mode */}
             {!isBottom && currentQuote.notes && (
               <div className="text-xs text-primary/80 bg-surface/40 backdrop-blur-sm rounded-full px-3 py-1 inline-flex items-center gap-1.5">
                 <span className="text-base">💭</span>
@@ -355,9 +349,7 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
         </blockquote>
       </div>
 
-      {/* Action Buttons - Compact row */}
       <div className={cn('flex items-center justify-center gap-2', isBottom ? 'mt-2' : 'mt-4')}>
-        {/* Navigation: Back */}
         <button
           type="button"
           onClick={releaseFocusOnPointer(handleGoBack)}
@@ -373,7 +365,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
           <ChevronLeft className="w-4 h-4" />
         </button>
 
-        {/* New Quote (center, slightly larger) */}
         <button
           type="button"
           onClick={releaseFocusOnPointer(handleRefreshClick)}
@@ -381,7 +372,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
           title="New quote"
         >
           <RefreshCw className="w-5 h-5" />
-          {/* Countdown Progress Ring */}
           {quoteChangeInterval > 0 && (
             <svg
               className="absolute inset-0 w-full h-full -rotate-90"
@@ -413,7 +403,6 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
           )}
         </button>
 
-        {/* Navigation: Forward */}
         <button
           type="button"
           onClick={releaseFocusOnPointer(handleGoForward)}
@@ -429,10 +418,8 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
           <ChevronRight className="w-4 h-4" />
         </button>
 
-        {/* Separator */}
         <div className="w-px h-4 bg-border/50 mx-1" />
 
-        {/* Favorite */}
         <button
           type="button"
           onClick={releaseFocusOnPointer(() => toggleFavorite(currentQuote.id))}
@@ -447,10 +434,8 @@ export const QuoteDisplay: React.FC<QuoteDisplayProps> = ({
           <Heart className={cn('w-4 h-4', currentQuote.isFavorite && 'fill-current')} />
         </button>
 
-        {/* Category Filter */}
         <CategoryFilter compact />
 
-        {/* Hide */}
         <button
           type="button"
           onClick={releaseFocusOnPointer(() => hideQuote(currentQuote.id))}

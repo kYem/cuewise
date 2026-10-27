@@ -336,7 +336,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-surface rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col mx-4">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="w-6 h-6 text-primary-600" />
@@ -356,9 +355,7 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
           </button>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Input Mode Tabs */}
           <div className="flex gap-2 p-1 bg-surface-variant rounded-lg">
             <button
               type="button"
@@ -388,7 +385,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
             </button>
           </div>
 
-          {/* File Upload Mode */}
           {inputMode === 'file' &&
             (!selectedFile ? (
               <div className="space-y-3">
@@ -445,7 +441,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
               </div>
             ))}
 
-          {/* Paste Text Mode */}
           {inputMode === 'paste' && (
             <div className="space-y-3">
               <div className="relative">
@@ -491,7 +486,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
             </div>
           )}
 
-          {/* File Error */}
           {fileError && (
             <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -499,10 +493,8 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
             </div>
           )}
 
-          {/* Parse Results */}
           {parseResult && (
             <>
-              {/* Summary */}
               <div className="flex items-center gap-4">
                 {parseResult.valid.length > 0 && (
                   <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
@@ -518,7 +510,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                 )}
               </div>
 
-              {/* Errors */}
               {parseResult.errors.length > 0 && (
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                   <p className="text-sm font-medium text-red-700 dark:text-red-400 mb-2">Errors:</p>
@@ -537,7 +528,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                 </div>
               )}
 
-              {/* Warnings */}
               {parseResult.warnings.length > 0 && (
                 <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                   <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400 mb-2">
@@ -554,7 +544,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                 </div>
               )}
 
-              {/* Preview */}
               {parseResult.valid.length > 0 && (
                 <div>
                   <p className="text-sm font-medium text-primary mb-2">Preview:</p>
@@ -562,7 +551,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                 </div>
               )}
 
-              {/* Collection Assignment */}
               {parseResult.valid.length > 0 && (
                 <div className="border-t border-border pt-4">
                   <div className="flex items-center gap-2 mb-3">
@@ -571,7 +559,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                   </div>
 
                   <div className="space-y-3">
-                    {/* No collection */}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
@@ -583,7 +570,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                       <span className="text-sm text-primary">Don't add to collection</span>
                     </label>
 
-                    {/* New collection */}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
@@ -604,7 +590,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
                       />
                     )}
 
-                    {/* Existing collection */}
                     {collections.length > 0 && (
                       <>
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -640,7 +625,6 @@ Please generate the CSV now, focusing on [SPECIFY YOUR THEME OR TOPIC HERE - e.g
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-border bg-surface-variant/50">
           <span className="text-sm text-secondary">
             {parseResult?.valid.length

@@ -68,7 +68,6 @@ export const QuoteRestorationMenu: React.FC<QuoteRestorationMenuProps> = ({
           role="menu"
           className="absolute right-0 top-full mt-2 w-64 bg-surface-elevated rounded-lg shadow-xl border border-border z-20 overflow-hidden animate-fade-in"
         >
-          {/* Restore Missing Quotes */}
           <button
             type="button"
             role="menuitem"
@@ -99,7 +98,6 @@ export const QuoteRestorationMenu: React.FC<QuoteRestorationMenuProps> = ({
 
           <div className="h-px bg-border" />
 
-          {/* Reset All Quotes */}
           <button
             type="button"
             role="menuitem"

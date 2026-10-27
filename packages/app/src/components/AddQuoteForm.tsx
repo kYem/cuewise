@@ -66,7 +66,6 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Quote Text */}
       <div>
         <Label htmlFor="quote-text" required>
           Quote Text
@@ -83,7 +82,6 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
         />
       </div>
 
-      {/* Author */}
       <div>
         <Label htmlFor="quote-author" required>
           Author
@@ -99,7 +97,6 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
         />
       </div>
 
-      {/* Category */}
       <div>
         <Label htmlFor="quote-category" required>
           Category
@@ -118,7 +115,6 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
         </select>
       </div>
 
-      {/* Source (Optional) */}
       <div>
         <Label htmlFor="quote-source">Source (Optional)</Label>
         <Input
@@ -134,7 +130,6 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
         </p>
       </div>
 
-      {/* Notes (Optional) */}
       <div>
         <Label htmlFor="quote-notes">Personal Notes (Optional)</Label>
         <Textarea
@@ -148,7 +143,6 @@ export const AddQuoteForm: React.FC<AddQuoteFormProps> = ({ onSuccess, onCancel 
         />
       </div>
 
-      {/* Action Buttons */}
       <div className="flex justify-end gap-3 pt-4">
         <button
           type="button"

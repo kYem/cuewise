@@ -73,7 +73,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Filter Button */}
       <button
         type="button"
         onClick={releaseFocusOnPointer(() => setIsOpen(!isOpen))}
@@ -91,7 +90,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
         <Filter className={compact ? 'w-4 h-4' : 'w-5 h-5'} />
       </button>
 
-      {/* Badge showing filtered count */}
       {!allEnabled && (
         <span
           data-testid="category-count"
@@ -101,10 +99,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
         </span>
       )}
 
-      {/* Dropdown */}
       {isOpen && (
         <div className="absolute bottom-full mb-2 right-0 w-64 bg-surface/95 backdrop-blur-xl rounded-lg shadow-xl border border-border z-50 animate-fade-in">
-          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="font-semibold text-primary">Filter Quotes</span>
             <button
@@ -116,7 +112,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
             </button>
           </div>
 
-          {/* Quick Actions */}
           <div className="flex gap-2 px-4 py-2 border-b border-border">
             <button
               type="button"
@@ -146,16 +141,13 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
             </button>
           </div>
 
-          {/* Category List */}
           <div className="max-h-64 overflow-y-auto py-2">
-            {/* Custom Quotes Option */}
             <button
               type="button"
               onClick={toggleCustomQuotes}
               aria-pressed={showCustomQuotes}
               className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
             >
-              {/* Checkbox */}
               <div
                 className={cn(
                   'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
@@ -167,7 +159,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                 {showCustomQuotes && <Check className="w-3 h-3 text-white" />}
               </div>
 
-              {/* Icon */}
               <Sparkles
                 className={cn(
                   'w-3 h-3 flex-shrink-0',
@@ -175,20 +166,17 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                 )}
               />
 
-              {/* Label */}
               <span className={cn('text-sm', showCustomQuotes ? 'text-primary' : 'text-secondary')}>
                 Custom
               </span>
             </button>
 
-            {/* Favorites Only Option */}
             <button
               type="button"
               onClick={toggleFavoritesOnly}
               aria-pressed={showFavoritesOnly}
               className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
             >
-              {/* Checkbox */}
               <div
                 className={cn(
                   'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
@@ -200,7 +188,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                 {showFavoritesOnly && <Check className="w-3 h-3 text-white" />}
               </div>
 
-              {/* Icon */}
               <Heart
                 className={cn(
                   'w-3 h-3 flex-shrink-0',
@@ -208,7 +195,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                 )}
               />
 
-              {/* Label */}
               <span
                 className={cn('text-sm', showFavoritesOnly ? 'text-primary' : 'text-secondary')}
               >
@@ -216,7 +202,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
               </span>
             </button>
 
-            {/* Collections Section */}
             {collections.length > 0 && (
               <>
                 <div className="border-t border-border my-2" />
@@ -271,7 +256,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
               </>
             )}
 
-            {/* Divider */}
             <div className="border-t border-border my-2" />
             <div className="px-4 py-1">
               <span className="text-xs font-medium text-tertiary uppercase tracking-wide">
@@ -279,7 +263,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
               </span>
             </div>
 
-            {/* Category Options */}
             {ALL_QUOTE_CATEGORIES.map((category) => {
               const isEnabled = enabledCategories.includes(category);
               const color = CATEGORY_COLORS[category];
@@ -293,7 +276,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                   aria-pressed={isEnabled}
                   className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-variant transition-colors"
                 >
-                  {/* Checkbox */}
                   <div
                     className={cn(
                       'w-5 h-5 rounded border-2 flex items-center justify-center transition-all',
@@ -303,13 +285,11 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
                     {isEnabled && <Check className="w-3 h-3 text-white" />}
                   </div>
 
-                  {/* Color Dot */}
                   <span
                     className="w-3 h-3 rounded-full flex-shrink-0"
                     style={{ backgroundColor: color }}
                   />
 
-                  {/* Category Name */}
                   <span className={cn('text-sm', isEnabled ? 'text-primary' : 'text-secondary')}>
                     {displayName}
                   </span>
@@ -318,7 +298,6 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
             })}
           </div>
 
-          {/* Footer */}
           {enabledCount === 0 && (
             <div className="px-4 py-3 border-t border-border bg-orange-50 dark:bg-orange-900/20">
               <p className="text-xs text-orange-600 dark:text-orange-400 text-center">
