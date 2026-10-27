@@ -109,7 +109,6 @@ export const ConceptToolbar: React.FC<ConceptToolbarProps> = ({
         onClick={onToggleFavorite}
         active={isFavorite}
       />
-      {/* Non-interactive due-count for now (the funnel menu is deferred). */}
       <span title={`${dueCount} due`} className={cn(DOCK_SHAPE, 'h-10 w-10 text-white/55')}>
         <Filter className="h-[18px] w-[18px]" />
         {dueCount > 0 && (

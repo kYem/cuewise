@@ -23,7 +23,6 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Export Analytics as JSON */}
         <button
           type="button"
           onClick={onExportJSON}
@@ -36,7 +35,6 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
           </div>
         </button>
 
-        {/* Export All Data as JSON */}
         <button
           type="button"
           onClick={onExportAllJSON}
@@ -49,7 +47,6 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
           </div>
         </button>
 
-        {/* CSV Export Dropdown */}
         <div className="relative md:col-span-2">
           <button
             type="button"
@@ -78,7 +75,6 @@ export const ExportControls: React.FC<ExportControlsProps> = ({
             </svg>
           </button>
 
-          {/* Dropdown Menu */}
           {showDropdown && (
             <div className="absolute top-full left-0 right-0 mt-2 bg-surface-elevated border-2 border-border rounded-lg shadow-xl z-10">
               <button

@@ -14,6 +14,11 @@ interface ConceptFormPreviewProps {
   schedule?: ConceptSchedule;
 }
 
+// Stands in for a photo so the glass card reads true.
+const FAUX_PHOTO_BACKDROP: React.CSSProperties = {
+  background: 'linear-gradient(135deg, #2f4439, #1b2b33 60%, #232036)',
+};
+
 /** Live preview of how the card will surface in the rotation (term → reveal). */
 export const ConceptFormPreview: React.FC<ConceptFormPreviewProps> = ({
   term,
@@ -31,11 +36,7 @@ export const ConceptFormPreview: React.FC<ConceptFormPreviewProps> = ({
       <span className="text-[11px] font-bold uppercase tracking-wider text-tertiary">Preview</span>
 
       <div className="overflow-hidden rounded-xl border border-border shadow-lg">
-        {/* faux photo backdrop so the glass card reads true */}
-        <div
-          className="min-h-[150px] p-5"
-          style={{ background: 'linear-gradient(135deg, #2f4439, #1b2b33 60%, #232036)' }}
-        >
+        <div className="min-h-[150px] p-5" style={FAUX_PHOTO_BACKDROP}>
           <div className="mb-3 inline-flex items-center gap-2">
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#d6c8ff]">
               <Brain className="h-2.5 w-2.5" /> Recall

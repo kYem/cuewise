@@ -97,7 +97,6 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
 
   return (
     <div className="w-full max-w-2xl mx-auto text-center text-primary">
-      {/* eyebrow: Recall pill + optional topic */}
       <div className="flex items-center justify-center gap-3 mb-5">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-primary-600">
           <Brain className="h-3.5 w-3.5" /> Recall
@@ -111,7 +110,6 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
         {queueLabel && <span className="text-xs text-tertiary">· {queueLabel}</span>}
       </div>
 
-      {/* term — the prompt */}
       <h2 className="font-display font-semibold tracking-tight text-[clamp(28px,4vw,46px)] leading-tight m-0">
         {card.term}
       </h2>
@@ -163,7 +161,6 @@ export const ConceptCardDisplay: React.FC<ConceptCardDisplayProps> = ({
             </div>
           )}
 
-          {/* the grading moment — one compact row: prompt, then inline pills */}
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-secondary">How well did you recall it?</span>
             <div className="flex flex-wrap items-center gap-2">

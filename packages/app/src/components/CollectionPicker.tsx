@@ -62,7 +62,6 @@ export const CollectionPicker: React.FC<CollectionPickerProps> = ({ quote, trigg
           </div>
         </div>
 
-        {/* Collections List */}
         <div className="max-h-64 overflow-y-auto p-1">
           {collections.length === 0 && !isCreating ? (
             <div className="text-center py-4 px-2">
@@ -107,7 +106,6 @@ export const CollectionPicker: React.FC<CollectionPickerProps> = ({ quote, trigg
           )}
         </div>
 
-        {/* Create New Collection */}
         {isCreating ? (
           <form onSubmit={handleCreateCollection} className="p-2 border-t border-border">
             <input

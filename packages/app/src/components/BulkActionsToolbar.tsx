@@ -72,7 +72,6 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
       className="bg-surface-variant border border-border rounded-lg p-3 mb-6"
     >
       <div className="flex flex-wrap items-center gap-3">
-        {/* Selection Mode Toggle */}
         <button
           type="button"
           onClick={onToggleSelectionMode}
@@ -98,10 +97,8 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
 
         {isSelectionMode && (
           <>
-            {/* Divider */}
             <div className="h-8 w-px bg-border" />
 
-            {/* Selection Info */}
             <span className="text-sm text-secondary">
               {hasSelection ? (
                 <span className="font-medium text-primary">{selectedCount} selected</span>
@@ -110,7 +107,6 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
               )}
             </span>
 
-            {/* Select All / Deselect All */}
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -130,13 +126,10 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
               </button>
             </div>
 
-            {/* Divider */}
             {hasSelection && <div className="h-8 w-px bg-border" />}
 
-            {/* Bulk Actions */}
             {hasSelection && (
               <div className="flex items-center gap-2">
-                {/* Favorite / Unfavorite */}
                 {hasSelectedUnfavorited && (
                   <button
                     type="button"
@@ -162,7 +155,6 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
                   </button>
                 )}
 
-                {/* Hide / Unhide */}
                 {hasSelectedVisible && (
                   <button
                     type="button"
@@ -188,7 +180,6 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
                   </button>
                 )}
 
-                {/* Add to Collection */}
                 {collections.length > 0 && onBulkAddToCollection && (
                   <Popover open={isCollectionPopoverOpen} onOpenChange={setIsCollectionPopoverOpen}>
                     <PopoverTrigger asChild>
@@ -223,7 +214,6 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
                   </Popover>
                 )}
 
-                {/* Delete */}
                 <button
                   type="button"
                   onClick={onBulkDelete}
@@ -237,7 +227,6 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
               </div>
             )}
 
-            {/* Exit Selection Mode */}
             <button
               type="button"
               onClick={onToggleSelectionMode}

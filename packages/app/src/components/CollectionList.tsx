@@ -150,7 +150,6 @@ Please generate the CSV data now:`;
 
     return (
       <div className="space-y-4">
-        {/* Header with Back Button */}
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -187,7 +186,6 @@ Please generate the CSV data now:`;
           </div>
         </div>
 
-        {/* Quotes in Collection */}
         {collectionQuotes.length === 0 ? (
           <div className="text-center py-8">
             <FolderOpen className="w-12 h-12 mx-auto text-tertiary mb-3" />
@@ -209,7 +207,6 @@ Please generate the CSV data now:`;
           </div>
         )}
 
-        {/* Add Quotes to Collection Modal */}
         {addingToCollection && (
           <AddQuotesToCollectionModal
             collection={addingToCollection}
@@ -222,7 +219,6 @@ Please generate the CSV data now:`;
 
   return (
     <div className="space-y-4">
-      {/* Header with Add Button */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-primary">Collections</h3>
         <button
@@ -235,14 +231,12 @@ Please generate the CSV data now:`;
         </button>
       </div>
 
-      {/* Create Form */}
       {showCreateForm && (
         <div className="bg-surface-variant rounded-lg p-4 border border-border">
           <CollectionForm onClose={() => setShowCreateForm(false)} />
         </div>
       )}
 
-      {/* Edit Form */}
       {editingCollection && (
         <div className="bg-surface-variant rounded-lg p-4 border border-border">
           <CollectionForm
@@ -252,7 +246,6 @@ Please generate the CSV data now:`;
         </div>
       )}
 
-      {/* Collections List - hidden when editing */}
       {!editingCollection && collections.length === 0 && (
         <div className="text-center py-8">
           <FolderOpen className="w-12 h-12 mx-auto text-tertiary mb-3" />
@@ -294,7 +287,6 @@ Please generate the CSV data now:`;
                   )}
                 </div>
 
-                {/* Actions */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     type="button"
@@ -336,7 +328,6 @@ Please generate the CSV data now:`;
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmationDialog
         isOpen={!!deletingCollection}
         onClose={() => setDeletingCollection(null)}
@@ -348,7 +339,6 @@ Please generate the CSV data now:`;
         isLoading={isDeleting}
       />
 
-      {/* Add Quotes to Collection Modal */}
       {addingToCollection && (
         <AddQuotesToCollectionModal
           collection={addingToCollection}

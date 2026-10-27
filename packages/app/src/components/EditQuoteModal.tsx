@@ -83,7 +83,6 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Quote Text */}
           <div>
             <label
               htmlFor="edit-quote-text"
@@ -104,7 +103,6 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
             <p className="mt-1 text-xs text-secondary">{text.length}/500 characters</p>
           </div>
 
-          {/* Author */}
           <div>
             <label
               htmlFor="edit-quote-author"
@@ -123,7 +121,6 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
             />
           </div>
 
-          {/* Category */}
           <div>
             <label
               htmlFor="edit-quote-category"
@@ -143,7 +140,6 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
             />
           </div>
 
-          {/* Source */}
           <div>
             <label
               htmlFor="edit-quote-source"
@@ -162,7 +158,6 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
             />
           </div>
 
-          {/* Notes */}
           <div>
             <label
               htmlFor="edit-quote-notes"
@@ -182,7 +177,6 @@ export const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ quote, onClose, 
             <p className="mt-1 text-xs text-secondary">{notes.length}/300 characters</p>
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-3 pt-4 border-t border-divider">
             <button
               type="button"

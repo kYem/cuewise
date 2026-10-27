@@ -87,7 +87,6 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
   return (
     <form onSubmit={handleSubmit}>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-[minmax(0,1fr)_240px]">
-        {/* fields */}
         <div className="space-y-4">
           <div>
             <Label htmlFor="concept-term" required>
@@ -157,7 +156,6 @@ export const ConceptForm: React.FC<ConceptFormProps> = ({ card, onSuccess, onCan
           </div>
         </div>
 
-        {/* live preview */}
         <ConceptFormPreview
           term={term}
           definition={definition}
