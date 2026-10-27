@@ -174,14 +174,3 @@ export const useFocusModeStore = create<FocusModeStore>((set, get) => ({
     }
   },
 }));
-
-/**
- * Clear cached images when focus mode settings change.
- * This ensures the new category takes effect immediately.
- */
-export function clearFocusModeImageCache() {
-  useFocusModeStore.setState({
-    currentImageUrl: null,
-    nextImageUrl: null,
-  });
-}

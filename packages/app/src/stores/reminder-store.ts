@@ -55,9 +55,7 @@ interface ReminderStore {
   updateReminder: (reminderId: string, updates: Partial<Omit<Reminder, 'id'>>) => Promise<boolean>;
   snoozeReminder: (reminderId: string, minutes: number) => Promise<void>;
   setReminderPaused: (reminderId: string, paused: boolean) => Promise<void>;
-  markAsNotified: (reminderId: string) => Promise<void>;
   fireDueReminders: () => Promise<void>;
-  refreshLists: () => void;
 }
 
 // Alarm scheduling is best-effort: the reminder is already saved, so a failure
@@ -664,28 +662,6 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     }
   },
 
-  markAsNotified: async (reminderId: string) => {
-    try {
-      // Bail before committing state on a failed write so notified stays consistent with storage.
-      const { result, reminders: updatedReminders } = await updateReminders((current) =>
-        current.map((reminder) =>
-          reminder.id === reminderId ? { ...reminder, notified: true } : reminder
-        )
-      );
-      if (result?.success === false) {
-        logger.error('Failed to persist notified status', result.error);
-        set({ error: 'Failed to update notification status' });
-        return;
-      }
-
-      set({ reminders: updatedReminders });
-    } catch (error) {
-      logger.error('Error marking reminder as notified', error);
-      // Track error in state for debugging, but don't show toast since this is a background operation
-      set({ error: 'Failed to update notification status' });
-    }
-  },
-
   // Fallback for platforms without chrome.alarms: mark newly-due reminders as
   // notified so they surface in the panel. The alarm path owns recurrence rescheduling.
   fireDueReminders: async () => {
@@ -750,10 +726,5 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     } catch (error) {
       logger.error('Error firing due reminders', error);
     }
-  },
-
-  refreshLists: () => {
-    const { reminders } = get();
-    commitReminders(set, reminders);
   },
 }));
