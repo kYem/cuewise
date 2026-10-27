@@ -34,10 +34,6 @@ export interface CollectionBinding {
   readBackfillIds?(): Promise<string[]>;
 }
 
-// Re-exported so existing consumers (cycle.ts, index.ts, tests) keep importing from here — the
-// single source of truth now lives in @cuewise/shared so the app package can share it too.
-export { DEVICE_LOCAL_SETTINGS_KEYS };
-
 interface HasId {
   id: string;
 }

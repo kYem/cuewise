@@ -1,6 +1,7 @@
 import type {
   EnableResult,
   LastCycleRead,
+  LastSyncCreds,
   SyncController,
   SyncDetails,
   SyncDetailsOptions,
@@ -8,12 +9,15 @@ import type {
 } from '@cuewise/app';
 import {
   AUTH_CANCELLED_DETAIL,
-  buildSyncDetails,
   computeCodeChallenge,
   generateCodeVerifier,
   LAST_CYCLE_UNAVAILABLE,
+  LAST_SYNC_CREDS_KEY,
+  mapSyncStatusToUi,
+  readSyncDetails,
 } from '@cuewise/app';
 import {
+  createSerializer,
   describeThrown,
   type KeyValueStore,
   logger,
@@ -37,18 +41,8 @@ import {
 } from '@cuewise/sync-engine';
 import { OAuthCancelledError, type OAuthDriver } from '../platform/oauth-driver';
 
-/** Exported so tests can assert against it without duplicating the literal. */
-export const LAST_SYNC_CREDS_KEY = 'cuewise.sync.lastCreds';
-
 /** Must exactly match an ALLOWED_RETURN_URIS entry on the server. Exported for tests. */
 export const GOOGLE_RETURN_URI = 'cuewise://auth';
-
-// Discriminated on provider so reconnect knows how to re-auth; records persisted before the
-// google flow existed lack the field and are read as dev. Never a Google credential/token/
-// one-time code — dev's accountId doubles as its fake-auth credential (localhost-only bypass).
-type LastSyncCreds =
-  | { provider?: 'dev'; accountId: string; deviceName: string }
-  | { provider: 'google'; deviceName: string };
 
 /** Narrows a stored creds record so a corrupted/foreign one fails at load, not mid-OAuth-flow. */
 function toLastSyncCreds(parsed: unknown): LastSyncCreds | null {
@@ -96,36 +90,6 @@ export interface DirectSyncControllerHandle<E extends SyncEngineControlSurface =
   engine: E;
 }
 
-/** spec §1: SyncStatus (engine) -> SyncUiStatus (controller-facing). */
-function mapStatus(status: SyncStatus): SyncUiStatus {
-  if (status === 'disabled') {
-    return 'off';
-  }
-  if (
-    status === 'signing_in' ||
-    status === 'key_init' ||
-    status === 'enrolling' ||
-    status === 'initial_sync'
-  ) {
-    return 'connecting';
-  }
-  if (status === 'active') {
-    return 'active';
-  }
-  if (status === 'error') {
-    return 'error';
-  }
-  if (status === 'signed_out') {
-    return 'needs_reauth';
-  }
-  if (status === 'needs_enroll') {
-    return 'needs_enroll';
-  }
-  // Exhaustiveness guard: a new SyncStatus member is a compile error here, not a silent fallthrough.
-  const exhaustive: never = status;
-  throw new Error(`unmapped sync status: ${String(exhaustive)}`);
-}
-
 interface BuildDirectSyncControllerDeps<E extends SyncEngineControlSurface> {
   baseUrl: string;
   keyStore: KeyValueStore;
@@ -154,7 +118,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
   }
 
   const engine = deps.buildEngine({
-    onStatus: (status) => emit(mapStatus(status)),
+    onStatus: (status) => emit(mapSyncStatusToUi(status)),
     onQuarantine: (key) => {
       if (deps.toast) {
         deps.toast(`Some synced data couldn't be decrypted and was skipped (${key}).`);
@@ -166,7 +130,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
     },
   });
 
-  cachedStatus = mapStatus(engine.getStatus());
+  cachedStatus = mapSyncStatusToUi(engine.getStatus());
 
   async function persistCreds(creds: LastSyncCreds): Promise<void> {
     const result = await deps.keyStore.set(LAST_SYNC_CREDS_KEY, creds, 'local');
@@ -338,15 +302,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
 
   // Promise-chain mutex: enable()/reconnect() share the one capture slot above, so two
   // concurrent callers must never run doEnable overlapping — the second waits for the first.
-  let mutex: Promise<unknown> = Promise.resolve();
-  function serialize<T>(fn: () => Promise<T>): Promise<T> {
-    const run = mutex.then(fn, fn);
-    mutex = run.then(
-      () => undefined,
-      () => undefined
-    );
-    return run;
-  }
+  const serialize = createSerializer();
 
   const controller: SyncController = {
     getStatus(): SyncUiStatus {
@@ -457,21 +413,11 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       try {
         return await engine.syncNow();
       } finally {
-        emit(mapStatus(engine.getStatus()));
+        emit(mapSyncStatusToUi(engine.getStatus()));
       }
     },
-    async getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
-      // Hydration owns lastSyncedAt too; without this the stamp is only correct because
-      // getAccount's network hop happens to outlast two local reads.
-      await engine.ensureHydrated();
-      // Both are network hops on the panel-open path, and neither throws.
-      const [account, recoveryEnvelope] = await Promise.all([
-        engine.getAccount(),
-        options?.refreshRecoveryEnvelope
-          ? engine.refreshRecoveryEnvelope()
-          : engine.getRecoveryEnvelope(),
-      ]);
-      return buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelope);
+    getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
+      return readSyncDetails(engine, options?.refreshRecoveryEnvelope);
     },
     async listSessions(): Promise<SyncSession[] | null> {
       return engine.listSessions();

@@ -1,5 +1,5 @@
-import { buildSyncDetails } from '@cuewise/app';
-import { describeThrown, logger } from '@cuewise/shared';
+import { readSyncDetails } from '@cuewise/app';
+import { createSerializer, describeThrown, logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import {
   RecoveryCodeError,
@@ -77,24 +77,18 @@ function enableFailure(err: unknown): Extract<SyncControlResponse, { ok: false }
   return { ok: false, reason: 'error', detail };
 }
 
+/** A control message missing a field its op needs: a caller bug, logged and never forwarded. */
+function rejectMalformed(what: string): Extract<SyncControlResponse, { ok: false }> {
+  logger.error(`Cloud sync ${what} rejected: malformed control message`);
+  return { ok: false, reason: 'error' };
+}
+
 /** Details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
 async function runDetails(
   engine: SyncEngineControlSurface,
   refreshEnvelope: boolean | undefined
 ): Promise<SyncDetailsResponse> {
-  // Hydration owns lastSyncedAt as well as the cycle; without this the stamp is only correct
-  // because getAccount's network hop happens to outlast two local reads on a cold worker.
-  await engine.ensureHydrated();
-  // Both are network hops on the panel-open path, and neither throws.
-  const [account, recoveryEnvelope] = await Promise.all([
-    engine.getAccount(),
-    refreshEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelope(),
-  ]);
-  return {
-    ok: true,
-    kind: 'details',
-    details: buildSyncDetails(account, engine.getLastSyncedAt(), recoveryEnvelope),
-  };
+  return { ok: true, kind: 'details', details: await readSyncDetails(engine, refreshEnvelope) };
 }
 
 /**
@@ -163,8 +157,7 @@ async function runOp(
   // persisted creds into accountId/deviceName — no code = silent re-auth, a code enrolls.
   if (msg.op === 'reconnect') {
     if (!msg.accountId || !msg.deviceName) {
-      logger.error('Cloud sync reconnect rejected: malformed control message');
-      return { ok: false, reason: 'error' };
+      return rejectMalformed('reconnect');
     }
     return doEnable(engine, 'dev', msg.accountId, msg.deviceName, msg.recoveryCode, deps);
   }
@@ -182,15 +175,13 @@ async function runOp(
       // request worth forwarding — same runtime guard rationale as enable's fields.
       case 'revokeSession':
         if (!msg.sessionId) {
-          logger.error('Cloud sync revoke rejected: malformed control message');
-          return { ok: false, reason: 'error' };
+          return rejectMalformed('revoke');
         }
         await engine.revokeSession(msg.sessionId);
         return { ok: true };
       case 'renameSession':
         if (!msg.sessionId || !msg.deviceName) {
-          logger.error('Cloud sync rename rejected: malformed control message');
-          return { ok: false, reason: 'error' };
+          return rejectMalformed('rename');
         }
         await engine.renameSession(msg.sessionId, msg.deviceName);
         return { ok: true };
@@ -211,8 +202,7 @@ async function runOp(
         return { ok: true, kind: 'pairingRequests', requests: await engine.listPairingRequests() };
       case 'commitPairing':
         if (!msg.pairingRequestId) {
-          logger.error('Cloud sync pairing commit rejected: malformed control message');
-          return { ok: false, reason: 'error' };
+          return rejectMalformed('pairing commit');
         }
         return {
           ok: true,
@@ -221,8 +211,7 @@ async function runOp(
         };
       case 'pollApproval':
         if (!msg.pairingRequestId) {
-          logger.error('Cloud sync pairing approval poll rejected: malformed control message');
-          return { ok: false, reason: 'error' };
+          return rejectMalformed('pairing approval poll');
         }
         return {
           ok: true,
@@ -231,8 +220,7 @@ async function runOp(
         };
       case 'approvePairing':
         if (!msg.pairingRequestId) {
-          logger.error('Cloud sync pairing approve rejected: malformed control message');
-          return { ok: false, reason: 'error' };
+          return rejectMalformed('pairing approve');
         }
         return {
           ok: true,
@@ -241,8 +229,7 @@ async function runOp(
         };
       case 'denyPairing':
         if (!msg.pairingRequestId) {
-          logger.error('Cloud sync pairing deny rejected: malformed control message');
-          return { ok: false, reason: 'error' };
+          return rejectMalformed('pairing deny');
         }
         await engine.denyPairing(msg.pairingRequestId);
         return { ok: true };
@@ -263,17 +250,9 @@ async function runOp(
   }
 }
 
-// Promise-chain mutex: every op is serialized per SW so two concurrent ops (chiefly
-// enable/reconnect, which share the one-shot capture slot) never interleave.
-let mutex: Promise<unknown> = Promise.resolve();
-function serialize<T>(fn: () => Promise<T>): Promise<T> {
-  const run = mutex.then(fn, fn);
-  mutex = run.then(
-    () => undefined,
-    () => undefined
-  );
-  return run;
-}
+// Every op is serialized per SW so two concurrent ops (chiefly enable/reconnect, which share the
+// one-shot capture slot) never interleave.
+const serialize = createSerializer();
 
 /**
  * Runs a page-relayed sync-control message (ENG-45 option B) against the background's

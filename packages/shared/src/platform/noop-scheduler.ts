@@ -1,6 +1,9 @@
-import type { SchedulerHost } from '@cuewise/shared';
+import type { SchedulerHost } from './types';
 
-/** Scheduler for contexts without chrome.alarms (dev/web): every operation no-ops. */
+/**
+ * Scheduler for hosts with no native wake source (dev/web/e2e): every operation no-ops, so the
+ * reminder store falls back to its in-page poll.
+ */
 export class NoopScheduler implements SchedulerHost {
   readonly deliversInBackground = false;
   readonly persistsAcrossRestarts = false;

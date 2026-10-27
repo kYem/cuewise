@@ -1,12 +1,18 @@
 import type {
   EnableResult,
   LastCycleRead,
+  LastSyncCreds,
   SyncController,
   SyncDetails,
   SyncDetailsOptions,
   SyncUiStatus,
 } from '@cuewise/app';
-import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE, NO_SAVED_SIGN_IN_DETAIL } from '@cuewise/app';
+import {
+  asSyncUiStatus,
+  LAST_CYCLE_UNAVAILABLE,
+  LAST_SYNC_CREDS_KEY,
+  NO_SAVED_SIGN_IN_DETAIL,
+} from '@cuewise/app';
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -23,7 +29,7 @@ import type {
   SyncControlResponse,
   SyncOpResponse,
 } from './sync-control-messages';
-import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
+import { QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 // The worker finishes a delete the page stopped waiting for, so a short timeout reports a
@@ -34,12 +40,14 @@ const DELETE_ACCOUNT_TIMEOUT_FACTOR = 4;
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_OAUTH_SCOPE = 'openid email';
 
-// Persisted per successful enable so reconnect can re-auth: dev keeps its reusable credential,
-// Google re-auths via a fresh OAuth flow. Written with this exact shape; reconnect() reads it
-// loosely because records written before `provider` existed lack that field (treated as dev).
-type LastSyncCreds =
-  | { provider: 'dev'; accountId: string; deviceName: string }
-  | { provider: 'google'; deviceName: string };
+type OkResponse<O extends SyncControlOp> = Extract<SyncOpResponse[O], { ok: true }>;
+// The success response's runtime kind tag, or null for ops whose success carries none.
+type OkKind<O extends SyncControlOp> = OkResponse<O> extends { kind: infer K } ? K : null;
+
+interface FallbackLog<O extends SyncControlOp> {
+  unavailable: (response: SyncOpResponse[O] | undefined) => void;
+  failed: (error: unknown) => void;
+}
 
 export interface BridgeSyncControllerOptions {
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */
@@ -369,48 +377,29 @@ export class BridgeSyncController implements SyncController {
     );
   }
 
+  // Warn, not error: the UI only hides one line, and a reload heals a version-skewed worker.
   async getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
-    try {
-      // The response type is {ok:true, kind:'details', details}, but the SW↔page wire is untyped —
-      // don't delete these guards. A skewed SW can return undefined (a pre-details SW's op guard
-      // rejects the message outright, so nothing responds), {ok:false} (the router's error fallback
-      // → fails the ok guard), or {ok:true, details} with no kind (a pre-kind SW → fails the kind
-      // guard). This call is purely informational, so any of those is "unavailable", not an error.
-      const response = await this.send({
+    return this.callOrFallback(
+      {
         kind: 'cuewise-sync-control',
         op: 'details',
         refreshRecoveryEnvelope: options?.refreshRecoveryEnvelope,
-      });
-      if (response?.ok && response.kind === 'details') {
-        return response.details;
-      }
-      // Warn, not debug: sync is already active here, so no usable response means a version-skewed
-      // or absent SW responder, not a routine miss. Note the app's default logLevel is 'error', so
-      // this only prints once logLevel is set to 'warn' or more verbose — deliberately not an error
-      // (the UI degrades to hiding one line, and a reload self-heals).
-      logger.warn('Sync details unavailable (no responder or error fallback)');
-      return null;
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      logger.warn(`Sync details control message failed: ${detail}`);
-      return null;
-    }
+      },
+      'details',
+      (response) => response.details,
+      null,
+      BridgeSyncController.warnLog('Sync details')
+    );
   }
 
-  // Informational like getDetails: any unusable answer is "unavailable", never a rejection.
   async listSessions(): Promise<SyncSession[] | null> {
-    try {
-      const response = await this.send({ kind: 'cuewise-sync-control', op: 'listSessions' });
-      if (response?.ok && response.kind === 'sessions') {
-        return response.sessions;
-      }
-      logger.warn('Sync session list unavailable (no responder or error fallback)');
-      return null;
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      logger.warn(`Sync session list control message failed: ${detail}`);
-      return null;
-    }
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'listSessions' },
+      'sessions',
+      (response) => response.sessions,
+      null,
+      BridgeSyncController.warnLog('Sync session list')
+    );
   }
 
   /**
@@ -522,177 +511,149 @@ export class BridgeSyncController implements SyncController {
   // Every unreadable path answers LAST_CYCLE_UNAVAILABLE, never a null outcome: a dead worker, a
   // timeout and a skewed response say nothing about the cycle, so the panel must keep its badge.
   async getLastCycle(): Promise<LastCycleRead> {
-    try {
-      // Same shape of guard as getDetails: the wire is untyped, so a skewed SW's {ok:true} with
-      // no lastCycle kind tag must read as "unavailable", not silently become undefined.
-      const response = await this.send({ kind: 'cuewise-sync-control', op: 'getLastCycle' });
-      if (response?.ok && response.kind === 'lastCycle') {
-        return { available: true, outcome: response.outcome };
+    // Error, not warn: the shipped logLevel is 'error', and a cycle that never reads is otherwise
+    // invisible. The cause separates a silent worker from one reporting an unreadable record.
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'getLastCycle' },
+      'lastCycle',
+      (response): LastCycleRead => ({ available: true, outcome: response.outcome }),
+      LAST_CYCLE_UNAVAILABLE,
+      {
+        unavailable: (response) => {
+          logger.error(
+            `Sync last-cycle outcome unavailable: ${BridgeSyncController.describeUnavailableCause(response)}`
+          );
+        },
+        failed: (error) => {
+          logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);
+        },
       }
-      // error, not warn: the shipped logLevel is 'error', and a device that can never read its
-      // cycle shows Active with no badge — invisible to the user and the engineer alike. The cause
-      // must distinguish a silent worker from one that answered: a live worker reports an
-      // unreadable record this way, and blaming messaging for a storage fault points the wrong way.
-      logger.error(
-        `Sync last-cycle outcome unavailable: ${BridgeSyncController.describeUnavailableCause(response)}`
-      );
-      return LAST_CYCLE_UNAVAILABLE;
-    } catch (error) {
-      logger.error(`Sync last-cycle control message failed: ${describeThrown(error)}`, error);
-      return LAST_CYCLE_UNAVAILABLE;
-    }
+    );
   }
 
-  // beginPairing answers rather than throws, like the informational reads: a dead worker or a
-  // skewed response means this device cannot pair right now, which is what the screen already
-  // renders, and the offer to retry is the user's way out.
+  // Pairing ops answer rather than throw: a dead worker or skewed response reads as "cannot pair
+  // right now" (or a non-terminal poll `error` that retries next tick), never a rejection.
   async beginPairing(): Promise<{ pairingId: string } | null> {
-    try {
-      const response = await this.send({ kind: 'cuewise-sync-control', op: 'beginPairing' });
-      if (response?.ok && response.kind === 'pairingStarted') {
-        return response.pairing;
-      }
-      logger.error(
-        `Cloud sync pairing request unavailable: ${BridgeSyncController.describeActionFailure(
-          response?.ok === false ? response : undefined
-        )}`
-      );
-      return null;
-    } catch (error) {
-      logger.error(`Cloud sync pairing request failed: ${describeThrown(error)}`, error);
-      return null;
-    }
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'beginPairing' },
+      'pairingStarted',
+      (response) => response.pairing,
+      null,
+      BridgeSyncController.pairingLog('request')
+    );
   }
 
-  // Non-terminal `error`, never a terminal `failed`, on a dead worker or skewed response — matching
-  // the engine's own pollPairing contract, so a background hiccup retries next tick instead of
-  // ending a live request the requester screen is still driving.
   async pollPairing(): Promise<PairingPollResult> {
-    try {
-      const response = await this.send({ kind: 'cuewise-sync-control', op: 'pollPairing' });
-      if (response?.ok && response.kind === 'pairingPoll') {
-        return response.result;
-      }
-      logger.error(
-        `Cloud sync pairing poll unavailable: ${BridgeSyncController.describeActionFailure(
-          response?.ok === false ? response : undefined
-        )}`
-      );
-      return { kind: 'error' };
-    } catch (error) {
-      logger.error(`Cloud sync pairing poll failed: ${describeThrown(error)}`, error);
-      return { kind: 'error' };
-    }
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'pollPairing' },
+      'pairingPoll',
+      (response) => response.result,
+      { kind: 'error' },
+      BridgeSyncController.pairingLog('poll')
+    );
   }
 
-  // The five ops below answer rather than throw, like beginPairing/pollPairing: a dead worker or a
-  // skewed response never surfaces here as an unhandled rejection.
   async listPairingRequests(): Promise<PendingPairing[]> {
-    try {
-      const response = await this.send({
-        kind: 'cuewise-sync-control',
-        op: 'listPairingRequests',
-      });
-      if (response?.ok && response.kind === 'pairingRequests') {
-        return response.requests;
-      }
-      logger.error(
-        `Cloud sync pairing requests unavailable: ${BridgeSyncController.describeActionFailure(
-          response?.ok === false ? response : undefined
-        )}`
-      );
-      return [];
-    } catch (error) {
-      logger.error(`Cloud sync pairing requests failed: ${describeThrown(error)}`, error);
-      return [];
-    }
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'listPairingRequests' },
+      'pairingRequests',
+      (response) => response.requests,
+      [],
+      BridgeSyncController.pairingLog('requests')
+    );
   }
 
   async commitPairing(id: string): Promise<{ pending: true } | null> {
-    try {
-      const response = await this.send({
-        kind: 'cuewise-sync-control',
-        op: 'commitPairing',
-        pairingRequestId: id,
-      });
-      if (response?.ok && response.kind === 'pairingCommit') {
-        return response.result;
-      }
-      logger.error(
-        `Cloud sync pairing commit unavailable: ${BridgeSyncController.describeActionFailure(
-          response?.ok === false ? response : undefined
-        )}`
-      );
-      return null;
-    } catch (error) {
-      logger.error(`Cloud sync pairing commit failed: ${describeThrown(error)}`, error);
-      return null;
-    }
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'commitPairing', pairingRequestId: id },
+      'pairingCommit',
+      (response) => response.result,
+      null,
+      BridgeSyncController.pairingLog('commit')
+    );
   }
 
   async pollApproval(id: string, row?: PendingPairing): Promise<PairingApprovalResult> {
-    try {
-      const response = await this.send({
+    return this.callOrFallback(
+      {
         kind: 'cuewise-sync-control',
         op: 'pollApproval',
         pairingRequestId: id,
-        // The row the section's list poll already fetched, so the worker's engine reuses it instead
-        // of re-listing the whole account against the shared rate bucket.
+        // The row the list poll already fetched, so the worker doesn't re-list the whole account.
         pairingRow: row,
-      });
-      if (response?.ok && response.kind === 'pairingApproval') {
-        return response.result;
-      }
-      logger.error(
-        `Cloud sync pairing approval poll unavailable: ${BridgeSyncController.describeActionFailure(
-          response?.ok === false ? response : undefined
-        )}`
-      );
-      return { kind: 'error' };
-    } catch (error) {
-      logger.error(`Cloud sync pairing approval poll failed: ${describeThrown(error)}`, error);
-      return { kind: 'error' };
-    }
+      },
+      'pairingApproval',
+      (response) => response.result,
+      { kind: 'error' },
+      BridgeSyncController.pairingLog('approval poll')
+    );
   }
 
   async approvePairing(id: string): Promise<boolean> {
-    try {
-      const response = await this.send({
-        kind: 'cuewise-sync-control',
-        op: 'approvePairing',
-        pairingRequestId: id,
-      });
-      if (response?.ok && response.kind === 'pairingApprove') {
-        return response.approved;
-      }
-      logger.error(
-        `Cloud sync pairing approve unavailable: ${BridgeSyncController.describeActionFailure(
-          response?.ok === false ? response : undefined
-        )}`
-      );
-      return false;
-    } catch (error) {
-      logger.error(`Cloud sync pairing approve failed: ${describeThrown(error)}`, error);
-      return false;
-    }
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'approvePairing', pairingRequestId: id },
+      'pairingApprove',
+      (response) => response.approved,
+      false,
+      BridgeSyncController.pairingLog('approve')
+    );
   }
 
   async denyPairing(id: string): Promise<void> {
-    try {
-      const response = await this.send({
-        kind: 'cuewise-sync-control',
-        op: 'denyPairing',
-        pairingRequestId: id,
-      });
-      if (!response?.ok) {
+    return this.callOrFallback(
+      { kind: 'cuewise-sync-control', op: 'denyPairing', pairingRequestId: id },
+      null,
+      () => undefined,
+      undefined,
+      BridgeSyncController.pairingLog('deny')
+    );
+  }
+
+  private static warnLog(subject: string): FallbackLog<SyncControlOp> {
+    return {
+      unavailable: () => {
+        logger.warn(`${subject} unavailable (no responder or error fallback)`);
+      },
+      failed: (error) => {
+        logger.warn(`${subject} control message failed: ${describeThrown(error)}`);
+      },
+    };
+  }
+
+  private static pairingLog(action: string): FallbackLog<SyncControlOp> {
+    return {
+      unavailable: (response) => {
         logger.error(
-          `Cloud sync pairing deny unavailable: ${BridgeSyncController.describeActionFailure(
+          `Cloud sync pairing ${action} unavailable: ${BridgeSyncController.describeActionFailure(
             response?.ok === false ? response : undefined
           )}`
         );
+      },
+      failed: (error) => {
+        logger.error(`Cloud sync pairing ${action} failed: ${describeThrown(error)}`, error);
+      },
+    };
+  }
+
+  // The wire is untyped: a skewed worker answers undefined, {ok:false}, or {ok:true} without the
+  // expected kind tag, and every one of those reads as the fallback, never a rejection.
+  private async callOrFallback<O extends SyncControlOp, T>(
+    msg: SyncControlMessage & { op: O },
+    kind: OkKind<O>,
+    read: (response: OkResponse<O>) => T,
+    fallback: T,
+    log: FallbackLog<O>
+  ): Promise<T> {
+    try {
+      const response: SyncOpResponse[O] | undefined = await this.send(msg);
+      if (response?.ok && (kind === null || (response as { kind?: unknown }).kind === kind)) {
+        return read(response as OkResponse<O>);
       }
+      log.unavailable(response);
+      return fallback;
     } catch (error) {
-      logger.error(`Cloud sync pairing deny failed: ${describeThrown(error)}`, error);
+      log.failed(error);
+      return fallback;
     }
   }
 

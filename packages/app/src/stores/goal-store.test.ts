@@ -203,48 +203,6 @@ describe('Goal Store', () => {
     });
   });
 
-  describe('clearCompleted', () => {
-    it('should remove only completed goals from today', async () => {
-      const today = getTodayDateString();
-      const completedTodayGoals = completedGoalFactory.buildList(2, { date: today });
-      const incompleteTodayGoals = goalFactory.buildList(2, { date: today, completed: false });
-      const completedYesterdayGoals = completedGoalFactory.buildList(1, { date: '2025-01-01' });
-
-      const allGoals = [
-        ...completedTodayGoals,
-        ...incompleteTodayGoals,
-        ...completedYesterdayGoals,
-      ];
-
-      useGoalStore.setState({ goals: allGoals });
-
-      await useGoalStore.getState().clearCompleted();
-
-      expect(storage.setGoals).toHaveBeenCalled();
-      const updatedGoals = vi.mocked(storage.setGoals).mock.calls[0][0];
-
-      // Should have incomplete today goals + completed yesterday goals
-      expect(updatedGoals).toHaveLength(3);
-      expect(updatedGoals).toEqual(
-        expect.arrayContaining([...incompleteTodayGoals, ...completedYesterdayGoals])
-      );
-    });
-
-    it('should update todayTasks correctly after clearing', async () => {
-      const today = getTodayDateString();
-      const completedTodayGoals = completedGoalFactory.buildList(2, { date: today });
-      const incompleteTodayGoals = goalFactory.buildList(1, { date: today, completed: false });
-
-      useGoalStore.setState({ goals: [...completedTodayGoals, ...incompleteTodayGoals] });
-
-      await useGoalStore.getState().clearCompleted();
-
-      const state = useGoalStore.getState();
-      expect(state.todayTasks).toHaveLength(1);
-      expect(state.todayTasks[0]).toMatchObject(incompleteTodayGoals[0]);
-    });
-  });
-
   describe('moveGoalToToday', () => {
     it('should move a past goal to today', async () => {
       const today = getTodayDateString();
@@ -1521,17 +1479,6 @@ describe('resolved write failures are honored across writers', () => {
         useGoalStore.setState({ goals: [task] });
         return {
           act: () => store().deleteTask(task.id),
-          verify: () => expect(store().goals).toHaveLength(1),
-        };
-      },
-    },
-    {
-      name: 'clearCompleted',
-      prepare: () => {
-        const done = completedGoalFactory.build({ date: today });
-        useGoalStore.setState({ goals: [done] });
-        return {
-          act: () => store().clearCompleted(),
           verify: () => expect(store().goals).toHaveLength(1),
         };
       },

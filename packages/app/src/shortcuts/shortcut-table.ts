@@ -106,7 +106,3 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keywords: ['cards', 'learn'],
   },
 ];
-
-export function formatKeys(keys: string[]): string {
-  return keys.join(' then ');
-}

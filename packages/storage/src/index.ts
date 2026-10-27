@@ -3,21 +3,13 @@
 
 // KeyValueStore adapters (implement the platform port)
 export { ChromeKeyValueStore } from './chrome-key-value-store';
-export type { StorageArea, StorageError, StorageErrorType, StorageResult } from './chrome-storage';
+export type { StorageResult } from './chrome-storage';
 // Low-level storage delegators over the platform port
-export {
-  getFromStorage,
-  getManyFromStorage,
-  removeFromStorage,
-  removeManyFromStorage,
-  setInStorage,
-  setManyInStorage,
-} from './chrome-storage';
+export { getManyFromStorage, setManyInStorage } from './chrome-storage';
 export { LocalStorageKeyValueStore } from './local-storage-key-value-store';
-export type { PlaylistResumeInfo, SettingsRead, StorageUsageInfo } from './storage-helpers';
+export type { SettingsRead, StorageUsageInfo } from './storage-helpers';
 // Typed storage helpers
 export {
-  COLLECTION_LOCKS,
   type CollectionLock,
   clearCustomBackground,
   clearDailyBackground,
@@ -50,9 +42,7 @@ export {
   getStorageUsage,
   getStoredSettingsKeys,
   getWeatherState,
-  getYoutubeProgress,
   isCustomQuote,
-  migrateLegacySettings,
   migrateStorageData,
   readSettings,
   recordHabitDone,
