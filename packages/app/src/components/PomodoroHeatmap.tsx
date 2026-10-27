@@ -62,7 +62,6 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
         Pomodoro Heatmap
       </h2>
 
-      {/* Productive Hours Summary */}
       {data.productiveHours.length > 0 && (
         <div className="mb-6 p-4 bg-primary-600/10 border border-border rounded-lg">
           <p className="text-sm text-primary">
@@ -73,7 +72,6 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Hourly Distribution */}
         <div>
           <h3 className="text-lg font-semibold text-primary mb-4">By Hour of Day</h3>
           <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
@@ -144,7 +142,6 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
           </div>
         </div>
 
-        {/* Weekday Distribution */}
         <div>
           <h3 className="text-lg font-semibold text-primary mb-4">By Day of Week</h3>
           <ChartContainer config={chartConfig} className="h-80 min-h-[20rem] w-full">
@@ -190,7 +187,6 @@ export const PomodoroHeatmap: React.FC<PomodoroHeatmapProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* Total Sessions Summary */}
       <div className="mt-8 pt-6 border-t border-border">
         <div className="flex items-center justify-center gap-8">
           <div className="text-center">

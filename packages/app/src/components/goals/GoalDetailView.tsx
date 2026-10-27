@@ -120,7 +120,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-border">
         <button
           type="button"
@@ -151,9 +150,7 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
         </button>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Goal Info */}
         <div className="flex items-start gap-4">
           <div
             className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -180,7 +177,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
 
             {goalItem.description && <p className="text-secondary mt-2">{goalItem.description}</p>}
 
-            {/* Due date */}
             <div className="flex items-center gap-2 mt-3">
               <Calendar className="w-4 h-4 text-tertiary" />
               <span
@@ -193,7 +189,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
           </div>
         </div>
 
-        {/* Completion Prompt - Show when all tasks are done */}
         {allTasksComplete && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
@@ -216,7 +211,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
           </div>
         )}
 
-        {/* Completed Goal Banner */}
         {goalItem.completed && (
           <div className="bg-surface-variant border border-border rounded-xl p-4">
             <div className="flex items-center justify-between">
@@ -238,7 +232,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
           </div>
         )}
 
-        {/* Progress */}
         <div className="bg-surface-variant rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-primary">Progress</span>
@@ -261,7 +254,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
           </p>
         </div>
 
-        {/* Linked Tasks */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-medium text-primary">Linked Tasks</h4>
@@ -277,7 +269,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
             )}
           </div>
 
-          {/* Inline Task Input */}
           {showTaskInput && (
             <div className="mb-4">
               <GoalInput
@@ -346,7 +337,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
         </div>
       </div>
 
-      {/* Delete Confirmation */}
       <ConfirmationDialog
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -357,7 +347,6 @@ export const GoalDetailView: React.FC<GoalDetailViewProps> = ({ goalId, onClose 
         variant="danger"
       />
 
-      {/* Complete Confirmation */}
       <ConfirmationDialog
         isOpen={showCompleteConfirm}
         onClose={() => setShowCompleteConfirm(false)}

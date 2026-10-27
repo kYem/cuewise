@@ -171,6 +171,16 @@ export const GoalsList: React.FC<GoalsListProps> = ({
 
   const showCompactAddRow = viewMode === 'compact' && (visibleTasks.length === 0 || showAddInput);
 
+  // Hidden while adding: the editable list renders the same rows, so they'd double up.
+  const showsReadOnlySubtasks = (goal: Goal) =>
+    !isEditing(goal.id) &&
+    addingSubtaskId !== goal.id &&
+    expandedSubtaskId === goal.id &&
+    (goal.subtasks?.length ?? 0) > 0;
+
+  // Kept mounted while adding so the edit-input blur doesn't drop the add field.
+  const showsEditableSubtasks = (goal: Goal) => isEditing(goal.id) || addingSubtaskId === goal.id;
+
   if (isLoading) {
     return <div className="text-center py-8 text-secondary">Loading goals...</div>;
   }
@@ -189,7 +199,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
         </div>
       )}
 
-      {/* Full: illustrated empty state when there are no tasks at all */}
       {viewMode !== 'compact' && todayTasks.length === 0 && (
         <div className="text-center py-8">
           <EmptyState
@@ -202,7 +211,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
         </div>
       )}
 
-      {/* Goals List */}
       {visibleTasks.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
@@ -237,7 +245,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                       )}
                     >
                       <div className="flex items-center gap-2.5">
-                        {/* Checkbox */}
                         <button
                           type="button"
                           onClick={() => toggleTask(goal.id)}
@@ -247,7 +254,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                           <AnimatedCheckbox checked={goal.completed} size="md" />
                         </button>
 
-                        {/* Goal Text */}
                         {isEditing(goal.id) ? (
                           <input
                             ref={inputRef}
@@ -273,17 +279,14 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                           </button>
                         )}
 
-                        {/* Right side: badges and actions */}
                         <div
                           ref={isEditing(goal.id) ? actionsRef : undefined}
                           className="flex items-center gap-1 flex-shrink-0"
                         >
-                          {/* Goal link badge - hide in edit mode */}
                           {!isEditing(goal.id) && goal.parentId && (
                             <LinkedGoalBadge parentId={goal.parentId} goals={goals} />
                           )}
 
-                          {/* Subtask count toggle (resting, full mode) — expands list below */}
                           {!isEditing(goal.id) &&
                             viewMode === 'full' &&
                             (goal.subtasks?.length ?? 0) > 0 && (
@@ -311,7 +314,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                               </button>
                             )}
 
-                          {/* Due date badge - hide in edit mode (control shown instead) */}
                           {!isEditing(goal.id) && goal.dueDate && (
                             <span
                               className={cn(
@@ -334,7 +336,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                             />
                           )}
 
-                          {/* Transfer Button - only show in edit mode */}
                           {isEditing(goal.id) && showTransferButton && !goal.completed && (
                             <button
                               type="button"
@@ -353,7 +354,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                             </button>
                           )}
 
-                          {/* Link to Goal Button - only show in edit mode */}
                           {isEditing(goal.id) && activeGoals.length > 0 && (
                             <GoalLinkPopover
                               open={isLinkPickerOpen(goal.id)}
@@ -367,7 +367,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                             />
                           )}
 
-                          {/* Duplicate Button - only show in edit mode */}
                           {isEditing(goal.id) && (
                             <button
                               type="button"
@@ -386,7 +385,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                             </button>
                           )}
 
-                          {/* Delete Button - only show in edit mode */}
                           {isEditing(goal.id) && (
                             <button
                               type="button"
@@ -403,70 +401,60 @@ export const GoalsList: React.FC<GoalsListProps> = ({
                         </div>
                       </div>
 
-                      {/* Full mode: read-only subtasks revealed by the inline n/m toggle.
-                        Suppressed while the add-field is open so it doesn't double up
-                        with the editable list below (which renders the same rows). */}
-                      {viewMode === 'full' &&
-                        !isEditing(goal.id) &&
-                        addingSubtaskId !== goal.id &&
-                        expandedSubtaskId === goal.id &&
-                        (goal.subtasks?.length ?? 0) > 0 && (
-                          <div className="mt-1.5 pl-9 space-y-1">
-                            {(goal.subtasks ?? []).map((subtask) => (
+                      {viewMode === 'full' && showsReadOnlySubtasks(goal) && (
+                        <div className="mt-1.5 pl-9 space-y-1">
+                          {(goal.subtasks ?? []).map((subtask) => (
+                            <button
+                              key={subtask.id}
+                              type="button"
+                              onClick={() => toggleSubtask(goal.id, subtask.id)}
+                              className="flex w-full items-center gap-2 text-left"
+                              aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
+                            >
+                              <SubtaskCheckIcon completed={subtask.completed} />
+                              <span className={subtaskTextClass(subtask.completed)}>
+                                {subtask.text}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {viewMode === 'full' && showsEditableSubtasks(goal) && (
+                        <div className="mt-2 pl-9 space-y-1">
+                          {(goal.subtasks ?? []).map((subtask) => (
+                            <div key={subtask.id} className="group/sub flex items-center gap-2">
                               <button
-                                key={subtask.id}
                                 type="button"
                                 onClick={() => toggleSubtask(goal.id, subtask.id)}
-                                className="flex w-full items-center gap-2 text-left"
+                                className="flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                                 aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
                               >
                                 <SubtaskCheckIcon completed={subtask.completed} />
-                                <span className={subtaskTextClass(subtask.completed)}>
-                                  {subtask.text}
-                                </span>
                               </button>
-                            ))}
-                          </div>
-                        )}
+                              <span className={cn('flex-1', subtaskTextClass(subtask.completed))}>
+                                {subtask.text}
+                              </span>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => removeSubtask(goal.id, subtask.id)}
+                                className="flex-shrink-0 rounded p-0.5 text-secondary hover:text-red-500 opacity-0 group-hover/sub:opacity-100 focus:opacity-100"
+                                aria-label={`Remove "${subtask.text}"`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
 
-                      {/* Full mode edit: editable subtasks + add (kept mounted while adding
-                        so the edit-input blur doesn't drop the add field) */}
-                      {viewMode === 'full' &&
-                        (isEditing(goal.id) || addingSubtaskId === goal.id) && (
-                          <div className="mt-2 pl-9 space-y-1">
-                            {(goal.subtasks ?? []).map((subtask) => (
-                              <div key={subtask.id} className="group/sub flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleSubtask(goal.id, subtask.id)}
-                                  className="flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                                  aria-label={subtaskToggleLabel(subtask.text, subtask.completed)}
-                                >
-                                  <SubtaskCheckIcon completed={subtask.completed} />
-                                </button>
-                                <span className={cn('flex-1', subtaskTextClass(subtask.completed))}>
-                                  {subtask.text}
-                                </span>
-                                <button
-                                  type="button"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => removeSubtask(goal.id, subtask.id)}
-                                  className="flex-shrink-0 rounded p-0.5 text-secondary hover:text-red-500 opacity-0 group-hover/sub:opacity-100 focus:opacity-100"
-                                  aria-label={`Remove "${subtask.text}"`}
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-
-                            <AddSubtask
-                              open={addingSubtaskId === goal.id}
-                              onOpen={() => setAddingSubtaskId(goal.id)}
-                              onClose={() => setAddingSubtaskId(null)}
-                              onAdd={(text) => addSubtask(goal.id, text)}
-                            />
-                          </div>
-                        )}
+                          <AddSubtask
+                            open={addingSubtaskId === goal.id}
+                            onOpen={() => setAddingSubtaskId(goal.id)}
+                            onClose={() => setAddingSubtaskId(null)}
+                            onAdd={(text) => addSubtask(goal.id, text)}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </SortableTaskItem>
@@ -476,7 +464,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
         </DndContext>
       )}
 
-      {/* Add a goal — bottom add row (full mode only, mirrors the widget design) */}
       {viewMode === 'full' && (
         <div className="pt-1">
           <GoalInput variant="widget" focusRequest={addRequest} />
@@ -485,7 +472,6 @@ export const GoalsList: React.FC<GoalsListProps> = ({
 
       {settings.showIncompleteGoals && <UnfinishedTasks compact={viewMode === 'compact'} />}
 
-      {/* Upcoming — revealed from the ⚙ menu (both list views) */}
       {settings.showUpcomingGoals && <UpcomingTasks showTrigger={false} />}
     </div>
   );

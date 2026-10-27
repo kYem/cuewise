@@ -50,10 +50,8 @@ export function BackgroundImage({ url, isLoading, dim, blur }: BackgroundImagePr
 
   return (
     <>
-      {/* Base dark background */}
       <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900" />
 
-      {/* Image layer with fade transition */}
       {loadedUrl && (
         <div
           className={cn(
@@ -66,7 +64,6 @@ export function BackgroundImage({ url, isLoading, dim, blur }: BackgroundImagePr
         />
       )}
 
-      {/* Loading indicator */}
       {isLoading && !loadedUrl && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-white/30 border-t-white/80 rounded-full animate-spin" />

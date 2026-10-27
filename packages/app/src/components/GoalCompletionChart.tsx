@@ -58,7 +58,6 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Overall Completion */}
         <div className="flex flex-col items-center">
           <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48 aspect-square">
             <RadialBarChart
@@ -93,7 +92,6 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
           </div>
         </div>
 
-        {/* This Week */}
         <div className="flex flex-col items-center">
           <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48 aspect-square">
             <RadialBarChart
@@ -130,7 +128,6 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
           </div>
         </div>
 
-        {/* This Month */}
         <div className="flex flex-col items-center">
           <ChartContainer config={chartConfig} className="h-48 min-h-[12rem] w-48 aspect-square">
             <RadialBarChart
@@ -168,7 +165,6 @@ export const GoalCompletionChart: React.FC<GoalCompletionChartProps> = ({ data }
         </div>
       </div>
 
-      {/* Summary Stats */}
       <div className="mt-8 grid grid-cols-3 gap-4 pt-6 border-t border-border">
         <div className="text-center">
           <div className="text-2xl font-bold text-primary-600">{data.totalGoals}</div>

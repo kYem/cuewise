@@ -62,7 +62,6 @@ export function FocusModeControls({ onExit }: FocusModeControlsProps) {
   return (
     <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
       <div className="flex items-center gap-4">
-        {/* Reset button */}
         <button
           type="button"
           onClick={handleReset}
@@ -73,7 +72,6 @@ export function FocusModeControls({ onExit }: FocusModeControlsProps) {
           <RotateCcw className="w-5 h-5" />
         </button>
 
-        {/* Play/Pause button (primary) */}
         <button
           type="button"
           onClick={handlePlayPause}
@@ -84,7 +82,6 @@ export function FocusModeControls({ onExit }: FocusModeControlsProps) {
           {isRunning ? <Pause className="w-7 h-7" /> : <Play className="w-7 h-7 ml-0.5" />}
         </button>
 
-        {/* Skip button */}
         <button
           type="button"
           onClick={handleSkip}
@@ -96,10 +93,8 @@ export function FocusModeControls({ onExit }: FocusModeControlsProps) {
           <SkipForward className="w-5 h-5" />
         </button>
 
-        {/* Divider */}
         <div className="w-px h-8 bg-white/20 mx-2" />
 
-        {/* New image button */}
         <button
           type="button"
           onClick={handleNewImage}
@@ -111,7 +106,6 @@ export function FocusModeControls({ onExit }: FocusModeControlsProps) {
           <ImageIcon className={cn('w-5 h-5', isImageLoading && 'animate-pulse')} />
         </button>
 
-        {/* Exit button */}
         <button
           type="button"
           onClick={onExit}
@@ -123,7 +117,6 @@ export function FocusModeControls({ onExit }: FocusModeControlsProps) {
         </button>
       </div>
 
-      {/* Keyboard hint */}
       <p className="text-center text-white/40 text-sm mt-4">
         Press <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/60">Esc</kbd> to exit
       </p>

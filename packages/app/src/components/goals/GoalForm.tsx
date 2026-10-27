@@ -111,7 +111,6 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Title */}
       <div>
         <label htmlFor="goal-title" className={cn(eyebrowClass, 'mb-1.5')}>
           Title <span className="text-red-400">*</span>
@@ -128,7 +127,6 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
         />
       </div>
 
-      {/* Description */}
       <div>
         <label htmlFor="goal-description" className={cn(eyebrowClass, 'mb-1.5')}>
           Description{' '}
@@ -145,7 +143,6 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
         />
       </div>
 
-      {/* Due date */}
       <div className="space-y-2.5">
         <span className={eyebrowClass}>
           Due date <span className="text-red-400">*</span>
@@ -184,7 +181,6 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onCancel, onSuccess })
         </p>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-end gap-3 pt-2">
         <button
           type="button"

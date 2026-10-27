@@ -56,15 +56,12 @@ export const ActivePomodoroWidget: React.FC = () => {
       )}
       title={`${sessionLabel} session in progress - Click to view`}
     >
-      {/* Session Icon */}
       <Timer className="w-4 h-4 text-primary-600" />
 
-      {/* Time Display */}
       <span className="text-base font-bold text-primary tabular-nums">
         {formatTimeRemaining(timeRemaining)}
       </span>
 
-      {/* Pause/Resume Button */}
       <button
         type="button"
         onClick={handleTogglePause}
@@ -80,13 +77,11 @@ export const ActivePomodoroWidget: React.FC = () => {
         {status === 'running' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
       </button>
 
-      {/* Pop-out into a floating always-on-top window (Document PiP) */}
       <PomodoroPipButton
         className="p-1 rounded-full text-primary-600 transition-all hover:scale-110 hover:bg-primary-600/10"
         iconClassName="w-3.5 h-3.5"
       />
 
-      {/* Pulsing indicator for running timer */}
       {status === 'running' && (
         <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>

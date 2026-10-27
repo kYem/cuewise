@@ -90,9 +90,7 @@ export const GoalsPage: React.FC = () => {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {/* Today */}
           <div className="bg-surface rounded-xl p-4 border-2 border-border">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-5 h-5 text-primary-600" />
@@ -104,7 +102,6 @@ export const GoalsPage: React.FC = () => {
             <div className="text-xs text-tertiary">completed</div>
           </div>
 
-          {/* This Week */}
           <div className="bg-surface rounded-xl p-4 border-2 border-border">
             <div className="flex items-center gap-2 mb-2">
               <Calendar className="w-5 h-5 text-blue-500" />
@@ -116,7 +113,6 @@ export const GoalsPage: React.FC = () => {
             <div className="text-xs text-tertiary">completed</div>
           </div>
 
-          {/* This Month */}
           <div className="bg-surface rounded-xl p-4 border-2 border-border">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="w-5 h-5 text-green-500" />
@@ -128,7 +124,6 @@ export const GoalsPage: React.FC = () => {
             <div className="text-xs text-tertiary">completed</div>
           </div>
 
-          {/* All Time */}
           <div className="bg-surface rounded-xl p-4 border-2 border-border">
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 className="w-5 h-5 text-purple-500" />
@@ -141,7 +136,6 @@ export const GoalsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* View Tab Switcher */}
         <div className="flex items-center gap-2 mb-6">
           <button
             type="button"
@@ -173,10 +167,8 @@ export const GoalsPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Tasks View */}
         {activeTab === 'tasks' && (
           <>
-            {/* Add Task Form */}
             <form onSubmit={handleAddGoal} className="mb-8">
               <div className="flex gap-3">
                 <div className="flex-1 relative">
@@ -200,7 +192,6 @@ export const GoalsPage: React.FC = () => {
               </div>
             </form>
 
-            {/* Filter Tabs */}
             <div className="flex items-center gap-4 mb-6">
               <span className="text-sm font-medium text-secondary">Filter:</span>
               <div className="flex gap-1 bg-surface-variant rounded-lg p-1">
@@ -230,14 +221,12 @@ export const GoalsPage: React.FC = () => {
 
             {showUnfinished && <UnfinishedBanner className="mb-4" />}
 
-            {/* Goals List */}
             <div className="bg-surface rounded-xl border-2 border-border p-6">
               <AllGoalsList />
             </div>
           </>
         )}
 
-        {/* Goals View */}
         {activeTab === 'goals' && (
           <div className="space-y-6">
             <UpcomingTasks defaultExpanded />

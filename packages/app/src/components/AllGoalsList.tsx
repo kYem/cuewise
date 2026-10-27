@@ -83,7 +83,6 @@ export const AllGoalsList: React.FC = () => {
 
         return (
           <div key={date} className="space-y-3">
-            {/* Date Header */}
             <div className="flex items-center gap-3">
               <div className={cn('flex-1 h-px', isToday ? 'bg-primary-300' : 'bg-divider')} />
               <div className="flex items-center gap-2">
@@ -105,7 +104,6 @@ export const AllGoalsList: React.FC = () => {
               <div className={cn('flex-1 h-px', isToday ? 'bg-primary-300' : 'bg-divider')} />
             </div>
 
-            {/* Goals for this date */}
             <div className="space-y-2">
               {goals.map((goal) => (
                 <div
@@ -117,7 +115,6 @@ export const AllGoalsList: React.FC = () => {
                       : 'bg-surface border-border hover:border-primary-300'
                   )}
                 >
-                  {/* Checkbox */}
                   <button
                     type="button"
                     onClick={() => toggleTask(goal.id)}
@@ -127,7 +124,6 @@ export const AllGoalsList: React.FC = () => {
                     <AnimatedCheckbox checked={goal.completed} size="lg" />
                   </button>
 
-                  {/* Goal Text */}
                   {isEditing(goal.id) ? (
                     <input
                       ref={inputRef}
@@ -153,12 +149,10 @@ export const AllGoalsList: React.FC = () => {
                     </button>
                   )}
 
-                  {/* Right side: badges and actions */}
                   <div
                     ref={isEditing(goal.id) ? actionsRef : undefined}
                     className="flex items-center gap-1 flex-shrink-0"
                   >
-                    {/* Goal link badge - hide in edit mode */}
                     {!isEditing(goal.id) &&
                       (() => {
                         const linkedGoal = getLinkedGoal(goal.parentId);
@@ -176,7 +170,6 @@ export const AllGoalsList: React.FC = () => {
                         );
                       })()}
 
-                    {/* Move to Today Button - only show in edit mode */}
                     {isEditing(goal.id) && !isToday && !goal.completed && (
                       <button
                         type="button"
@@ -195,7 +188,6 @@ export const AllGoalsList: React.FC = () => {
                       </button>
                     )}
 
-                    {/* Transfer to Tomorrow Button - only show in edit mode */}
                     {isEditing(goal.id) && isToday && !goal.completed && (
                       <button
                         type="button"
@@ -214,7 +206,6 @@ export const AllGoalsList: React.FC = () => {
                       </button>
                     )}
 
-                    {/* Link to Goal Button - only show in edit mode */}
                     {isEditing(goal.id) && activeGoals.length > 0 && (
                       <GoalLinkPopover
                         open={isLinkPickerOpen(goal.id)}
@@ -228,7 +219,6 @@ export const AllGoalsList: React.FC = () => {
                       />
                     )}
 
-                    {/* Delete Button - only show in edit mode */}
                     {isEditing(goal.id) && (
                       <button
                         type="button"
