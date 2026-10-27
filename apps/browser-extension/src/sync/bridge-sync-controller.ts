@@ -1,12 +1,18 @@
 import type {
   EnableResult,
   LastCycleRead,
+  LastSyncCreds,
   SyncController,
   SyncDetails,
   SyncDetailsOptions,
   SyncUiStatus,
 } from '@cuewise/app';
-import { asSyncUiStatus, LAST_CYCLE_UNAVAILABLE, NO_SAVED_SIGN_IN_DETAIL } from '@cuewise/app';
+import {
+  asSyncUiStatus,
+  LAST_CYCLE_UNAVAILABLE,
+  LAST_SYNC_CREDS_KEY,
+  NO_SAVED_SIGN_IN_DETAIL,
+} from '@cuewise/app';
 import { describeThrown, logger, type SyncSession } from '@cuewise/shared';
 import {
   CLOUD_SYNC_ENABLED_KEY,
@@ -23,7 +29,7 @@ import type {
   SyncControlResponse,
   SyncOpResponse,
 } from './sync-control-messages';
-import { LAST_SYNC_CREDS_KEY, QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
+import { QUARANTINE_KEY, STATUS_KEY } from './sync-storage-keys';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 // The worker finishes a delete the page stopped waiting for, so a short timeout reports a
@@ -33,13 +39,6 @@ const DELETE_ACCOUNT_TIMEOUT_FACTOR = 4;
 // Google OAuth 2.0 authorization endpoint + the OpenID scope for the implicit id_token flow.
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_OAUTH_SCOPE = 'openid email';
-
-// Persisted per successful enable so reconnect can re-auth: dev keeps its reusable credential,
-// Google re-auths via a fresh OAuth flow. Written with this exact shape; reconnect() reads it
-// loosely because records written before `provider` existed lack that field (treated as dev).
-type LastSyncCreds =
-  | { provider: 'dev'; accountId: string; deviceName: string }
-  | { provider: 'google'; deviceName: string };
 
 export interface BridgeSyncControllerOptions {
   /** Fires on quarantine (never the recovery code/credential/token — those are secrets). */

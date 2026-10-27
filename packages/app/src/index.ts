@@ -30,6 +30,7 @@ export { useToastStore } from './stores/toast-store';
 export type {
   EnableResult,
   LastCycleRead,
+  LastSyncCreds,
   SyncController,
   SyncDetails,
   SyncDetailsOptions,
@@ -40,7 +41,10 @@ export {
   asSyncUiStatus,
   buildSyncDetails,
   LAST_CYCLE_UNAVAILABLE,
+  LAST_SYNC_CREDS_KEY,
+  mapSyncStatusToUi,
   NO_SAVED_SIGN_IN_DETAIL,
+  readSyncDetails,
   SyncControllerContext,
   useSyncController,
 } from './sync/sync-controller';

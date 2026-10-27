@@ -989,7 +989,7 @@ describe('SyncSettingsSectionComponent', () => {
 
   it('fetches details once per mount, not on every active/syncing flip', async () => {
     // A "Sync now" click flips active → syncing → active on hosts that report 'syncing' (macOS
-    // only — the engine has no such status; the extension's mapToUi never emits it). Without the
+    // only — the engine has no such status; mapSyncStatusToUi never emits it). Without the
     // latch that flip re-fires the effect and duplicates the getDetails handleSyncNow already
     // issues. (An unavailable result deliberately re-arms it — see below.)
     const controller = new FakeSyncController();
