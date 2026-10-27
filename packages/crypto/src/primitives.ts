@@ -1,6 +1,6 @@
 // Every WebCrypto touch lives here as a swappable backend seam. All current targets have
 // crypto.subtle (probed in the bundled Tauri app: tauri://localhost is a secure context).
-import { b64urlDecode } from './base64url';
+import { b64urlDecode, b64urlEncode } from './base64url';
 import { DecryptError, EnvelopeParseError } from './errors';
 
 // Lazy so a runtime without WebCrypto fails at first use with a clear message (not at import,
@@ -119,6 +119,25 @@ export async function aesGcmOpen(
 
 export function isValidKeyId(keyId: string): boolean {
   return KEY_ID_RE.test(keyId);
+}
+
+/**
+ * Seals into the `v1.<keyId>.<iv>.<ct>` envelope splitEnvelope parses. A lazy key is derived only
+ * once the keyId has passed, so a bad keyId never costs (or is masked by) a key derivation.
+ */
+export async function sealEnvelope(
+  key: Uint8Array | (() => Promise<Uint8Array>),
+  keyId: string,
+  plaintext: Uint8Array,
+  aad: Uint8Array
+): Promise<string> {
+  if (!isValidKeyId(keyId)) {
+    throw new EnvelopeParseError('invalid keyId');
+  }
+  const rawKey = typeof key === 'function' ? await key() : key;
+  const iv = randomBytes(12);
+  const ct = await aesGcmSeal(rawKey, iv, plaintext, aad);
+  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}`;
 }
 
 /** Shared `v1.<keyId>.<iv>.<ct>` parser used by both record envelopes and wrapped-key blobs. */

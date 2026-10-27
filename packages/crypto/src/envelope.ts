@@ -1,14 +1,6 @@
-import { b64urlEncode } from './base64url';
 import { EnvelopeParseError } from './errors';
 import type { DataKey } from './keys';
-import {
-  aesGcmOpen,
-  aesGcmSeal,
-  isValidKeyId,
-  randomBytes,
-  splitEnvelope,
-  utf8,
-} from './primitives';
+import { aesGcmOpen, sealEnvelope, splitEnvelope, utf8 } from './primitives';
 
 // Reject before building any AAD: an unescaped `|` lets ('a|b','c') and ('a','b|c')
 // serialize to the identical AAD string, so either could open the other's ciphertext.
@@ -31,12 +23,7 @@ export async function sealRecord(
 ): Promise<string> {
   assertValidAadComponent(collection);
   assertValidAadComponent(entityId);
-  if (!isValidKeyId(keyId)) {
-    throw new EnvelopeParseError('invalid keyId');
-  }
-  const iv = randomBytes(12);
-  const ct = await aesGcmSeal(dk, iv, utf8(plaintext), recordAad(collection, entityId));
-  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}`;
+  return sealEnvelope(dk, keyId, utf8(plaintext), recordAad(collection, entityId));
 }
 
 export async function openRecord(

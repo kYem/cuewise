@@ -1,11 +1,8 @@
-import { b64urlEncode } from './base64url';
-import { EnvelopeParseError } from './errors';
 import {
   aesGcmOpen,
-  aesGcmSeal,
   hkdfSha256,
-  isValidKeyId,
   randomBytes,
+  sealEnvelope,
   splitEnvelope,
   utf8,
 } from './primitives';
@@ -33,12 +30,7 @@ function wrapAad(keyId: string): Uint8Array {
 }
 
 export async function wrapDataKey(mk: MasterKey, dk: DataKey, keyId: string): Promise<string> {
-  if (!isValidKeyId(keyId)) {
-    throw new EnvelopeParseError('invalid keyId');
-  }
-  const iv = randomBytes(12);
-  const ct = await aesGcmSeal(mk, iv, dk, wrapAad(keyId));
-  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}`;
+  return sealEnvelope(mk, keyId, dk, wrapAad(keyId));
 }
 
 export async function unwrapDataKey(

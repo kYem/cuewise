@@ -3,11 +3,10 @@ import { EnvelopeParseError } from './errors';
 import type { DataKey } from './keys';
 import {
   aesGcmOpen,
-  aesGcmSeal,
   generateX25519KeyPair,
   hkdfSha256,
-  isValidKeyId,
   randomBytes,
+  sealEnvelope,
   sha256,
   splitEnvelope,
   utf8,
@@ -97,13 +96,12 @@ export async function wrapDataKeyToPeer(
   keyId: string,
   pairingId: string
 ): Promise<PeerWrappedEnvelope> {
-  if (!isValidKeyId(keyId)) {
-    throw new EnvelopeParseError('invalid keyId');
-  }
-  const key = await pairingWrapKey(priv, peerPub);
-  const iv = randomBytes(12);
-  const ct = await aesGcmSeal(key, iv, dk, pairingAad(pairingId, keyId));
-  return `v1.${keyId}.${b64urlEncode(iv)}.${b64urlEncode(ct)}` as PeerWrappedEnvelope;
+  return (await sealEnvelope(
+    () => pairingWrapKey(priv, peerPub),
+    keyId,
+    dk,
+    pairingAad(pairingId, keyId)
+  )) as PeerWrappedEnvelope;
 }
 
 export async function unwrapDataKeyFromPeer(
@@ -122,12 +120,7 @@ export async function makePairingCommitment(
   pub: PairingPublicKey
 ): Promise<{ commitment: PairingCommitment; nonce: PairingNonce }> {
   const nonce = randomBytes(32) as PairingNonce;
-  const transcript = new Uint8Array(pub.length + nonce.length);
-  transcript.set(pub, 0);
-  transcript.set(nonce, pub.length);
-  const hash = await sha256(transcript);
-  const commitment = b64urlEncode(hash) as PairingCommitment;
-  return { commitment, nonce };
+  return { commitment: await commitmentOf(pub, nonce), nonce };
 }
 
 export async function verifyPairingCommitment(
@@ -135,13 +128,15 @@ export async function verifyPairingCommitment(
   pub: PairingPublicKey,
   nonce: PairingNonce
 ): Promise<boolean> {
+  return commitment === (await commitmentOf(pub, nonce));
+}
+
+async function commitmentOf(
+  pub: PairingPublicKey,
+  nonce: PairingNonce
+): Promise<PairingCommitment> {
   const transcript = new Uint8Array(pub.length + nonce.length);
   transcript.set(pub, 0);
   transcript.set(nonce, pub.length);
-  const hash = await sha256(transcript);
-  const expectedCommitment = b64urlEncode(hash);
-  if (commitment === expectedCommitment) {
-    return true;
-  }
-  return false;
+  return b64urlEncode(await sha256(transcript)) as PairingCommitment;
 }
