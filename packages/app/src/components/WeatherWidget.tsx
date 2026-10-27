@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { useStaleRefresh } from '../hooks/useStaleRefresh';
 import { useSettingsStore } from '../stores/settings-store';
 import { useWeatherStore } from '../stores/weather-store';
@@ -243,26 +244,19 @@ export const WeatherWidget: React.FC = () => {
     refresh({ silent, unitsPreference });
   }, [showWeather, snapshot, unitsPreference, refresh]);
 
+  useClickOutside(containerRef, () => setIsOpen(false), isOpen);
+
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
   if (!showWeather || location === null) {

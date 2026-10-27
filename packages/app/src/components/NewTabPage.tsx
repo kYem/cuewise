@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { useConceptNudge } from '../hooks/useConceptNudge';
 import { useReviewPrompt } from '../hooks/useReviewPrompt';
 import type { NotionHost } from '../notion/notion-host';
@@ -220,20 +221,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({ extraSections, notionHos
     };
   }, [quoteChangeInterval, refreshQuote, lastManualRefresh]);
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const clickedInStickyMenu = stickyMenuRef.current?.contains(event.target as Node);
-      const clickedInFloatingMenu = floatingMenuRef.current?.contains(event.target as Node);
-
-      if (!clickedInStickyMenu && !clickedInFloatingMenu) {
-        setIsMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useClickOutside([stickyMenuRef, floatingMenuRef], () => setIsMenuOpen(false));
 
   const handleCloseWelcome = async () => {
     setIsWelcomeOpen(false);

@@ -2,7 +2,8 @@ import { ALL_QUOTE_CATEGORIES, CATEGORY_COLORS, QUOTE_CATEGORIES } from '@cuewis
 import { cn } from '@cuewise/ui';
 import { Check, Filter, FolderOpen, Heart, Sparkles, X } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { useQuoteStore } from '../stores/quote-store';
 import { releaseFocusOnPointer } from '../utils/keyboard-shortcut';
 
@@ -42,22 +43,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({ compact = false 
     return quotes.filter((q) => !q.isHidden && q.collectionIds?.includes(collectionId)).length;
   };
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
+  useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
 
   const handleSelectAll = () => {
     setEnabledCategories([...ALL_QUOTE_CATEGORIES]);

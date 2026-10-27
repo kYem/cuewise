@@ -8,6 +8,7 @@ import { Check, MoreHorizontal, Pencil, Plus, X } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useClickOutside } from '../hooks/useClickOutside';
 import { useQuickLinksStore } from '../stores/quick-links-store';
 
 function faviconUrl(url: string): string | null {
@@ -134,16 +135,9 @@ export const QuickLinksWidget: React.FC = () => {
     initialize();
   }, [initialize]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      const clickedTrigger = triggerRef.current?.contains(target);
-      const clickedDropdown = dropdownRef.current?.contains(target);
-      if (!clickedTrigger && !clickedDropdown) {
-        setIsOpen(false);
-      }
-    };
+  useClickOutside([triggerRef, dropdownRef], () => setIsOpen(false), isOpen);
 
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
@@ -151,10 +145,8 @@ export const QuickLinksWidget: React.FC = () => {
     };
 
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleKeyDown);
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
         document.removeEventListener('keydown', handleKeyDown);
       };
     }

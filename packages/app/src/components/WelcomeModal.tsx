@@ -1,6 +1,7 @@
 import { CheckCircle2, Target, Timer } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useDialogChrome } from '../hooks/useDialogChrome';
 import { isTextEntryEvent } from '../utils/keyboard-shortcut';
 import { WidgetPicker } from './widgets/WidgetPicker';
 
@@ -36,25 +37,9 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ isOpen, onClose }) =
     }
   }, [isOpen]);
 
-  // Close on Escape key. Not while typing: onboarding never reopens, so Escape meant as
-  // "clear this field" would retire it for the life of the profile.
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isTextEntryEvent(e)) {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
+  // Not while typing: onboarding never reopens, so Escape meant as "clear this field" would
+  // retire it for the life of the profile.
+  useDialogChrome({ open: isOpen, onClose, ignoreEscape: isTextEntryEvent });
 
   if (!isOpen) {
     return null;

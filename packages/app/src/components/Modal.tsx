@@ -1,7 +1,8 @@
 import { X } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useId } from 'react';
+import { useId } from 'react';
 import { createPortal } from 'react-dom';
+import { useDialogChrome } from '../hooks/useDialogChrome';
 
 interface ModalProps {
   isOpen: boolean;
@@ -21,25 +22,7 @@ const SIZE_CLASS: Record<NonNullable<ModalProps['size']>, string> = {
 
 export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, size = '2xl', children }) => {
   const titleId = useId();
-  // Close on Escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll when modal is open
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
+  useDialogChrome({ open: isOpen, onClose });
 
   if (!isOpen) {
     return null;
