@@ -9,8 +9,6 @@ export { createSyncEngine } from './create-engine';
 export {
   CLOUD_SYNC_ENABLED_KEY,
   type DeleteAccountResult,
-  type PairingApprovalResult,
-  type PairingPollResult,
   type RecoveryEnvelopeState,
   SyncEngine,
   type SyncSignInProvider,
@@ -46,4 +44,5 @@ export type SyncEngineControlSurface = Pick<
   | 'deleteAccount'
 >;
 export { RecoveryCodeRequiredError } from './key-lifecycle';
+export type { PairingApprovalResult, PairingPollResult } from './pairing';
 export type { SyncFailureReason, SyncNowResult, SyncOutcome } from './sync-outcome';
