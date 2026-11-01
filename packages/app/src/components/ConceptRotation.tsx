@@ -48,10 +48,7 @@ function cadenceAllows(framing: ConceptFraming, cadence: ConceptCadence): boolea
  * back to quotes; `index` is a free-running counter wrapped into the deck.
  */
 /** What this tab may browse: the whole due pile, or only cards added since its decision. */
-export function surfacedDeck(
-  due: ConceptCard[],
-  decision: SurfacingDecision | null
-): ConceptCard[] {
+function surfacedDeck(due: ConceptCard[], decision: SurfacingDecision | null): ConceptCard[] {
   if (decision === null) {
     return [];
   }

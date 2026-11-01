@@ -85,7 +85,7 @@ export function createValidationWithWarnings(warnings: string[]): ImportValidati
 /**
  * Creates a successful ImportResult
  */
-export function createSuccessfulImportResult(): ImportResult {
+function createSuccessfulImportResult(): ImportResult {
   return {
     success: true,
     imported: { goals: 1, quotes: 1, pomodoroSessions: 1 },

@@ -4,7 +4,7 @@ import type { AmbientSoundType } from '@cuewise/shared';
  * Ambient sound generator using Web Audio API
  * Generates continuous ambient sounds for focus sessions
  */
-export class AmbientSoundPlayer {
+class AmbientSoundPlayer {
   private audioContext: AudioContext | null = null;
   private gainNode: GainNode | null = null;
   private oscillators: OscillatorNode[] = [];

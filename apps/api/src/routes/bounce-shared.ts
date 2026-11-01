@@ -75,7 +75,7 @@ export function requireStateSigningKey(env: Env): string | null {
   return env.STATE_SIGNING_KEY;
 }
 
-export function escapeHtml(value: string): string {
+function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
