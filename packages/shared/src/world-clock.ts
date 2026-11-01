@@ -1,5 +1,5 @@
+import { generateId } from './ids';
 import type { WorldClockZone } from './types';
-import { generateId } from './utils';
 import { ZONE_COUNTRIES } from './zone-countries';
 
 export const MAX_WORLD_CLOCKS = 4;

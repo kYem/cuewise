@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BACKGROUND_EFFECT_BOUNDS } from './constants';
-import { clampBackgroundEffects } from './utils';
+import { clampBackgroundEffects } from './settings-clamps';
 
 describe('clampBackgroundEffects', () => {
   it('leaves in-range values untouched', () => {

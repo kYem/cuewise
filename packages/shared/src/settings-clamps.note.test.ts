@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_NOTE_LENGTH } from './constants';
-import { clampNoteLength, truncateNote } from './utils';
+import { clampNoteLength, truncateNote } from './settings-clamps';
 
 describe('truncateNote', () => {
   it('leaves a note at the cap untouched', () => {

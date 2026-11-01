@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { deriveQuickLinkTitle, normalizeQuickLinkUrl, quickLinkMonogram } from './quick-links';
 import type { QuickLink } from './types';
-import { deriveQuickLinkTitle, normalizeQuickLinkUrl, quickLinkMonogram } from './utils';
 
 describe('Quick Link Utilities', () => {
   describe('normalizeQuickLinkUrl', () => {
