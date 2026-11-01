@@ -47,7 +47,7 @@ export function createNavigationQuotes(count = 3) {
 /**
  * Creates a hidden quote for testing skip logic
  */
-export function createHiddenQuote(overrides: Partial<Quote> = {}) {
+function createHiddenQuote(overrides: Partial<Quote> = {}) {
   return quoteFactory.build({ ...overrides, isHidden: true });
 }
 

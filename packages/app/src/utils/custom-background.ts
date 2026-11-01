@@ -1,7 +1,7 @@
 import { logger } from '@cuewise/shared';
 
 /** Bounds the longest side, so a portrait photo is capped by height, not width. */
-export const MAX_BACKGROUND_DIMENSION = 1920;
+const MAX_BACKGROUND_DIMENSION = 1920;
 
 /** Refuse before reading: base64 inflates ~33%, and decoding a huge file can hang the tab. */
 const MAX_FILE_MB = 25;

@@ -3,7 +3,7 @@ import { recurringReminderFactory, reminderFactory } from '@cuewise/test-utils/f
 import { useReminderPromptStore } from '../../stores/reminder-prompt-store';
 import { useReminderStore } from '../../stores/reminder-store';
 
-export const FIRED_AT = '2026-10-04T09:00:00.000Z';
+const FIRED_AT = '2026-10-04T09:00:00.000Z';
 
 export const stretch = reminderFactory.build({ id: 'r1', text: 'Stretch', completed: false });
 
