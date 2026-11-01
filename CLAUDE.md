@@ -172,7 +172,7 @@ import { useQuoteStore } from '../stores/quote-store';
 
 1. **Add types** to `packages/shared/src/types.ts`
 2. **Add business logic** to `packages/shared/src/utils.ts`
-3. **Add storage helpers** to `packages/storage/src/storage-helpers.ts`
+3. **Add storage helpers** to a per-area module in `packages/storage/src/` (export it from `index.ts`)
 4. **Create Zustand store** in `apps/browser-extension/src/stores/`
 5. **Create components** in `apps/browser-extension/src/components/`
 6. **Wire up in App.tsx**
@@ -457,7 +457,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `packages/shared/src/utils.ts` | Business logic utilities | Adding platform-agnostic functions |
 | `packages/shared/src/csv-utils.ts` | CSV parsing for bulk import | Modifying import/export |
 | `packages/shared/src/logger.ts` | Configurable logger | Changing log behavior |
-| `packages/storage/src/storage-helpers.ts` | Typed storage helpers | Adding new storage operations |
+| `packages/storage/src/` | Typed storage helpers, one module per area | Adding new storage operations |
 | `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
 | `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter) | Adding a new sync-backend operation |
 | `packages/sync-client/src/api-client.ts` | Typed sync API client (`ApiClient`) | Adding/changing a sync endpoint call |
