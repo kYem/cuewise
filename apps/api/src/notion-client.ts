@@ -15,10 +15,10 @@ import {
 
 // Must stay >= 2025-09-03, the release that split a database into a container plus data
 // sources; this code assumes that model.
-export const NOTION_VERSION = '2026-03-11';
+const NOTION_VERSION = '2026-03-11';
 const NOTION_API = 'https://api.notion.com/v1';
 const REQUEST_TIMEOUT_MS = 15_000;
-export const PAGE_SIZE = 100;
+const PAGE_SIZE = 100;
 // Bounded so a 50k-row table cannot hold a Worker invocation open; 500 rows is past any task list.
 export const MAX_QUERY_PAGES = 5;
 

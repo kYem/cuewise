@@ -368,7 +368,7 @@ const categoryQuotesMap: Record<QuoteCategory, typeof INSPIRATION_QUOTES> = {
 /**
  * Generate seed quotes with proper IDs and metadata
  */
-export function generateSeedQuotes(): Quote[] {
+function generateSeedQuotes(): Quote[] {
   const quotes: Quote[] = [];
   let idCounter = 1;
 

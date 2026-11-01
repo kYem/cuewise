@@ -65,10 +65,10 @@ interface LandedRow {
 
 // Caps one pull/export query so a large account can't force the worker to buffer an unbounded
 // result set into memory (OOM) — the caller pages by re-pulling from the returned cursor.
-export const MAX_CHANGES_PAGE_SIZE = 500;
+const MAX_CHANGES_PAGE_SIZE = 500;
 // Safety rail against one account filling the shared D1. Generous enough that only deliberate
 // abuse hits it; checked conservatively (all pushed rows treated as new).
-export const MAX_RECORDS_PER_USER = 100_000;
+const MAX_RECORDS_PER_USER = 100_000;
 // Tombstones older than this are safe to reclaim: a device idle longer than the session TTL is
 // logged out and re-bootstraps from since=0, so it never needs the tombstone to learn of a delete.
 export const TOMBSTONE_RETENTION_MS = SESSION_TTL_MS;

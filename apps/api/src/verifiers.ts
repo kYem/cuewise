@@ -44,7 +44,7 @@ export function isTokenFault(err: unknown): boolean {
 }
 
 /** Apple sends `email_verified` as the string 'true'/'false'; Google sends a boolean. */
-export function isEmailVerified(payload: JWTPayload): boolean {
+function isEmailVerified(payload: JWTPayload): boolean {
   return payload.email_verified === true || payload.email_verified === 'true';
 }
 

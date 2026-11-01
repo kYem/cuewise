@@ -40,7 +40,7 @@ export function cursorResetsOf(meta: SyncMeta): number {
   return meta.cursorResets ?? 0;
 }
 
-export function defaultMeta(deviceNode: string): SyncMeta {
+function defaultMeta(deviceNode: string): SyncMeta {
   return {
     deviceNode,
     clock: hlcEncode(hlcInit(deviceNode)),

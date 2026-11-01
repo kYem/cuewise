@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
 /** Stands in for the browser's Image: jsdom never decodes, so tests drive onload/onerror. */
-export class FakeImage {
+class FakeImage {
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
   naturalWidth = 0;
