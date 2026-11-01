@@ -17,7 +17,6 @@
   "dependencies": {
     "@cuewise/shared": "workspace:*",
     "@testing-library/jest-dom": "catalog:",
-    "@testing-library/react": "catalog:",
     "fishery": "catalog:"
   },
   "devDependencies": {

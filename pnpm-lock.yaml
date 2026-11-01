@@ -82,9 +82,6 @@ catalogs:
     autoprefixer:
       specifier: ^10.6.1
       version: 10.6.1
-    chrono-node:
-      specifier: ^2.10.1
-      version: 2.10.1
     clsx:
       specifier: ^2.1.1
       version: 2.1.1
@@ -250,33 +247,12 @@ importers:
       '@cuewise/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@dnd-kit/core':
-        specifier: ^6.3.1
-        version: 6.3.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@dnd-kit/sortable':
-        specifier: ^10.0.0
-        version: 10.0.0(@dnd-kit/core@6.3.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)
-      '@dnd-kit/utilities':
-        specifier: ^3.2.2
-        version: 3.2.2(react@19.3.0)
       '@fontsource/inter':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/poppins':
         specifier: ^5.3.0
         version: 5.3.0
-      '@tombcato/smart-ticker':
-        specifier: ^1.2.4
-        version: 1.2.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      chrono-node:
-        specifier: 'catalog:'
-        version: 2.10.1
-      date-fns:
-        specifier: 'catalog:'
-        version: 4.4.0
-      lottie-web:
-        specifier: ^5.13.0
-        version: 5.13.0
       lucide-react:
         specifier: 'catalog:'
         version: 1.48.0(react@19.3.0)
@@ -286,15 +262,9 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
-      recharts:
-        specifier: 'catalog:'
-        version: 3.10.1(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react-is@18.3.1)(react@19.3.0)(redux@5.0.1)
       zod:
         specifier: 'catalog:'
         version: 4.6.5
-      zustand:
-        specifier: 'catalog:'
-        version: 5.0.15(@types/react@19.3.0)(immer@11.1.8)(react@19.3.0)(use-sync-external-store@1.6.0(react@19.3.0))
     devDependencies:
       '@crxjs/vite-plugin':
         specifier: 'catalog:'
@@ -344,6 +314,9 @@ importers:
       jsdom:
         specifier: 'catalog:'
         version: 30.1.1
+      lottie-web:
+        specifier: ^5.13.0
+        version: 5.13.0
       postcss:
         specifier: 'catalog:'
         version: 8.5.28
@@ -505,9 +478,6 @@ importers:
       '@tombcato/smart-ticker':
         specifier: ^1.2.4
         version: 1.2.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      chrono-node:
-        specifier: 'catalog:'
-        version: 2.10.1
       country-flag-icons:
         specifier: 'catalog:'
         version: 1.6.20
@@ -696,9 +666,6 @@ importers:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 7.0.1(@testing-library/dom@10.4.1)(vitest@5.0.2)
-      '@testing-library/react':
-        specifier: 'catalog:'
-        version: 16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       fishery:
         specifier: 'catalog:'
         version: 2.4.0
@@ -721,9 +688,6 @@ importers:
 
   packages/ui:
     dependencies:
-      '@cuewise/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@radix-ui/react-hover-card':
         specifier: ^1.1.15
         version: 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -3054,10 +3018,6 @@ packages:
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
     engines: {node: '>= 20.19.0'}
-
-  chrono-node@2.10.1:
-    resolution: {integrity: sha512-tPOsBzYVAK5zth+CiHCgp5NGeqRc4mMD8FPthQ5IxkgjPWWxIFdM5odnmfw//IRAzl6C++Xy8olQW7wn5qBR1g==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   ci-info@4.4.0:
     resolution: {integrity: sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg==}
@@ -6980,8 +6940,6 @@ snapshots:
   chokidar@5.0.0:
     dependencies:
       readdirp: 5.0.0
-
-  chrono-node@2.10.1: {}
 
   ci-info@4.4.0: {}
 
