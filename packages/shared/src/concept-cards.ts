@@ -7,6 +7,7 @@ import {
   CONCEPT_NUDGE_GAP_DAYS,
   CONCEPT_NUDGE_MAX_SHOWS,
 } from './constants';
+import type { NudgeShowState } from './review-prompt';
 import type {
   ConceptCard,
   ConceptDifficulty,
@@ -14,7 +15,6 @@ import type {
   ConceptSchedule,
   ConceptStats,
 } from './types';
-import type { NudgeShowState } from './utils';
 
 /**
  * Spaced repetition for concept cards — a simplified SM-2 with three grades.

@@ -1,11 +1,11 @@
 import { parseISO, subDays } from 'date-fns';
+import { formatDateString } from './date-utils';
 import { logger } from './logger';
 import {
   POSTURE_SAMPLE_INTERVAL_SECONDS,
   type PostureDailyStat,
   type PostureStatus,
 } from './types';
-import { formatDateString } from './utils';
 
 /** Daily rollups older than this are pruned (on load and on each flush). */
 export const POSTURE_STATS_RETENTION_DAYS = 90;

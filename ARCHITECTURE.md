@@ -155,7 +155,7 @@ export const Button = () => { /* Native version */ };
    export interface Goal { /* ... */ }
    ```
 
-2. **Business logic** (`packages/shared/src/utils.ts`)
+2. **Business logic** (per-domain modules in `packages/shared/src/`, e.g. `quote-utils.ts`, `analytics.ts`)
    ```typescript
    export function getRandomQuote(quotes: Quote[]): Quote | null
    export function calculateStreak(dates: string[]): { current: number }

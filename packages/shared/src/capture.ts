@@ -1,6 +1,7 @@
 import { newConceptSchedule } from './concept-cards';
+import { generateId } from './ids';
+import { normalizeQuickLinkUrl } from './quick-links';
 import type { ConceptCard, Quote, QuoteCategory } from './types';
-import { generateId, normalizeQuickLinkUrl } from './utils';
 
 export interface ConceptCardInput {
   term: string;

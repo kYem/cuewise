@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { formatWallClockTime } from './time-format';
 import type { WorldClockZone } from './types';
-import { formatWallClockTime } from './utils';
 import {
   addWorldClock,
   cityFromTimeZone,

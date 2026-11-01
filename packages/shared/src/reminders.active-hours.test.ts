@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { baseReminder } from './__fixtures__/reminders.fixtures';
-import type { ReminderActiveHours } from './types';
 import {
   buildReminderRecurring,
   firesPerActiveDay,
@@ -9,7 +8,8 @@ import {
   isActiveDay,
   nextReminderDueDate,
   skipReminderOccurrence,
-} from './utils';
+} from './reminders';
+import type { ReminderActiveHours } from './types';
 
 const WORKDAY: ReminderActiveHours = { start: '09:00', end: '18:00' };
 const WEEKDAYS: ReminderActiveHours = { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5] };

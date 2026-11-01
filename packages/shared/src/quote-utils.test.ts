@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRandomQuote } from './utils';
+import { getRandomQuote } from './quote-utils';
 
 describe('getRandomQuote with category filtering', () => {
   it('should filter quotes by enabled categories', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseImportData } from './utils';
+import { parseImportData } from './import-validation';
 
 describe('Import Utilities', () => {
   describe('parseImportData', () => {
