@@ -10,7 +10,7 @@ export function base64UrlEncode(bytes: Uint8Array): string {
     .replace(/=+$/, '');
 }
 
-export function base64UrlDecode(value: string): string {
+function base64UrlDecode(value: string): string {
   return atob(value.replace(/-/g, '+').replace(/_/g, '/'));
 }
 
@@ -21,7 +21,7 @@ export function base64UrlEncodeString(value: string): string {
 
 // The buffer parameter is explicit because WebCrypto's BufferSource rejects ArrayBufferLike,
 // which is what a bare `Uint8Array` return annotation widens to.
-export function base64UrlDecodeBytes(value: string): Uint8Array<ArrayBuffer> {
+function base64UrlDecodeBytes(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(base64UrlDecode(value), (ch) => ch.charCodeAt(0));
 }
 

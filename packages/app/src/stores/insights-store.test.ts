@@ -58,7 +58,7 @@ vi.mock('@cuewise/storage', () => ({
   getReminders: vi.fn(async () => []),
   getHabitHistory: vi.fn(async () => []),
   // The real predicate, not a vi.fn(): the export's completeness depends on what it answers, so a
-  // stub would make these assertions pass for any rule. storage-helpers.test.ts pins the original
+  // stub would make these assertions pass for any rule. storage/quotes.test.ts pins the original
   // against this copy.
   isCustomQuote: (quote: Quote) => quote.isCustom || quote.isFavorite || quote.isHidden,
 }));

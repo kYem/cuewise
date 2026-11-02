@@ -168,10 +168,6 @@
         box-shadow: 0 0 40px rgba(139, 92, 246, 0.55);
       }
 
-      .tab-ghost.cue i {
-        background: #fff;
-      }
-
       .hook-line {
         font-family: var(--display);
         font-weight: 700;
@@ -745,10 +741,6 @@
 
       .qa.fav {
         color: #ef4444;
-      }
-
-      .qa.fav svg {
-        fill: currentColor;
       }
 
       .qa .num {
@@ -1598,13 +1590,6 @@
         overflow: hidden;
       }
 
-      .pdash i b {
-        position: absolute;
-        inset: 0;
-        width: 0;
-        background: #fff;
-      }
-
       .pdash span {
         margin-left: 6px;
       }
@@ -2013,22 +1998,6 @@
         overflow: hidden;
       }
 
-      .cat .trk i {
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 0;
-        border-radius: 6px;
-      }
-
-      .cat .trk b {
-        position: absolute;
-        right: 10px;
-        top: 7px;
-        font-size: 12px;
-      }
-
       .donuts {
         display: flex;
         justify-content: space-around;
@@ -2287,6 +2256,38 @@
         font-weight: 500;
         letter-spacing: 0.04em;
         color: var(--text-2);
+      }
+
+      /* Kept last: a lower-specificity `i`/`b`/`svg` rule after these trips noDescendingSpecificity */
+      .tab-ghost.cue i {
+        background: #fff;
+      }
+
+      .qa.fav svg {
+        fill: currentColor;
+      }
+
+      .pdash i b {
+        position: absolute;
+        inset: 0;
+        width: 0;
+        background: #fff;
+      }
+
+      .cat .trk i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        border-radius: 6px;
+      }
+
+      .cat .trk b {
+        position: absolute;
+        right: 10px;
+        top: 7px;
+        font-size: 12px;
       }
     </style>
   </head>

@@ -20,7 +20,7 @@ import {
   reminderIdFromAlarm,
   resolveReminderNotificationAction,
   skipReminderOccurrence,
-} from './utils';
+} from './reminders';
 
 describe('clampIntervalMinutes', () => {
   it('returns the value when within range', () => {

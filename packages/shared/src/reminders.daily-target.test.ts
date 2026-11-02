@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { baseReminder } from './__fixtures__/reminders.fixtures';
 import { DEFAULT_REMINDER_ACTIVE_HOURS, REMINDER_TEMPLATES } from './constants';
-import type { Reminder, ReminderActiveHours } from './types';
 import {
   buildReminderRecurring,
   describeDailyProgress,
@@ -11,7 +10,8 @@ import {
   recordReminderDone,
   resolveReminderNotificationAction,
   skipReminderOccurrence,
-} from './utils';
+} from './reminders';
+import type { Reminder, ReminderActiveHours } from './types';
 
 const WORKDAY: ReminderActiveHours = { start: '09:00', end: '18:00' };
 

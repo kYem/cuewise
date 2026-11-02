@@ -1,6 +1,7 @@
 import { parseISO, subDays } from 'date-fns';
+import { formatDateString } from './date-utils';
+import { dailyTargetOf, isActiveDay, targetDayOf } from './reminders';
 import type { HabitDay, Reminder } from './types';
-import { dailyTargetOf, formatDateString, isActiveDay, targetDayOf } from './utils';
 
 export const HABIT_HISTORY_RETENTION_DAYS = 365;
 

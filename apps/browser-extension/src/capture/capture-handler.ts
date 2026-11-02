@@ -18,7 +18,7 @@ import {
 import type { CaptureSaveResponse } from './capture-messages';
 import { readPageSelection } from './page-selection';
 
-export const CAPTURE_POPUP_PATH = 'popup.html';
+const CAPTURE_POPUP_PATH = 'popup.html';
 
 // An explicit parent: two loose items get grouped under the full store name instead.
 export const CAPTURE_MENU_IDS = {
@@ -75,7 +75,7 @@ function kindForMenuItem(menuItemId: string | number): CaptureKind | null {
   return null;
 }
 
-export async function openCapturePopup(): Promise<void> {
+async function openCapturePopup(): Promise<void> {
   try {
     await chrome.action.openPopup();
   } catch (error) {

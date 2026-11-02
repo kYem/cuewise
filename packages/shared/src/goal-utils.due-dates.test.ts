@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Goal } from './types';
+import { getNextDayDateString, getTodayDateString } from './date-utils';
 import {
-  formatDateString,
-  getDateStringDaysAgo,
-  getDateStringDaysFromNow,
   getDueDateLabel,
-  getNextDayDateString,
   getRecentIncompleteTasks,
-  getTodayDateString,
   getUpcomingTasks,
-  getYesterdayDateString,
   rollDueTasksToToday,
-  shouldShowReviewPrompt,
-} from './utils';
+} from './goal-utils';
+import type { Goal } from './types';
 
 function createTestTask(overrides: Partial<Goal> = {}): Goal {
   return {
@@ -101,100 +95,6 @@ describe('Due Date Utilities', () => {
     });
   });
 
-  describe('shouldShowReviewPrompt', () => {
-    const base = {
-      streakCurrent: 0,
-      completedPomodoros: 0,
-      hasSeenOnboarding: true,
-      state: { dismissed: false, count: 0, lastShownAt: null as string | null },
-      today: '2026-06-11',
-    };
-
-    it('shows once a delight milestone is reached (7-day streak)', () => {
-      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7 })).toBe(true);
-    });
-
-    it('shows once 10 pomodoros are completed', () => {
-      expect(shouldShowReviewPrompt({ ...base, completedPomodoros: 10 })).toBe(true);
-    });
-
-    it('does not show below either threshold', () => {
-      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 6, completedPomodoros: 9 })).toBe(
-        false
-      );
-    });
-
-    it('does not show before onboarding is complete', () => {
-      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7, hasSeenOnboarding: false })).toBe(
-        false
-      );
-    });
-
-    it('does not show once permanently dismissed', () => {
-      expect(
-        shouldShowReviewPrompt({
-          ...base,
-          streakCurrent: 7,
-          state: { ...base.state, dismissed: true },
-        })
-      ).toBe(false);
-    });
-
-    it('does not show after it has been shown twice', () => {
-      expect(
-        shouldShowReviewPrompt({
-          ...base,
-          streakCurrent: 7,
-          state: { dismissed: false, count: 2, lastShownAt: '2026-06-01' },
-        })
-      ).toBe(false);
-    });
-
-    it('spaces the second ask at least 7 days after the first', () => {
-      const seen = { dismissed: false, count: 1 };
-      // 6 days later — too soon
-      expect(
-        shouldShowReviewPrompt({
-          ...base,
-          streakCurrent: 7,
-          state: { ...seen, lastShownAt: '2026-06-05' },
-        })
-      ).toBe(false);
-      // 7 days later — eligible again
-      expect(
-        shouldShowReviewPrompt({
-          ...base,
-          streakCurrent: 7,
-          state: { ...seen, lastShownAt: '2026-06-04' },
-        })
-      ).toBe(true);
-    });
-
-    it('shows on the first eligible milestone (count 0, no lastShownAt)', () => {
-      expect(shouldShowReviewPrompt({ ...base, completedPomodoros: 10 })).toBe(true);
-    });
-
-    it('shows when both signals are met', () => {
-      expect(shouldShowReviewPrompt({ ...base, streakCurrent: 7, completedPomodoros: 10 })).toBe(
-        true
-      );
-    });
-
-    it('stays hidden when a prior show has no/invalid lastShownAt', () => {
-      const seen = { dismissed: false, count: 1 };
-      expect(
-        shouldShowReviewPrompt({ ...base, streakCurrent: 7, state: { ...seen, lastShownAt: null } })
-      ).toBe(false);
-      expect(
-        shouldShowReviewPrompt({
-          ...base,
-          streakCurrent: 7,
-          state: { ...seen, lastShownAt: 'not-a-date' },
-        })
-      ).toBe(false);
-    });
-  });
-
   describe('getDueDateLabel', () => {
     it('should return "Today" for today', () => {
       expect(getDueDateLabel(getTodayDateString())).toBe('Today');
@@ -240,55 +140,6 @@ describe('Due Date Utilities', () => {
       expect(label).toContain('15');
     });
   });
-
-  // Guards the UTC->local fix: must stay consistent with the sibling local-time helpers,
-  // not drift back to toISOString() (which is off by a day in some timezones near midnight).
-  describe('getDateStringDaysAgo', () => {
-    it('returns today for 0 days ago', () => {
-      expect(getDateStringDaysAgo(0)).toBe(getTodayDateString());
-    });
-
-    it('returns yesterday for 1 day ago', () => {
-      expect(getDateStringDaysAgo(1)).toBe(getYesterdayDateString());
-    });
-
-    it('returns a YYYY-MM-DD string exactly N days before today', () => {
-      const result = getDateStringDaysAgo(7);
-
-      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      const daysApart = (Date.parse(getTodayDateString()) - Date.parse(result)) / 86_400_000;
-      expect(daysApart).toBe(7);
-    });
-  });
-
-  describe('getDateStringDaysFromNow', () => {
-    it('returns today for 0 days from now', () => {
-      expect(getDateStringDaysFromNow(0)).toBe(getTodayDateString());
-    });
-
-    it('returns tomorrow for 1 day from now', () => {
-      expect(getDateStringDaysFromNow(1)).toBe(getNextDayDateString());
-    });
-
-    it('returns a YYYY-MM-DD string exactly N days after today', () => {
-      const result = getDateStringDaysFromNow(7);
-
-      expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      const daysApart = (Date.parse(result) - Date.parse(getTodayDateString())) / 86_400_000;
-      expect(daysApart).toBe(7);
-    });
-  });
-
-  describe('formatDateString', () => {
-    it('formats a Date as a local YYYY-MM-DD string', () => {
-      expect(formatDateString(new Date(2025, 0, 5))).toBe('2025-01-05');
-    });
-
-    it('matches getTodayDateString for the current date', () => {
-      expect(formatDateString(new Date())).toBe(getTodayDateString());
-    });
-  });
-
   describe('rollDueTasksToToday', () => {
     it('rolls incomplete tasks whose due date has arrived into today', () => {
       const goals = [

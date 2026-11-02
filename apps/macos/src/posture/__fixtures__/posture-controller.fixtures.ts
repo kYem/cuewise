@@ -7,7 +7,7 @@ import { vi } from 'vitest';
 export type EventHandler = (event: { payload: string }) => void;
 
 /** Tauri event handlers captured by the mocked `listen`, keyed by event name. */
-export const capturedHandlers = new Map<string, EventHandler>();
+const capturedHandlers = new Map<string, EventHandler>();
 export const unlistenSpies: Array<ReturnType<typeof vi.fn>> = [];
 
 export const invokeMock = vi.fn();
@@ -91,7 +91,7 @@ export function hhmmFromNow(offsetMinutes: number): string {
   return `${hours}:${minutes}`;
 }
 
-export function getHandler(event: string): EventHandler {
+function getHandler(event: string): EventHandler {
   const handler = capturedHandlers.get(event);
   if (handler === undefined) {
     throw new Error(`No listener attached for ${event}`);

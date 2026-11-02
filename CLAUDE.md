@@ -171,8 +171,8 @@ import { useQuoteStore } from '../stores/quote-store';
 ### Adding a New Feature
 
 1. **Add types** to `packages/shared/src/types.ts`
-2. **Add business logic** to `packages/shared/src/utils.ts`
-3. **Add storage helpers** to `packages/storage/src/storage-helpers.ts`
+2. **Add business logic** to its domain module in `packages/shared/src/` (e.g. `goal-utils.ts`, `reminders.ts`), exported from `index.ts`
+3. **Add storage helpers** to a per-area module in `packages/storage/src/` (export it from `index.ts`)
 4. **Create Zustand store** in `apps/browser-extension/src/stores/`
 5. **Create components** in `apps/browser-extension/src/components/`
 6. **Wire up in App.tsx**
@@ -409,7 +409,7 @@ const quotes = await getQuotes(); // Quote[]
 ### 2. Don't Import Browser APIs in Shared Package
 
 ```typescript
-// WRONG: packages/shared/src/utils.ts
+// WRONG: packages/shared/src/quote-utils.ts
 export function saveToStorage(data: Quote[]) {
   chrome.storage.local.set({ quotes: data }); // NO! Chrome API in shared code
 }
@@ -454,10 +454,10 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 |------|---------|--------------|
 | `packages/shared/src/types.ts` | Core data types (50+ interfaces) | Adding new entities/interfaces |
 | `packages/shared/src/constants.ts` | Categories, themes, sounds, templates | Adding categories, defaults |
-| `packages/shared/src/utils.ts` | Business logic utilities | Adding platform-agnostic functions |
+| `packages/shared/src/*.ts` (`date-utils`, `goal-utils`, `reminders`, `analytics`, ...) | Per-domain business logic | Adding platform-agnostic functions |
 | `packages/shared/src/csv-utils.ts` | CSV parsing for bulk import | Modifying import/export |
 | `packages/shared/src/logger.ts` | Configurable logger | Changing log behavior |
-| `packages/storage/src/storage-helpers.ts` | Typed storage helpers | Adding new storage operations |
+| `packages/storage/src/` | Typed storage helpers, one module per area | Adding new storage operations |
 | `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
 | `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter) | Adding a new sync-backend operation |
 | `packages/sync-client/src/api-client.ts` | Typed sync API client (`ApiClient`) | Adding/changing a sync endpoint call |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { parseImportData } from './import-validation';
 import { goalSchema, pomodoroSessionSchema, quoteSchema } from './schemas';
-import { parseImportData } from './utils';
 
 /**
  * The write boundary must not admit what the read boundary deletes: anything that slips
