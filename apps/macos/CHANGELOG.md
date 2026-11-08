@@ -1,5 +1,27 @@
 # @cuewise/macos
 
+## 0.11.1
+
+### Patch Changes
+
+- b8672c5: Compact goals view has a + button to add another goal, and any goal expands to add a subtask.
+- db251cf: A habit turned into a scheduled reminder drops its streak history, and history older than a year is cleared.
+- cddfb47: Habits keep recording days when their stored history has become unreadable.
+- 436f6d6: Sync stops keeping bookkeeping for items deleted more than 90 days ago.
+- 81cd8eb: A new device's first sync writes each page of pulled items at once, so large histories land much faster.
+- d449ce0: World clock cities show their country's flag.
+- Updated dependencies [b8672c5]
+- Updated dependencies [db251cf]
+- Updated dependencies [cddfb47]
+- Updated dependencies [436f6d6]
+- Updated dependencies [81cd8eb]
+- Updated dependencies [d449ce0]
+  - @cuewise/app@1.26.1
+  - @cuewise/shared@1.28.1
+  - @cuewise/storage@1.28.1
+  - @cuewise/sync-engine@0.5.1
+  - @cuewise/sync-client@0.3.3
+
 ## 0.11.0
 
 ### Minor Changes

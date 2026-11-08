@@ -1,5 +1,17 @@
 # @cuewise/browser-extension
 
+## 1.28.1
+
+### Patch Changes
+
+- b8672c5: Compact goals view has a + button to add another goal, and any goal expands to add a subtask.
+- db251cf: A habit turned into a scheduled reminder drops its streak history, and history older than a year is cleared.
+- cddfb47: Habits keep recording days when their stored history has become unreadable.
+- fa67ab9: The new tab's title is now "New Tab".
+- 436f6d6: Sync stops keeping bookkeeping for items deleted more than 90 days ago.
+- 81cd8eb: A new device's first sync writes each page of pulled items at once, so large histories land much faster.
+- d449ce0: World clock cities show their country's flag.
+
 ## 1.28.0
 
 ### Minor Changes
