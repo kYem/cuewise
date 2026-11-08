@@ -1,5 +1,15 @@
 # @cuewise/storage
 
+## 1.28.1
+
+### Patch Changes
+
+- db251cf: A habit turned into a scheduled reminder drops its streak history, and history older than a year is cleared.
+- cddfb47: Habits keep recording days when their stored history has become unreadable.
+- Updated dependencies [db251cf]
+- Updated dependencies [d449ce0]
+  - @cuewise/shared@1.28.1
+
 ## 1.28.0
 
 ### Minor Changes

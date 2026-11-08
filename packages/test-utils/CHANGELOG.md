@@ -1,5 +1,13 @@
 # @cuewise/test-utils
 
+## 1.0.18
+
+### Patch Changes
+
+- Updated dependencies [db251cf]
+- Updated dependencies [d449ce0]
+  - @cuewise/shared@1.28.1
+
 ## 1.0.17
 
 ### Patch Changes

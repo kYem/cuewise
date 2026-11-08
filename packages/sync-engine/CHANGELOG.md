@@ -1,5 +1,18 @@
 # @cuewise/sync-engine
 
+## 0.5.1
+
+### Patch Changes
+
+- 436f6d6: Sync stops keeping bookkeeping for items deleted more than 90 days ago.
+- 81cd8eb: A new device's first sync writes each page of pulled items at once, so large histories land much faster.
+- Updated dependencies [db251cf]
+- Updated dependencies [cddfb47]
+- Updated dependencies [d449ce0]
+  - @cuewise/shared@1.28.1
+  - @cuewise/storage@1.28.1
+  - @cuewise/sync-client@0.3.3
+
 ## 0.5.0
 
 ### Minor Changes

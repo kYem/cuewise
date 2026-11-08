@@ -1,5 +1,21 @@
 # @cuewise/app
 
+## 1.26.1
+
+### Patch Changes
+
+- b8672c5: Compact goals view has a + button to add another goal, and any goal expands to add a subtask.
+- db251cf: A habit turned into a scheduled reminder drops its streak history, and history older than a year is cleared.
+- d449ce0: World clock cities show their country's flag.
+- Updated dependencies [db251cf]
+- Updated dependencies [cddfb47]
+- Updated dependencies [436f6d6]
+- Updated dependencies [81cd8eb]
+- Updated dependencies [d449ce0]
+  - @cuewise/shared@1.28.1
+  - @cuewise/storage@1.28.1
+  - @cuewise/sync-engine@0.5.1
+
 ## 1.26.0
 
 ### Minor Changes
