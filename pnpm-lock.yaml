@@ -95,8 +95,8 @@ catalogs:
       specifier: ^2.4.0
       version: 2.4.0
     hono:
-      specifier: ^4.13.11
-      version: 4.13.13
+      specifier: ^4.13.16
+      version: 4.13.18
     jose:
       specifier: ^6.2.12
       version: 6.2.12
@@ -200,7 +200,7 @@ importers:
         version: link:../../packages/shared
       hono:
         specifier: 'catalog:'
-        version: 4.13.13
+        version: 4.13.18
       jose:
         specifier: 'catalog:'
         version: 6.2.12
@@ -3449,8 +3449,8 @@ packages:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
 
-  hono@4.13.13:
-    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@7.0.0:
@@ -7347,7 +7347,7 @@ snapshots:
 
   he@1.2.0: {}
 
-  hono@4.13.13: {}
+  hono@4.13.18: {}
 
   html-encoding-sniffer@7.0.0:
     dependencies:
