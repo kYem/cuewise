@@ -61,7 +61,7 @@ catalog:
   '@vitest/coverage-istanbul': 5.0.2
   '@vitest/coverage-v8': 5.0.2
   '@vitest/ui': 5.0.2
-  astro: 7.3.5
+  astro: 7.4.7
   autoprefixer: ^10.6.1
   clsx: ^2.1.1
   country-flag-icons: ^1.6.20
