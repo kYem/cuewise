@@ -1093,11 +1093,6 @@ export class SyncEngine {
   }
 
   /**
-   * Installs the persisted stamp, or names why it could not be. Both rejections log at error: only
-   * localStorage can report an unreadable value, and the app embedding it ships logLevel 'error',
-   * so a warn would be unreachable by anyone able to act on it.
-   */
-  /**
    * Only into a process that has never forgotten the account: after a sign-in or disable the
    * stored one may be the previous account's (a failed remove, or a read that straddled it).
    */
@@ -1119,6 +1114,11 @@ export class SyncEngine {
     this.account = account.value;
   }
 
+  /**
+   * Installs the persisted stamp, or names why it could not be. Both rejections log at error: only
+   * localStorage can report an unreadable value, and the app embedding it ships logLevel 'error',
+   * so a warn would be unreachable by anyone able to act on it.
+   */
   private hydrateStamp(stamp: StoredValue): void {
     if (!stamp.readable) {
       logger.error('The stored last-synced stamp is unreadable', { key: LAST_SYNCED_AT_KEY });
