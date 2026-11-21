@@ -76,7 +76,7 @@ a full-bleed background photo. Activate with `[data-theme="glass"]` (tokens in
 `tokens/glass.css`). All text carries `--glass-text-shadow` for legibility on
 any photo, and a top/bottom `--glass-scrim` keeps chrome readable over bright
 images. The product pulls a **daily curated Unsplash photo** by category
-(nature/forest/ocean/mountains/minimal/dark, see `utils/unsplash.ts`) behind a
+(the themes in `FOCUS_IMAGE_CATEGORY_IDS`, photos in `utils/unsplash-catalog.ts`) behind a
 "Brewing your view" ☕ loader. For a **self-contained** system this kit ships
 three on-brand mesh-gradient backdrops (`assets/bg-{aurora,dusk,mist}.png` — the
 product's "minimal" category) and defaults to them; swap in any photo URL for

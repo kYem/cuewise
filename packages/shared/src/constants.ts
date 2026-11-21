@@ -1,16 +1,16 @@
-import type {
-  ColorTheme,
-  ConceptTemplate,
-  FocusImageCategory,
-  QuoteCategory,
-  ReminderActiveHours,
-  ReminderCategory,
-  ReminderTemplate,
-  Settings,
-  SoundscapeTile,
-  YoutubePlaylist,
+import {
+  type ColorTheme,
+  type ConceptTemplate,
+  FOCUS_IMAGE_CATEGORY_IDS,
+  type FocusImageCategory,
+  type QuoteCategory,
+  type ReminderActiveHours,
+  type ReminderCategory,
+  type ReminderTemplate,
+  type Settings,
+  type SoundscapeTile,
+  type YoutubePlaylist,
 } from './types';
-import { FOCUS_IMAGE_CATEGORY_IDS } from './types';
 
 /** 24 hours in ms — use for day arithmetic instead of inline literals. */
 export const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -321,7 +321,7 @@ export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
   classical: 'Classical',
 };
 
-export const ALL_FOCUS_IMAGE_CATEGORIES: FocusImageCategory[] = [...FOCUS_IMAGE_CATEGORY_IDS];
+export const ALL_FOCUS_IMAGE_CATEGORIES: readonly FocusImageCategory[] = FOCUS_IMAGE_CATEGORY_IDS;
 
 // App configuration links
 export const APP_LINKS = {

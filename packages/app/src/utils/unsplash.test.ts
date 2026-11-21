@@ -233,7 +233,7 @@ describe('curated catalog invariants', () => {
   });
 
   it('covers every theme the picker offers', () => {
-    expect(Object.keys(CURATED_PHOTOS)).toEqual(ALL_FOCUS_IMAGE_CATEGORIES);
+    expect(Object.keys(CURATED_PHOTOS).sort()).toEqual([...ALL_FOCUS_IMAGE_CATEGORIES].sort());
   });
 
   it.each(RETIRED_PHOTO_IDS)('no longer ships retired photo %s', (id) => {

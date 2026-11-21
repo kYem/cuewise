@@ -1,4 +1,4 @@
-import { ALL_FOCUS_IMAGE_CATEGORIES, type FocusImageCategory } from '@cuewise/shared';
+import type { FocusImageCategory } from '@cuewise/shared';
 import { CURATED_PHOTOS } from './unsplash-catalog';
 
 /**
@@ -8,9 +8,12 @@ import { CURATED_PHOTOS } from './unsplash-catalog';
  */
 
 // Track last used index per category to avoid immediate repeats
-const lastUsedIndex = Object.fromEntries(
-  ALL_FOCUS_IMAGE_CATEGORIES.map((category) => [category, -1])
-) as Record<FocusImageCategory, number>;
+const lastUsedIndex: Partial<Record<FocusImageCategory, number>> = {};
+
+/** CDN URL for a catalog photo id, sized by Unsplash's on-the-fly transform params. */
+export function unsplashImageUrl(photoId: string, params: string): string {
+  return `https://images.unsplash.com/${photoId}?${params}`;
+}
 
 // Unsplash asks attribution links to carry these referral params.
 const REFERRAL_PARAMS = 'utm_source=cuewise&utm_medium=referral';
@@ -92,7 +95,7 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
     selectedIndex = index % images.length;
   } else {
     // Random selection that avoids immediate repeats
-    const lastIndex = lastUsedIndex[category];
+    const lastIndex = lastUsedIndex[category] ?? -1;
     const availableIndices = images
       .map((_, i) => i)
       .filter((i) => i !== lastIndex || images.length === 1);
@@ -103,7 +106,7 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
   const imageId = images[selectedIndex].id;
   // No cache-buster: the photo behind an id never changes, and a URL nobody has requested
   // before misses the CDN edge and forces an origin transform.
-  return `https://images.unsplash.com/${imageId}?w=1920&h=1080&fit=crop&auto=format`;
+  return unsplashImageUrl(imageId, 'w=1920&h=1080&fit=crop&auto=format');
 }
 
 /** Masks a custom background for logging — it is a data URL of the user's own picture. */
