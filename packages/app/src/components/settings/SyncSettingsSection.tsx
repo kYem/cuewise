@@ -26,7 +26,7 @@ import {
   NO_SAVED_SIGN_IN_DETAIL,
   useSyncController,
 } from '../../sync/sync-controller';
-import { formatMillisAgo } from '../../utils/reminder-date-utils';
+import { formatMillisAgoPhrase } from '../../utils/reminder-date-utils';
 import { ConfirmationDialog } from '../ConfirmationDialog';
 import { EnrollCodeModal } from './EnrollCodeModal';
 import { PairingPanel, POLL_INTERVAL_MS } from './PairingPanel';
@@ -1099,7 +1099,7 @@ export const SyncSettingsSectionComponent: React.FC<SettingsSectionProps> = ({ f
             <div data-testid="sync-device-label" className="text-xs text-tertiary">
               Device: {deviceName}
               {details !== null && details.lastSyncedAt !== null
-                ? ` · Last synced ${formatMillisAgo(details.lastSyncedAt)}`
+                ? ` · Last synced ${formatMillisAgoPhrase(details.lastSyncedAt)}`
                 : ''}
             </div>
             <div className="flex flex-wrap gap-2">

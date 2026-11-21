@@ -1074,7 +1074,7 @@ describe('SyncSettingsSectionComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Sync now' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced Just now/)
+      expect(screen.getByTestId('sync-device-label')).toHaveTextContent(/Last synced just now/)
     );
   });
 

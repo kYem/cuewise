@@ -356,7 +356,7 @@ describe('SyncMenuFooter', () => {
 
   describe('while the menu stays open', () => {
     beforeEach(() => {
-      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     });
 
     afterEach(() => {

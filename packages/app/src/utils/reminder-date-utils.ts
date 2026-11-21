@@ -87,11 +87,10 @@ export function formatDueDate(dueDate: string, timeFormat: '12h' | '24h' = '12h'
   };
 }
 
-/** Compact "time since" for an absolute instant in epoch millis: "Just now", "26 min ago", "3h ago", "2d ago". */
-export function formatMillisAgo(millis: number): string {
-  const seconds = Math.round((Date.now() - millis) / 1000);
+function formatAgo(millis: number, now: number, justNow: string): string {
+  const seconds = Math.round((now - millis) / 1000);
   if (seconds < 60) {
-    return 'Just now';
+    return justNow;
   }
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) {
@@ -103,6 +102,16 @@ export function formatMillisAgo(millis: number): string {
   }
   const days = Math.round(hours / 24);
   return `${days}d ago`;
+}
+
+/** Compact "time since" for an absolute instant in epoch millis: "Just now", "26 min ago", "3h ago", "2d ago". */
+export function formatMillisAgo(millis: number, now: number = Date.now()): string {
+  return formatAgo(millis, now, 'Just now');
+}
+
+/** formatMillisAgo for use after a prefix ("Synced just now", "Last synced 3h ago"). */
+export function formatMillisAgoPhrase(millis: number, now: number = Date.now()): string {
+  return formatAgo(millis, now, 'just now');
 }
 
 /** Same compact "time since" for an ISO-8601 timestamp string (reminder timestamps are ISO strings). */

@@ -2,6 +2,7 @@ import { describeThrown, logger } from '@cuewise/shared';
 import { RefreshCw, Settings } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useMinuteNow } from '../hooks/useMinuteNow';
 import { useToastStore } from '../stores/toast-store';
 import {
   type SyncDetails,
@@ -9,7 +10,7 @@ import {
   type SyncUiStatus,
   useSyncController,
 } from '../sync/sync-controller';
-import { formatMillisAgo } from '../utils/reminder-date-utils';
+import { formatMillisAgoPhrase } from '../utils/reminder-date-utils';
 
 interface SyncMenuFooterProps {
   onOpenSettings: () => void;
@@ -22,22 +23,7 @@ const NEEDS_SETTINGS: readonly SyncUiStatus[] = ['needs_reauth', 'needs_enroll']
 // the status line below it does not move when the details fetch lands.
 const EMAIL_SKELETON_ROW = 'flex h-4 items-center';
 
-// formatMillisAgo says "Just now" under a minute, capitalised for standalone use.
-const JUST_NOW_MS = 60_000;
-// Fine enough for a minute-resolution label, cheap enough to run while the menu is open.
-const TICK_MS = 15_000;
-
 const CACHED: SyncDetailsOptions = { cached: true };
-
-function syncedLabel(lastSyncedAt: number | null): string {
-  if (lastSyncedAt === null) {
-    return 'Synced';
-  }
-  if (Date.now() - lastSyncedAt < JUST_NOW_MS) {
-    return 'Synced just now';
-  }
-  return `Synced ${formatMillisAgo(lastSyncedAt)}`;
-}
 
 const LABELS: Partial<Record<SyncUiStatus, string>> = {
   connecting: 'Connecting…',
@@ -55,7 +41,7 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
   const [details, setDetails] = useState<SyncDetails | null>(null);
   const [detailsPending, setDetailsPending] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [, setTick] = useState(0);
+  const now = useMinuteNow();
   // Guards two concurrent getDetails() callers: a host that emits 'syncing' mid-syncNow (macOS)
   // re-fetches on both that transition and the back-to-active one, while handleSync fetches its
   // own refresh — only the newest generation may paint.
@@ -98,15 +84,6 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
     });
   }, [controller, status]);
 
-  const lastSyncedAt = details?.lastSyncedAt ?? null;
-  useEffect(() => {
-    if (lastSyncedAt === null) {
-      return;
-    }
-    const id = setInterval(() => setTick((n) => n + 1), TICK_MS);
-    return () => clearInterval(id);
-  }, [lastSyncedAt]);
-
   if (controller === null || status === null || status === 'off') {
     return null;
   }
@@ -115,7 +92,12 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
   // The adapter status covers syncs this row did not start; `busy` covers the extension, whose
   // bridge never emits 'syncing' at all.
   const inProgress = busy || status === 'syncing';
-  const label = inProgress ? 'Syncing…' : (LABELS[status] ?? syncedLabel(lastSyncedAt));
+  const lastSyncedAt = details?.lastSyncedAt ?? null;
+  const syncedLabel =
+    lastSyncedAt === null
+      ? 'Synced'
+      : `Synced ${formatMillisAgoPhrase(lastSyncedAt, now.getTime())}`;
+  const label = inProgress ? 'Syncing…' : (LABELS[status] ?? syncedLabel);
 
   const handleSync = async (): Promise<void> => {
     setBusy(true);
