@@ -39,13 +39,6 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'v2osk',
       location: null,
     },
-    // Green hills
-    {
-      id: 'photo-1472214103451-9374bd1c798e',
-      photographer: 'Robert Lukeman',
-      username: 'robertlukeman',
-      location: 'Skye, United Kingdom',
-    },
     // Waterfall
     {
       id: 'photo-1433086966358-54859d0ed716',
@@ -81,13 +74,6 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'tokeller',
       location: 'Lake Tekapo, New Zealand',
     },
-    // misty mountain valley
-    {
-      id: 'photo-1759061003114-337938a8a004',
-      photographer: 'Tobias Pfeifer',
-      username: 'tobi_sap',
-      location: 'Teneriffa, Spanien',
-    },
     // lush green valley
     {
       id: 'photo-1754637024977-368665e88caf',
@@ -101,13 +87,6 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       photographer: 'Marek Piwnicki',
       username: 'marekpiwnicki',
       location: 'Italy',
-    },
-    // rolling green hills
-    {
-      id: 'photo-1759759260780-f09be8608b53',
-      photographer: 'paws and prints',
-      username: 'paws_and_prints',
-      location: 'Diamond Hill, Connemara National Park, Letterfrack, County Galway, Irland',
     },
     // grassy sunlit hills
     {
@@ -151,6 +130,27 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'jeffreyp',
       location: null,
     },
+    // trees near lake
+    {
+      id: 'photo-1600298882283-40b4dcb8b211',
+      photographer: 'Nathan Dumlao',
+      username: 'nate_dumlao',
+      location: null,
+    },
+    // trees beside lake
+    {
+      id: 'photo-1583244685026-d8519b5e3d21',
+      photographer: 'Claudia Chiavazza',
+      username: 'chiclaudia',
+      location: 'Laghi di Fusine, Tarvisio, UD, Italia',
+    },
+    // lake surrounded by trees
+    {
+      id: 'photo-1507371341162-763b5e419408',
+      photographer: 'Ricardo Gomez Angel',
+      username: 'rgaleriacom',
+      location: 'Horgenberg, Horgen, Switzerland',
+    },
   ],
   forest: [
     // Forest path
@@ -188,13 +188,6 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'lucabravo',
       location: 'Lago di Braies',
     },
-    // Sunbeams through trees
-    {
-      id: 'photo-1502082553048-f009c37129b9',
-      photographer: 'niko photos',
-      username: 'niko_photos',
-      location: 'Nicaragua',
-    },
     // Forest stream
     {
       id: 'photo-1476231682828-37e571bc172f',
@@ -230,26 +223,12 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'robshumski',
       location: null,
     },
-    // dark misty pines
-    {
-      id: 'photo-1764111812995-b73ff58fc7d7',
-      photographer: 'Dmitry Spravko',
-      username: 'kaprion',
-      location: 'Vancouver, BC, Canada',
-    },
     // sunlit pine trail
     {
       id: 'photo-1752230446597-a5b08f8647e4',
       photographer: 'Gavin Allanwood',
       username: 'fp4',
       location: 'Ainsdale, Southport, UK',
-    },
-    // misty forested slope
-    {
-      id: 'photo-1758642882005-447873fd2d29',
-      photographer: 'Andrea Caramello',
-      username: 'andreacaramello',
-      location: null,
     },
     // winter forest sunbeams
     {
@@ -293,6 +272,69 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'prphotography262',
       location: 'Olympic National Forest, Washington, USA',
     },
+    // golden larch forest
+    {
+      id: 'photo-1508255139162-e1f7b7288ab7',
+      photographer: 'Federica Galli',
+      username: 'fedechanw',
+      location: 'Lago di Sorapis, Italy',
+    },
+    // tree-lined path, golden hour
+    {
+      id: 'photo-1445855743215-296f71d4b49c',
+      photographer: 'Lukasz Szmigiel',
+      username: 'szmigieldesign',
+      location: 'Biały Ług, Kędzierzyn-Koźle, Poland',
+    },
+    // brown trees on field
+    {
+      id: 'photo-1613985212734-166ffb5a513d',
+      photographer: 'Konstantin Dyadyun',
+      username: 'kostyadyadyun',
+      location: null,
+    },
+    // road through autumn trees
+    {
+      id: 'photo-1700192569130-13f6b3dd0fca',
+      photographer: 'Alexander Holmes',
+      username: 'solar_al',
+      location: null,
+    },
+    // autumn path, misty forest
+    {
+      id: 'photo-1445964047600-cdbdb873673d',
+      photographer: 'Sebastian Unrau',
+      username: 'sebastian_unrau',
+      location: 'Bad Pyrmont, Deutschland',
+    },
+    // blurred autumn foliage
+    {
+      id: 'photo-1759806642296-5ba05e043d84',
+      photographer: 'Eugene Golovesov',
+      username: 'eugene_golovesov',
+      location: null,
+    },
+    // moss-covered rock
+    {
+      id: 'photo-1692065976427-9e97e653e02a',
+      photographer: 'Brice Cooper',
+      username: 'brice_cooper18',
+      location: null,
+    },
+    // sunlight through green forest
+    {
+      id: 'photo-1761461922930-9afd5bf09593',
+      photographer: 'Jean Woloszczyk',
+      username: 'jeanwolo',
+      location: null,
+    },
+    // sunlight through canopy
+    {
+      id: 'photo-1762284499277-eff8dba45c02',
+      photographer: 'Teodora Vaklinska',
+      username: 'tea_in_deventer',
+      location: 'Sallandse Heuvelrug, Netherlands',
+    },
   ],
   ocean: [
     // Ocean waves
@@ -329,13 +371,6 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       photographer: 'Christoffer Engström',
       username: 'christoffere',
       location: null,
-    },
-    // Tropical beach
-    {
-      id: 'photo-1519046904884-53103b34b206',
-      photographer: 'Elizeu Dias',
-      username: 'elishavision',
-      location: 'Rio de Janeiro, Brazil',
     },
     // Beach aerial
     {
@@ -501,26 +536,12 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'heytowner',
       location: 'Ancient Bristlecone Pine Forest, United States',
     },
-    // alpine peaks dawn
-    {
-      id: 'photo-1780042426982-cb794203ea1d',
-      photographer: 'Pascal Debrunner',
-      username: 'debrupas',
-      location: 'Schweiz',
-    },
     // snowy dolomites twilight
     {
       id: 'photo-1769631417306-a1da09f42b20',
       photographer: 'Marek Piwnicki',
       username: 'marekpiwnicki',
       location: 'Bolzano, Autonomous Province of Bolzano – South Tyrol, Italy',
-    },
-    // sunrise above fog
-    {
-      id: 'photo-1762181702079-40f2f9ac56e4',
-      photographer: 'Pascal Debrunner',
-      username: 'debrupas',
-      location: 'Schweiz',
     },
     // golden snowcapped range
     {
@@ -564,6 +585,48 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'marekpiwnicki',
       location: 'Dolomites',
     },
+    // fog-covered mountains
+    {
+      id: 'photo-1483354483454-4cd359948304',
+      photographer: 'Paul Earle',
+      username: 'paulearlephotography',
+      location: 'Snowdonia National Park, United Kingdom',
+    },
+    // mountain near water
+    {
+      id: 'photo-1523248948644-586f1ab2a83e',
+      photographer: 'Tyler Lastovich',
+      username: 'lastly',
+      location: 'Lake Hauroko, New Zealand',
+    },
+    // turquoise lake, snowy peaks
+    {
+      id: 'photo-1559310589-2673bfe16970',
+      photographer: 'Adam Vradenburg',
+      username: 'vradenburg',
+      location: null,
+    },
+    // snowy peak, calm lake
+    {
+      id: 'photo-1778510092958-c952c661b807',
+      photographer: 'Timo Wielink',
+      username: 'timowielink',
+      location: 'Lake Wenatchee, Washington, USA',
+    },
+    // snowy peaks reflected
+    {
+      id: 'photo-1787117754799-75c2b97d66a8',
+      photographer: 'Gabor Koszegi',
+      username: 'gabor_koszegi',
+      location: 'Two Jack Lake, Improvement District No. 9, AB, Canada',
+    },
+    // Moraine Lake
+    {
+      id: 'photo-1506104489822-562ca25152fe',
+      photographer: 'Redd Francisco',
+      username: 'reddfrancisco',
+      location: 'Moraine Lake, Canada',
+    },
   ],
   minimal: [
     // Gradient purple
@@ -587,40 +650,12 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'lukechesser',
       location: null,
     },
-    // Pink gradient
-    {
-      id: 'photo-1553356084-58ef4a67b2a7',
-      photographer: 'Pawel Czerwinski',
-      username: 'pawel_czerwinski',
-      location: null,
-    },
-    // Blue gradient
-    {
-      id: 'photo-1557682224-5b8590cd9ec5',
-      photographer: 'Luke Chesser',
-      username: 'lukechesser',
-      location: null,
-    },
     // Colorful gradient
     {
       id: 'photo-1579546929518-9e396f3cc809',
       photographer: 'Codioful (Formerly Gradienta)',
       username: 'codioful',
       location: null,
-    },
-    // Soft gradient
-    {
-      id: 'photo-1557682260-96773eb01377',
-      photographer: 'Luke Chesser',
-      username: 'lukechesser',
-      location: null,
-    },
-    // Geometric minimal
-    {
-      id: 'photo-1550684848-fac1c5b4e853',
-      photographer: 'Rodion Kutsaiev',
-      username: 'frostroomhead',
-      location: 'Melitopol, Ukraine',
     },
     // Abstract blue
     {
@@ -706,6 +741,55 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'annahunko',
       location: 'Ireland, Cliffs of Moher',
     },
+    // snow-covered pine
+    {
+      id: 'photo-1518972734183-c5b490a7c637',
+      photographer: 'Cristina Gottardi',
+      username: 'cristina_gottardi',
+      location: null,
+    },
+    // lone tree on hill
+    {
+      id: 'photo-1705435896415-933b94be4ea5',
+      photographer: 'Mojtaba Mohammadi',
+      username: 'mojitaba',
+      location: 'Iran',
+    },
+    // small boat, calm sea
+    {
+      id: 'photo-1761943840939-ad36457f54a0',
+      photographer: 'Eduard Galitskiy',
+      username: 'echogolf',
+      location: null,
+    },
+    // lone house in snow
+    {
+      id: 'photo-1641247940945-b8329abedc00',
+      photographer: 'Luca Pozzoli',
+      username: 'pozlu0',
+      location: null,
+    },
+    // grayscale lone tree
+    {
+      id: 'photo-1609668627336-4fee026204f7',
+      photographer: 'Jan Huber',
+      username: 'jan_huber',
+      location: null,
+    },
+    // white dunes, distant range
+    {
+      id: 'photo-1765498069280-b863094c17bf',
+      photographer: 'Royce Fonseca',
+      username: 'casunshine0508',
+      location: 'White Sands National Park, New Mexico, USA',
+    },
+    // white concrete house
+    {
+      id: 'photo-1503450843813-359b7b07bd36',
+      photographer: 'Raychan',
+      username: 'wx1993',
+      location: null,
+    },
   ],
   dark: [
     // Night sky stars
@@ -715,40 +799,12 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'vincentiu',
       location: "Cima d'Asta, Scurelle, Italy",
     },
-    // Dark forest
-    {
-      id: 'photo-1507400492013-162706c8c05e',
-      photographer: 'Timothée Duran',
-      username: 'timotheeduran',
-      location: null,
-    },
-    // Night cityscape
-    {
-      id: 'photo-1472552944129-b035e9ea3744',
-      photographer: 'Gregoire Jeanneau',
-      username: 'gregjeanneau',
-      location: null,
-    },
     // Milky way
     {
       id: 'photo-1536183922588-166604504d5e',
       photographer: 'Kyle Johnson',
       username: 'kylejeffreys',
       location: 'Cannon Beach, United States',
-    },
-    // Night road
-    {
-      id: 'photo-1489549132488-d00b7eee80f1',
-      photographer: 'Diego PH',
-      username: 'jdiegoph',
-      location: 'Toluca, Mexico',
-    },
-    // Starry night
-    {
-      id: 'photo-1475274047050-1d0c0975c63e',
-      photographer: 'Paul Lichtblau',
-      username: 'laup',
-      location: null,
     },
     // Night forest
     {
@@ -799,26 +855,12 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'joshuaworoniecki',
       location: 'Jasper, Alberta, Canada',
     },
-    // meteor starry sky
-    {
-      id: 'photo-1599218419176-0daa21523249',
-      photographer: 'Олег Мороз',
-      username: 'tengyart',
-      location: 'Russia',
-    },
     // aurora snowy peaks
     {
       id: 'photo-1759675739458-6e5a4a60a117',
       photographer: 'Jonny Gios',
       username: 'supergios',
       location: 'Vestrahorn, Iceland',
-    },
-    // dark dusk silhouettes
-    {
-      id: 'photo-1741501769971-68e9b813509a',
-      photographer: 'MChe Lee',
-      username: 'mclee',
-      location: null,
     },
     // aurora light burst
     {
@@ -833,6 +875,525 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       photographer: 'Lightscape',
       username: 'lightscape',
       location: 'Tromsø, Norway',
+    },
+    // grayscale beach waves
+    {
+      id: 'photo-1514695307237-bfad60f67684',
+      photographer: 'Matt Hardy',
+      username: 'matthardy',
+      location: 'Bondi Beach, Australia',
+    },
+    // thunderstorm clouds
+    {
+      id: 'photo-1516490981167-dc990a242afe',
+      photographer: 'Josep Castells',
+      username: 'paniscusbcn',
+      location: null,
+    },
+    // dark storm clouds
+    {
+      id: 'photo-1560928863-e140ee0fc733',
+      photographer: 'Paul Zoetemeijer',
+      username: 'paul_1865',
+      location: null,
+    },
+    // storm over water
+    {
+      id: 'photo-1584820537082-8e19daff36bd',
+      photographer: 'Daniel Lerman',
+      username: 'dlerman6',
+      location: 'Koh Samui, Ko Samui District, Provincia de Surat Thani, Tailandia',
+    },
+    // lightning on water
+    {
+      id: 'photo-1600377927594-ceae8f8981a6',
+      photographer: 'Raychel Sanner',
+      username: 'raychelsnr',
+      location: null,
+    },
+  ],
+  countryside: [
+    // rural village in green valley
+    {
+      id: 'photo-1774304233896-62d078d03673',
+      photographer: 'Sebastian S',
+      username: 'izeberg',
+      location: 'Nagano Prefecture, Japan',
+    },
+    // grass field under blue sky
+    {
+      id: 'photo-1584441695492-71ce0b7aecbe',
+      photographer: 'enkuu smile',
+      username: 'enkuu',
+      location: null,
+    },
+    // houses and rice paddies valley
+    {
+      id: 'photo-1559439080-b6037bc5f8fb',
+      photographer: 'Rap Dela Rea',
+      username: 'rapdelarea',
+      location: 'Shirakawa-Go, Japan',
+    },
+    // fluffy white clouds
+    {
+      id: 'photo-1765112377086-bf92696f0b72',
+      photographer: 'Bulat Akhtiamov',
+      username: 'richard_29',
+      location: null,
+    },
+    // grassy hill, large clouds
+    {
+      id: 'photo-1787670121807-aa1cac7a1544',
+      photographer: 'Tao Yuan',
+      username: 'peek_a_boo_who',
+      location: 'lanqab, Inner Mongolia',
+    },
+    // clouds above open field
+    {
+      id: 'photo-1778294411660-5dd9e24daa03',
+      photographer: 'Ryan Wu',
+      username: 'nzw897',
+      location: null,
+    },
+    // trees under white clouds
+    {
+      id: 'photo-1597216101660-cae6b98ae212',
+      photographer: 'Kirill Yermakov',
+      username: 'kirkarma',
+      location: null,
+    },
+    // dirt path through grassy field
+    {
+      id: 'photo-1758612181584-ea4fad017752',
+      photographer: 'Just Jus',
+      username: 'onejus',
+      location: 'RAF Greenham Common, Thatcham, UK',
+    },
+    // train track through rural area
+    {
+      id: 'photo-1710243543164-0345af2d2167',
+      photographer: 'Tsuyoshi Kozu',
+      username: 'tsuyoshikozu',
+      location: null,
+    },
+    // train beside forest
+    {
+      id: 'photo-1710243543195-dd4e8581bd66',
+      photographer: 'Tsuyoshi Kozu',
+      username: 'tsuyoshikozu',
+      location: null,
+    },
+    // train through green countryside
+    {
+      id: 'photo-1725139069066-2c0796ca2579',
+      photographer: 'Marton Voros',
+      username: 'martonvoros',
+      location: null,
+    },
+    // small cabin in field
+    {
+      id: 'photo-1682682586841-9c2169cb9612',
+      photographer: 'Tomáš Hirsch',
+      username: 'tomashirsch',
+      location: 'Alto Adige, Italy',
+    },
+    // cabin in meadow, mountains
+    {
+      id: 'photo-1686518110219-c51aa1a76a2a',
+      photographer: 'Tomáš Hirsch',
+      username: 'tomashirsch',
+      location: 'Alpe di Siusi, Italy',
+    },
+    // thatched-roof house
+    {
+      id: 'photo-1682516086739-c3fbf844529b',
+      photographer: 'Karen Cann',
+      username: 'karenjac',
+      location: 'Houghton, Huntingdon, Cambridgeshire, UK',
+    },
+    // rice terraces in daylight
+    {
+      id: 'photo-1548710332-3e03e8220a79',
+      photographer: 'Sebastian Herrmann',
+      username: 'herrherrmann',
+      location: 'Sagada Rice Terraces, Sagada, Philippines',
+    },
+    // small village in valley
+    {
+      id: 'photo-1663265159276-9f716dda0e83',
+      photographer: 'Rondell Chaz Mabunga',
+      username: 'chazmabunga',
+      location: null,
+    },
+  ],
+  cars: [
+    // vintage cream car, desert road
+    {
+      id: 'photo-1765211003784-a82564cb8d3d',
+      photographer: 'Wesley Tingey',
+      username: 'wesleyphotography',
+      location: null,
+    },
+    // turquoise convertible on road
+    {
+      id: 'photo-1779226871405-843a391c70bc',
+      photographer: 'Roger Starnes Sr',
+      username: 'rstar50',
+      location: null,
+    },
+    // orange Challenger, gravel road
+    {
+      id: 'photo-1604940500627-d3f44d1d21c6',
+      photographer: 'Alexandros Athanasopoulos',
+      username: 'alexandros_ath',
+      location: null,
+    },
+    // vintage Mustang, desert sunset
+    {
+      id: 'photo-1622319544231-ce84790b689a',
+      photographer: 'Brendan Stephens',
+      username: 'brendan_stephens',
+      location: 'Palmdale, CA, USA',
+    },
+    // red Mustang, forest path
+    {
+      id: 'photo-1544896478-d5b709d413c5',
+      photographer: 'Jakob Owens',
+      username: 'jakobowens1',
+      location: null,
+    },
+    // teal sedan by trees
+    {
+      id: 'photo-1533468659570-9cc9354310e4',
+      photographer: 'Wade Lambert',
+      username: 'wade_lambert',
+      location: null,
+    },
+    // wet street at night
+    {
+      id: 'photo-1775144583501-1e20e7b9b4e4',
+      photographer: 'Alexander Korte',
+      username: 'stelath',
+      location: 'Oyster Bar, Delancey Street, New York, NY, USA',
+    },
+    // wet highway at night
+    {
+      id: 'photo-1770756248904-6031ad07223f',
+      photographer: 'Dmitrii Filatov',
+      username: 'dmitrii_filatov',
+      location: 'Almaty, Kazakhstan',
+    },
+    // car on dark road
+    {
+      id: 'photo-1763445727332-7c5c0e46e6e9',
+      photographer: 'Enq 1998',
+      username: 'enq_1998',
+      location: null,
+    },
+    // car under starry sky
+    {
+      id: 'photo-1545642412-2fb9732aac99',
+      photographer: 'Elias Andres-Jose',
+      username: 'eliasandres',
+      location: null,
+    },
+    // vehicle in desert at night
+    {
+      id: 'photo-1556634202-129a046351c0',
+      photographer: 'Sid Balachandran',
+      username: 'sid_balachandran',
+      location: 'The Night Drive, Dubai, United Arab Emirates',
+    },
+    // black car, road at night
+    {
+      id: 'photo-1613713568305-8da2fc04f168',
+      photographer: 'Mohammad Alizade',
+      username: 'mohamadaz',
+      location: null,
+    },
+    // black sedan at night
+    {
+      id: 'photo-1606512084153-189ffdc0f086',
+      photographer: 'Patrick Schiele',
+      username: 'schiepatrick',
+      location: null,
+    },
+    // SUV on curved mountain road
+    {
+      id: 'photo-1469423910081-3488183dd77e',
+      photographer: 'Nathan Anderson',
+      username: 'nathananderson',
+      location: 'US National Park Road, Grand Lake, United States',
+    },
+    // vintage sports car, Alpine road
+    {
+      id: 'photo-1794083123054-8a13c2f928ef',
+      photographer: 'Rafael Peier',
+      username: 'rafaelpeier',
+      location: 'Berninapass, Poschiavo, Schweiz',
+    },
+    // car at mountain overlook
+    {
+      id: 'photo-1758311177480-62d7920cd01d',
+      photographer: 'Viktor Stefanoski',
+      username: '1zzy_st',
+      location: 'Lake Kozjak & Dam Viewpoint, North Macedonia',
+    },
+    // car driving on road
+    {
+      id: 'photo-1650804200978-7140e0c4f15b',
+      photographer: 'Paul Steiner',
+      username: 'paul_steiner',
+      location: null,
+    },
+  ],
+  ai: [
+    // crystal vase, pink flowers
+    {
+      id: 'photo-1717501218385-55bc3a95be94',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // water droplets
+    {
+      id: 'photo-1717501219417-bb1803e95c77',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // black and white light
+    {
+      id: 'photo-1717501218636-a390f9ac5957',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // glass sculpture
+    {
+      id: 'photo-1717501219781-54ac9d09051b',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // colorful abstract
+    {
+      id: 'photo-1717503159960-bf398715c19e',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // green plant mobile
+    {
+      id: 'photo-1718011087751-e82f1792aa32',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // circular object
+    {
+      id: 'photo-1717501219604-cc1902b5d845',
+      photographer: 'Google DeepMind',
+      username: 'googledeepmind',
+      location: null,
+    },
+    // black cubes, glowing sphere
+    {
+      id: 'photo-1655499603560-6f834760f8d5',
+      photographer: 'Andrew W',
+      username: 'wandreww',
+      location: null,
+    },
+    // cubes and yellow spheres
+    {
+      id: 'photo-1622737133809-d95047b9e673',
+      photographer: 'Sebastian Svenson',
+      username: 'sebastiansvenson',
+      location: null,
+    },
+    // sphere of dots and lines
+    {
+      id: 'photo-1674027444485-cec3da58eef4',
+      photographer: 'Growtika',
+      username: 'growtika',
+      location: null,
+    },
+    // teal spiral
+    {
+      id: 'photo-1650943574955-ac02c65cfc71',
+      photographer: 'Dynamic Wang',
+      username: 'dynamicwang',
+      location: null,
+    },
+    // blue layered waves
+    {
+      id: 'photo-1627637819794-fba32f82be16',
+      photographer: 'SIMON LEE',
+      username: 'simonppt',
+      location: null,
+    },
+    // blue abstract shapes
+    {
+      id: 'photo-1744130268168-a94003e431e6',
+      photographer: 'Logan Voss',
+      username: 'loganvoss',
+      location: null,
+    },
+    // cluster of spheres
+    {
+      id: 'photo-1738082956213-aa554ba67bda',
+      photographer: 'Logan Voss',
+      username: 'loganvoss',
+      location: null,
+    },
+    // dark blue squares
+    {
+      id: 'photo-1709626011485-6fe000ea2dbc',
+      photographer: 'Pawel Czerwinski',
+      username: 'pawel_czerwinski',
+      location: null,
+    },
+    // spiral of discs
+    {
+      id: 'photo-1618172193763-c511deb635ca',
+      photographer: 'Milad Fakurian',
+      username: 'fakurian',
+      location: 'London, UK',
+    },
+  ],
+  classical: [
+    // busts in a dark library
+    {
+      id: 'photo-1782530707432-eb04674c3a5c',
+      photographer: 'Jameson Berrios',
+      username: 'simpoge',
+      location: 'Dublin, Ireland',
+    },
+    // library shelves with busts
+    {
+      id: 'photo-1502700807168-484a3e7889d0',
+      photographer: 'Alex Block',
+      username: 'alexblock',
+      location: 'Dublin, Ireland',
+    },
+    // David bust, dark pedestal
+    {
+      id: 'photo-1793820390948-5d3f91bd24b4',
+      photographer: 'Liana S',
+      username: 'cherstve_pechivo',
+      location: null,
+    },
+    // robed bust, black wall
+    {
+      id: 'photo-1505663912202-ac22d4cb3707',
+      photographer: 'Giammarco Boscaro',
+      username: 'giamboscaro',
+      location: 'Dublino, Irlanda',
+    },
+    // three busts, dim room
+    {
+      id: 'photo-1774611689206-2068bcac0d2e',
+      photographer: 'Clary Garcia',
+      username: 'ccgrc',
+      location: 'Vatican Museums, Vatican City',
+    },
+    // rows of ancient busts
+    {
+      id: 'photo-1762223539113-85cb8410efce',
+      photographer: 'Redd Francisco',
+      username: 'reddfrancisco',
+      location: null,
+    },
+    // statue with laurel wreath
+    {
+      id: 'photo-1772230398112-0419b5f6ca57',
+      photographer: 'Everson Vansoski',
+      username: 'eversonvansoski',
+      location: 'Belo Horizonte, MG, Brasil',
+    },
+    // Socrates, Athens
+    {
+      id: 'photo-1776719316358-f3b246e88f3d',
+      photographer: 'Vidar Nordli-Mathisen',
+      username: 'vidarnm',
+      location: null,
+    },
+    // Plato with Athena
+    {
+      id: 'photo-1776719315528-b793722cac9d',
+      photographer: 'Vidar Nordli-Mathisen',
+      username: 'vidarnm',
+      location: null,
+    },
+    // Plato statue by column
+    {
+      id: 'photo-1787753774415-bfa2537f43ff',
+      photographer: 'Alberto Domingo Carreiro',
+      username: 'betitop',
+      location: 'Athens, Grecia',
+    },
+    // Admont Abbey library
+    {
+      id: 'photo-1562932831-afcfe48b5786',
+      photographer: 'Valdemaras D.',
+      username: 'deko_photo4',
+      location: null,
+    },
+    // ornate library
+    {
+      id: 'photo-1759732419233-5b84c4cb5a9c',
+      photographer: 'Michael D Beckwith',
+      username: 'mdbeckwith',
+      location: 'The John Rylands Library, Manchester, UK',
+    },
+    // ancient city ruins
+    {
+      id: 'photo-1717518215340-0d1184c493fa',
+      photographer: 'Alexis Presa',
+      username: 'alexispresa',
+      location: 'Corinth, Greece',
+    },
+    // columns at sunset
+    {
+      id: 'photo-1776717591137-f48addb6ce25',
+      photographer: 'Burak Oskay',
+      username: 'burakoskay',
+      location: 'Pergamon Ancient City, Ulucami, Akropol Caddesi, Bergama/İzmir, Türkiye',
+    },
+    // Greek temple ruins
+    {
+      id: 'photo-1773017825019-b8d05f7eac4b',
+      photographer: 'Daniel B Ramos',
+      username: 'the_urbannographer',
+      location: 'Archaeological Museum of Ancient Corinth, Argous, Archaia Korinthos, Greece',
+    },
+    // Greek temple columns
+    {
+      id: 'photo-1758559616527-35f149122a12',
+      photographer: 'Wanderlust in Frame',
+      username: 'kkincade',
+      location: 'Temple of Hephaestus, Athens, Greece',
+    },
+    // ruins under blue sky
+    {
+      id: 'photo-1783279675068-5f555458d890',
+      photographer: 'Melih Özmen',
+      username: 'sargonsama',
+      location: null,
+    },
+    // Roman temple ruins
+    {
+      id: 'photo-1762086092259-329c64c3cb17',
+      photographer: 'JP Sheard',
+      username: 'jpsheard',
+      location: 'Roman Forum, Rome, Metropolitan City of Rome Capital, Italy',
+    },
+    // ancient Rome ruins
+    {
+      id: 'photo-1649754242327-2d7a73668fb5',
+      photographer: 'Embla Munk Rynkebjerg',
+      username: 'emblarynke',
+      location: 'Rome, Italy',
     },
   ],
 };

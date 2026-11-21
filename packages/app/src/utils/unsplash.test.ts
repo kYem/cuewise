@@ -1,4 +1,6 @@
+import { ALL_FOCUS_IMAGE_CATEGORIES } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RETIRED_PHOTO_IDS } from './__fixtures__/unsplash-catalog.fixtures';
 import {
   getPhotoCredit,
   getRandomImageUrl,
@@ -228,6 +230,20 @@ describe('curated catalog invariants', () => {
     for (const photo of Object.values(CURATED_PHOTOS).flat()) {
       expect(photo.photographer === null).toBe(photo.username === null);
     }
+  });
+
+  it('covers every theme the picker offers', () => {
+    expect(Object.keys(CURATED_PHOTOS).sort()).toEqual([...ALL_FOCUS_IMAGE_CATEGORIES].sort());
+  });
+
+  it.each(RETIRED_PHOTO_IDS)('no longer ships retired photo %s', (id) => {
+    expect(allIds).not.toContain(id);
+  });
+
+  it('credits the photographer of a new theme wallpaper', () => {
+    const [first] = CURATED_PHOTOS.classical;
+
+    expect(getPhotoCredit(getRandomImageUrl('classical', 0)).photographer).toBe(first.photographer);
   });
 
   it('offers at least 15 images per category', () => {

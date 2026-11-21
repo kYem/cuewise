@@ -1,4 +1,9 @@
-import { HABIT_HISTORY_SYNC_NOTICE, type Settings } from '@cuewise/shared';
+import {
+  ALL_FOCUS_IMAGE_CATEGORIES,
+  FOCUS_IMAGE_CATEGORIES,
+  HABIT_HISTORY_SYNC_NOTICE,
+  type Settings,
+} from '@cuewise/shared';
 import * as storage from '@cuewise/storage';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -145,6 +150,15 @@ describe('settings sections', () => {
         expect(matched).not.toContain('focus');
       }
     );
+
+    it.each(ALL_FOCUS_IMAGE_CATEGORIES)('finds the background picker for "%s"', (theme) => {
+      expect(sectionsMatching(theme)).toContain('background');
+      renderSection('background', theme);
+
+      expect(
+        screen.getByRole('button', { name: FOCUS_IMAGE_CATEGORIES[theme] })
+      ).toBeInTheDocument();
+    });
 
     it.each(['fullscreen', 'auto enter'])('still surfaces Focus mode for "%s"', (query) => {
       expect(sectionsMatching(query)).toContain('focus');

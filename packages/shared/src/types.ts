@@ -200,8 +200,20 @@ export type FocusPosition = 'top' | 'center' | 'bottom';
 // What shows beside the Pomodoro timer
 export type PomodoroCompanion = 'quote' | 'calendar' | 'both';
 
-// Focus mode image categories for Unsplash backgrounds
-export type FocusImageCategory = 'nature' | 'forest' | 'ocean' | 'mountains' | 'minimal' | 'dark';
+// Focus mode image categories for Unsplash backgrounds; order is the settings picker's order
+export const FOCUS_IMAGE_CATEGORY_IDS = [
+  'nature',
+  'forest',
+  'ocean',
+  'mountains',
+  'minimal',
+  'dark',
+  'countryside',
+  'cars',
+  'ai',
+  'classical',
+] as const;
+export type FocusImageCategory = (typeof FOCUS_IMAGE_CATEGORY_IDS)[number];
 
 // YouTube playlist for Pomodoro music
 export interface YoutubePlaylist {

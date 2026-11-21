@@ -1,17 +1,18 @@
 import { z } from 'zod/mini';
-import type {
-  CalendarEvent,
-  CalendarState,
-  ConceptCard,
-  DailyBackground,
-  Goal,
-  HabitDay,
-  PlaylistProgress,
-  PomodoroSession,
-  PostureDailyStat,
-  QuickLink,
-  Reminder,
-  YoutubePlaylist,
+import {
+  type CalendarEvent,
+  type CalendarState,
+  type ConceptCard,
+  type DailyBackground,
+  FOCUS_IMAGE_CATEGORY_IDS,
+  type Goal,
+  type HabitDay,
+  type PlaylistProgress,
+  type PomodoroSession,
+  type PostureDailyStat,
+  type QuickLink,
+  type Reminder,
+  type YoutubePlaylist,
 } from '../types';
 import { assertNoDrift } from './drift';
 
@@ -190,7 +191,7 @@ assertNoDrift<z.infer<typeof playlistProgressSchema>, PlaylistProgress>();
 
 export const dailyBackgroundSchema = z.object({
   url: z.string(),
-  category: z.enum(['nature', 'forest', 'ocean', 'mountains', 'minimal', 'dark']),
+  category: z.enum(FOCUS_IMAGE_CATEGORY_IDS),
   date: z.string(),
 });
 assertNoDrift<z.infer<typeof dailyBackgroundSchema>, DailyBackground>();

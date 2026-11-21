@@ -1,14 +1,15 @@
-import type {
-  ColorTheme,
-  ConceptTemplate,
-  FocusImageCategory,
-  QuoteCategory,
-  ReminderActiveHours,
-  ReminderCategory,
-  ReminderTemplate,
-  Settings,
-  SoundscapeTile,
-  YoutubePlaylist,
+import {
+  type ColorTheme,
+  type ConceptTemplate,
+  FOCUS_IMAGE_CATEGORY_IDS,
+  type FocusImageCategory,
+  type QuoteCategory,
+  type ReminderActiveHours,
+  type ReminderCategory,
+  type ReminderTemplate,
+  type Settings,
+  type SoundscapeTile,
+  type YoutubePlaylist,
 } from './types';
 
 /** 24 hours in ms — use for day arithmetic instead of inline literals. */
@@ -314,12 +315,13 @@ export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
   mountains: 'Mountains',
   minimal: 'Minimal',
   dark: 'Dark',
+  countryside: 'Countryside',
+  cars: 'Cars',
+  ai: 'AI',
+  classical: 'Classical',
 };
 
-// All focus image categories as an array (for UI)
-export const ALL_FOCUS_IMAGE_CATEGORIES: FocusImageCategory[] = Object.keys(
-  FOCUS_IMAGE_CATEGORIES
-) as FocusImageCategory[];
+export const ALL_FOCUS_IMAGE_CATEGORIES: readonly FocusImageCategory[] = FOCUS_IMAGE_CATEGORY_IDS;
 
 // App configuration links
 export const APP_LINKS = {
