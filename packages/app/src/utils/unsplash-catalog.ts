@@ -1176,7 +1176,7 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'googledeepmind',
       location: null,
     },
-    // colourful abstract
+    // colorful abstract
     {
       id: 'photo-1717503159960-bf398715c19e',
       photographer: 'Google DeepMind',
