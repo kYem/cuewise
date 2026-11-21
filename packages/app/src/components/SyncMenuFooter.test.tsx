@@ -37,11 +37,14 @@ function serverDetailsCalls(controller: FakeSyncController) {
   );
 }
 
-const RECORDED_DETAILS: SyncDetails = {
-  accountEmail: 'someone@example.com',
-  accountId: 'acct-1',
-  lastSyncedAt: Date.now() - 7 * 60_000,
-};
+function recordedDetails(overrides: Partial<SyncDetails> = {}): SyncDetails {
+  return {
+    accountEmail: 'someone@example.com',
+    accountId: 'acct-1',
+    lastSyncedAt: Date.now() - 7 * 60_000,
+    ...overrides,
+  };
+}
 
 describe('SyncMenuFooter', () => {
   it('renders nothing when sync is not configured', () => {
@@ -271,7 +274,7 @@ describe('SyncMenuFooter', () => {
   it('paints the recorded account and stamp while the server lookup is in flight', async () => {
     const controller = new FakeSyncController();
     controller.setStatus('active');
-    controller.scriptCachedDetails(RECORDED_DETAILS);
+    controller.scriptCachedDetails(recordedDetails());
     controller.deferNextDetails();
 
     renderFooter(controller);
@@ -284,22 +287,67 @@ describe('SyncMenuFooter', () => {
   it('lets the server answer replace the recorded one', async () => {
     const controller = new FakeSyncController();
     controller.setStatus('active');
-    controller.scriptCachedDetails(RECORDED_DETAILS);
+    controller.scriptCachedDetails(recordedDetails());
     controller.deferNextDetails();
     renderFooter(controller);
     await screen.findByText('someone@example.com');
 
     await act(async () => {
-      controller.resolveDetails({ ...RECORDED_DETAILS, accountEmail: 'renamed@example.com' });
+      controller.resolveDetails(recordedDetails({ accountEmail: 'renamed@example.com' }));
     });
 
     expect(screen.getByText('renamed@example.com')).toBeInTheDocument();
   });
 
+  it('keeps the server answer when the recorded one arrives after it', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.deferNextCachedDetails();
+    controller.scriptDetails(recordedDetails({ accountEmail: 'server@example.com' }));
+    renderFooter(controller);
+    await screen.findByText('server@example.com');
+
+    await act(async () => {
+      controller.resolveCachedDetails(recordedDetails({ accountEmail: 'recorded@example.com' }));
+    });
+
+    expect(screen.getByText('server@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('recorded@example.com')).not.toBeInTheDocument();
+  });
+
+  it('re-reads the recorded stamp after a click, without asking the server again', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptCachedDetails(recordedDetails());
+    controller.scriptDetails(recordedDetails());
+    renderFooter(controller);
+    await screen.findByText('Synced 7 min ago');
+    controller.scriptCachedDetails(recordedDetails({ lastSyncedAt: Date.now() }));
+
+    fireEvent.click(screen.getByTestId('sync-menu-footer'));
+
+    expect(await screen.findByText('Synced just now')).toBeInTheDocument();
+    expect(serverDetailsCalls(controller)).toHaveLength(1);
+  });
+
+  it('asks the server after a click when nothing is recorded', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptDetails(recordedDetails());
+    controller.scriptDetails(recordedDetails({ lastSyncedAt: Date.now() }));
+    renderFooter(controller);
+    await screen.findByText('Synced 7 min ago');
+
+    fireEvent.click(screen.getByTestId('sync-menu-footer'));
+
+    expect(await screen.findByText('Synced just now')).toBeInTheDocument();
+    expect(serverDetailsCalls(controller)).toHaveLength(2);
+  });
+
   it('says just now in lower case for a sync under a minute old', async () => {
     const controller = new FakeSyncController();
     controller.setStatus('active');
-    controller.scriptCachedDetails({ ...RECORDED_DETAILS, lastSyncedAt: Date.now() - 5_000 });
+    controller.scriptCachedDetails(recordedDetails({ lastSyncedAt: Date.now() - 5_000 }));
 
     renderFooter(controller);
 
@@ -318,7 +366,7 @@ describe('SyncMenuFooter', () => {
     it('moves the relative time on', async () => {
       const controller = new FakeSyncController();
       controller.setStatus('active');
-      controller.scriptCachedDetails({ ...RECORDED_DETAILS, lastSyncedAt: Date.now() });
+      controller.scriptCachedDetails(recordedDetails({ lastSyncedAt: Date.now() }));
       renderFooter(controller);
       await act(async () => {});
       expect(screen.getByText('Synced just now')).toBeInTheDocument();

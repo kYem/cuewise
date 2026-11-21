@@ -928,6 +928,7 @@ describe('SyncEngine.enableSync', () => {
     useStorage(device);
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     await device.engine.getAccount();
+    expect(device.engine.getCachedAccount()).not.toBeNull();
 
     await device.engine.disableSync();
 
@@ -951,6 +952,43 @@ describe('SyncEngine.enableSync', () => {
 
     const lookup = device.engine.getAccount();
     await device.engine.disableSync();
+    release();
+    await lookup;
+
+    expect(device.engine.getCachedAccount()).toBeNull();
+    expect(await device.kv.get(ACCOUNT_KEY, 'local')).toBeNull();
+  });
+
+  it('forgets the recorded account when signing in again', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.accountResult = { userId: 'u1', email: 'old@example.com' };
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.getAccount();
+
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
+
+    expect(device.engine.getCachedAccount()).toBeNull();
+    expect(await device.kv.get(ACCOUNT_KEY, 'local')).toBeNull();
+  });
+
+  it('does not record an account whose fetch a sign-in overtook', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(device.apiClient, 'getAccount').mockImplementationOnce(async () => {
+      await gate;
+      return { userId: 'u1', email: 'old@example.com' };
+    });
+
+    const lookup = device.engine.getAccount();
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
     release();
     await lookup;
 

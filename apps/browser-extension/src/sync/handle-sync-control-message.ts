@@ -270,7 +270,7 @@ export async function handleSyncControlMessage(
   const { op } = msg;
   if (op === 'details') {
     // Bypasses the mutex so a slow account fetch cannot delay a queued user action (e.g. a
-    // disable click). Its one write, the envelope flag, is epoch-guarded in the engine.
+    // disable click). Its writes, the envelope flag and the account cache, are guarded in the engine.
     return runDetails(engine, msg);
   }
   if (op === 'getLastCycle') {

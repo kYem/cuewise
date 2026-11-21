@@ -22,7 +22,7 @@ const NEEDS_SETTINGS: readonly SyncUiStatus[] = ['needs_reauth', 'needs_enroll']
 // the status line below it does not move when the details fetch lands.
 const EMAIL_SKELETON_ROW = 'flex h-4 items-center';
 
-// Under a minute formatMillisAgo answers a sentence ("Just now"), which reads wrong mid-label.
+// formatMillisAgo says "Just now" under a minute, capitalised for standalone use.
 const JUST_NOW_MS = 60_000;
 // Fine enough for a minute-resolution label, cheap enough to run while the menu is open.
 const TICK_MS = 15_000;
@@ -58,7 +58,7 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
   const [, setTick] = useState(0);
   // Guards two concurrent getDetails() callers: a host that emits 'syncing' mid-syncNow (macOS)
   // re-fetches on both that transition and the back-to-active one, while handleSync fetches its
-  // own refresh — only the fetch started last may paint.
+  // own refresh — only the newest generation may paint.
   const detailsGenRef = useRef(0);
 
   useEffect(() => {

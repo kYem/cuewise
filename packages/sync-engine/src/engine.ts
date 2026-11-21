@@ -74,7 +74,7 @@ export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
  */
 export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 
-/** The account getAccount last fetched, so a menu can name it without a request (cleared on disable). */
+/** The account getAccount last fetched, so a menu can name it without a request. */
 export const ACCOUNT_KEY = 'cuewise.sync.account';
 
 export interface SyncAccount {
@@ -248,6 +248,9 @@ export class SyncEngine {
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
+  // Bumped whenever the cached account is forgotten. A sign-in must not move accountEpoch (that
+  // cancels its own enroll), yet a fetch or hydration from before it must not restore the old one.
+  private accountCacheGen = 0;
   private pushTimer: ReturnType<typeof setTimeout> | null = null;
   private pushDeadline: number | null = null;
   // A count, not a flag: syncNow is concurrently callable (explicit sync, pull wake, start), and a
@@ -297,9 +300,9 @@ export class SyncEngine {
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
-      // The chooser may have landed on another account; the next getAccount records this one.
-      this.account = null;
-      await this.bestEffortRemove(ACCOUNT_KEY);
+      // Never name the previous account in this session; the next getAccount records this one.
+      this.forgetAccount();
+      await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'signed in again');
       await this.enrollAndActivate(recoveryCode, epoch, setAsideFrom);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
@@ -602,7 +605,7 @@ export class SyncEngine {
     // Whatever a pairing in flight is offered, it would be a key for the account just removed.
     this.devicePairing.forget();
     this.lastSyncedAt = null;
-    this.account = null;
+    this.forgetAccount();
     this.lastCycle = null;
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
@@ -856,9 +859,14 @@ export class SyncEngine {
     return this.account;
   }
 
-  /** Epoch-gated like the envelope record: a disable mid-fetch must not leave its account behind. */
-  private async recordAccount(account: SyncAccount, epoch: number): Promise<void> {
-    if (this.accountEpoch !== epoch) {
+  private forgetAccount(): void {
+    this.accountCacheGen += 1;
+    this.account = null;
+  }
+
+  /** Gated like the envelope record: a fetch a disable or sign-in overtook must not be recorded. */
+  private async recordAccount(account: SyncAccount, gen: number): Promise<void> {
+    if (this.accountCacheGen !== gen) {
       return;
     }
     const previous = this.account;
@@ -872,7 +880,7 @@ export class SyncEngine {
         error: result.error,
       });
     }
-    if (this.accountEpoch !== epoch) {
+    if (this.accountCacheGen !== gen) {
       await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'retired an account fetch');
     }
   }
@@ -979,7 +987,7 @@ export class SyncEngine {
   }
 
   /**
-   * Reads the persisted stamp and cycle record, once per process. Public and memoised because the
+   * Reads the persisted sync state (stamp, cycle, envelope, account), once per process. Public and memoised because the
    * extension answers a control message from a cold worker BEFORE start() runs — the listeners are
    * registered synchronously while start() waits on the settings migration.
    */
@@ -1017,6 +1025,7 @@ export class SyncEngine {
 
   /** `retry` only for a read that failed outright and may succeed later; see HydrationResult. */
   private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
+    const cacheGen = this.accountCacheGen;
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany(
@@ -1040,10 +1049,17 @@ export class SyncEngine {
       this.hydrateStamp(stamp);
     }
 
-    // A fetch this process already made outranks the stored one; a bad shape is just a cache miss.
     const account = stored[ACCOUNT_KEY];
-    if (this.account === null && account?.readable === true && isSyncAccount(account.value)) {
-      this.account = account.value;
+    // A fetch this process already made outranks the stored one, and a forget since the read wins.
+    if (account?.readable === true && this.account === null && this.accountCacheGen === cacheGen) {
+      if (isSyncAccount(account.value)) {
+        this.account = account.value;
+      } else {
+        logger.warn('The stored sync account is not an account record; ignoring it', {
+          key: ACCOUNT_KEY,
+          shape: describeShape(account.value),
+        });
+      }
     }
 
     // Only a positively-read boolean; anything else stays null, which the panel paints as nothing
@@ -1122,9 +1138,10 @@ export class SyncEngine {
   /**
    * Account details for the settings UI. Informational only: resolves null when signed out
    * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
+   * Records a successful answer for getCachedAccount.
    */
-  async getAccount(): Promise<{ userId: string; email: string | null } | null> {
-    const epoch = this.accountEpoch;
+  async getAccount(): Promise<SyncAccount | null> {
+    const gen = this.accountCacheGen;
     // The session read sits inside the try so the never-throws contract holds by construction,
     // not by the current storage adapters happening to swallow their own errors.
     try {
@@ -1132,7 +1149,7 @@ export class SyncEngine {
         return null;
       }
       const account = await this.deps.apiClient.getAccount();
-      await this.bestEffort(() => this.recordAccount(account, epoch), 'account cache');
+      await this.bestEffort(() => this.recordAccount(account, gen), 'account cache');
       return account;
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);

@@ -153,8 +153,8 @@ export interface SyncDetailsOptions {
    */
   readonly refreshRecoveryEnvelope?: boolean;
   /**
-   * Answer from what this device last recorded, with no request: null when nothing is recorded.
-   * Wins over refreshRecoveryEnvelope. An older extension worker ignores it and asks the server.
+   * Answer from what this device last recorded, with no request (null when nothing is).
+   * Wins over refreshRecoveryEnvelope.
    */
   readonly cached?: boolean;
 }
@@ -184,8 +184,7 @@ export async function readSyncDetails(
   engine: SyncEngineControlSurface,
   options: SyncDetailsOptions = {}
 ): Promise<SyncDetails | null> {
-  // Hydration owns lastSyncedAt too; without it the stamp is only right because getAccount's
-  // network hop happens to outlast two local reads.
+  // Hydration owns the recorded account and lastSyncedAt; skipped, a cached read answers null.
   await engine.ensureHydrated();
   if (options.cached === true) {
     return buildSyncDetails(

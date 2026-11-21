@@ -60,7 +60,7 @@ export interface SyncControlMessage {
   // details-only: also ask the server about the recovery envelope. Absent (a page realm predating
   // the flag, or a surface that only shows the identity) reports the last recorded answer instead.
   refreshRecoveryEnvelope?: boolean;
-  // details-only: answer from the worker's recorded account and stamp, with no request.
+  // details-only: answer from the worker's recorded state, with no request.
   cached?: boolean;
 }
 

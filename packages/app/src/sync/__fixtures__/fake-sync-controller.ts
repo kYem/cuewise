@@ -63,6 +63,8 @@ export class FakeSyncController implements SyncController {
   private readonly enrollWithCodeResults: EnableResult[] = [];
   private readonly detailsResults: (SyncDetails | null)[] = [];
   private cachedDetails: SyncDetails | null = null;
+  private deferredCachedDetails = false;
+  private pendingCachedDetails: ((details: SyncDetails | null) => void) | null = null;
   private readonly syncNowResults: SyncNowResult[] = [];
   private lastCycleRead: LastCycleRead = { available: true, outcome: null };
   private readonly failingMethods = new Set<FailableMethod>();
@@ -129,6 +131,20 @@ export class FakeSyncController implements SyncController {
     }
     this.pendingDetails(details);
     this.pendingDetails = null;
+  }
+
+  /** Makes the next cached getDetails() hang until resolveCachedDetails() releases it. */
+  deferNextCachedDetails(): void {
+    this.deferredCachedDetails = true;
+  }
+
+  /** Releases a cached getDetails() call armed via deferNextCachedDetails(). */
+  resolveCachedDetails(details: SyncDetails | null): void {
+    if (this.pendingCachedDetails === null) {
+      throw new Error('FakeSyncController: no pending cached getDetails() to resolve');
+    }
+    this.pendingCachedDetails(details);
+    this.pendingCachedDetails = null;
   }
 
   /** Makes the next listSessions() hang until resolveSessions() releases it — for read races. */
@@ -405,6 +421,12 @@ export class FakeSyncController implements SyncController {
     this.calls.push({ method: 'getDetails', args: [options] });
     this.maybeFail('getDetails');
     if (options?.cached === true) {
+      if (this.deferredCachedDetails) {
+        this.deferredCachedDetails = false;
+        return new Promise((resolve) => {
+          this.pendingCachedDetails = resolve;
+        });
+      }
       return this.cachedDetails;
     }
     if (this.deferredDetails) {
