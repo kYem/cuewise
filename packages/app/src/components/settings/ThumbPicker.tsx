@@ -5,7 +5,7 @@ import { Check } from 'lucide-react';
 import type React from 'react';
 
 /** Representative thumbnail + gradient fallback per focus-mode background category. */
-const CATEGORY_THUMBS: Record<FocusImageCategory, { img?: string; fallback: string }> = {
+const CATEGORY_THUMBS: Record<FocusImageCategory, { img: string; fallback: string }> = {
   nature: {
     img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400&q=60',
     fallback: 'linear-gradient(135deg, #5a7d6b, #2c4a3e)',
@@ -22,8 +22,30 @@ const CATEGORY_THUMBS: Record<FocusImageCategory, { img?: string; fallback: stri
     img: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=400&q=60',
     fallback: 'linear-gradient(135deg, #6b7a8e, #2e3a4a)',
   },
-  minimal: { fallback: 'linear-gradient(135deg, #d8dbe2, #aab0bf)' },
-  dark: { fallback: 'linear-gradient(135deg, #232636, #0b0d15)' },
+  minimal: {
+    img: 'https://images.unsplash.com/photo-1518972734183-c5b490a7c637?w=400&q=60',
+    fallback: 'linear-gradient(135deg, #d8dbe2, #aab0bf)',
+  },
+  dark: {
+    img: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=400&q=60',
+    fallback: 'linear-gradient(135deg, #232636, #0b0d15)',
+  },
+  countryside: {
+    img: 'https://images.unsplash.com/photo-1686518110219-c51aa1a76a2a?w=400&q=60',
+    fallback: 'linear-gradient(135deg, #8fb3d9, #5d8a4a)',
+  },
+  cars: {
+    img: 'https://images.unsplash.com/photo-1622319544231-ce84790b689a?w=400&q=60',
+    fallback: 'linear-gradient(135deg, #c0703f, #2b2230)',
+  },
+  ai: {
+    img: 'https://images.unsplash.com/photo-1650943574955-ac02c65cfc71?w=400&q=60',
+    fallback: 'linear-gradient(135deg, #1f6f78, #0d1b2a)',
+  },
+  classical: {
+    img: 'https://images.unsplash.com/photo-1758559616527-35f149122a12?w=400&q=60',
+    fallback: 'linear-gradient(135deg, #c9b79c, #6b5d4a)',
+  },
 };
 
 interface ThumbPickerProps {
@@ -33,13 +55,11 @@ interface ThumbPickerProps {
 
 /** Visual grid for picking a focus-mode background category. */
 export const ThumbPicker: React.FC<ThumbPickerProps> = ({ value, onChange }) => (
-  <div className="grid grid-cols-6 gap-1.5">
+  <div className="grid grid-cols-5 gap-1.5">
     {ALL_FOCUS_IMAGE_CATEGORIES.map((category) => {
       const thumb = CATEGORY_THUMBS[category];
       const active = value === category;
-      const background = thumb.img
-        ? `url("${thumb.img}") center/cover, ${thumb.fallback}`
-        : thumb.fallback;
+      const background = `url("${thumb.img}") center/cover, ${thumb.fallback}`;
       return (
         <button
           key={category}

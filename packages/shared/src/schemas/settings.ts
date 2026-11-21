@@ -1,5 +1,5 @@
 import { z } from 'zod/mini';
-import type { Settings } from '../types';
+import { FOCUS_IMAGE_CATEGORY_IDS, type Settings } from '../types';
 import { assertNoDrift } from './drift';
 import { quoteCategorySchema } from './quotes';
 
@@ -53,7 +53,7 @@ export const settingsSchema = z.object({
   logLevel: z.enum(['none', 'error', 'warn', 'info', 'debug']),
   hasSeenOnboarding: z.boolean(),
   focusModeEnabled: z.boolean(),
-  focusModeImageCategory: z.enum(['nature', 'forest', 'ocean', 'mountains', 'minimal', 'dark']),
+  focusModeImageCategory: z.enum(FOCUS_IMAGE_CATEGORY_IDS),
   focusModeShowQuote: z.boolean(),
   focusModeShowGoal: z.boolean(),
   focusModeAutoEnter: z.boolean(),

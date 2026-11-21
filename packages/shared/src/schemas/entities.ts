@@ -13,6 +13,7 @@ import type {
   Reminder,
   YoutubePlaylist,
 } from '../types';
+import { FOCUS_IMAGE_CATEGORY_IDS } from '../types';
 import { assertNoDrift } from './drift';
 
 export const subtaskSchema = z.object({
@@ -190,7 +191,7 @@ assertNoDrift<z.infer<typeof playlistProgressSchema>, PlaylistProgress>();
 
 export const dailyBackgroundSchema = z.object({
   url: z.string(),
-  category: z.enum(['nature', 'forest', 'ocean', 'mountains', 'minimal', 'dark']),
+  category: z.enum(FOCUS_IMAGE_CATEGORY_IDS),
   date: z.string(),
 });
 assertNoDrift<z.infer<typeof dailyBackgroundSchema>, DailyBackground>();

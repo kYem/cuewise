@@ -1,4 +1,4 @@
-import type { FocusImageCategory } from '@cuewise/shared';
+import { ALL_FOCUS_IMAGE_CATEGORIES, type FocusImageCategory } from '@cuewise/shared';
 import { CURATED_PHOTOS } from './unsplash-catalog';
 
 /**
@@ -8,14 +8,9 @@ import { CURATED_PHOTOS } from './unsplash-catalog';
  */
 
 // Track last used index per category to avoid immediate repeats
-const lastUsedIndex: Record<FocusImageCategory, number> = {
-  nature: -1,
-  forest: -1,
-  ocean: -1,
-  mountains: -1,
-  minimal: -1,
-  dark: -1,
-};
+const lastUsedIndex = Object.fromEntries(
+  ALL_FOCUS_IMAGE_CATEGORIES.map((category) => [category, -1])
+) as Record<FocusImageCategory, number>;
 
 // Unsplash asks attribution links to carry these referral params.
 const REFERRAL_PARAMS = 'utm_source=cuewise&utm_medium=referral';

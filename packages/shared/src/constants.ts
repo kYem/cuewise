@@ -10,6 +10,7 @@ import type {
   SoundscapeTile,
   YoutubePlaylist,
 } from './types';
+import { FOCUS_IMAGE_CATEGORY_IDS } from './types';
 
 /** 24 hours in ms — use for day arithmetic instead of inline literals. */
 export const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -314,12 +315,13 @@ export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
   mountains: 'Mountains',
   minimal: 'Minimal',
   dark: 'Dark',
+  countryside: 'Countryside',
+  cars: 'Cars',
+  ai: 'AI',
+  classical: 'Classical',
 };
 
-// All focus image categories as an array (for UI)
-export const ALL_FOCUS_IMAGE_CATEGORIES: FocusImageCategory[] = Object.keys(
-  FOCUS_IMAGE_CATEGORIES
-) as FocusImageCategory[];
+export const ALL_FOCUS_IMAGE_CATEGORIES: FocusImageCategory[] = [...FOCUS_IMAGE_CATEGORY_IDS];
 
 // App configuration links
 export const APP_LINKS = {

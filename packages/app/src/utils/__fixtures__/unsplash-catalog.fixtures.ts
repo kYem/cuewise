@@ -1,0 +1,22 @@
+/** Photos the 2026-11 refresh retired: empty starfields, loud gradients, near-blank fog, murky shots. */
+export const RETIRED_PHOTO_IDS = [
+  'photo-1472214103451-9374bd1c798e',
+  'photo-1759061003114-337938a8a004',
+  'photo-1759759260780-f09be8608b53',
+  'photo-1502082553048-f009c37129b9',
+  'photo-1764111812995-b73ff58fc7d7',
+  'photo-1758642882005-447873fd2d29',
+  'photo-1519046904884-53103b34b206',
+  'photo-1780042426982-cb794203ea1d',
+  'photo-1762181702079-40f2f9ac56e4',
+  'photo-1553356084-58ef4a67b2a7',
+  'photo-1557682224-5b8590cd9ec5',
+  'photo-1557682260-96773eb01377',
+  'photo-1550684848-fac1c5b4e853',
+  'photo-1507400492013-162706c8c05e',
+  'photo-1472552944129-b035e9ea3744',
+  'photo-1489549132488-d00b7eee80f1',
+  'photo-1475274047050-1d0c0975c63e',
+  'photo-1599218419176-0daa21523249',
+  'photo-1741501769971-68e9b813509a',
+];
