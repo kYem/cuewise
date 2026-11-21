@@ -2,10 +2,12 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { resolvePomodoroCompanion } from '../utils/calendar-visibility';
 import type { ChromeVariant } from '../utils/chrome-variant';
+import { BreakRecall } from './BreakRecall';
 import { CalendarStrip } from './CalendarStrip';
 import { FocusMode } from './FocusMode';
 import { PageHeader } from './PageHeader';
@@ -27,6 +29,7 @@ export const PomodoroPage: React.FC = () => {
   const initCalendar = useCalendarStore((state) => state.initialize);
   // Hides the mini player: FocusMode renders its own.
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
+  const isBreak = usePomodoroStore((state) => state.sessionType !== 'work');
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
 
   useEffect(() => {
@@ -84,6 +87,10 @@ export const PomodoroPage: React.FC = () => {
     );
   } else {
     companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
+  }
+  // Mounted only during a break, so each break gets a fresh cap and "Just rest".
+  if (isBreak) {
+    companion = <BreakRecall rest={companion} />;
   }
 
   return (

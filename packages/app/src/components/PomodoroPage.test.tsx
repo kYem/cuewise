@@ -2,10 +2,12 @@ import type { Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
+import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBackgroundStore } from '../stores/background-store';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
@@ -20,6 +22,7 @@ vi.mock('../stores/settings-store', async (importOriginal) => ({
 }));
 vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
 vi.mock('../stores/focus-mode-store', () => ({ useFocusModeStore: vi.fn() }));
+vi.mock('../stores/pomodoro-store', () => ({ usePomodoroStore: vi.fn() }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
 // The background effect resolves today's image before reading the cache; both are stubbed
 // so the effect actually runs (a missing preloadImages would throw once isLoaded is true).
@@ -42,6 +45,11 @@ vi.mock('./QuoteDisplay', () => ({
   ),
 }));
 vi.mock('./FocusMode', () => ({ FocusMode: () => null }));
+vi.mock('./BreakRecall', () => ({
+  BreakRecall: ({ rest }: { rest: React.ReactNode }) => (
+    <div data-testid="break-recall">{rest}</div>
+  ),
+}));
 vi.mock('./PomodoroTimer', () => ({
   PomodoroTimer: ({ variant }: { variant?: string }) => (
     <div data-testid="pomodoro-timer" data-variant={variant} />
@@ -63,8 +71,10 @@ const initCalendar = vi.fn();
 function setup(
   companion: 'quote' | 'calendar' | 'both',
   calendarEnabled: boolean,
-  settingsOverrides: Partial<Settings> = {}
+  settingsOverrides: Partial<Settings> = {},
+  sessionType: 'work' | 'break' | 'longBreak' = 'work'
 ) {
+  vi.mocked(usePomodoroStore).mockImplementation(createSelectorMock({ sessionType }));
   vi.mocked(isCalendarFeatureEnabled).mockReturnValue(calendarEnabled);
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
@@ -226,4 +236,28 @@ describe('PomodoroPage - chrome wiring', () => {
 
     expect(screen.getByTestId('page-header')).not.toHaveAttribute('data-transparent');
   });
+});
+
+describe('PomodoroPage - break recall', () => {
+  it('keeps the plain companion during work', () => {
+    setup('quote', false);
+
+    render(<PomodoroPage />);
+
+    expect(screen.queryByTestId('break-recall')).not.toBeInTheDocument();
+    expect(screen.getByTestId('quote-display')).toBeInTheDocument();
+  });
+
+  it.each(['break', 'longBreak'] as const)(
+    'offers recall with the companion as rest on a %s',
+    (type) => {
+      setup('quote', false, {}, type);
+
+      render(<PomodoroPage />);
+
+      expect(screen.getByTestId('break-recall')).toContainElement(
+        screen.getByTestId('quote-display')
+      );
+    }
+  );
 });

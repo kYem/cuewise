@@ -763,6 +763,18 @@ function HomeSection({ s, set, filter }: SettingsSectionProps) {
               onChange={(v) => set({ conceptActiveRecall: v })}
             />
           </SettingRow>
+          <SettingRow
+            label="Recall on breaks"
+            filter={filter}
+            help="Offer up to three due cards beside the timer on Pomodoro breaks"
+            keywords="pomodoro break recall review rest timer"
+          >
+            <Switch
+              label="Recall on breaks"
+              checked={s.conceptBreakRecall}
+              onChange={(v) => set({ conceptBreakRecall: v })}
+            />
+          </SettingRow>
         </SettingSubgroup>
       )}
     </div>
