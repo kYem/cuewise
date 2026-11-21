@@ -92,8 +92,7 @@ export const PomodoroPage: React.FC = () => {
   } else {
     companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
   }
-  // Active only when visible: a hidden card would still take 1/2/3 grades.
-  companion = <BreakRecall active={isBreak && companionVisible} rest={companion} />;
+  companion = <BreakRecall onBreak={isBreak} visible={companionVisible} rest={companion} />;
 
   return (
     <div className="min-h-screen w-full relative">

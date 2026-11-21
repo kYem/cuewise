@@ -47,8 +47,16 @@ vi.mock('./QuoteDisplay', () => ({
 }));
 vi.mock('./FocusMode', () => ({ FocusMode: () => null }));
 vi.mock('./BreakRecall', () => ({
-  BreakRecall: ({ active, rest }: { active: boolean; rest: React.ReactNode }) => (
-    <div data-testid="break-recall" data-active={String(active)}>
+  BreakRecall: ({
+    onBreak,
+    visible,
+    rest,
+  }: {
+    onBreak: boolean;
+    visible: boolean;
+    rest: React.ReactNode;
+  }) => (
+    <div data-testid="break-recall" data-on-break={String(onBreak)} data-visible={String(visible)}>
       {rest}
     </div>
   ),
@@ -252,40 +260,29 @@ describe('PomodoroPage - break recall', () => {
     window.matchMedia = originalMatchMedia;
   });
 
-  it('keeps recall inactive during work', () => {
+  it('tells recall when a break is on', () => {
     setup('quote', false);
 
     render(<PomodoroPage />);
 
-    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-on-break', 'false');
     expect(screen.getByTestId('quote-display')).toBeInTheDocument();
   });
 
-  it.each(['break', 'longBreak'] as const)('activates recall on a %s', (type) => {
+  it.each(['break', 'longBreak'] as const)('marks a %s as a break', (type) => {
     setup('quote', false, {}, type);
 
     render(<PomodoroPage />);
 
-    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-on-break', 'true');
   });
 
-  it('keeps the same companion mounted when a break starts', () => {
-    setup('quote', false);
-    const { rerender } = render(<PomodoroPage />);
-    const quote = screen.getByTestId('quote-display');
-
-    setup('quote', false, {}, 'break');
-    rerender(<PomodoroPage />);
-
-    expect(screen.getByTestId('quote-display')).toBe(quote);
-  });
-
-  it('keeps recall inactive while the companion is hidden on a narrow window', () => {
+  it('tells recall the companion is hidden on a narrow window', () => {
     stubMatchMedia(false);
     setup('quote', false, {}, 'break');
 
     render(<PomodoroPage />);
 
-    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-active', 'false');
+    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-visible', 'false');
   });
 });

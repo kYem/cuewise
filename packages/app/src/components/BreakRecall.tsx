@@ -6,9 +6,11 @@ import { useSettingsStore } from '../stores/settings-store';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
 
 interface BreakRecallProps {
-  /** A break is on and the card would be visible; each switch to true starts a fresh break. */
-  active: boolean;
-  /** The usual companion, shown outside a break and once the person rests, finishes, or has nothing due. */
+  /** A Pomodoro break is on; each switch to true starts a fresh cap and clears "Just rest". */
+  onBreak: boolean;
+  /** The companion column is on screen; a hidden card would still take 1/2/3 grades. */
+  visible: boolean;
+  /** The usual companion, shown outside a break and once the person rests or runs out. */
   rest: React.ReactNode;
 }
 
@@ -16,7 +18,7 @@ interface BreakRecallProps {
  * Offers a few due concept cards beside the timer during a Pomodoro break. Always rendered, so
  * the companion keeps its place in the tree (and its quote timer) across break transitions.
  */
-export const BreakRecall: React.FC<BreakRecallProps> = ({ active, rest }) => {
+export const BreakRecall: React.FC<BreakRecallProps> = ({ onBreak, visible, rest }) => {
   const enabled = useSettingsStore(
     (state) => state.settings.conceptCardsEnabled && state.settings.conceptBreakRecall
   );
@@ -31,11 +33,12 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ active, rest }) => {
   const [rested, setRested] = useState(false);
   const [grading, setGrading] = useState(false);
   const [position, setPosition] = useState(0);
-  const [wasActive, setWasActive] = useState(active);
+  const [wasOnBreak, setWasOnBreak] = useState(onBreak);
+  const active = onBreak && visible;
 
-  if (active !== wasActive) {
-    setWasActive(active);
-    if (active) {
+  if (onBreak !== wasOnBreak) {
+    setWasOnBreak(onBreak);
+    if (onBreak) {
       setHandledIds([]);
       setRested(false);
       setPosition(0);

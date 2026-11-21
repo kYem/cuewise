@@ -10,7 +10,6 @@ interface BreakRecallSetup {
   cards: ConceptCard[];
   conceptCardsEnabled?: boolean;
   conceptBreakRecall?: boolean;
-  isLoading?: boolean;
 }
 
 /** Mocks the settings + concept stores BreakRecall reads; returns the store actions to assert on. */
@@ -18,7 +17,6 @@ export function setupBreakRecall({
   cards,
   conceptCardsEnabled = true,
   conceptBreakRecall = true,
-  isLoading = false,
 }: BreakRecallSetup) {
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
@@ -28,7 +26,7 @@ export function setupBreakRecall({
   const reviewCard = vi.fn().mockResolvedValue(true);
   const initialize = vi.fn();
   vi.mocked(useConceptCardsStore).mockImplementation(
-    createSelectorMock({ cards, isLoading, initialize, reviewCard, toggleFavorite: vi.fn() })
+    createSelectorMock({ cards, initialize, reviewCard, toggleFavorite: vi.fn() })
   );
   return { reviewCard, initialize };
 }

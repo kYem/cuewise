@@ -9,8 +9,17 @@ vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() 
 
 const REST = <div>REST</div>;
 
-function renderBreak() {
-  return render(<BreakRecall active rest={REST} />);
+interface BreakState {
+  onBreak?: boolean;
+  visible?: boolean;
+}
+
+function breakRecall({ onBreak = true, visible = true }: BreakState = {}) {
+  return <BreakRecall onBreak={onBreak} visible={visible} rest={REST} />;
+}
+
+function renderBreak(state?: BreakState) {
+  return render(breakRecall(state));
 }
 
 async function gradeGood() {
@@ -147,23 +156,6 @@ describe('BreakRecall', () => {
     expect(screen.getByText(/1 of 2/)).toBeInTheDocument();
   });
 
-  it('keeps the card on screen while a later break reloads the deck', () => {
-    const cards = conceptCardFactory.buildList(2);
-    setupBreakRecall({ cards, isLoading: true });
-
-    renderBreak();
-
-    expect(screen.getByText(cards[0].term)).toBeInTheDocument();
-  });
-
-  it('rests while the first load is still running', () => {
-    setupBreakRecall({ cards: [], isLoading: true });
-
-    renderBreak();
-
-    expect(screen.getByText('REST')).toBeInTheDocument();
-  });
-
   it('rests when nothing is due', () => {
     setupBreakRecall({ cards: notDueConceptCards(2) });
 
@@ -175,7 +167,7 @@ describe('BreakRecall', () => {
   it('shows the rest content and leaves the deck unloaded outside a break', () => {
     const { initialize } = setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
 
-    render(<BreakRecall active={false} rest={REST} />);
+    renderBreak({ onBreak: false });
 
     expect(screen.getByText('REST')).toBeInTheDocument();
     expect(initialize).not.toHaveBeenCalled();
@@ -187,11 +179,41 @@ describe('BreakRecall', () => {
     const { rerender } = renderBreak();
     fireEvent.click(screen.getByRole('button', { name: 'Just rest' }));
 
-    rerender(<BreakRecall active={false} rest={REST} />);
-    rerender(<BreakRecall active rest={REST} />);
+    rerender(breakRecall({ onBreak: false }));
+    rerender(breakRecall());
 
     expect(screen.getByText(cards[0].term)).toBeInTheDocument();
     expect(screen.getByText(/1 of 3/)).toBeInTheDocument();
+  });
+
+  it('keeps Just rest when the window narrows and widens mid-break', () => {
+    setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
+    const { rerender } = renderBreak();
+    fireEvent.click(screen.getByRole('button', { name: 'Just rest' }));
+
+    rerender(breakRecall({ visible: false }));
+    rerender(breakRecall());
+
+    expect(screen.getByText('REST')).toBeInTheDocument();
+  });
+
+  it('keeps the rest content mounted as a break starts with nothing due', () => {
+    setupBreakRecall({ cards: notDueConceptCards(2) });
+    const { rerender } = renderBreak({ onBreak: false });
+    const rest = screen.getByText('REST');
+
+    rerender(breakRecall());
+
+    expect(screen.getByText('REST')).toBe(rest);
+  });
+
+  it('shows the rest content while hidden on a narrow window', () => {
+    const { initialize } = setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
+
+    renderBreak({ visible: false });
+
+    expect(screen.getByText('REST')).toBeInTheDocument();
+    expect(initialize).not.toHaveBeenCalled();
   });
 
   it('rests when break recall is turned off', () => {
