@@ -922,6 +922,22 @@ describe('SyncEngine.enableSync', () => {
     expect(restarted.getCachedAccount()).toEqual({ userId: 'u1', email: 'kes@example.com' });
   });
 
+  it('ignores a stored account that is not an account record', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.kv.set(ACCOUNT_KEY, { userId: 42 }, 'local');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.ensureHydrated();
+
+    expect(device.engine.getCachedAccount()).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'The stored sync account is not an account record',
+      expect.objectContaining({ key: ACCOUNT_KEY })
+    );
+  });
+
   it('forgets the recorded account on disable', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);

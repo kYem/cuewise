@@ -5,6 +5,7 @@ import type {
   PairingPollResult,
   PendingPairing,
   RecoveryEnvelopeState,
+  SyncAccount,
   SyncEngineControlSurface,
   SyncNowResult,
   SyncOutcome,
@@ -153,7 +154,7 @@ export interface SyncDetailsOptions {
    */
   readonly refreshRecoveryEnvelope?: boolean;
   /**
-   * Answer from what this device last recorded, with no request (null when nothing is).
+   * Answer from this device's recorded state, with no request; null when no account is recorded.
    * Wins over refreshRecoveryEnvelope.
    */
   readonly cached?: boolean;
@@ -164,7 +165,7 @@ export interface SyncDetailsOptions {
  * host adapters (macOS in-process, extension SW) build the identical shape from one definition.
  */
 export function buildSyncDetails(
-  account: { userId: string; email: string | null } | null,
+  account: SyncAccount | null,
   lastSyncedAt: number | null,
   recoveryEnvelope: RecoveryEnvelopeState = 'unknown'
 ): SyncDetails | null {
@@ -184,7 +185,7 @@ export async function readSyncDetails(
   engine: SyncEngineControlSurface,
   options: SyncDetailsOptions = {}
 ): Promise<SyncDetails | null> {
-  // Hydration owns the recorded account and lastSyncedAt; skipped, a cached read answers null.
+  // Loads the recorded account and stamp; without it a cached read finds no account.
   await engine.ensureHydrated();
   if (options.cached === true) {
     return buildSyncDetails(

@@ -300,7 +300,7 @@ export class SyncEngine {
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
-      // Never name the previous account in this session; the next getAccount records this one.
+      // The previous account must not name this one; the next getAccount records it.
       this.forgetAccount();
       await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'signed in');
       await this.enrollAndActivate(recoveryCode, epoch, setAsideFrom);
@@ -596,8 +596,8 @@ export class SyncEngine {
       }
     }
     if (survived.length > 0) {
-      // A surviving enabled flag re-activates sync on the next start(); a surviving stamp can be
-      // hydrated onto whatever account comes next. Both outlast the account they describe.
+      // A surviving enabled flag re-activates sync on the next start(); a surviving stamp or account
+      // can be hydrated onto whatever account comes next. All outlast the account they describe.
       logger.error(`Disable could not remove every sync key: ${survived.join(', ')}`);
     }
     this.dk = null;
@@ -864,13 +864,14 @@ export class SyncEngine {
     this.account = null;
   }
 
-  /** Gated like the envelope record: a fetch a disable or sign-in overtook must not be recorded. */
+  /** Dropped if a sign-in or disable forgot the account mid-fetch; an overtaken write is undone. */
   private async recordAccount(account: SyncAccount, gen: number): Promise<void> {
     if (this.accountCacheGen !== gen) {
       return;
     }
     const previous = this.account;
-    this.account = { userId: account.userId, email: account.email };
+    // A missing email would not survive JSON, and the stored record would never hydrate again.
+    this.account = { userId: account.userId, email: account.email ?? null };
     if (previous?.userId === account.userId && previous.email === account.email) {
       return;
     }
@@ -987,7 +988,7 @@ export class SyncEngine {
   }
 
   /**
-   * Reads the persisted sync state (stamp, cycle, envelope, account), once per process. Public and memoised because the
+   * Reads the persisted sync state once per process. Public and memoised because the
    * extension answers a control message from a cold worker BEFORE start() runs — the listeners are
    * registered synchronously while start() waits on the settings migration.
    */
@@ -1093,8 +1094,8 @@ export class SyncEngine {
   }
 
   /**
-   * Only into a process that has never forgotten the account: after a sign-in or disable the
-   * stored one may be the previous account's (a failed remove, or a read that straddled it).
+   * Skipped once this process forgot the account (sign-in/disable): a read that straddled it, or a
+   * remove that failed, may still hold the previous one.
    */
   private hydrateAccount(account: StoredValue): void {
     if (this.account !== null || this.accountCacheGen !== 0) {
@@ -1111,7 +1112,7 @@ export class SyncEngine {
       });
       return;
     }
-    this.account = account.value;
+    this.account = { userId: account.value.userId, email: account.value.email };
   }
 
   /**

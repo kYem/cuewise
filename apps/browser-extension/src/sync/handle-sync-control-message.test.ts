@@ -191,6 +191,28 @@ describe('handleSyncControlMessage: getLastCycle', () => {
     expect(order).toEqual(['hydrate', 'read']);
   });
 
+  it('awaits hydration before a cached details lookup reads the recorded account', async () => {
+    const order: string[] = [];
+    const engine = fakeControlSurface({
+      getCachedAccount: vi.fn(() => {
+        order.push('read');
+        return null;
+      }),
+      ensureHydrated: vi.fn(async () => {
+        await Promise.resolve();
+        order.push('hydrate');
+      }),
+    });
+
+    await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details', cached: true },
+      fakeDeps()
+    );
+
+    expect(order).toEqual(['hydrate', 'read']);
+  });
+
   it('answers a null outcome when the engine has not run a cycle yet', async () => {
     const result = await handleSyncControlMessage(
       fakeControlSurface(),

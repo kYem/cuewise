@@ -20,7 +20,7 @@ interface SyncMenuFooterProps {
 const NEEDS_SETTINGS: readonly SyncUiStatus[] = ['needs_reauth', 'needs_enroll'];
 
 // h-4 is text-xs's line-height, so the placeholder occupies exactly the row the email will:
-// the status line below it does not move when the details fetch lands.
+// the status line below it does not move when details land.
 const EMAIL_SKELETON_ROW = 'flex h-4 items-center';
 
 const CACHED: SyncDetailsOptions = { cached: true };
@@ -105,7 +105,7 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
       await controller.syncNow();
       detailsGenRef.current += 1;
       const gen = detailsGenRef.current;
-      // The account cannot change on a sync, so the recorded stamp is all that needs re-reading.
+      // A sync cannot change the account, so re-read the recorded stamp; with none recorded, ask.
       const next = (await controller.getDetails(CACHED)) ?? (await controller.getDetails());
       if (detailsGenRef.current === gen && next !== null) {
         setDetails(next);

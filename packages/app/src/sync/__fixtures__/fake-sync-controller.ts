@@ -277,7 +277,7 @@ export class FakeSyncController implements SyncController {
     this.detailsResults.push(details);
   }
 
-  /** What every `getDetails({cached:true})` resolves to (default null); never consumes the queue above. */
+  /** What every `getDetails({cached:true})` resolves to (default null); never consumes scriptDetails' queue. */
   scriptCachedDetails(details: SyncDetails | null): void {
     this.cachedDetails = details;
   }
