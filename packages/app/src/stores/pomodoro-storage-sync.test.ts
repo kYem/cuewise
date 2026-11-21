@@ -12,7 +12,7 @@ describe('usePomodoroStorageSync', () => {
   it('rehydrates when another context writes the timer state', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(usePomodoroStore.persist, 'rehydrate').mockImplementation(() => {});
+    const rehydrate = vi.spyOn(usePomodoroStore.persist, 'rehydrate').mockResolvedValue(undefined);
     renderHook(() => usePomodoroStorageSync());
 
     fake.emit(['pomodoroState']);
@@ -23,7 +23,7 @@ describe('usePomodoroStorageSync', () => {
   it('ignores another key, and the same key in another area', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(usePomodoroStore.persist, 'rehydrate').mockImplementation(() => {});
+    const rehydrate = vi.spyOn(usePomodoroStore.persist, 'rehydrate').mockResolvedValue(undefined);
     renderHook(() => usePomodoroStorageSync());
 
     fake.emit(['soundsState']);
