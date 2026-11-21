@@ -25,6 +25,6 @@ language js(typescript)
   $write <: not within or {
     `withCollectionLock($...)`,
     `withCollectionLock<$_>($...)`
-  } ,
+  },
   register_diagnostic(span=$write, message="This rewrites the whole collection: call it inside withCollectionLock so a concurrent write in the other realm cannot be lost.", severity="error")
 }

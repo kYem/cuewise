@@ -31,6 +31,9 @@ overrides:
   brace-expansion@5: 5.0.12
   launch-editor@2: 2.14.2
   minimatch@10: 11.0.1
+  # rolldown's wasm binding drags in emnapi 2.0 betas, which pair with 1.x cores and crash astro check.
+  '@emnapi/core': 1.11.3
+  '@emnapi/runtime': 1.11.3
 
 allowBuilds:
   esbuild: true
@@ -38,53 +41,53 @@ allowBuilds:
   workerd: true
 
 catalog:
-  '@astrojs/check': ^0.9.10
+  '@astrojs/check': ^0.9.12
   '@astrojs/sitemap': ^3.7.4
-  '@biomejs/biome': ^2.5.14
+  '@biomejs/biome': ^2.6.6
   '@changesets/cli': ^3.0.3
   '@cloudflare/vitest-plugin': ^1.6.0
   '@cloudflare/workers-types': ^5.20261107.1
-  '@commitlint/cli': ^21.2.3
-  '@commitlint/config-conventional': ^21.2.3
+  '@commitlint/cli': ^21.2.4
+  '@commitlint/config-conventional': ^21.2.4
   '@crxjs/vite-plugin': ^3.0.0
-  '@playwright/test': ^1.63.0
-  '@tailwindcss/postcss': ^4.3.3
+  '@playwright/test': ^1.65.0
+  '@tailwindcss/postcss': ^4.3.5
   '@testing-library/jest-dom': ^7.0.1
   '@testing-library/react': ^16.3.3
-  '@testing-library/user-event': ^14.6.7
-  '@types/chrome': ^0.3.0
+  '@testing-library/user-event': ^14.6.8
+  '@types/chrome': ^0.3.7
   '@types/node': ^24.13.3
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
-  '@vitejs/plugin-react': ^6.1.1
+  '@vitejs/plugin-react': ^6.2.1
   '@vitest/coverage-istanbul': 5.1.0
   '@vitest/coverage-v8': 5.1.0
   '@vitest/ui': 5.1.0
   astro: 7.4.7
-  autoprefixer: ^10.6.1
+  autoprefixer: ^10.6.2
   clsx: ^2.1.1
   country-flag-icons: ^1.6.20
   date-fns: ^4.4.0
   fishery: ^2.4.0
   hono: ^4.13.17
-  jose: ^6.2.12
+  jose: ^6.2.15
   jsdom: ^30.1.1
-  lucide-react: ^1.48.0
-  postcss: ^8.5.28
-  react: ^19.3.0
-  react-dom: ^19.3.0
+  lucide-react: ^1.70.0
+  postcss: ^8.5.32
+  react: ^19.3.1
+  react-dom: ^19.3.1
   recharts: 3.10.1
   sharp: ^0.35.5
   tailwind-merge: ^3.7.0
-  tailwindcss: ^4.3.3
+  tailwindcss: ^4.3.5
   tsx: ^4.23.15
-  turbo: ^2.11.5
+  turbo: ^2.11.10
   typescript: ^7.0.2
   vite: ^8.3.6
   vitest: 5.1.0
   wrangler: ^4.158.0
   zod: ^4.6.7
-  zustand: 5.0.15
+  zustand: 5.1.0
 
 catalogs:
   # Astro's check tooling (@astrojs/check) peer-caps at TS 6, so the standalone website

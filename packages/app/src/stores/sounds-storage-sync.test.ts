@@ -31,7 +31,7 @@ describe('useSoundsStorageSync', () => {
   it('rehydrates when another context writes the sounds state', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     renderHook(() => useSoundsStorageSync());
 
     fake.emit(['soundsState']);
@@ -42,7 +42,7 @@ describe('useSoundsStorageSync', () => {
   it('ignores another key, and the same key in another area', () => {
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     renderHook(() => useSoundsStorageSync());
 
     fake.emit(['pomodoroState']);
@@ -55,7 +55,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    const rehydrate = vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     renderHook(() => useSoundsStorageSync());
 
     fake.emit(['soundsState']);
@@ -69,7 +69,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     useSoundsStore.setState({ isLeader: true });
     const { rerender } = renderHook(() => useSoundsStorageSync());
     fake.emit(['soundsState']);
@@ -86,7 +86,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     useSoundsStore.setState({ isLeader: true });
     renderHook(() => useSoundsStorageSync());
 
@@ -100,7 +100,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     useSoundsStore.setState({ isLeader: true });
     renderHook(() => useSoundsStorageSync());
 
@@ -115,7 +115,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const { rerender } = renderHook(() => useSoundsStorageSync());
     expect(fake.subscriberCount).toBe(1);
 
@@ -148,7 +148,7 @@ describe('useSoundsStorageSync', () => {
     // "playing" indicator over silence.
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     stubYoutubePlayer();
     const loadPlaylist = vi.spyOn(youtubePlayer, 'loadPlaylist').mockImplementation(() => {
       throw new Error('the iframe API is not ready');
@@ -172,7 +172,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
     leaderPlayingYoutube();
@@ -194,7 +194,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: false });
     leaderPlayingYoutube();
     renderHook(() => useSoundsStorageSync());
@@ -210,7 +210,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
     const setVolume = vi.spyOn(youtubePlayer, 'setVolume').mockImplementation(() => {});
@@ -232,7 +232,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
     leaderPlayingYoutube();
     useSoundsStore.setState({ isPlaying: false, isPaused: false });
@@ -248,7 +248,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
     leaderPlayingYoutube();
     useSoundsStore.setState({ isPlaying: false, isPaused: true });
@@ -265,7 +265,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue({
       videoId: 'half-watched',
@@ -290,7 +290,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
     leaderPlayingYoutube();
@@ -310,7 +310,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const playAmbient = vi.spyOn(ambientSoundPlayer, 'play').mockImplementation(() => {});
     const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
     vi.spyOn(ambientSoundPlayer, 'getCurrentSound').mockReturnValue('rain');
@@ -335,7 +335,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
     vi.spyOn(ambientSoundPlayer, 'getCurrentSound').mockReturnValue('rain');
     stubYoutubePlayer();
@@ -357,7 +357,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
     leaderPlayingYoutube();
@@ -378,7 +378,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
     leaderPlayingYoutube();
@@ -399,7 +399,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
     leaderPlayingYoutube();
@@ -421,7 +421,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
     const player = stubYoutubePlayer();
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
@@ -443,7 +443,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const player = stubYoutubePlayer();
     const setVolume = vi.spyOn(youtubePlayer, 'setVolume').mockImplementation(() => {});
     vi.spyOn(storage, 'getCurrentVideoForPlaylist').mockResolvedValue(null);
@@ -516,7 +516,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
     stubYoutubePlayer({ loaded: leaderPlaylist.playlistId, playing: true });
     leaderPlayingYoutube();
@@ -532,7 +532,7 @@ describe('useSoundsStorageSync', () => {
     vi.useFakeTimers();
     const fake = fakeObservableStore();
     configurePlatform({ storage: fake.store });
-    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockImplementation(() => {});
+    vi.spyOn(useSoundsStore.persist, 'rehydrate').mockResolvedValue(undefined);
     const stopAmbient = vi.spyOn(ambientSoundPlayer, 'stop').mockImplementation(() => {});
     stubYoutubePlayer();
     // Ambient plays wherever it was pressed, which is usually not the tab holding the audio lock.

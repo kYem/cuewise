@@ -119,7 +119,7 @@ export function Select<T extends string = string>({
   useEffect(() => {
     if (isOpen) {
       const selectedIndex = options.findIndex((opt) => opt.value === value);
-      setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+      setHighlightedIndex(Math.max(selectedIndex, 0));
     }
   }, [isOpen, value, options]);
 
