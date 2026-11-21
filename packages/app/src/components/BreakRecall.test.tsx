@@ -98,6 +98,20 @@ describe('BreakRecall', () => {
     expect(screen.getByText(cards[2].term)).toBeInTheDocument();
   });
 
+  it('stays on a due card when the browsed one stops being due mid-break', () => {
+    const cards = conceptCardFactory.buildList(3);
+    setupBreakRecall({ cards });
+    const { rerender } = renderBreak();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Next' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Next' })[0]);
+
+    setupBreakRecall({ cards: [cards[0], cards[1], ...notDueConceptCards(1)] });
+    rerender(breakRecall());
+
+    expect(screen.getByText(cards[0].term)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 2/)).toBeInTheDocument();
+  });
+
   it('grades the card on screen after browsing', async () => {
     const cards = conceptCardFactory.buildList(3);
     const { reviewCard } = setupBreakRecall({ cards });

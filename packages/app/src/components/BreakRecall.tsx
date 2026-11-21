@@ -8,9 +8,9 @@ import { ConceptCardDisplay } from './ConceptCardDisplay';
 interface BreakRecallProps {
   /** A Pomodoro break is on; each switch to true starts a fresh cap and clears "Just rest". */
   onBreak: boolean;
-  /** The companion column is on screen; a hidden card would still take 1/2/3 grades. */
+  /** The companion column is on screen; a hidden card would still grab Space and 1/2/3. */
   visible: boolean;
-  /** The usual companion, shown outside a break and once the person rests or runs out. */
+  /** The usual companion, shown whenever no card is on offer. */
   rest: React.ReactNode;
 }
 
@@ -75,7 +75,7 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ onBreak, visible, rest
 
   const current = deck[position % deck.length];
   const takeRest = () => setRound((r) => ({ ...r, rested: true }));
-  // Wrapped at read time above, which also covers a deck that shrinks mid-break.
+  // Only kept non-negative here; the % at read time wraps it, even if the deck shrinks.
   const moveBy = (delta: number) => {
     setRound((r) => ({ ...r, position: (r.position % deck.length) + delta + deck.length }));
   };
