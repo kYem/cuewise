@@ -6,7 +6,7 @@ import type React from 'react';
 import { unsplashImageUrl } from '../../utils/unsplash';
 
 // Tiles are ~100×56 CSS px; 2× covers retina without downloading the 1920px wallpaper.
-const THUMB_PARAMS = 'w=240&h=112&fit=crop&auto=format&q=60';
+const THUMB_PARAMS = 'w=200&h=112&fit=crop&auto=format&q=60';
 
 /** Representative thumbnail + gradient fallback per focus-mode background category. */
 const CATEGORY_THUMBS: Record<FocusImageCategory, { photoId: string; fallback: string }> = {

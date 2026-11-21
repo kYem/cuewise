@@ -19,7 +19,7 @@ describe('ThumbPicker', () => {
   });
 
   it('requests a thumbnail-sized image, not the full wallpaper', () => {
-    expect(tileStyle('cars')).toContain('w=240&h=112&fit=crop&auto=format');
+    expect(tileStyle('cars')).toContain('w=200&h=112&fit=crop&auto=format');
   });
 
   it('marks only the chosen theme as selected', () => {
