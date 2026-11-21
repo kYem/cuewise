@@ -5,17 +5,17 @@ import { Check } from 'lucide-react';
 import type React from 'react';
 import { unsplashImageUrl } from '../../utils/unsplash';
 
-// Tiles are ~90×56 CSS px; 2× covers retina without downloading the 1920px wallpaper.
-const THUMB_PARAMS = 'w=200&h=112&fit=crop&auto=format&q=60';
+// Tiles are ~120×56 CSS px; 2× covers retina without downloading the 1920px wallpaper.
+const THUMB_PARAMS = 'w=240&h=112&fit=crop&auto=format&q=60';
 
 /** Representative thumbnail + gradient fallback per focus-mode background category. */
 const CATEGORY_THUMBS: Record<FocusImageCategory, { photoId: string; fallback: string }> = {
   nature: {
-    photoId: 'photo-1506744038136-46273834b3fb',
+    photoId: 'photo-1469474968028-56623f02e42e',
     fallback: 'linear-gradient(135deg, #5a7d6b, #2c4a3e)',
   },
   forest: {
-    photoId: 'photo-1441974231531-c6227db76b6e',
+    photoId: 'photo-1448375240586-882707db888b',
     fallback: 'linear-gradient(135deg, #3e5d43, #1d3322)',
   },
   ocean: {

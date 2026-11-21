@@ -10,7 +10,7 @@ import { CURATED_PHOTOS } from './unsplash-catalog';
 // Track last used index per category to avoid immediate repeats
 const lastUsedIndex: Partial<Record<FocusImageCategory, number>> = {};
 
-/** CDN URL for a catalog photo id, sized by Unsplash's on-the-fly transform params. */
+/** `params` are imgix transforms (w, h, fit, q, auto). */
 export function unsplashImageUrl(photoId: string, params: string): string {
   return `https://images.unsplash.com/${photoId}?${params}`;
 }

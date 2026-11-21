@@ -240,6 +240,12 @@ describe('curated catalog invariants', () => {
     expect(allIds).not.toContain(id);
   });
 
+  it('credits the photographer of a new theme wallpaper', () => {
+    const [first] = CURATED_PHOTOS.classical;
+
+    expect(getPhotoCredit(getRandomImageUrl('classical', 0)).photographer).toBe(first.photographer);
+  });
+
   it('offers at least 15 images per category', () => {
     for (const photos of Object.values(CURATED_PHOTOS)) {
       expect(photos.length).toBeGreaterThanOrEqual(15);
