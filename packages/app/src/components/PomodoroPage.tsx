@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
 import { usePomodoroStore } from '../stores/pomodoro-store';
@@ -17,6 +18,8 @@ import { SoundsMiniPlayer } from './sounds';
 
 // top-20 clears PageHeader, which is 4.5rem tall once a plain theme makes it opaque.
 const PLAYER_OFFSET = 'fixed top-20 left-4 z-50';
+// Tailwind's `lg`, where the companion column becomes visible.
+const COMPANION_VISIBLE_QUERY = '(min-width: 1024px)';
 
 export const PomodoroPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -30,6 +33,7 @@ export const PomodoroPage: React.FC = () => {
   // Hides the mini player: FocusMode renders its own.
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
   const isBreak = usePomodoroStore((state) => state.sessionType !== 'work');
+  const companionVisible = useMediaQuery(COMPANION_VISIBLE_QUERY);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
 
   useEffect(() => {
@@ -88,8 +92,8 @@ export const PomodoroPage: React.FC = () => {
   } else {
     companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
   }
-  // Mounted only during a break, so each break gets a fresh cap and "Just rest".
-  if (isBreak) {
+  // Mounted per break for a fresh cap, and only when visible: its 1/2/3 keys grade the card.
+  if (isBreak && companionVisible) {
     companion = <BreakRecall rest={companion} />;
   }
 

@@ -13,6 +13,7 @@ import { useSettingsStore } from '../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { preloadImages } from '../utils/image-preload-cache';
 import { PLAIN_THEMES } from './__fixtures__/color-theme.fixtures';
+import { stubMatchMedia } from './__fixtures__/media-query.fixtures';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
@@ -239,6 +240,16 @@ describe('PomodoroPage - chrome wiring', () => {
 });
 
 describe('PomodoroPage - break recall', () => {
+  const originalMatchMedia = window.matchMedia;
+
+  beforeEach(() => {
+    stubMatchMedia(true);
+  });
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
   it('keeps the plain companion during work', () => {
     setup('quote', false);
 
@@ -260,4 +271,13 @@ describe('PomodoroPage - break recall', () => {
       );
     }
   );
+
+  it('leaves recall out while the companion is hidden on a narrow window', () => {
+    stubMatchMedia(false);
+    setup('quote', false, {}, 'break');
+
+    render(<PomodoroPage />);
+
+    expect(screen.queryByTestId('break-recall')).not.toBeInTheDocument();
+  });
 });

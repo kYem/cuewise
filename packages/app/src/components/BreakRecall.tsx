@@ -21,7 +21,6 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ rest }) => {
   const activeRecall = useSettingsStore((state) => state.settings.conceptActiveRecall);
 
   const cards = useConceptCardsStore((state) => state.cards);
-  const isLoading = useConceptCardsStore((state) => state.isLoading);
   const initialize = useConceptCardsStore((state) => state.initialize);
   const reviewCard = useConceptCardsStore((state) => state.reviewCard);
   const toggleFavorite = useConceptCardsStore((state) => state.toggleFavorite);
@@ -44,7 +43,9 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ rest }) => {
     return due.slice(0, CONCEPT_BREAK_RECALL_MAX - handledIds.length);
   }, [cards, handledIds]);
 
-  if (!enabled || isLoading || rested || deck.length === 0) {
+  // No isLoading gate: each break reloads a deck that is usually already here, and gating
+  // on it would flash the quote. A first load with no cards yet has an empty deck anyway.
+  if (!enabled || rested || deck.length === 0) {
     return <>{rest}</>;
   }
 
