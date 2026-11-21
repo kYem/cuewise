@@ -1,4 +1,5 @@
 import {
+  ALL_FOCUS_IMAGE_CATEGORIES,
   type ConceptCadence,
   type ConceptFraming,
   type CornerPosition,
@@ -63,6 +64,8 @@ import { ThumbPicker } from './ThumbPicker';
 import { pomodoroWorkStep } from './timer-presets';
 import { WeatherLocationPicker } from './WeatherLocationPicker';
 import { WorldClockSettings } from './WorldClockSettings';
+
+const BACKGROUND_THEME_WORDS = ALL_FOCUS_IMAGE_CATEGORIES.join(' ');
 
 const CHROME_SYNC_HELP = `Sync custom quotes, goals, and reminders across browsers where you're signed in. Built-in quotes stay local; sync is limited to 100KB total and 8KB per item. ${HABIT_HISTORY_SYNC_NOTICE}`;
 
@@ -383,7 +386,7 @@ function BackgroundSection({ s, set, filter }: SettingsSectionProps) {
         label="Background"
         filter={filter}
         help="High-quality photos from Unsplash. Shown on the Glass theme, and in focus mode on any theme."
-        keywords="image category nature forest ocean mountains minimal dark glass wallpaper scenic photo unsplash"
+        keywords={`image category ${BACKGROUND_THEME_WORDS} glass wallpaper scenic photo unsplash`}
       >
         <ThumbPicker
           value={s.focusModeImageCategory}
@@ -999,8 +1002,7 @@ export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] =
     label: 'Background',
     icon: ImageIcon,
     component: BackgroundSection,
-    terms:
-      'background wallpaper photo image unsplash nature forest ocean mountains minimal dark glass scenic custom own picture readability dim brightness blur darken contrast',
+    terms: `background wallpaper photo image unsplash ${BACKGROUND_THEME_WORDS} glass scenic custom own picture readability dim brightness blur darken contrast`,
   },
   {
     id: 'focus',
