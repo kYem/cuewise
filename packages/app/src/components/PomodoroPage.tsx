@@ -92,10 +92,8 @@ export const PomodoroPage: React.FC = () => {
   } else {
     companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
   }
-  // Mounted per break for a fresh cap, and only when visible: its 1/2/3 keys grade the card.
-  if (isBreak && companionVisible) {
-    companion = <BreakRecall rest={companion} />;
-  }
+  // Active only when visible: a hidden card would still take 1/2/3 grades.
+  companion = <BreakRecall active={isBreak && companionVisible} rest={companion} />;
 
   return (
     <div className="min-h-screen w-full relative">

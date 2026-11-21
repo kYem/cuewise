@@ -10,7 +10,7 @@ vi.mock('../stores/concept-cards-store', () => ({ useConceptCardsStore: vi.fn() 
 const REST = <div>REST</div>;
 
 function renderBreak() {
-  return render(<BreakRecall rest={REST} />);
+  return render(<BreakRecall active rest={REST} />);
 }
 
 async function gradeGood() {
@@ -170,6 +170,28 @@ describe('BreakRecall', () => {
     renderBreak();
 
     expect(screen.getByText('REST')).toBeInTheDocument();
+  });
+
+  it('shows the rest content and leaves the deck unloaded outside a break', () => {
+    const { initialize } = setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
+
+    render(<BreakRecall active={false} rest={REST} />);
+
+    expect(screen.getByText('REST')).toBeInTheDocument();
+    expect(initialize).not.toHaveBeenCalled();
+  });
+
+  it('starts each break fresh after a rest in the last one', () => {
+    const cards = conceptCardFactory.buildList(3);
+    setupBreakRecall({ cards });
+    const { rerender } = renderBreak();
+    fireEvent.click(screen.getByRole('button', { name: 'Just rest' }));
+
+    rerender(<BreakRecall active={false} rest={REST} />);
+    rerender(<BreakRecall active rest={REST} />);
+
+    expect(screen.getByText(cards[0].term)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 3/)).toBeInTheDocument();
   });
 
   it('rests when break recall is turned off', () => {

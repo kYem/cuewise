@@ -6,15 +6,17 @@ import { useSettingsStore } from '../stores/settings-store';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
 
 interface BreakRecallProps {
-  /** The usual companion, shown once the person rests, finishes, or has nothing due. */
+  /** A break is on and the card would be visible; each switch to true starts a fresh break. */
+  active: boolean;
+  /** The usual companion, shown outside a break and once the person rests, finishes, or has nothing due. */
   rest: React.ReactNode;
 }
 
 /**
- * Offers a few due concept cards beside the timer during a Pomodoro break. Mount it per break:
- * the cap and "Just rest" hold for this mount, so the next break starts fresh.
+ * Offers a few due concept cards beside the timer during a Pomodoro break. Always rendered, so
+ * the companion keeps its place in the tree (and its quote timer) across break transitions.
  */
-export const BreakRecall: React.FC<BreakRecallProps> = ({ rest }) => {
+export const BreakRecall: React.FC<BreakRecallProps> = ({ active, rest }) => {
   const enabled = useSettingsStore(
     (state) => state.settings.conceptCardsEnabled && state.settings.conceptBreakRecall
   );
@@ -29,12 +31,22 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ rest }) => {
   const [rested, setRested] = useState(false);
   const [grading, setGrading] = useState(false);
   const [position, setPosition] = useState(0);
+  const [wasActive, setWasActive] = useState(active);
+
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (active) {
+      setHandledIds([]);
+      setRested(false);
+      setPosition(0);
+    }
+  }
 
   useEffect(() => {
-    if (enabled) {
+    if (enabled && active) {
       initialize();
     }
-  }, [enabled, initialize]);
+  }, [enabled, active, initialize]);
 
   const deck = useMemo(() => {
     const due = getDueConceptCards(cards, new Date()).filter(
@@ -45,7 +57,7 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ rest }) => {
 
   // No isLoading gate: each break reloads a deck that is usually already here, and gating
   // on it would flash the quote. A first load with no cards yet has an empty deck anyway.
-  if (!enabled || rested || deck.length === 0) {
+  if (!active || !enabled || rested || deck.length === 0) {
     return <>{rest}</>;
   }
 
