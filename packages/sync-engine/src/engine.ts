@@ -302,7 +302,7 @@ export class SyncEngine {
       }
       // Never name the previous account in this session; the next getAccount records this one.
       this.forgetAccount();
-      await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'signed in again');
+      await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'signed in');
       await this.enrollAndActivate(recoveryCode, epoch, setAsideFrom);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
@@ -1025,7 +1025,6 @@ export class SyncEngine {
 
   /** `retry` only for a read that failed outright and may succeed later; see HydrationResult. */
   private async readPersistedSyncState(epoch: number): Promise<HydrationResult> {
-    const cacheGen = this.accountCacheGen;
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany(
@@ -1050,16 +1049,8 @@ export class SyncEngine {
     }
 
     const account = stored[ACCOUNT_KEY];
-    // A fetch this process already made outranks the stored one, and a forget since the read wins.
-    if (account?.readable === true && this.account === null && this.accountCacheGen === cacheGen) {
-      if (isSyncAccount(account.value)) {
-        this.account = account.value;
-      } else {
-        logger.warn('The stored sync account is not an account record; ignoring it', {
-          key: ACCOUNT_KEY,
-          shape: describeShape(account.value),
-        });
-      }
+    if (account !== undefined) {
+      this.hydrateAccount(account);
     }
 
     // Only a positively-read boolean; anything else stays null, which the panel paints as nothing
@@ -1106,6 +1097,28 @@ export class SyncEngine {
    * localStorage can report an unreadable value, and the app embedding it ships logLevel 'error',
    * so a warn would be unreachable by anyone able to act on it.
    */
+  /**
+   * Only into a process that has never forgotten the account: after a sign-in or disable the
+   * stored one may be the previous account's (a failed remove, or a read that straddled it).
+   */
+  private hydrateAccount(account: StoredValue): void {
+    if (this.account !== null || this.accountCacheGen !== 0) {
+      return;
+    }
+    if (!account.readable) {
+      logger.error('The stored sync account is unreadable', { key: ACCOUNT_KEY });
+      return;
+    }
+    if (!isSyncAccount(account.value)) {
+      logger.error('The stored sync account is not an account record', {
+        key: ACCOUNT_KEY,
+        shape: describeShape(account.value),
+      });
+      return;
+    }
+    this.account = account.value;
+  }
+
   private hydrateStamp(stamp: StoredValue): void {
     if (!stamp.readable) {
       logger.error('The stored last-synced stamp is unreadable', { key: LAST_SYNCED_AT_KEY });

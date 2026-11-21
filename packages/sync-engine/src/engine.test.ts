@@ -973,6 +973,21 @@ describe('SyncEngine.enableSync', () => {
     expect(await device.kv.get(ACCOUNT_KEY, 'local')).toBeNull();
   });
 
+  it('does not hydrate a previous account that a sign-in could not remove', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.kv.set(ACCOUNT_KEY, { userId: 'u1', email: 'old@example.com' }, 'local');
+    device.kv.failRemovesForKey = ACCOUNT_KEY;
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    await device.engine.enableSync('dev', 'cred-b', 'Device A');
+    await device.engine.ensureHydrated();
+
+    expect(device.engine.getCachedAccount()).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('the cached sync account'));
+  });
+
   it('does not record an account whose fetch a sign-in overtook', async () => {
     const server = new FakeSyncServer();
     const device = createDevice(server);
