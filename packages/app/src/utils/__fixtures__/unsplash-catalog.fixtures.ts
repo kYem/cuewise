@@ -1,4 +1,4 @@
-/** Photos the 2026-11 refresh retired: empty starfields, loud gradients, near-blank fog, murky shots. */
+/** Photos removed from the catalog; a regenerated catalog must not bring them back. */
 export const RETIRED_PHOTO_IDS = [
   'photo-1472214103451-9374bd1c798e',
   'photo-1759061003114-337938a8a004',

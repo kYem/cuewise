@@ -620,7 +620,7 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'gabor_koszegi',
       location: 'Two Jack Lake, Improvement District No. 9, AB, Canada',
     },
-    // moraine Lake
+    // Moraine Lake
     {
       id: 'photo-1506104489822-562ca25152fe',
       photographer: 'Redd Francisco',
@@ -1118,7 +1118,7 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'schiepatrick',
       location: null,
     },
-    // sUV on curved mountain road
+    // SUV on curved mountain road
     {
       id: 'photo-1469423910081-3488183dd77e',
       photographer: 'Nathan Anderson',
@@ -1276,7 +1276,7 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'alexblock',
       location: 'Dublin, Ireland',
     },
-    // david bust, dark pedestal
+    // David bust, dark pedestal
     {
       id: 'photo-1793820390948-5d3f91bd24b4',
       photographer: 'Liana S',
@@ -1311,28 +1311,28 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'eversonvansoski',
       location: 'Belo Horizonte, MG, Brasil',
     },
-    // socrates, Athens
+    // Socrates, Athens
     {
       id: 'photo-1776719316358-f3b246e88f3d',
       photographer: 'Vidar Nordli-Mathisen',
       username: 'vidarnm',
       location: null,
     },
-    // plato with Athena
+    // Plato with Athena
     {
       id: 'photo-1776719315528-b793722cac9d',
       photographer: 'Vidar Nordli-Mathisen',
       username: 'vidarnm',
       location: null,
     },
-    // plato statue by column
+    // Plato statue by column
     {
       id: 'photo-1787753774415-bfa2537f43ff',
       photographer: 'Alberto Domingo Carreiro',
       username: 'betitop',
       location: 'Athens, Grecia',
     },
-    // admont Abbey library
+    // Admont Abbey library
     {
       id: 'photo-1562932831-afcfe48b5786',
       photographer: 'Valdemaras D.',
@@ -1360,14 +1360,14 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'burakoskay',
       location: 'Pergamon Ancient City, Ulucami, Akropol Caddesi, Bergama/İzmir, Türkiye',
     },
-    // greek temple ruins
+    // Greek temple ruins
     {
       id: 'photo-1773017825019-b8d05f7eac4b',
       photographer: 'Daniel B Ramos',
       username: 'the_urbannographer',
       location: 'Archaeological Museum of Ancient Corinth, Argous, Archaia Korinthos, Greece',
     },
-    // greek temple columns
+    // Greek temple columns
     {
       id: 'photo-1758559616527-35f149122a12',
       photographer: 'Wanderlust in Frame',
@@ -1381,7 +1381,7 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       username: 'sargonsama',
       location: null,
     },
-    // roman temple ruins
+    // Roman temple ruins
     {
       id: 'photo-1762086092259-329c64c3cb17',
       photographer: 'JP Sheard',

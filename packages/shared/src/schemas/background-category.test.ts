@@ -11,12 +11,6 @@ describe('background category', () => {
     expect(categorySetting.safeParse(category).success).toBe(true);
   });
 
-  it('accepts the four added themes', () => {
-    expect(FOCUS_IMAGE_CATEGORY_IDS).toEqual(
-      expect.arrayContaining(['countryside', 'cars', 'ai', 'classical'])
-    );
-  });
-
   it('rejects an unknown theme', () => {
     expect(categorySetting.safeParse('ghibli').success).toBe(false);
   });

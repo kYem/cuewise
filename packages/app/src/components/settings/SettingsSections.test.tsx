@@ -1,5 +1,6 @@
 import {
   ALL_FOCUS_IMAGE_CATEGORIES,
+  FOCUS_IMAGE_CATEGORIES,
   HABIT_HISTORY_SYNC_NOTICE,
   type Settings,
 } from '@cuewise/shared';
@@ -154,7 +155,9 @@ describe('settings sections', () => {
       expect(sectionsMatching(theme)).toContain('background');
       renderSection('background', theme);
 
-      expect(screen.getByRole('button', { name: 'Classical' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: FOCUS_IMAGE_CATEGORIES[theme] })
+      ).toBeInTheDocument();
     });
 
     it.each(['fullscreen', 'auto enter'])('still surfaces Focus mode for "%s"', (query) => {
