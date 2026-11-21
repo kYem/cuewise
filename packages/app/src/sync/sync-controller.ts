@@ -152,6 +152,11 @@ export interface SyncDetailsOptions {
    * surface that renders the finding — the settings panel's banner — turns it on (ENG-98).
    */
   readonly refreshRecoveryEnvelope?: boolean;
+  /**
+   * Answer from what this device last recorded, with no request: null when nothing is recorded.
+   * Wins over refreshRecoveryEnvelope. An older extension worker ignores it and asks the server.
+   */
+  readonly cached?: boolean;
 }
 
 /**
@@ -177,11 +182,19 @@ export function buildSyncDetails(
 /** Reads the engine's account + freshness into SyncDetails; neither network hop throws. */
 export async function readSyncDetails(
   engine: SyncEngineControlSurface,
-  refreshRecoveryEnvelope?: boolean
+  options: SyncDetailsOptions = {}
 ): Promise<SyncDetails | null> {
   // Hydration owns lastSyncedAt too; without it the stamp is only right because getAccount's
   // network hop happens to outlast two local reads.
   await engine.ensureHydrated();
+  if (options.cached === true) {
+    return buildSyncDetails(
+      engine.getCachedAccount(),
+      engine.getLastSyncedAt(),
+      engine.getRecoveryEnvelope()
+    );
+  }
+  const refreshRecoveryEnvelope = options.refreshRecoveryEnvelope === true;
   const [account, recoveryEnvelope] = await Promise.all([
     engine.getAccount(),
     refreshRecoveryEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelope(),

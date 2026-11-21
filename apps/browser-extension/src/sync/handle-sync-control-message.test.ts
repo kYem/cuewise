@@ -77,6 +77,26 @@ describe('handleSyncControlMessage: details', () => {
     expect(result).toMatchObject({ details: { recoveryEnvelope: 'present' } });
   });
 
+  it('answers a cached lookup from the recorded account without asking the server', async () => {
+    const getAccount = vi.fn().mockResolvedValue({ userId: 'u1', email: 'fresh@example.com' });
+    const engine = fakeControlSurface({
+      getAccount,
+      getCachedAccount: vi.fn().mockReturnValue({ userId: 'u1', email: 'kes@example.com' }),
+      getLastSyncedAt: vi.fn().mockReturnValue(1_700_000_000_000),
+    });
+
+    const result = await handleSyncControlMessage(
+      engine,
+      { kind: 'cuewise-sync-control', op: 'details', cached: true },
+      fakeDeps()
+    );
+
+    expect(getAccount).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      details: { accountEmail: 'kes@example.com', lastSyncedAt: 1_700_000_000_000 },
+    });
+  });
+
   it('answers details null when the engine has no account', async () => {
     const result = await handleSyncControlMessage(
       fakeControlSurface(),

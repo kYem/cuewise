@@ -86,9 +86,13 @@ function rejectMalformed(what: string): Extract<SyncControlResponse, { ok: false
 /** Details lookup — deliberately NOT serialized (see handleSyncControlMessage). */
 async function runDetails(
   engine: SyncEngineControlSurface,
-  refreshEnvelope: boolean | undefined
+  msg: SyncControlMessage
 ): Promise<SyncDetailsResponse> {
-  return { ok: true, kind: 'details', details: await readSyncDetails(engine, refreshEnvelope) };
+  const details = await readSyncDetails(engine, {
+    refreshRecoveryEnvelope: msg.refreshRecoveryEnvelope,
+    cached: msg.cached,
+  });
+  return { ok: true, kind: 'details', details };
 }
 
 /**
@@ -267,7 +271,7 @@ export async function handleSyncControlMessage(
   if (op === 'details') {
     // Bypasses the mutex so a slow account fetch cannot delay a queued user action (e.g. a
     // disable click). Its one write, the envelope flag, is epoch-guarded in the engine.
-    return runDetails(engine, msg.refreshRecoveryEnvelope);
+    return runDetails(engine, msg);
   }
   if (op === 'getLastCycle') {
     // Same rationale as 'details': read-only, so it must never queue behind a pending op.

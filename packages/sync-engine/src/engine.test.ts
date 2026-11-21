@@ -25,6 +25,7 @@ import { unbindPersistedDataKey } from './__fixtures__/legacy-data-key';
 import { pushWithoutBase } from './__fixtures__/records';
 import { type CollectionBinding, defaultBindings } from './collections';
 import {
+  ACCOUNT_KEY,
   CLOUD_SYNC_ENABLED_KEY,
   LAST_CYCLE_KEY,
   LAST_SYNCED_AT_KEY,
@@ -899,6 +900,62 @@ describe('SyncEngine.enableSync', () => {
 
     await device.engine.enableSync('dev', 'cred-a', 'Device A');
     expect(await device.engine.getAccount()).toEqual({ userId: 'u1', email: 'kes@example.com' });
+  });
+
+  it('records the fetched account so a restarted engine names it without a request', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    device.apiClient.accountResult = { userId: 'u1', email: 'kes@example.com' };
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    expect(device.engine.getCachedAccount()).toBeNull();
+
+    await device.engine.getAccount();
+
+    const restarted = new SyncEngine({
+      apiClient: device.apiClient,
+      sessionManager: new SessionManager(device.kv),
+      keyStore: device.kv,
+      scheduler: device.scheduler,
+    });
+    await restarted.ensureHydrated();
+    expect(restarted.getCachedAccount()).toEqual({ userId: 'u1', email: 'kes@example.com' });
+  });
+
+  it('forgets the recorded account on disable', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    await device.engine.getAccount();
+
+    await device.engine.disableSync();
+
+    expect(device.engine.getCachedAccount()).toBeNull();
+    expect(await device.kv.get(ACCOUNT_KEY, 'local')).toBeNull();
+  });
+
+  it('does not record an account whose fetch a disable overtook', async () => {
+    const server = new FakeSyncServer();
+    const device = createDevice(server);
+    useStorage(device);
+    await device.engine.enableSync('dev', 'cred-a', 'Device A');
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(device.apiClient, 'getAccount').mockImplementationOnce(async () => {
+      await gate;
+      return { userId: 'u1', email: 'old@example.com' };
+    });
+
+    const lookup = device.engine.getAccount();
+    await device.engine.disableSync();
+    release();
+    await lookup;
+
+    expect(device.engine.getCachedAccount()).toBeNull();
+    expect(await device.kv.get(ACCOUNT_KEY, 'local')).toBeNull();
   });
 
   it('getAccount resolves null on a 401 without auth-loss side effects', async () => {

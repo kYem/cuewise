@@ -10,6 +10,7 @@ export {
   CLOUD_SYNC_ENABLED_KEY,
   type DeleteAccountResult,
   type RecoveryEnvelopeState,
+  type SyncAccount,
   SyncEngine,
   type SyncSignInProvider,
   type SyncStatus,
@@ -32,6 +33,7 @@ export type SyncEngineControlSurface = Pick<
   | 'syncNow'
   | 'getStatus'
   | 'getAccount'
+  | 'getCachedAccount'
   | 'getLastSyncedAt'
   | 'getLastCycle'
   | 'getRecoveryEnvelope'

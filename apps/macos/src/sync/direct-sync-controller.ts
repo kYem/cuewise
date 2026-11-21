@@ -417,7 +417,7 @@ export function buildDirectSyncController<E extends SyncEngineControlSurface>(
       }
     },
     getDetails(options?: SyncDetailsOptions): Promise<SyncDetails | null> {
-      return readSyncDetails(engine, options?.refreshRecoveryEnvelope);
+      return readSyncDetails(engine, options);
     },
     async listSessions(): Promise<SyncSession[] | null> {
       return engine.listSessions();

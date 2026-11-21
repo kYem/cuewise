@@ -62,6 +62,7 @@ export class FakeSyncController implements SyncController {
   private readonly reconnectResults: EnableResult[] = [];
   private readonly enrollWithCodeResults: EnableResult[] = [];
   private readonly detailsResults: (SyncDetails | null)[] = [];
+  private cachedDetails: SyncDetails | null = null;
   private readonly syncNowResults: SyncNowResult[] = [];
   private lastCycleRead: LastCycleRead = { available: true, outcome: null };
   private readonly failingMethods = new Set<FailableMethod>();
@@ -260,6 +261,11 @@ export class FakeSyncController implements SyncController {
     this.detailsResults.push(details);
   }
 
+  /** What every `getDetails({cached:true})` resolves to (default null); never consumes the queue above. */
+  scriptCachedDetails(details: SyncDetails | null): void {
+    this.cachedDetails = details;
+  }
+
   /** Queues the outcome the next `syncNow()` call resolves to; also becomes what `getLastCycle()` reports. */
   scriptSyncNow(outcome: SyncNowResult): void {
     this.syncNowResults.push(outcome);
@@ -398,6 +404,9 @@ export class FakeSyncController implements SyncController {
     // ENG-98 on this side of the seam, and a swallowed argument makes losing it invisible.
     this.calls.push({ method: 'getDetails', args: [options] });
     this.maybeFail('getDetails');
+    if (options?.cached === true) {
+      return this.cachedDetails;
+    }
     if (this.deferredDetails) {
       this.deferredDetails = false;
       return new Promise((resolve) => {
