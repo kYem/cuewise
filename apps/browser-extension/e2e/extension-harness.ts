@@ -27,15 +27,16 @@ export interface ExtensionSession {
 }
 
 /**
- * An empty `profileDir` is a fresh temp profile. Headed, as MV3 service workers never register
- * under `--headless=new` here.
+ * An empty `profileDir` is a fresh temp profile. The `chromium` channel is full Chrome in new
+ * headless mode; the default headless shell can't load extensions.
  */
 export async function launchExtension(
   options: { extensionDir?: string; profileDir?: string } = {}
 ): Promise<ExtensionSession> {
   const extensionDir = options.extensionDir ?? EXTENSION_DIST;
   const context = await chromium.launchPersistentContext(options.profileDir ?? '', {
-    headless: false,
+    channel: 'chromium',
+    headless: true,
     args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],
   });
   let [worker] = context.serviceWorkers();
