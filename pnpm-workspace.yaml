@@ -14,17 +14,7 @@ minimumReleaseAge: 20160
 minimumReleaseAgeExclude:
   - typescript
   - '@typescript/*'
-  # Early adoption of @cloudflare/vitest-plugin 1.4 (vitest 5) and its fresh runtime; drop after 2026-10-22.
-  - '@cloudflare/vitest-plugin@1.4.0'
-  - 'wrangler@4.149.0'
-  - '@cloudflare/workers-types@5.20261006.1'
-  - 'miniflare@5.20261006.1-alpha'
-  - 'workerd@1.20261006.1'
-  - '@cloudflare/workerd-darwin-64@1.20261006.1'
-  - '@cloudflare/workerd-darwin-arm64@1.20261006.1'
-  - '@cloudflare/workerd-linux-64@1.20261006.1'
-  - '@cloudflare/workerd-linux-arm64@1.20261006.1'
-  - '@cloudflare/workerd-windows-64@1.20261006.1'
+
 
 # Force patched versions of transitive deps flagged by Dependabot. Major-scoped
 # so unrelated majors are untouched. All targets are >14 days old, so they clear
@@ -32,6 +22,15 @@ minimumReleaseAgeExclude:
 overrides:
   # yaml-language-server holds 2.7.1; even its latest stops at 2.8.3, the first patched release.
   yaml@2: 2.9.0
+  undici@7: 7.30.1
+  undici@8: 8.12.2
+  fast-uri@3: 3.1.9
+  devalue@5: 5.9.3
+  shell-quote@1: 1.11.0
+  source-map-js@1: 1.2.2
+  brace-expansion@5: 5.0.12
+  launch-editor@2: 2.14.2
+  minimatch@10: 11.0.1
 
 allowBuilds:
   esbuild: true
@@ -43,8 +42,8 @@ catalog:
   '@astrojs/sitemap': ^3.7.4
   '@biomejs/biome': ^2.5.14
   '@changesets/cli': ^3.0.3
-  '@cloudflare/vitest-plugin': ^1.4.0
-  '@cloudflare/workers-types': ^5.20261006.1
+  '@cloudflare/vitest-plugin': ^1.6.0
+  '@cloudflare/workers-types': ^5.20261107.1
   '@commitlint/cli': ^21.2.3
   '@commitlint/config-conventional': ^21.2.3
   '@crxjs/vite-plugin': ^3.0.0
@@ -58,16 +57,16 @@ catalog:
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
   '@vitejs/plugin-react': ^6.1.1
-  '@vitest/coverage-istanbul': 5.0.2
-  '@vitest/coverage-v8': 5.0.2
-  '@vitest/ui': 5.0.2
-  astro: 7.3.5
+  '@vitest/coverage-istanbul': 5.1.0
+  '@vitest/coverage-v8': 5.1.0
+  '@vitest/ui': 5.1.0
+  astro: 7.4.7
   autoprefixer: ^10.6.1
   clsx: ^2.1.1
   country-flag-icons: ^1.6.20
   date-fns: ^4.4.0
   fishery: ^2.4.0
-  hono: ^4.13.11
+  hono: ^4.13.17
   jose: ^6.2.12
   jsdom: ^30.1.1
   lucide-react: ^1.48.0
@@ -81,10 +80,10 @@ catalog:
   tsx: ^4.23.15
   turbo: ^2.11.5
   typescript: ^7.0.2
-  vite: ^8.3.1
-  vitest: 5.0.2
-  wrangler: ^4.149.0
-  zod: ^4.6.5
+  vite: ^8.3.6
+  vitest: 5.1.0
+  wrangler: ^4.158.0
+  zod: ^4.6.7
   zustand: 5.0.15
 
 catalogs:
