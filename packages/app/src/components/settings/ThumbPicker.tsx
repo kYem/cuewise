@@ -5,8 +5,8 @@ import { Check } from 'lucide-react';
 import type React from 'react';
 import { unsplashImageUrl } from '../../utils/unsplash';
 
-// Tiles are ~120×56 CSS px; 2× covers retina without downloading the 1920px wallpaper.
-const THUMB_PARAMS = 'w=240&h=112&fit=crop&auto=format&q=60';
+// Tiles are ~100×56 CSS px; 2× covers retina without downloading the 1920px wallpaper.
+const THUMB_PARAMS = 'w=200&h=112&fit=crop&auto=format&q=60';
 
 /** Representative thumbnail + gradient fallback per focus-mode background category. */
 const CATEGORY_THUMBS: Record<FocusImageCategory, { photoId: string; fallback: string }> = {
@@ -50,6 +50,14 @@ const CATEGORY_THUMBS: Record<FocusImageCategory, { photoId: string; fallback: s
     photoId: 'photo-1758559616527-35f149122a12',
     fallback: 'linear-gradient(135deg, #c9b79c, #6b5d4a)',
   },
+  anime: {
+    photoId: 'photo-1493515322954-4fa727e97985',
+    fallback: 'linear-gradient(135deg, #d9467a, #1b1035)',
+  },
+  space: {
+    photoId: 'photo-1464802686167-b939a6910659',
+    fallback: 'linear-gradient(135deg, #3b2a6b, #05060f)',
+  },
 };
 
 interface ThumbPickerProps {
@@ -59,7 +67,7 @@ interface ThumbPickerProps {
 
 /** Visual grid for picking a focus-mode background category. */
 export const ThumbPicker: React.FC<ThumbPickerProps> = ({ value, onChange }) => (
-  <div className="grid grid-cols-5 gap-1.5">
+  <div className="grid grid-cols-6 gap-1.5">
     {ALL_FOCUS_IMAGE_CATEGORIES.map((category) => {
       const thumb = CATEGORY_THUMBS[category];
       const active = value === category;

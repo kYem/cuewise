@@ -1396,4 +1396,324 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       location: 'Rome, Italy',
     },
   ],
+  anime: [
+    // neon Japanese side street
+    {
+      id: 'photo-1493515322954-4fa727e97985',
+      photographer: 'Andre Benz',
+      username: 'trapnation',
+      location: 'Tokyo, Japan',
+    },
+    // empty street at night
+    {
+      id: 'photo-1519638399535-1b036603ac77',
+      photographer: 'Ian Valerio',
+      username: 'iangvalerio',
+      location: 'Japan',
+    },
+    // neon alley at night
+    {
+      id: 'photo-1694276971921-ff8f103752eb',
+      photographer: 'realfish',
+      username: 'realfish',
+      location: 'Hongik Univ. Station, Seoul',
+    },
+    // lantern-lit alley
+    {
+      id: 'photo-1617870314635-fc819547ec11',
+      photographer: 'Pema G. Lama',
+      username: 'peemaglama',
+      location: 'Omoide Yokochō, 1 Chome-2 Nishishinjuku, Shinjuku City, Tokyo, Japan',
+    },
+    // pink cloud over street light
+    {
+      id: 'photo-1712087860928-c38c61a4e069',
+      photographer: 'Faheem Ahmed',
+      username: 'faheem_2911',
+      location: null,
+    },
+    // street light, pink sky
+    {
+      id: 'photo-1712087857426-62e5c2a80f8e',
+      photographer: 'Faheem Ahmed',
+      username: 'faheem_2911',
+      location: null,
+    },
+    // Tokyo Tower at dusk
+    {
+      id: 'photo-1513407030348-c983a97b98d8',
+      photographer: 'Louie Martinez',
+      username: 'thetalkinglens',
+      location: '4 Chome-2-8 Shibakōen, Minato-ku, Japan',
+    },
+    // Tokyo at night from above
+    {
+      id: 'photo-1604928141064-207cea6f571f',
+      photographer: 'Takashi Miyazaki',
+      username: 'miyatankun',
+      location: 'Roppongi, Minato City, Tokyo, Japan',
+    },
+    // city lights at night
+    {
+      id: 'photo-1669629229839-325cce20fab1',
+      photographer: 'Leo Okuyama',
+      username: 'okuyama_leo',
+      location: 'Ebisu, Shibuya City, Tokyo, Japan',
+    },
+    // cherry blossoms over canal
+    {
+      id: 'photo-1598957232485-fab51e0ed7e8',
+      photographer: 'Crystal Kay',
+      username: 'xtalkay',
+      location: 'Tokyo, Japan',
+    },
+    // cherry blossom canal
+    {
+      id: 'photo-1524413840807-0c3cb6fa808d',
+      photographer: 'Sora Sagano',
+      username: 'sorasagano',
+      location: 'Meguro River, Matsuno, Japan',
+    },
+    // cherry trees by a river
+    {
+      id: 'photo-1585442581492-a4f38c1cfc14',
+      photographer: 'Yusheng Deng',
+      username: 'akiradeng',
+      location: 'Kanuma, Tochigi, Japan',
+    },
+    // cherry blossoms and Mount Fuji
+    {
+      id: 'photo-1525635569544-610f9540664a',
+      photographer: 'Daniel Hehn',
+      username: 'katzenbus',
+      location: 'Lake Kawaguchi, Fujikawaguchiko, Japan',
+    },
+    // cherry trees beside water
+    {
+      id: 'photo-1526344966-89049886b28d',
+      photographer: 'Mark Tegethoff',
+      username: 'tegethoff',
+      location: null,
+    },
+    // torii on calm water
+    {
+      id: 'photo-1639056496887-3caaa605609b',
+      photographer: 'Wu Hsien Yu',
+      username: 'heyywh',
+      location: null,
+    },
+    // torii at sunset
+    {
+      id: 'photo-1762018920776-67af60705fee',
+      photographer: 'Fabio Montello',
+      username: 'fabiomontello',
+      location:
+        'Itsukushima Shrine, 1-1 Miyajima-chō, Hatsukaichi, Prefettura di Hiroshima, Giappone',
+    },
+    // red torii on Lake Ashi
+    {
+      id: 'photo-1492571350019-22de08371fd3',
+      photographer: 'Tianshu Liu',
+      username: 'tianshu',
+      location: '箱根神社 平和の鳥居, 箱根町, Japan',
+    },
+    // torii in the sea
+    {
+      id: 'photo-1708009254530-2b3c1ee00cfe',
+      photographer: 'Lucius Hunter',
+      username: 'lucius_x14',
+      location: null,
+    },
+    // Itsukushima torii
+    {
+      id: 'photo-1504109586057-7a2ae83d1338',
+      photographer: 'Nicki Eliza Schinow',
+      username: 'nicki_schinow',
+      location: 'Itsukushima Shrine, Hatsukaichi-shi, Japan',
+    },
+    // torii on a rocky outcrop
+    {
+      id: 'photo-1651910853503-b77731a6e718',
+      photographer: 'Masaaki Komori',
+      username: 'gaspanik',
+      location: null,
+    },
+    // red torii tunnel
+    {
+      id: 'photo-1640068678791-e1ddf8806905',
+      photographer: 'Matt Ketchum',
+      username: 'mkultraman',
+      location: 'Miyakami, Yugawara, Ashigarashimo District, Kanagawa 259-0314, Japan',
+    },
+  ],
+  space: [
+    // galaxy over the night sky
+    {
+      id: 'photo-1464802686167-b939a6910659',
+      photographer: 'Jeremy Thomas',
+      username: 'jeremythomasphoto',
+      location: 'Edwards, United States',
+    },
+    // Earth and clouds from orbit
+    {
+      id: 'photo-1777047023742-1607aeb1a5bb',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // Milky Way
+    {
+      id: 'photo-1566345984367-fa2ba5cedc17',
+      photographer: 'Aperture Vintage',
+      username: 'aperturevintage',
+      location: null,
+    },
+    // ocean clouds from orbit
+    {
+      id: 'photo-1446776811953-b23d57bd21aa',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: 'Space',
+    },
+    // North America and Pelican nebulae
+    {
+      id: 'photo-1610296669228-602fa827fc1f',
+      photographer: 'Aldebaran S',
+      username: 'aldebarans',
+      location: 'Newton, MA',
+    },
+    // Earth at night
+    {
+      id: 'photo-1777047023536-8e47688b77f9',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // city lights from orbit
+    {
+      id: 'photo-1451187580459-43490279c0fa',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: 'Gulf of Mexico, United States',
+    },
+    // sea of stars
+    {
+      id: 'photo-1506318137071-a8e063b4bec0',
+      photographer: 'Jeremy Perkins',
+      username: 'jeremyperkins',
+      location: null,
+    },
+    // crescent Earth
+    {
+      id: 'photo-1777047023579-5007a6d402bc',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // Earthset over the Moon
+    {
+      id: 'photo-1777033356671-59469ab29684',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // Milky Way over mountains
+    {
+      id: 'photo-1548625361-58a9b86aa83b',
+      photographer: 'Cosmic Timetraveler',
+      username: 'cosmictimetraveler',
+      location: null,
+    },
+    // Space Shuttle above Earth
+    {
+      id: 'photo-1614121181207-4b6c334d353d',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // total solar eclipse
+    {
+      id: 'photo-1504192010706-dd7f569ee2be',
+      photographer: 'Tyler van der Hoeven',
+      username: 'tyvdh',
+      location: null,
+    },
+    // blue starry night
+    {
+      id: 'photo-1470813740244-df37b8c1edcb',
+      photographer: 'Mark Basarab',
+      username: 'markbasarabvisuals',
+      location: null,
+    },
+    // Milky Way over the coast
+    {
+      id: 'photo-1502134249126-9f3755a50d78',
+      photographer: 'Shot by Cerqueira',
+      username: 'shotbycerqueira',
+      location: 'Armação dos Búzios, Brazil',
+    },
+    // Earth from the Shuttle
+    {
+      id: 'photo-1446776877081-d282a0f896e2',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // Andromeda Galaxy
+    {
+      id: 'photo-1543722530-d2c3201371e7',
+      photographer: 'Guillermo Ferla',
+      username: 'gferla',
+      location: null,
+    },
+    // Rosette Nebula
+    {
+      id: 'photo-1778336110797-0deff0dd4b39',
+      photographer: 'Steve Busch',
+      username: 'sdbusch77',
+      location: null,
+    },
+    // red nebula
+    {
+      id: 'photo-1772672869101-7abc3637fb7e',
+      photographer: 'Scott Lord',
+      username: 'darkcatimages',
+      location: null,
+    },
+    // colorful nebula
+    {
+      id: 'photo-1771095436222-e20a8737fcd1',
+      photographer: 'Sheng Hu',
+      username: 'laohu911',
+      location: null,
+    },
+    // nebula
+    {
+      id: 'photo-1462332420958-a05d1e002413',
+      photographer: 'NASA',
+      username: 'nasa',
+      location: null,
+    },
+    // Milky Way, Rocky Mountains
+    {
+      id: 'photo-1465101162946-4377e57745c3',
+      photographer: 'Jeremy Thomas',
+      username: 'jeremythomasphoto',
+      location: 'Rocky Mountain National Park, United States',
+    },
+    // Milky Way over Lake Tekapo
+    {
+      id: 'photo-1538370965046-79c0d6907d47',
+      photographer: 'Graham Holtshausen',
+      username: 'freedomstudios',
+      location: 'Lake Tekapo, New Zealand',
+    },
+    // Westerlund 2 star cluster
+    {
+      id: 'photo-1706800696671-570820e7ff39',
+      photographer: 'NASA Hubble Space Telescope',
+      username: 'hubblespacetelescope',
+      location: null,
+    },
+  ],
 };
