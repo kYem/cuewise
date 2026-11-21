@@ -11,11 +11,11 @@ const THUMB_PARAMS = 'w=240&h=112&fit=crop&auto=format&q=60';
 /** Representative thumbnail + gradient fallback per focus-mode background category. */
 const CATEGORY_THUMBS: Record<FocusImageCategory, { photoId: string; fallback: string }> = {
   nature: {
-    photoId: 'photo-1469474968028-56623f02e42e',
+    photoId: 'photo-1501854140801-50d01698950b',
     fallback: 'linear-gradient(135deg, #5a7d6b, #2c4a3e)',
   },
   forest: {
-    photoId: 'photo-1448375240586-882707db888b',
+    photoId: 'photo-1761461922930-9afd5bf09593',
     fallback: 'linear-gradient(135deg, #3e5d43, #1d3322)',
   },
   ocean: {
