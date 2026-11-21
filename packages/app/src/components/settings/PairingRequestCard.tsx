@@ -48,7 +48,7 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
   // The latest row the section's list poll fetched. pollApproval reads it so the engine reuses this
   // reveal instead of re-listing the account — one poll stream against the shared bucket, not two.
   const requestRef = useRef(request);
-  // Set only while waiting, so a fresh row is read the moment the list poll lands it.
+  // Set only while waiting, so a revealed row is read the moment the list poll lands it.
   const pollRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
@@ -57,7 +57,9 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
 
   useEffect(() => {
     requestRef.current = request;
-    void pollRef.current?.();
+    if (request.requesterPublicKey !== null) {
+      void pollRef.current?.();
+    }
   }, [request]);
 
   // Live only while state.kind is 'waiting' — cleared whenever the card leaves that state (confirm,
