@@ -260,7 +260,7 @@ describe('PomodoroPage - break recall', () => {
     window.matchMedia = originalMatchMedia;
   });
 
-  it('tells recall when a break is on', () => {
+  it('tells recall no break is on during work', () => {
     setup('quote', false);
 
     render(<PomodoroPage />);

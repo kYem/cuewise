@@ -12,7 +12,7 @@ interface BreakRecallSetup {
   conceptBreakRecall?: boolean;
 }
 
-/** Mocks the settings + concept stores BreakRecall reads; returns the store actions to assert on. */
+/** Mocks the stores BreakRecall reads; returns the actions to assert on. */
 export function setupBreakRecall({
   cards,
   conceptCardsEnabled = true,
