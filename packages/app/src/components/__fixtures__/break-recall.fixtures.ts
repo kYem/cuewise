@@ -1,7 +1,6 @@
 import type { ConceptCard } from '@cuewise/shared';
-import { createSelectorMock } from '@cuewise/test-utils';
+import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
-import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { vi } from 'vitest';
 import { useConceptCardsStore } from '../../stores/concept-cards-store';
 import { useSettingsStore } from '../../stores/settings-store';
@@ -19,9 +18,7 @@ export function setupBreakRecall({
   conceptBreakRecall = true,
 }: BreakRecallSetup) {
   vi.mocked(useSettingsStore).mockImplementation(
-    createSelectorMock({
-      settings: { ...defaultSettings, conceptCardsEnabled, conceptBreakRecall },
-    })
+    createSettingsStoreMock({ conceptCardsEnabled, conceptBreakRecall })
   );
   const reviewCard = vi.fn().mockResolvedValue(true);
   const initialize = vi.fn();

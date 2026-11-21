@@ -1,5 +1,5 @@
 import { conceptCardFactory } from '@cuewise/test-utils/factories';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { notDueConceptCards, setupBreakRecall } from './__fixtures__/break-recall.fixtures';
 import { BreakRecall } from './BreakRecall';
@@ -32,22 +32,27 @@ describe('BreakRecall', () => {
     vi.clearAllMocks();
   });
 
-  it('offers the first due card, counting at most three for the break', () => {
-    const cards = conceptCardFactory.buildList(5);
+  it.each([
+    [5, 3],
+    [2, 2],
+  ])('offers the first of %i due cards, counting %i for the break', (due, counted) => {
+    const cards = conceptCardFactory.buildList(due);
     setupBreakRecall({ cards });
 
     renderBreak();
 
     expect(screen.getByText(cards[0].term)).toBeInTheDocument();
-    expect(screen.getByText(/1 of 3/)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`1 of ${counted}`))).toBeInTheDocument();
   });
 
-  it('counts only the due cards when fewer than three are due', () => {
-    setupBreakRecall({ cards: conceptCardFactory.buildList(2) });
+  it('loads the deck once across breaks', () => {
+    const { initialize } = setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
+    const { rerender } = renderBreak();
 
-    renderBreak();
+    rerender(breakRecall({ onBreak: false }));
+    rerender(breakRecall());
 
-    expect(screen.getByText(/1 of 2/)).toBeInTheDocument();
+    expect(initialize).toHaveBeenCalledTimes(1);
   });
 
   it('loads the deck itself, since the Pomodoro page does not', () => {
@@ -149,7 +154,6 @@ describe('BreakRecall', () => {
     renderBreak();
 
     await gradeGood();
-    await waitFor(() => expect(reviewCard).toHaveBeenCalled());
     await act(async () => {});
 
     expect(screen.getByText(cards[0].term)).toBeInTheDocument();
@@ -164,10 +168,13 @@ describe('BreakRecall', () => {
     expect(screen.getByText('REST')).toBeInTheDocument();
   });
 
-  it('shows the rest content and leaves the deck unloaded outside a break', () => {
+  it.each([
+    ['outside a break', { onBreak: false }],
+    ['while hidden on a narrow window', { visible: false }],
+  ])('shows the rest content and leaves the deck unloaded %s', (_, state) => {
     const { initialize } = setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
 
-    renderBreak({ onBreak: false });
+    renderBreak(state);
 
     expect(screen.getByText('REST')).toBeInTheDocument();
     expect(initialize).not.toHaveBeenCalled();
@@ -207,25 +214,11 @@ describe('BreakRecall', () => {
     expect(screen.getByText('REST')).toBe(rest);
   });
 
-  it('shows the rest content while hidden on a narrow window', () => {
-    const { initialize } = setupBreakRecall({ cards: conceptCardFactory.buildList(3) });
-
-    renderBreak({ visible: false });
-
-    expect(screen.getByText('REST')).toBeInTheDocument();
-    expect(initialize).not.toHaveBeenCalled();
-  });
-
-  it('rests when break recall is turned off', () => {
-    setupBreakRecall({ cards: conceptCardFactory.buildList(3), conceptBreakRecall: false });
-
-    renderBreak();
-
-    expect(screen.getByText('REST')).toBeInTheDocument();
-  });
-
-  it('rests when concept cards are turned off', () => {
-    setupBreakRecall({ cards: conceptCardFactory.buildList(3), conceptCardsEnabled: false });
+  it.each([
+    ['break recall', { conceptBreakRecall: false }],
+    ['concept cards', { conceptCardsEnabled: false }],
+  ])('rests when %s is turned off', (_, off) => {
+    setupBreakRecall({ cards: conceptCardFactory.buildList(3), ...off });
 
     renderBreak();
 

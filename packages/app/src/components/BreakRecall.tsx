@@ -1,6 +1,6 @@
 import { CONCEPT_BREAK_RECALL_MAX, type ConceptGrade, getDueConceptCards } from '@cuewise/shared';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useConceptCardsStore } from '../stores/concept-cards-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { ConceptCardDisplay } from './ConceptCardDisplay';
@@ -13,6 +13,14 @@ interface BreakRecallProps {
   /** The usual companion, shown outside a break and once the person rests or runs out. */
   rest: React.ReactNode;
 }
+
+interface BreakRound {
+  handledIds: string[];
+  rested: boolean;
+  position: number;
+}
+
+const FRESH_ROUND: BreakRound = { handledIds: [], rested: false, position: 0 };
 
 /**
  * Offers a few due concept cards beside the timer during a Pomodoro break. Always rendered, so
@@ -29,46 +37,47 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ onBreak, visible, rest
   const reviewCard = useConceptCardsStore((state) => state.reviewCard);
   const toggleFavorite = useConceptCardsStore((state) => state.toggleFavorite);
 
-  const [handledIds, setHandledIds] = useState<string[]>([]);
-  const [rested, setRested] = useState(false);
+  const [round, setRound] = useState(FRESH_ROUND);
   const [grading, setGrading] = useState(false);
-  const [position, setPosition] = useState(0);
   const [wasOnBreak, setWasOnBreak] = useState(onBreak);
-  const active = onBreak && visible;
+  const loaded = useRef(false);
+  const active = enabled && onBreak && visible;
 
   if (onBreak !== wasOnBreak) {
     setWasOnBreak(onBreak);
     if (onBreak) {
-      setHandledIds([]);
-      setRested(false);
-      setPosition(0);
+      setRound(FRESH_ROUND);
     }
   }
 
+  // One load is enough: initialize subscribes the store to storage changes from then on.
   useEffect(() => {
-    if (enabled && active) {
+    if (active && !loaded.current) {
+      loaded.current = true;
       initialize();
     }
-  }, [enabled, active, initialize]);
+  }, [active, initialize]);
 
+  const { handledIds, rested, position } = round;
   const deck = useMemo(() => {
+    if (!active) {
+      return [];
+    }
     const due = getDueConceptCards(cards, new Date()).filter(
       (card) => !handledIds.includes(card.id)
     );
     return due.slice(0, CONCEPT_BREAK_RECALL_MAX - handledIds.length);
-  }, [cards, handledIds]);
+  }, [active, cards, handledIds]);
 
-  // No isLoading gate: each break reloads a deck that is usually already here, and gating
-  // on it would flash the quote. A first load with no cards yet has an empty deck anyway.
-  if (!active || !enabled || rested || deck.length === 0) {
+  if (rested || deck.length === 0) {
     return <>{rest}</>;
   }
 
   const current = deck[position % deck.length];
-  const total = handledIds.length + deck.length;
-
+  const takeRest = () => setRound((r) => ({ ...r, rested: true }));
+  // Wrapped at read time above, which also covers a deck that shrinks mid-break.
   const moveBy = (delta: number) => {
-    setPosition((p) => (((p + delta) % deck.length) + deck.length) % deck.length);
+    setRound((r) => ({ ...r, position: (r.position % deck.length) + delta + deck.length }));
   };
 
   const handleGrade = async (grade: ConceptGrade) => {
@@ -81,8 +90,7 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ onBreak, visible, rest
     if (!ok) {
       return;
     }
-    setHandledIds((ids) => [...ids, current.id]);
-    setPosition(0);
+    setRound((r) => ({ ...r, handledIds: [...r.handledIds, current.id], position: 0 }));
   };
 
   return (
@@ -97,12 +105,12 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ onBreak, visible, rest
         isFavorite={current.isFavorite ?? false}
         onToggleFavorite={() => toggleFavorite(current.id)}
         dueCount={deck.length}
-        queueLabel={`Break recall ${handledIds.length + 1} of ${total}`}
-        onSkipToQuote={() => setRested(true)}
+        queueLabel={`Break recall ${handledIds.length + 1} of ${handledIds.length + deck.length}`}
+        onSkipToQuote={takeRest}
       />
       <button
         type="button"
-        onClick={() => setRested(true)}
+        onClick={takeRest}
         className="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-secondary transition-colors hover:bg-surface-variant hover:text-primary"
       >
         Just rest

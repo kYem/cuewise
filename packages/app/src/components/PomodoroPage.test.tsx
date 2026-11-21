@@ -2,7 +2,7 @@ import type { Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
-import type React from 'react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBackgroundStore } from '../stores/background-store';
 import { useCalendarStore } from '../stores/calendar-store';
@@ -14,6 +14,7 @@ import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { preloadImages } from '../utils/image-preload-cache';
 import { PLAIN_THEMES } from './__fixtures__/color-theme.fixtures';
 import { stubMatchMedia } from './__fixtures__/media-query.fixtures';
+import type { BreakRecall } from './BreakRecall';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
@@ -47,15 +48,7 @@ vi.mock('./QuoteDisplay', () => ({
 }));
 vi.mock('./FocusMode', () => ({ FocusMode: () => null }));
 vi.mock('./BreakRecall', () => ({
-  BreakRecall: ({
-    onBreak,
-    visible,
-    rest,
-  }: {
-    onBreak: boolean;
-    visible: boolean;
-    rest: React.ReactNode;
-  }) => (
+  BreakRecall: ({ onBreak, visible, rest }: ComponentProps<typeof BreakRecall>) => (
     <div data-testid="break-recall" data-on-break={String(onBreak)} data-visible={String(visible)}>
       {rest}
     </div>
