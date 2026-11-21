@@ -319,6 +319,8 @@ export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
   cars: 'Cars',
   ai: 'AI',
   classical: 'Classical',
+  anime: 'Anime',
+  space: 'Space',
 };
 
 export const ALL_FOCUS_IMAGE_CATEGORIES: readonly FocusImageCategory[] = FOCUS_IMAGE_CATEGORY_IDS;
