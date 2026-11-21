@@ -108,7 +108,8 @@ describe('BreakRecall', () => {
     setupBreakRecall({ cards: [cards[0], cards[1], ...notDueConceptCards(1)] });
     rerender(breakRecall());
 
-    expect(screen.getByText(cards[0].term)).toBeInTheDocument();
+    expect(screen.getByText(cards[1].term)).toBeInTheDocument();
+    expect(screen.queryByText(cards[2].term)).not.toBeInTheDocument();
     expect(screen.getByText(/1 of 2/)).toBeInTheDocument();
   });
 
