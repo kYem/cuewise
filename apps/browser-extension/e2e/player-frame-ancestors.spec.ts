@@ -75,8 +75,8 @@ test('allowlisted extension id: the player iframe loads', async () => {
 
   // A blocked frame never navigates to the player document — only an allowed
   // origin reaches its real title (mirrors the website's own assertion).
-  const frame = page.frame({ url: PLAYER_URL_PATTERN });
   await expect(async () => {
+    const frame = page.frame({ url: PLAYER_URL_PATTERN });
     expect(await frame?.title().catch(() => null)).toBe('Cuewise Player');
   }).toPass({ timeout: 5000 });
 
