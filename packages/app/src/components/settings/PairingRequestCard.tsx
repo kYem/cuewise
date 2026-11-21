@@ -1,5 +1,6 @@
 import { describeThrown, logger } from '@cuewise/shared';
 import type { PairingApprovalResult, PendingPairing } from '@cuewise/sync-engine';
+import { Loader2 } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useToastStore } from '../../stores/toast-store';
@@ -7,7 +8,6 @@ import { useSyncController } from '../../sync/sync-controller';
 import { formatSas, POLL_INTERVAL_MS } from './PairingPanel';
 
 const SHOW_CODE = 'Show code';
-const WAITING_FOR_DEVICE = 'Waiting for your other device…';
 const CONFIRM_PROMPT = 'Do the codes match?';
 const APPROVE = 'Approve';
 const DENY = 'Deny';
@@ -48,6 +48,8 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
   // The latest row the section's list poll fetched. pollApproval reads it so the engine reuses this
   // reveal instead of re-listing the account — one poll stream against the shared bucket, not two.
   const requestRef = useRef(request);
+  // Set only while waiting, so a revealed row is read the moment the list poll lands it.
+  const pollRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     onResolvedRef.current = onResolved;
@@ -55,6 +57,9 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
 
   useEffect(() => {
     requestRef.current = request;
+    if (request.requesterPublicKey !== null) {
+      void pollRef.current?.();
+    }
   }, [request]);
 
   // Live only while state.kind is 'waiting' — cleared whenever the card leaves that state (confirm,
@@ -95,11 +100,13 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
       }
       // waiting/error: stay put — the next tick retries.
     };
+    pollRef.current = poll;
     const timer = setInterval(() => {
       void poll();
     }, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
+      pollRef.current = null;
       clearInterval(timer);
     };
   }, [controller, state.kind, request.id]);
@@ -171,8 +178,12 @@ export const PairingRequestCard: React.FC<PairingRequestCardProps> = ({ request,
         <strong className="font-medium">{request.deviceName}</strong> wants to join your sync
       </p>
       {waiting && (
-        <p data-testid="pairing-request-waiting" className="text-xs text-tertiary">
-          {WAITING_FOR_DEVICE}
+        <p
+          data-testid="pairing-request-waiting"
+          className="flex items-center gap-1.5 text-xs text-tertiary"
+        >
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          {`Waiting for ${request.deviceName} to confirm…`}
         </p>
       )}
       {codeShown && (

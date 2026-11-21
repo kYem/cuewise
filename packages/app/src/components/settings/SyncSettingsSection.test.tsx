@@ -47,7 +47,6 @@ const PAIRING_FAILED = 'Not approved — try again, or use your recovery code.';
 const PAIRING_BLOCKED =
   "Pairing blocked: the other device's key didn't verify. Try again, or use your recovery code.";
 const PAIRING_CODE_LINK = 'Enter your recovery code instead';
-const PAIRING_REQUEST_WAITING = 'Waiting for your other device…';
 const PAIRING_TAMPERED_MESSAGE =
   "Pairing blocked: the request didn't verify. Try again on the new device.";
 const PAIRING_APPROVE_FAILED = "Couldn't approve this device — try again.";
@@ -2912,6 +2911,11 @@ describe('SyncSettingsSectionComponent', () => {
       requesterNonce: null,
       createdAt: Date.now(),
     };
+    const REVEALED_REQUEST: PendingPairing = {
+      ...REQUEST,
+      requesterPublicKey: 'requester-public-key' as PendingPairing['requesterPublicKey'],
+    };
+    const PAIRING_REQUEST_WAITING = `Waiting for ${REQUEST.deviceName} to confirm…`;
 
     const showCode = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.click(screen.getByRole('button', { name: 'Show code' }));
@@ -2919,10 +2923,15 @@ describe('SyncSettingsSectionComponent', () => {
 
     /** Renders the card, activates the section, and clicks Show code — the shared setup every
      * wait-state/poll test below starts from. Assumes fake timers are already armed. */
-    async function renderAndShowCode(controller: FakeSyncController): Promise<void> {
+    async function renderAndShowCode(controller: FakeSyncController, delayMs = 0): Promise<void> {
       renderSection(controller);
       act(() => controller.setStatus('active'));
       await flush();
+      if (delayMs > 0) {
+        await act(async () => {
+          vi.advanceTimersByTime(delayMs);
+        });
+      }
       fireEvent.click(screen.getByRole('button', { name: 'Show code' }));
       await flush();
     }
@@ -2988,6 +2997,30 @@ describe('SyncSettingsSectionComponent', () => {
         expect(screen.getByText('Do the codes match?')).toBeInTheDocument();
         expect(screen.queryByText(PAIRING_REQUEST_WAITING)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('shows the code as soon as the list poll brings the revealed row, before its own tick', async () => {
+      vi.useFakeTimers();
+      const controller = new FakeSyncController();
+      controller.pairingRequests = [REQUEST];
+      controller.scriptCommitPairing({ pending: true });
+      controller.scriptPollApproval({ kind: 'confirm', sas: '391554' });
+      try {
+        await renderAndShowCode(controller, PAIRING_POLL_MS / 3);
+        controller.pairingRequests = [REVEALED_REQUEST];
+
+        await act(async () => {
+          vi.advanceTimersByTime((PAIRING_POLL_MS * 2) / 3);
+        });
+
+        expect(screen.getByTestId('pairing-request-sas')).toHaveTextContent('391 554');
+        expect(controller.calls).toContainEqual({
+          method: 'pollApproval',
+          args: [REQUEST.id, REVEALED_REQUEST],
+        });
       } finally {
         vi.useRealTimers();
       }
