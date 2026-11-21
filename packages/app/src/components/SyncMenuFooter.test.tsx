@@ -357,6 +357,8 @@ describe('SyncMenuFooter', () => {
   describe('while the menu stays open', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      // useMinuteNow ticks on the wall-clock minute, so start on one.
+      vi.setSystemTime(new Date('2026-01-01T09:00:00Z'));
     });
 
     afterEach(() => {
