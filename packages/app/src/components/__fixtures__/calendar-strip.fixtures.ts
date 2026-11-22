@@ -1,20 +1,18 @@
-import type { AllDayCalendarEvent, CalendarEvent, TimedCalendarEvent } from '@cuewise/shared';
+import type { AllDayCalendarEvent, TimedCalendarEvent } from '@cuewise/shared';
+import type { MockStoreOf } from '@cuewise/test-utils';
 
 // Re-export the canonical selector mock so CalendarStrip tests use the shared one.
 export { createSelectorMock } from '@cuewise/test-utils';
 
 import { vi } from 'vitest';
+import type { useCalendarStore } from '../../stores/calendar-store';
 
-export interface MockCalendarStore {
-  connected: boolean;
-  events: CalendarEvent[];
-  isLoading: boolean;
-  error: string | null;
-  lastSync: string | null;
-  connect: ReturnType<typeof vi.fn>;
-  refresh: ReturnType<typeof vi.fn>;
-  disconnect: ReturnType<typeof vi.fn>;
-}
+type CalendarStore = ReturnType<typeof useCalendarStore.getState>;
+
+export type MockCalendarStore = MockStoreOf<
+  CalendarStore,
+  'connected' | 'events' | 'isLoading' | 'error' | 'lastSync' | 'connect' | 'refresh' | 'disconnect'
+>;
 
 export function createCalendarStore(overrides: Partial<MockCalendarStore> = {}): MockCalendarStore {
   return {

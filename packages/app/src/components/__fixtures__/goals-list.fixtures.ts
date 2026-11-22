@@ -1,5 +1,5 @@
 import { type Goal, getYesterdayDateString, type Settings } from '@cuewise/shared';
-import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
+import { createSelectorMock, createSettingsStoreMock, type MockStoreOf } from '@cuewise/test-utils';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
 import { useCalendarStore } from '../../stores/calendar-store';
@@ -15,27 +15,29 @@ export { createSettingsStoreMock };
  * GoalsList component can be rendered in isolation.
  */
 
-export interface MockGoalStore {
-  todayTasks: Goal[];
-  goals: Goal[];
-  isLoading: boolean;
-  toggleTask: Mock;
-  updateTask: Mock;
-  deleteTask: Mock;
-  transferTaskToNextDay: Mock;
-  moveTaskToToday: Mock;
-  moveTasksToToday: Mock;
-  getActiveGoals: Mock;
-  getGoalProgress: Mock;
-  linkTaskToGoal: Mock;
-  // Task Enhancement actions (Phase 2)
-  duplicateTask: Mock;
-  setTaskDueDate: Mock;
-  addSubtask: Mock;
-  toggleSubtask: Mock;
-  removeSubtask: Mock;
-  reorderTasks: Mock;
-}
+type GoalStore = ReturnType<typeof useGoalStore.getState>;
+
+export type MockGoalStore = MockStoreOf<
+  GoalStore,
+  | 'todayTasks'
+  | 'goals'
+  | 'isLoading'
+  | 'toggleTask'
+  | 'updateTask'
+  | 'deleteTask'
+  | 'transferTaskToNextDay'
+  | 'moveTaskToToday'
+  | 'moveTasksToToday'
+  | 'getActiveGoals'
+  | 'getGoalProgress'
+  | 'linkTaskToGoal'
+  | 'duplicateTask'
+  | 'setTaskDueDate'
+  | 'addSubtask'
+  | 'toggleSubtask'
+  | 'removeSubtask'
+  | 'reorderTasks'
+>;
 
 export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): MockGoalStore {
   return {
@@ -84,12 +86,8 @@ export function createNoTodayTasksStore(goals: Goal[]): MockGoalStore {
   return createMockGoalStore({ todayTasks: [], goals });
 }
 
-export type MockGoalsPageStore = MockGoalStore & {
-  initialize: Mock;
-  addTask: Mock;
-  completionFilter: CompletionFilter;
-  setCompletionFilter: Mock;
-};
+export type MockGoalsPageStore = MockGoalStore &
+  MockStoreOf<GoalStore, 'initialize' | 'addTask' | 'completionFilter' | 'setCompletionFilter'>;
 
 /**
  * Mocks the goal, calendar and settings stores that GoalsSection and its real children read.

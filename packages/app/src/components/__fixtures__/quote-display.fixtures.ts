@@ -1,6 +1,8 @@
-import { ALL_QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, type Quote } from '@cuewise/shared';
+import type { MockStoreOf } from '@cuewise/test-utils';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
+import type { QuoteStore } from '../../stores/quote-store/types';
 
 /**
  * Common test fixtures for QuoteDisplay component tests
@@ -11,38 +13,39 @@ import { type Mock, vi } from 'vitest';
 // Mock Store Return Types
 // ============================================================================
 
-export interface MockQuoteStore {
-  quotes: Quote[];
-  currentQuote: Quote | null;
-  isLoading: boolean;
-  error: string | null;
-  quoteHistory: string[];
-  historyIndex: number;
-  enabledCategories: QuoteCategory[];
-  showCustomQuotes: boolean;
-  showFavorites: boolean;
-  collections: unknown[];
-  activeCollectionIds: string[];
-  initialize: Mock;
-  refreshQuote: Mock;
-  goBack: Mock;
-  goForward: Mock;
-  canGoBack: Mock;
-  canGoForward: Mock;
-  toggleFavorite: Mock;
-  hideQuote: Mock;
-  unhideQuote: Mock;
-  addCustomQuote: Mock;
-  editQuote: Mock;
-  deleteQuote: Mock;
-  incrementViewCount: Mock;
-  setEnabledCategories: Mock;
-  toggleCategory: Mock;
-  toggleCustomQuotes: Mock;
-  toggleFavorites: Mock;
-  toggleCollection: Mock;
-  setActiveCollectionIds: Mock;
-}
+export type MockQuoteStore = MockStoreOf<
+  QuoteStore,
+  | 'quotes'
+  | 'currentQuote'
+  | 'isLoading'
+  | 'error'
+  | 'quoteHistory'
+  | 'historyIndex'
+  | 'enabledCategories'
+  | 'showCustomQuotes'
+  | 'showFavoritesOnly'
+  | 'collections'
+  | 'activeCollectionIds'
+  | 'initialize'
+  | 'refreshQuote'
+  | 'goBack'
+  | 'goForward'
+  | 'canGoBack'
+  | 'canGoForward'
+  | 'toggleFavorite'
+  | 'hideQuote'
+  | 'unhideQuote'
+  | 'addCustomQuote'
+  | 'editQuote'
+  | 'deleteQuote'
+  | 'incrementViewCount'
+  | 'setEnabledCategories'
+  | 'toggleCategory'
+  | 'toggleCustomQuotes'
+  | 'toggleFavoritesOnly'
+  | 'toggleCollection'
+  | 'setActiveCollectionIds'
+>;
 
 // ============================================================================
 // Mock Store Builders
@@ -61,7 +64,7 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     historyIndex: 0,
     enabledCategories: [...ALL_QUOTE_CATEGORIES],
     showCustomQuotes: true,
-    showFavorites: false,
+    showFavoritesOnly: false,
     collections: [],
     activeCollectionIds: [],
     initialize: overrides.initialize || (vi.fn() as Mock),
@@ -80,7 +83,7 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     setEnabledCategories: overrides.setEnabledCategories || (vi.fn() as Mock),
     toggleCategory: overrides.toggleCategory || (vi.fn() as Mock),
     toggleCustomQuotes: overrides.toggleCustomQuotes || (vi.fn() as Mock),
-    toggleFavorites: overrides.toggleFavorites || (vi.fn() as Mock),
+    toggleFavoritesOnly: overrides.toggleFavoritesOnly || (vi.fn() as Mock),
     toggleCollection: overrides.toggleCollection || (vi.fn() as Mock),
     setActiveCollectionIds: overrides.setActiveCollectionIds || (vi.fn() as Mock),
     ...overrides,
