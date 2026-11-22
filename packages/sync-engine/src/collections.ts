@@ -160,16 +160,17 @@ function settingsBinding(): CollectionBinding {
 }
 
 export function defaultBindings(): CollectionBinding[] {
-  return [
+  const byCollection = {
     // Raw readers: see the note on `getGoalsRaw`. An item the UI hides must not be an item
     // sync deletes — `writeOne` rewrites the whole array, and an entity missing from a read
     // is how the cycle infers a tombstone for every other device.
-    arrayBinding('goals', getGoalsRaw, setGoalsRaw),
-    arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
-    arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
-    arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
+    goals: arrayBinding('goals', getGoalsRaw, setGoalsRaw),
+    quotes: arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
+    collections: arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
+    reminders: arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
     // One entity per habit per day, so devices only conflict on a day both ticked.
-    arrayBinding('habitHistory', getHabitHistoryRaw, setHabitHistoryRaw),
-    settingsBinding(),
-  ];
+    habitHistory: arrayBinding('habitHistory', getHabitHistoryRaw, setHabitHistoryRaw),
+    settings: settingsBinding(),
+  } satisfies Record<SyncedCollection, CollectionBinding>;
+  return Object.values(byCollection);
 }
