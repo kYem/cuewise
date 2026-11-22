@@ -22,6 +22,10 @@ interface BreakRound {
 
 const FRESH_ROUND: BreakRound = { handledIds: [], rested: false, position: 0 };
 
+// Fixed at the quote's full width (max-w-2xl): the companion column shrinks to its content,
+// so a short term would otherwise pull the card up against the timer.
+const BREAK_CARD_LAYOUT = 'flex w-[42rem] max-w-full flex-col items-center gap-density-md';
+
 /**
  * Offers a few due concept cards beside the timer during a Pomodoro break. Always rendered, so
  * the companion keeps its place in the tree (and its quote timer) across break transitions.
@@ -94,7 +98,7 @@ export const BreakRecall: React.FC<BreakRecallProps> = ({ onBreak, visible, rest
   };
 
   return (
-    <div className="flex w-full flex-col items-center gap-density-md">
+    <div className={BREAK_CARD_LAYOUT}>
       <ConceptCardDisplay
         key={current.id}
         card={current}
