@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { WeatherHour } from './types';
+import type { WeatherDay, WeatherHour } from './types';
 import {
+  formatForecastDay,
   formatForecastHour,
   formatTemperature,
   formatWeatherAge,
@@ -10,6 +11,7 @@ import {
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
+  upcomingForecastDays,
   weatherAgeMs,
 } from './weather-utils';
 
@@ -25,6 +27,16 @@ function dayOfHours(date = '2026-07-25'): WeatherHour[] {
 
 function twoDaysOfHours(): WeatherHour[] {
   return [...dayOfHours('2026-07-25'), ...dayOfHours('2026-07-26')];
+}
+
+/** Consecutive days from the 25th, so the 27th is a Monday. */
+function daysFrom25th(count: number): WeatherDay[] {
+  return Array.from({ length: count }, (_, index) => ({
+    date: `2026-07-${25 + index}`,
+    high: 20 + index,
+    low: 10 + index,
+    condition: 'clear' as const,
+  }));
 }
 
 describe('mapWmoCode', () => {
@@ -398,5 +410,42 @@ describe('resolveDayRange', () => {
       low: 11,
       isTomorrow: false,
     });
+  });
+});
+
+describe('upcomingForecastDays', () => {
+  it('keeps every day of a fresh reading, today included', () => {
+    const days = daysFrom25th(3);
+
+    expect(upcomingForecastDays(days, '2026-07-25T09:00')).toEqual(days);
+  });
+
+  it('drops the days a reading left standing has outlived', () => {
+    const days = daysFrom25th(3);
+
+    expect(upcomingForecastDays(days, '2026-07-26T00:30')).toEqual(days.slice(1));
+  });
+
+  it('is empty for a reading from a proxy that sends no daily forecast', () => {
+    expect(upcomingForecastDays(undefined, '2026-07-25T09:00')).toEqual([]);
+  });
+});
+
+describe('formatForecastDay', () => {
+  it('calls the day it is in the location today', () => {
+    expect(formatForecastDay('2026-07-25', '2026-07-25T23:59')).toBe('Today');
+  });
+
+  // Two weeks repeat every weekday, so the name alone would not say which Monday.
+  it('names any other day by weekday and day of the month', () => {
+    expect(formatForecastDay('2026-07-27', '2026-07-25T09:00')).toBe('Mon 27');
+  });
+
+  it('drops the leading zero from the day of the month', () => {
+    expect(formatForecastDay('2026-08-03', '2026-07-25T09:00')).toBe('Mon 3');
+  });
+
+  it('hands back a stamp it cannot read rather than guessing a weekday', () => {
+    expect(formatForecastDay('soon', '2026-07-25T09:00')).toBe('soon');
   });
 });

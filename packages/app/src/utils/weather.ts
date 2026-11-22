@@ -20,6 +20,9 @@ import {
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
+/** How far ahead the popover's expandable day list looks. */
+const DAILY_FORECAST_DAYS = 14;
+
 /** Mirrors the worker's own floor. */
 export const MIN_SEARCH_QUERY_LENGTH = 2;
 
@@ -169,6 +172,8 @@ export async function fetchForecast(
     units,
     // The strip spans midnight, so it needs tomorrow's hours as well as the rest of today's.
     days: '2',
+    // Its own field, not a larger `days`: a proxy that predates it reads any other `days` as one.
+    daily: String(DAILY_FORECAST_DAYS),
   });
   if (!isForecast(raw)) {
     throw new WeatherRequestError('The weather service returned an unexpected response');

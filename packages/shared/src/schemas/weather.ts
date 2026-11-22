@@ -1,5 +1,11 @@
 import { z } from 'zod/mini';
-import type { WeatherForecast, WeatherHour, WeatherLocation, WeatherSnapshot } from '../types';
+import type {
+  WeatherDay,
+  WeatherForecast,
+  WeatherHour,
+  WeatherLocation,
+  WeatherSnapshot,
+} from '../types';
 import { WEATHER_CONDITION_KINDS, WEATHER_UNITS } from '../types';
 import { assertNoDrift } from './drift';
 
@@ -30,6 +36,14 @@ export const weatherHourSchema = z.object({
 });
 assertNoDrift<z.infer<typeof weatherHourSchema>, WeatherHour>();
 
+export const weatherDaySchema = z.object({
+  date: z.string(),
+  high: z.number(),
+  low: z.number(),
+  condition: conditionSchema,
+});
+assertNoDrift<z.infer<typeof weatherDaySchema>, WeatherDay>();
+
 export const weatherForecastSchema = z.object({
   units: unitsSchema,
   timezone: z.string(),
@@ -43,6 +57,7 @@ export const weatherForecastSchema = z.object({
   low: z.number(),
   tomorrow: z.optional(z.object({ high: z.number(), low: z.number() })),
   hours: z.array(weatherHourSchema),
+  daily: z.optional(z.array(weatherDaySchema)),
 });
 assertNoDrift<z.infer<typeof weatherForecastSchema>, WeatherForecast>();
 

@@ -277,6 +277,128 @@ describe('POST /v1/weather', () => {
     expect(await res.json()).not.toHaveProperty('tomorrow');
   });
 
+  describe('the daily forecast', () => {
+    const FORTNIGHT_PAYLOAD = {
+      ...FORECAST_PAYLOAD,
+      hourly: {
+        time: ['2026-07-25T23:00', '2026-07-26T00:00', '2026-07-26T23:00', '2026-07-27T00:00'],
+        temperature_2m: [14.1, 13.8, 13.2, 12.9],
+        weather_code: [0, 0, 0, 0],
+      },
+      daily: {
+        time: ['2026-07-25', '2026-07-26', '2026-07-27'],
+        weather_code: [0, 61, 95],
+        temperature_2m_max: [21.4, 24.8, 19.1],
+        temperature_2m_min: [11.2, 13.6, 12.4],
+      },
+    };
+
+    async function forecastFor(
+      payload: unknown,
+      body: Record<string, unknown>
+    ): Promise<{ sent: URL; forecast: Record<string, unknown> }> {
+      const upstream = stubUpstream(payload);
+      const app = createApp({ weatherUpstream: upstream.fetch });
+      const res = await app.request(
+        '/v1/weather',
+        post({ lat: '51.5', lon: '-0.13', ...body }),
+        env
+      );
+      return { sent: new URL(upstream.urls[0]), forecast: await res.json() };
+    }
+
+    it('asks the provider for as many days as the client asks for', async () => {
+      const { sent } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '14' });
+
+      expect(sent.searchParams.get('forecast_days')).toBe('14');
+    });
+
+    it("asks the provider for each day's condition", async () => {
+      const { sent } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '14' });
+
+      expect(sent.searchParams.get('daily')).toContain('weather_code');
+    });
+
+    it('returns one entry per day', async () => {
+      const { forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '14' });
+
+      expect(forecast.daily).toEqual([
+        { date: '2026-07-25', high: 21.4, low: 11.2, condition: 'clear' },
+        { date: '2026-07-26', high: 24.8, low: 13.6, condition: 'rain' },
+        { date: '2026-07-27', high: 19.1, low: 12.4, condition: 'thunderstorm' },
+      ]);
+    });
+
+    // The strip reads only the next few hours, and the whole reading is persisted on every refresh.
+    it('keeps the hours to the two days asked for', async () => {
+      const { forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '14' });
+
+      expect(forecast.hours).toHaveLength(3);
+      expect(forecast.hours).not.toContainEqual(
+        expect.objectContaining({ time: '2026-07-27T00:00' })
+      );
+    });
+
+    it('returns no more days than were asked for', async () => {
+      const { forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '1' });
+
+      expect(forecast.daily).toHaveLength(1);
+    });
+
+    it('omits it for a client that does not ask', async () => {
+      const { sent, forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2' });
+
+      expect(sent.searchParams.get('forecast_days')).toBe('2');
+      expect(forecast).not.toHaveProperty('daily');
+    });
+
+    it.each([
+      ['longer than the provider forecasts', '17'],
+      ['a fraction of a day', '2.5'],
+      ['not a number', 'fortnight'],
+    ])('ignores a length that is %s', async (_label, daily) => {
+      const { sent, forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily });
+
+      expect(sent.searchParams.get('forecast_days')).toBe('2');
+      expect(forecast).not.toHaveProperty('daily');
+    });
+
+    it('drops a day missing an extreme rather than inventing one', async () => {
+      const gappy = {
+        ...FORTNIGHT_PAYLOAD,
+        daily: { ...FORTNIGHT_PAYLOAD.daily, temperature_2m_min: [11.2, null, 12.4] },
+      };
+
+      const { forecast } = await forecastFor(gappy, { days: '2', daily: '14' });
+
+      expect(forecast.daily).toEqual([
+        expect.objectContaining({ date: '2026-07-25' }),
+        expect.objectContaining({ date: '2026-07-27' }),
+      ]);
+    });
+
+    it('omits it when the provider dated none of the days', async () => {
+      const { time: _omitted, ...undated } = FORTNIGHT_PAYLOAD.daily;
+
+      const { forecast } = await forecastFor(
+        { ...FORTNIGHT_PAYLOAD, daily: undated },
+        { days: '2', daily: '14' }
+      );
+
+      expect(forecast).not.toHaveProperty('daily');
+    });
+
+    it('still reports today and tomorrow the way an older client reads them', async () => {
+      const { forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '14' });
+
+      expect(forecast).toMatchObject({
+        high: 21.4,
+        low: 11.2,
+        tomorrow: { high: 24.8, low: 13.6 },
+      });
+    });
+  });
+
   it('answers 503 when the provider payload is unusable', async () => {
     const app = createApp({ weatherUpstream: stubUpstream({ current: {} }).fetch });
 
@@ -644,7 +766,11 @@ describe('daylight', () => {
     };
     const app = createApp({ weatherUpstream: stubUpstream(twoDays).fetch });
 
-    const res = await app.request('/v1/weather', post({ lat: '51.5', lon: '-0.13' }), env);
+    const res = await app.request(
+      '/v1/weather',
+      post({ lat: '51.5', lon: '-0.13', days: '2' }),
+      env
+    );
 
     const body = (await res.json()) as { hours: { isDay: boolean }[] };
     expect(body.hours.map((hour) => hour.isDay)).toEqual([true, false, true, false]);
