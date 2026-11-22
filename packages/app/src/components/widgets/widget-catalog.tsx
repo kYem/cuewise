@@ -106,10 +106,7 @@ export function offeredHomeWidgets(
 }
 
 export function isWidgetShowing(widget: HomeWidget, s: Settings, world: WidgetWorld): boolean {
-  if (widget.isShowing !== undefined) {
-    return widget.isShowing(s, world);
-  }
-  return s[widget.key];
+  return widget.isShowing?.(s, world) ?? s[widget.key];
 }
 
 export type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;

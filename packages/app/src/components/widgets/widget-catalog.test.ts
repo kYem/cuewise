@@ -34,21 +34,20 @@ describe('HOME_WIDGETS', () => {
   });
 
   it('follows weather between the two corners it can occupy', () => {
-    const weather = HOME_WIDGETS.find((w) => w.key === 'showWeather');
+    const weather = catalogued('showWeather');
 
-    expect(weather).toBeDefined();
-    expect(weather?.where({ ...DEFAULT_SETTINGS, weatherPosition: 'left' })).toBe('Top left');
-    expect(weather?.where({ ...DEFAULT_SETTINGS, weatherPosition: 'right' })).toBe('Top right');
+    expect(weather.where({ ...DEFAULT_SETTINGS, weatherPosition: 'left' })).toBe('Top left');
+    expect(weather.where({ ...DEFAULT_SETTINGS, weatherPosition: 'right' })).toBe('Top right');
   });
 
   it('follows the world clock between corners, and under the big clock when that is on', () => {
-    const worldClock = HOME_WIDGETS.find((w) => w.key === 'showWorldClock');
+    const worldClock = catalogued('showWorldClock');
 
-    expect(worldClock?.where({ ...DEFAULT_SETTINGS, worldClockPosition: 'left' })).toBe('Top left');
-    expect(worldClock?.where({ ...DEFAULT_SETTINGS, worldClockPosition: 'right' })).toBe(
+    expect(worldClock.where({ ...DEFAULT_SETTINGS, worldClockPosition: 'left' })).toBe('Top left');
+    expect(worldClock.where({ ...DEFAULT_SETTINGS, worldClockPosition: 'right' })).toBe(
       'Top right'
     );
-    expect(worldClock?.where({ ...DEFAULT_SETTINGS, showClock: true })).toBe('Center');
+    expect(worldClock.where({ ...DEFAULT_SETTINGS, showClock: true })).toBe('Center');
   });
 
   it.each(['showClock', 'newTabShowCalendar'] as const)('sends %s to the center column', (key) => {
