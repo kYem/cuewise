@@ -1,4 +1,4 @@
-import { LAST_SYNC_CREDS_KEY } from '@cuewise/app';
+import { LAST_SYNC_CREDS_KEY, type LastSyncCreds } from '@cuewise/app';
 import { logger } from '@cuewise/shared';
 import { ApiError } from '@cuewise/sync-client';
 import type { SyncEngineControlSurface } from '@cuewise/sync-engine';
@@ -17,6 +17,7 @@ import { BridgeSyncController } from './bridge-sync-controller';
 import { SYNC_CONTROL_OPS, type SyncControlOp } from './sync-control-messages';
 
 const LAST_SYNCED_AT = 1_700_000_000_000;
+const SAVED_SIGN_IN: LastSyncCreds = { provider: 'dev', accountId: 'acct-1', deviceName: 'Laptop' };
 
 interface WireCase {
   /** Answers no bridge fallback produces, so a response the bridge swallowed cannot pass. */
@@ -35,9 +36,7 @@ const WIRE_CASES: Record<SyncControlOp, WireCase> = {
     reaches: ['enableSync', 'dev', 'acct-1', 'Laptop', { recoveryCode: TYPED_CODE }],
   },
   reconnect: {
-    stored: {
-      [LAST_SYNC_CREDS_KEY]: { provider: 'dev', accountId: 'acct-1', deviceName: 'Laptop' },
-    },
+    stored: { [LAST_SYNC_CREDS_KEY]: SAVED_SIGN_IN },
     call: (controller) => controller.reconnect('Unsaved name', TYPED_CODE),
     returns: { ok: true, recoveryCode: CAPTURED_CODE },
     reaches: ['enableSync', 'dev', 'acct-1', 'Laptop', { recoveryCode: TYPED_CODE }],
@@ -165,8 +164,8 @@ describe('sync control wire: bridge to handler', () => {
     const reached = vi.spyOn(engine, method);
     // denyPairing's fallback answers undefined as well, so this log is all that tells them apart.
     const gaveUp = vi.spyOn(logger, 'error');
-    const stored = connectPageToWorker(engine);
-    Object.assign(stored.data, wireCase.stored);
+    connectPageToWorker(engine);
+    await chrome.storage.local.set(wireCase.stored ?? {});
 
     const answer = await wireCase.call(new BridgeSyncController());
 
