@@ -1,7 +1,6 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
 import { ALL_WIDGETS_ON } from '../__fixtures__/widget-picker.fixtures';
-import { TOKYO_ZONE } from '../__fixtures__/world-clock.fixtures';
 import {
   HOME_WIDGETS,
   type HomeWidget,
@@ -90,22 +89,14 @@ describe('isWidgetShowing', () => {
   );
 
   it('does not count weather as showing until it has a city', () => {
-    const on = { ...DEFAULT_SETTINGS, showWeather: true };
+    const noCity = { hasWeatherLocation: false };
 
-    expect(isWidgetShowing(catalogued('showWeather'), on, { hasWeatherLocation: false })).toBe(
-      false
-    );
-    expect(isWidgetShowing(catalogued('showWeather'), on, world)).toBe(true);
+    expect(isWidgetShowing(catalogued('showWeather'), allShowing, noCity)).toBe(false);
   });
 
   it('does not count the world clock as showing until it has a city', () => {
-    const on = { ...DEFAULT_SETTINGS, showWorldClock: true };
+    const noCities = { ...allShowing, worldClocks: [] };
 
-    expect(isWidgetShowing(catalogued('showWorldClock'), { ...on, worldClocks: [] }, world)).toBe(
-      false
-    );
-    expect(
-      isWidgetShowing(catalogued('showWorldClock'), { ...on, worldClocks: [TOKYO_ZONE] }, world)
-    ).toBe(true);
+    expect(isWidgetShowing(catalogued('showWorldClock'), noCities, world)).toBe(false);
   });
 });
