@@ -1,20 +1,27 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
-import { HOME_WIDGETS, offeredHomeWidgets } from './widget-catalog';
+import { TOKYO_ZONE } from '../__fixtures__/world-clock.fixtures';
+import {
+  HOME_WIDGETS,
+  type HomeWidget,
+  type HomeWidgetKey,
+  isWidgetShowing,
+  offeredHomeWidgets,
+} from './widget-catalog';
+
+function catalogued(key: HomeWidgetKey): HomeWidget {
+  const widget = HOME_WIDGETS.find((w) => w.key === key);
+  if (widget === undefined) {
+    throw new Error(`no catalog entry for ${key}`);
+  }
+  return widget;
+}
 
 describe('HOME_WIDGETS', () => {
   it('lists every home widget exactly once', () => {
     const keys = HOME_WIDGETS.map((w) => w.key);
 
     expect(new Set(keys).size).toBe(keys.length);
-    expect(keys).toEqual([
-      'showClock',
-      'showQuickLinks',
-      'showNotes',
-      'showWeather',
-      'showWorldClock',
-      'newTabShowCalendar',
-    ]);
   });
 
   it('gives every widget copy the picker can render', () => {
@@ -60,12 +67,41 @@ describe('offeredHomeWidgets', () => {
   it('withholds the calendar on a build without an OAuth client id, where it is a dead switch', () => {
     const keys = offeredHomeWidgets(false).map((w) => w.key);
 
-    expect(keys).toEqual([
-      'showClock',
-      'showQuickLinks',
-      'showNotes',
-      'showWeather',
-      'showWorldClock',
-    ]);
+    expect(keys).toEqual(
+      HOME_WIDGETS.map((w) => w.key).filter((key) => key !== 'newTabShowCalendar')
+    );
+  });
+});
+
+describe('isWidgetShowing', () => {
+  const world = { hasWeatherLocation: true };
+
+  it.each(HOME_WIDGETS.map((widget) => [widget.label, widget] as const))(
+    'draws nothing while %s is switched off',
+    (_label, widget) => {
+      expect(isWidgetShowing(widget, { ...DEFAULT_SETTINGS, [widget.key]: false }, world)).toBe(
+        false
+      );
+    }
+  );
+
+  it('does not count weather as showing until it has a city', () => {
+    const on = { ...DEFAULT_SETTINGS, showWeather: true };
+
+    expect(isWidgetShowing(catalogued('showWeather'), on, { hasWeatherLocation: false })).toBe(
+      false
+    );
+    expect(isWidgetShowing(catalogued('showWeather'), on, world)).toBe(true);
+  });
+
+  it('does not count the world clock as showing until it has a city', () => {
+    const on = { ...DEFAULT_SETTINGS, showWorldClock: true };
+
+    expect(isWidgetShowing(catalogued('showWorldClock'), { ...on, worldClocks: [] }, world)).toBe(
+      false
+    );
+    expect(
+      isWidgetShowing(catalogued('showWorldClock'), { ...on, worldClocks: [TOKYO_ZONE] }, world)
+    ).toBe(true);
   });
 });

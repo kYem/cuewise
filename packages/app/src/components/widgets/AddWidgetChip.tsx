@@ -5,7 +5,7 @@ import { useId, useState } from 'react';
 import { useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
 import { WidgetPicker } from './WidgetPicker';
-import { offeredHomeWidgets } from './widget-catalog';
+import { isWidgetShowing, offeredHomeWidgets } from './widget-catalog';
 
 export const AddWidgetChip: React.FC = () => {
   const settings = useSettingsStore((state) => state.settings);
@@ -15,17 +15,12 @@ export const AddWidgetChip: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const headingId = useId();
 
-  // A flag is not a widget: weather or world clock without a city renders nothing, and this
-  // chip is the only inline route back to the city search.
-  const everyWidgetDelivers = offeredHomeWidgets().every((widget) => {
-    if (widget.key === 'showWeather') {
-      return settings.showWeather && weatherLocation !== null;
-    }
-    if (widget.key === 'showWorldClock') {
-      return settings.showWorldClock && settings.worldClocks.length > 0;
-    }
-    return settings[widget.key];
-  });
+  // A flag is not a widget: one switched on without its city draws nothing, and this chip is the
+  // only inline route back to the city search.
+  const world = { hasWeatherLocation: weatherLocation !== null };
+  const everyWidgetDelivers = offeredHomeWidgets().every((widget) =>
+    isWidgetShowing(widget, settings, world)
+  );
 
   // Weather's store hydrates separately, so deciding before it lands would flash the chip at
   // someone whose city is already saved.

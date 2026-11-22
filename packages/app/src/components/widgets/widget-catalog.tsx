@@ -15,6 +15,11 @@ export type HomeWidgetKey = Extract<
   | 'newTabShowCalendar'
 >;
 
+/** What a widget may need beyond settings to draw: weather's city lives in its own store. */
+export interface WidgetWorld {
+  hasWeatherLocation: boolean;
+}
+
 export interface HomeWidget {
   key: HomeWidgetKey;
   label: string;
@@ -23,6 +28,8 @@ export interface HomeWidget {
   icon: React.ReactNode;
   where: (s: Settings) => 'Top left' | 'Top right' | 'Center';
   setup?: React.FC;
+  /** Whether it draws anything once switched on; absent means its switch alone decides. */
+  isShowing?: (s: Settings, world: WidgetWorld) => boolean;
 }
 
 const iconClass = 'w-4 h-4 text-primary-600 dark:text-primary-400';
@@ -60,6 +67,7 @@ export const HOME_WIDGETS = [
     icon: <CloudSun className={iconClass} />,
     where: (s) => (s.weatherPosition === 'left' ? 'Top left' : 'Top right'),
     setup: WeatherSetupRow,
+    isShowing: (s, world) => s.showWeather && world.hasWeatherLocation,
   },
   {
     key: 'showWorldClock',
@@ -74,6 +82,7 @@ export const HOME_WIDGETS = [
       return s.worldClockPosition === 'left' ? 'Top left' : 'Top right';
     },
     setup: WorldClockSetupRow,
+    isShowing: (s) => s.showWorldClock && s.worldClocks.length > 0,
   },
   {
     key: 'newTabShowCalendar',
@@ -94,6 +103,13 @@ export function offeredHomeWidgets(
     return HOME_WIDGETS;
   }
   return HOME_WIDGETS.filter((widget) => widget.key !== 'newTabShowCalendar');
+}
+
+export function isWidgetShowing(widget: HomeWidget, s: Settings, world: WidgetWorld): boolean {
+  if (widget.isShowing !== undefined) {
+    return widget.isShowing(s, world);
+  }
+  return s[widget.key];
 }
 
 export type WidgetPatch = Partial<Record<HomeWidgetKey, boolean>>;

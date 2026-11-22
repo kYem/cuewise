@@ -1,42 +1,27 @@
+import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
+import { HOME_WIDGETS } from './widget-catalog';
 import { widgetPresets } from './widget-presets';
 
 function preset(id: string, featureEnabled = true) {
   return widgetPresets(featureEnabled).find((p) => p.id === id);
 }
 
+function patchOf(value: (key: (typeof HOME_WIDGETS)[number]['key']) => boolean) {
+  return Object.fromEntries(HOME_WIDGETS.map((widget) => [widget.key, value(widget.key)]));
+}
+
 describe('widgetPresets', () => {
-  it('turns everything off for minimal', () => {
-    expect(preset('minimal')?.patch).toEqual({
-      showClock: false,
-      showQuickLinks: false,
-      showNotes: false,
-      showWeather: false,
-      showWorldClock: false,
-      newTabShowCalendar: false,
-    });
+  it('turns every widget off for minimal', () => {
+    expect(preset('minimal')?.patch).toEqual(patchOf(() => false));
   });
 
   it('matches the shipped defaults for recommended', () => {
-    expect(preset('recommended')?.patch).toEqual({
-      showClock: false,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: false,
-      showWorldClock: false,
-      newTabShowCalendar: false,
-    });
+    expect(preset('recommended')?.patch).toEqual(patchOf((key) => DEFAULT_SETTINGS[key]));
   });
 
-  it('turns everything on for everything', () => {
-    expect(preset('everything')?.patch).toEqual({
-      showClock: true,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: true,
-      showWorldClock: true,
-      newTabShowCalendar: true,
-    });
+  it('turns every widget on for everything', () => {
+    expect(preset('everything')?.patch).toEqual(patchOf(() => true));
   });
 
   it.each(['minimal', 'recommended', 'everything'])(
@@ -47,12 +32,8 @@ describe('widgetPresets', () => {
   );
 
   it('still writes the remaining widgets when the calendar is not offered', () => {
-    expect(preset('everything', false)?.patch).toEqual({
-      showClock: true,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: true,
-      showWorldClock: true,
-    });
+    const { newTabShowCalendar: _calendar, ...rest } = patchOf(() => true);
+
+    expect(preset('everything', false)?.patch).toEqual(rest);
   });
 });
