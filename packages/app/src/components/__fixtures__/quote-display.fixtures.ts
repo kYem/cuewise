@@ -152,8 +152,8 @@ export function createEmptyMockStore(overrides: Partial<MockQuoteStore> = {}) {
  */
 export function createNavigableMockStore(quote?: Quote, overrides: Partial<MockQuoteStore> = {}) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => true) as Mock,
-    canGoForward: vi.fn(() => true) as Mock,
+    canGoBack: vi.fn(() => true),
+    canGoForward: vi.fn(() => true),
     quoteHistory: ['quote1', 'quote2', 'quote3'],
     historyIndex: 1,
     ...overrides,
@@ -165,8 +165,8 @@ export function createNavigableMockStore(quote?: Quote, overrides: Partial<MockQ
  */
 export function createAtBeginningMockStore(quote?: Quote, overrides: Partial<MockQuoteStore> = {}) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => true) as Mock,
-    canGoForward: vi.fn(() => false) as Mock,
+    canGoBack: vi.fn(() => true),
+    canGoForward: vi.fn(() => false),
     quoteHistory: ['quote1', 'quote2'],
     historyIndex: 0,
     ...overrides,
@@ -178,8 +178,8 @@ export function createAtBeginningMockStore(quote?: Quote, overrides: Partial<Moc
  */
 export function createAtEndMockStore(quote?: Quote, overrides: Partial<MockQuoteStore> = {}) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => false) as Mock,
-    canGoForward: vi.fn(() => true) as Mock,
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => true),
     quoteHistory: ['quote1', 'quote2'],
     historyIndex: 1,
     ...overrides,
@@ -194,8 +194,8 @@ export function createNoNavigationMockStore(
   overrides: Partial<MockQuoteStore> = {}
 ) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => false) as Mock,
-    canGoForward: vi.fn(() => false) as Mock,
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => false),
     quoteHistory: ['quote1'],
     historyIndex: 0,
     ...overrides,
