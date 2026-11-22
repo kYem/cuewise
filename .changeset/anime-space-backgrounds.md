@@ -5,4 +5,4 @@
 '@cuewise/shared': minor
 ---
 
-Three new background themes: Anime (original AI-generated art), Japan and Space.
+Three new background themes: Anime (original art), Japan and Space.
