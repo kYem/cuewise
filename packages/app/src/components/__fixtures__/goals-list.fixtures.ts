@@ -16,6 +16,7 @@ export { createSettingsStoreMock };
  */
 
 type GoalStore = ReturnType<typeof useGoalStore.getState>;
+type CalendarStore = ReturnType<typeof useCalendarStore.getState>;
 
 export type MockGoalStore = MockStoreOf<
   GoalStore,
@@ -104,9 +105,7 @@ export function mockGoalsSectionStores(
     initialize: vi.fn(),
     addTask: vi.fn(async () => true),
   };
-  const calendar: MockStoreOf<ReturnType<typeof useCalendarStore.getState>, 'initialize'> = {
-    initialize: vi.fn(),
-  };
+  const calendar: MockStoreOf<CalendarStore, 'initialize'> = { initialize: vi.fn() };
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(store));
   vi.mocked(useCalendarStore).mockImplementation(createSelectorMock(calendar));
   vi.mocked(useSettingsStore).mockImplementation(

@@ -2,7 +2,7 @@ import { createSelectorMock } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from '../stores/goal-store';
-import { createMockGoalStore, type MockGoalsPageStore } from './__fixtures__/goals-list.fixtures';
+import { createGoalsPageStore } from './__fixtures__/goals-list.fixtures';
 import { GoalInput } from './GoalInput';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
@@ -12,12 +12,7 @@ const ADD_INPUT = { name: 'Add a goal' };
 describe('GoalInput', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useGoalStore).mockImplementation(
-      createSelectorMock({
-        ...createMockGoalStore(),
-        addTask: vi.fn(async () => true),
-      } satisfies Partial<MockGoalsPageStore>)
-    );
+    vi.mocked(useGoalStore).mockImplementation(createSelectorMock(createGoalsPageStore([])));
   });
 
   it('leaves focus alone when it mounts with an earlier focus request', () => {
