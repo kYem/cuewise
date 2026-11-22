@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
-import { ALL_WIDGETS_ON } from '../__fixtures__/widget-picker.fixtures';
+import { ALL_WIDGETS_ON, EVERY_WIDGET_WORLD } from '../__fixtures__/widget-picker.fixtures';
 import {
   HOME_WIDGETS,
   type HomeWidget,
@@ -75,7 +75,7 @@ describe('offeredHomeWidgets', () => {
 });
 
 describe('isWidgetShowing', () => {
-  const world = { hasWeatherLocation: true };
+  const world = EVERY_WIDGET_WORLD;
 
   // From a state where everything draws, so each case fails only on its own switch.
   const allShowing = { ...DEFAULT_SETTINGS, ...ALL_WIDGETS_ON };

@@ -5,7 +5,12 @@ import { create } from 'zustand';
 import { VILNIUS } from '../../stores/__fixtures__/weather-store.fixtures';
 import { type SettingsStore, useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
-import { HOME_WIDGETS, type HomeWidgetKey, type WidgetPatch } from '../widgets/widget-catalog';
+import {
+  HOME_WIDGETS,
+  type HomeWidgetKey,
+  type WidgetPatch,
+  type WidgetWorld,
+} from '../widgets/widget-catalog';
 import { TOKYO_ZONE } from './world-clock.fixtures';
 
 export interface WidgetPickerStoreOptions {
@@ -74,3 +79,6 @@ export const ALL_WIDGETS_ON: Partial<Settings> = {
 };
 
 export const ALL_WIDGETS_OFF: Partial<Settings> = everyWidget(false);
+
+/** The world beyond settings in which every widget has what it needs to draw. */
+export const EVERY_WIDGET_WORLD: WidgetWorld = { hasWeatherLocation: true };
