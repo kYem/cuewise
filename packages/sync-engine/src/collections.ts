@@ -1,4 +1,10 @@
-import { DEVICE_LOCAL_SETTINGS_KEYS, logger, type Settings, storageFailure } from '@cuewise/shared';
+import {
+  DEVICE_LOCAL_SETTINGS_KEYS,
+  logger,
+  type Settings,
+  type SyncedCollection,
+  storageFailure,
+} from '@cuewise/shared';
 import {
   type CollectionLock,
   getCollectionsRaw,
@@ -20,7 +26,7 @@ import {
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
 export interface CollectionBinding {
-  name: string;
+  name: SyncedCollection;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
   /** Every entry in one storage write where the backend allows; a null entity deletes. */
@@ -54,7 +60,7 @@ const reportedUnusableCollections = new Set<string>();
  * seals that absence as a tombstone every other device applies.
  */
 function arrayBinding<T extends HasId>(
-  name: CollectionLock,
+  name: CollectionLock & SyncedCollection,
   getAll: () => Promise<T[]>,
   setAll: (items: T[]) => Promise<StorageResult>
 ): CollectionBinding {
