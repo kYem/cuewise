@@ -275,6 +275,17 @@ describe('BridgeSyncController: getDetails', () => {
     });
   });
 
+  it('forwards a cached lookup to the worker', async () => {
+    runtime.sendMessage.mockResolvedValueOnce({ ok: true, kind: 'details', details: null });
+    const controller = new BridgeSyncController();
+
+    await controller.getDetails({ cached: true });
+
+    expect(runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ op: 'details', cached: true })
+    );
+  });
+
   it('resolves null when messaging fails, without throwing', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     runtime.sendMessage.mockRejectedValueOnce(new Error('no SW'));

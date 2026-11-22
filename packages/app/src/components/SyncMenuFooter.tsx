@@ -2,9 +2,15 @@ import { describeThrown, logger } from '@cuewise/shared';
 import { RefreshCw, Settings } from 'lucide-react';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useMinuteNow } from '../hooks/useMinuteNow';
 import { useToastStore } from '../stores/toast-store';
-import { type SyncDetails, type SyncUiStatus, useSyncController } from '../sync/sync-controller';
-import { formatMillisAgo } from '../utils/reminder-date-utils';
+import {
+  type SyncDetails,
+  type SyncDetailsOptions,
+  type SyncUiStatus,
+  useSyncController,
+} from '../sync/sync-controller';
+import { formatMillisAgoPhrase } from '../utils/reminder-date-utils';
 
 interface SyncMenuFooterProps {
   onOpenSettings: () => void;
@@ -14,8 +20,10 @@ interface SyncMenuFooterProps {
 const NEEDS_SETTINGS: readonly SyncUiStatus[] = ['needs_reauth', 'needs_enroll'];
 
 // h-4 is text-xs's line-height, so the placeholder occupies exactly the row the email will:
-// the status line below it does not move when the details fetch lands.
+// the status line below it does not move when details land.
 const EMAIL_SKELETON_ROW = 'flex h-4 items-center';
+
+const CACHED: SyncDetailsOptions = { cached: true };
 
 const LABELS: Partial<Record<SyncUiStatus, string>> = {
   connecting: 'Connecting…',
@@ -33,9 +41,10 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
   const [details, setDetails] = useState<SyncDetails | null>(null);
   const [detailsPending, setDetailsPending] = useState(false);
   const [busy, setBusy] = useState(false);
+  const now = useMinuteNow();
   // Guards two concurrent getDetails() callers: a host that emits 'syncing' mid-syncNow (macOS)
   // re-fetches on both that transition and the back-to-active one, while handleSync fetches its
-  // own refresh — only the fetch started last may paint.
+  // own refresh — only the newest generation may paint.
   const detailsGenRef = useRef(0);
 
   useEffect(() => {
@@ -55,6 +64,13 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
     detailsGenRef.current += 1;
     const gen = detailsGenRef.current;
     setDetailsPending(true);
+    // The recorded answer paints at once; the server's replaces it, and never the other way round.
+    let fresh = false;
+    controller.getDetails(CACHED).then((cached) => {
+      if (detailsGenRef.current === gen && !fresh && cached !== null) {
+        setDetails(cached);
+      }
+    });
     controller.getDetails().then((next) => {
       if (detailsGenRef.current !== gen) {
         return;
@@ -62,6 +78,7 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
       setDetailsPending(false);
       // A transient null (offline, slow host) must not blank out details a fresher fetch painted.
       if (next !== null) {
+        fresh = true;
         setDetails(next);
       }
     });
@@ -75,12 +92,12 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
   // The adapter status covers syncs this row did not start; `busy` covers the extension, whose
   // bridge never emits 'syncing' at all.
   const inProgress = busy || status === 'syncing';
-  const label = inProgress
-    ? 'Syncing…'
-    : (LABELS[status] ??
-      (details?.lastSyncedAt != null
-        ? `Synced ${formatMillisAgo(details.lastSyncedAt)}`
-        : 'Synced'));
+  const lastSyncedAt = details?.lastSyncedAt ?? null;
+  const syncedLabel =
+    lastSyncedAt === null
+      ? 'Synced'
+      : `Synced ${formatMillisAgoPhrase(lastSyncedAt, now.getTime())}`;
+  const label = inProgress ? 'Syncing…' : (LABELS[status] ?? syncedLabel);
 
   const handleSync = async (): Promise<void> => {
     setBusy(true);
@@ -88,7 +105,8 @@ export const SyncMenuFooter: React.FC<SyncMenuFooterProps> = ({ onOpenSettings }
       await controller.syncNow();
       detailsGenRef.current += 1;
       const gen = detailsGenRef.current;
-      const next = await controller.getDetails();
+      // A sync cannot change the account, so re-read the recorded stamp; with none recorded, ask.
+      const next = (await controller.getDetails(CACHED)) ?? (await controller.getDetails());
       if (detailsGenRef.current === gen && next !== null) {
         setDetails(next);
       }

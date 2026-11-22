@@ -31,6 +31,7 @@ export function fakeControlSurface(
     syncNow: vi.fn().mockResolvedValue({ kind: 'synced' }),
     getStatus: vi.fn().mockReturnValue('active' as SyncStatus),
     getAccount: vi.fn().mockResolvedValue(null),
+    getCachedAccount: vi.fn().mockReturnValue(null),
     getLastSyncedAt: vi.fn().mockReturnValue(null),
     getLastCycle: vi.fn().mockReturnValue({ known: true, cycle: null }),
     getRecoveryEnvelope: vi.fn().mockReturnValue('present'),

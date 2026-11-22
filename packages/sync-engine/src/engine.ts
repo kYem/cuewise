@@ -74,6 +74,22 @@ export const LAST_SYNCED_AT_KEY = 'cuewise.sync.lastSyncedAt';
  */
 export const LAST_CYCLE_KEY = 'cuewise.sync.lastCycle';
 
+/** The account getAccount last fetched, so a menu can name it without a request. */
+export const ACCOUNT_KEY = 'cuewise.sync.account';
+
+export interface SyncAccount {
+  readonly userId: string;
+  readonly email: string | null;
+}
+
+function isSyncAccount(value: unknown): value is SyncAccount {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const { userId, email } = value as Record<string, unknown>;
+  return typeof userId === 'string' && (email === null || typeof email === 'string');
+}
+
 /**
  * Whether the server holds a recovery envelope for this account. Persisted, not held per process:
  * the extension respawns its worker on every wake, so an in-memory answer would be recomputed —
@@ -216,6 +232,7 @@ export class SyncEngine {
   private dk: DataKey | null = null;
   private keyId: string | null = null;
   private lastSyncedAt: number | null = null;
+  private account: SyncAccount | null = null;
   private lastCycle: SyncCycle | null = null;
   // False once a stored record turned out to be unreadable: that is not "no cycle ran", and
   // answering it as such is exactly what clears a wedged device's badge.
@@ -231,6 +248,9 @@ export class SyncEngine {
   // The cancellation token for everything a disable must stop: the cycle, each enrol checkpoint,
   // start(), and any bookkeeping already in flight. Only disableSync bumps it, and only upward.
   private accountEpoch = 0;
+  // Bumped whenever the cached account is forgotten. A sign-in must not move accountEpoch (that
+  // cancels its own enroll), yet a fetch or hydration from before it must not restore the old one.
+  private accountCacheGen = 0;
   private pushTimer: ReturnType<typeof setTimeout> | null = null;
   private pushDeadline: number | null = null;
   // A count, not a flag: syncNow is concurrently callable (explicit sync, pull wake, start), and a
@@ -280,6 +300,9 @@ export class SyncEngine {
       if (!saved.success) {
         throw new Error(`failed to persist sync session: ${saved.error.message}`);
       }
+      // The previous account must not name this one; the next getAccount records it.
+      this.forgetAccount();
+      await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'signed in');
       await this.enrollAndActivate(recoveryCode, epoch, setAsideFrom);
     } catch (err) {
       await this.handleEnableError(err, before, epoch);
@@ -565,6 +588,7 @@ export class SyncEngine {
       LAST_SYNCED_AT_KEY,
       LAST_CYCLE_KEY,
       RECOVERY_ENVELOPE_KEY,
+      ACCOUNT_KEY,
     ]) {
       const removed = await this.deps.keyStore.remove(key, 'local');
       if (!removed) {
@@ -572,8 +596,8 @@ export class SyncEngine {
       }
     }
     if (survived.length > 0) {
-      // A surviving enabled flag re-activates sync on the next start(); a surviving stamp can be
-      // hydrated onto whatever account comes next. Both outlast the account they describe.
+      // A surviving enabled flag re-activates sync on the next start(); a surviving stamp or account
+      // can be hydrated onto whatever account comes next. All outlast the account they describe.
       logger.error(`Disable could not remove every sync key: ${survived.join(', ')}`);
     }
     this.dk = null;
@@ -581,6 +605,7 @@ export class SyncEngine {
     // Whatever a pairing in flight is offered, it would be a key for the account just removed.
     this.devicePairing.forget();
     this.lastSyncedAt = null;
+    this.forgetAccount();
     this.lastCycle = null;
     // After a disable "no cycle" is the truth, so an earlier unreadable record must stop
     // reporting unknown — otherwise a failed hydration outlives the account it described.
@@ -829,6 +854,38 @@ export class SyncEngine {
     return this.lastSyncedAt;
   }
 
+  /** The account getAccount last fetched, without asking the server; await ensureHydrated() first. */
+  getCachedAccount(): SyncAccount | null {
+    return this.account;
+  }
+
+  private forgetAccount(): void {
+    this.accountCacheGen += 1;
+    this.account = null;
+  }
+
+  /** Dropped if a sign-in or disable forgot the account mid-fetch; an overtaken write is undone. */
+  private async recordAccount(account: SyncAccount, gen: number): Promise<void> {
+    if (this.accountCacheGen !== gen) {
+      return;
+    }
+    const previous = this.account;
+    // A missing email would not survive JSON, and the stored record would never hydrate again.
+    this.account = { userId: account.userId, email: account.email ?? null };
+    if (previous?.userId === account.userId && previous.email === account.email) {
+      return;
+    }
+    const result = await this.deps.keyStore.set(ACCOUNT_KEY, this.account, 'local');
+    if (!result.success) {
+      logger.warn(`Failed to persist the sync account: ${result.error.message}`, {
+        error: result.error,
+      });
+    }
+    if (this.accountCacheGen !== gen) {
+      await this.rollbackKey(ACCOUNT_KEY, 'the cached sync account', 'retired an account fetch');
+    }
+  }
+
   /** The last recorded answer, without asking the server. */
   getRecoveryEnvelope(): RecoveryEnvelopeState {
     return this.recoveryEnvelope;
@@ -931,7 +988,7 @@ export class SyncEngine {
   }
 
   /**
-   * Reads the persisted stamp and cycle record, once per process. Public and memoised because the
+   * Reads the persisted sync state once per process. Public and memoised because the
    * extension answers a control message from a cold worker BEFORE start() runs — the listeners are
    * registered synchronously while start() waits on the settings migration.
    */
@@ -972,7 +1029,7 @@ export class SyncEngine {
     // One batch read, because `get` collapses "absent" into "read failed" and this is the one
     // place that distinction decides whether a wedged device shows a badge.
     const stored = await this.deps.keyStore.getMany(
-      [LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY, RECOVERY_ENVELOPE_KEY],
+      [LAST_SYNCED_AT_KEY, LAST_CYCLE_KEY, RECOVERY_ENVELOPE_KEY, ACCOUNT_KEY],
       'local'
     );
     if (this.accountEpoch !== epoch) {
@@ -990,6 +1047,11 @@ export class SyncEngine {
     const stamp = stored[LAST_SYNCED_AT_KEY];
     if (stamp !== undefined) {
       this.hydrateStamp(stamp);
+    }
+
+    const account = stored[ACCOUNT_KEY];
+    if (account !== undefined) {
+      this.hydrateAccount(account);
     }
 
     // Only a positively-read boolean; anything else stays null, which the panel paints as nothing
@@ -1032,6 +1094,28 @@ export class SyncEngine {
   }
 
   /**
+   * Skipped once this process forgot the account (sign-in/disable): a read that straddled it, or a
+   * remove that failed, may still hold the previous one.
+   */
+  private hydrateAccount(account: StoredValue): void {
+    if (this.account !== null || this.accountCacheGen !== 0) {
+      return;
+    }
+    if (!account.readable) {
+      logger.error('The stored sync account is unreadable', { key: ACCOUNT_KEY });
+      return;
+    }
+    if (!isSyncAccount(account.value)) {
+      logger.error('The stored sync account is not an account record', {
+        key: ACCOUNT_KEY,
+        shape: describeShape(account.value),
+      });
+      return;
+    }
+    this.account = { userId: account.value.userId, email: account.value.email };
+  }
+
+  /**
    * Installs the persisted stamp, or names why it could not be. Both rejections log at error: only
    * localStorage can report an unreadable value, and the app embedding it ships logLevel 'error',
    * so a warn would be unreachable by anyone able to act on it.
@@ -1068,15 +1152,19 @@ export class SyncEngine {
   /**
    * Account details for the settings UI. Informational only: resolves null when signed out
    * or on any fetch failure (including 401 — no auth-loss side effects), never throws.
+   * Records a successful answer for getCachedAccount.
    */
-  async getAccount(): Promise<{ userId: string; email: string | null } | null> {
+  async getAccount(): Promise<SyncAccount | null> {
+    const gen = this.accountCacheGen;
     // The session read sits inside the try so the never-throws contract holds by construction,
     // not by the current storage adapters happening to swallow their own errors.
     try {
       if (!(await this.deps.sessionManager.isSignedIn())) {
         return null;
       }
-      return await this.deps.apiClient.getAccount();
+      const account = await this.deps.apiClient.getAccount();
+      await this.bestEffort(() => this.recordAccount(account, gen), 'account cache');
+      return account;
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       logger.warn(`Failed to fetch sync account details: ${detail}`);

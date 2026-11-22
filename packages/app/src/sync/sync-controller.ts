@@ -5,6 +5,7 @@ import type {
   PairingPollResult,
   PendingPairing,
   RecoveryEnvelopeState,
+  SyncAccount,
   SyncEngineControlSurface,
   SyncNowResult,
   SyncOutcome,
@@ -152,6 +153,11 @@ export interface SyncDetailsOptions {
    * surface that renders the finding — the settings panel's banner — turns it on (ENG-98).
    */
   readonly refreshRecoveryEnvelope?: boolean;
+  /**
+   * Answer from this device's recorded state, with no request; null when no account is recorded.
+   * Wins over refreshRecoveryEnvelope.
+   */
+  readonly cached?: boolean;
 }
 
 /**
@@ -159,7 +165,7 @@ export interface SyncDetailsOptions {
  * host adapters (macOS in-process, extension SW) build the identical shape from one definition.
  */
 export function buildSyncDetails(
-  account: { userId: string; email: string | null } | null,
+  account: SyncAccount | null,
   lastSyncedAt: number | null,
   recoveryEnvelope: RecoveryEnvelopeState = 'unknown'
 ): SyncDetails | null {
@@ -177,11 +183,18 @@ export function buildSyncDetails(
 /** Reads the engine's account + freshness into SyncDetails; neither network hop throws. */
 export async function readSyncDetails(
   engine: SyncEngineControlSurface,
-  refreshRecoveryEnvelope?: boolean
+  options: SyncDetailsOptions = {}
 ): Promise<SyncDetails | null> {
-  // Hydration owns lastSyncedAt too; without it the stamp is only right because getAccount's
-  // network hop happens to outlast two local reads.
+  // Loads the recorded account and stamp; without it a cached read finds no account.
   await engine.ensureHydrated();
+  if (options.cached === true) {
+    return buildSyncDetails(
+      engine.getCachedAccount(),
+      engine.getLastSyncedAt(),
+      engine.getRecoveryEnvelope()
+    );
+  }
+  const refreshRecoveryEnvelope = options.refreshRecoveryEnvelope === true;
   const [account, recoveryEnvelope] = await Promise.all([
     engine.getAccount(),
     refreshRecoveryEnvelope ? engine.refreshRecoveryEnvelope() : engine.getRecoveryEnvelope(),

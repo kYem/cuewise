@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatMillisAgo, formatReminderClock, formatTimeAgo } from './reminder-date-utils';
+import {
+  formatMillisAgo,
+  formatMillisAgoPhrase,
+  formatReminderClock,
+  formatTimeAgo,
+} from './reminder-date-utils';
 
 /** ISO timestamp `ms` in the past relative to now. */
 function agoIso(ms: number): string {
@@ -48,5 +53,19 @@ describe('formatMillisAgo', () => {
 
   it('returns "Just now" for under a minute', () => {
     expect(formatMillisAgo(Date.now() - 30 * 1000)).toBe('Just now');
+  });
+
+  it('measures from the given now', () => {
+    expect(formatMillisAgo(0, 3 * 60 * 60 * 1000)).toBe('3h ago');
+  });
+});
+
+describe('formatMillisAgoPhrase', () => {
+  it('reads "just now" in lower case for use after a prefix', () => {
+    expect(formatMillisAgoPhrase(Date.now() - 30 * 1000)).toBe('just now');
+  });
+
+  it('matches formatMillisAgo past a minute', () => {
+    expect(formatMillisAgoPhrase(Date.now() - 26 * 60 * 1000)).toBe('26 min ago');
   });
 });

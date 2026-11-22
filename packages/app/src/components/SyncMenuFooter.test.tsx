@@ -1,8 +1,12 @@
 import { logger } from '@cuewise/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSyncController } from '../sync/__fixtures__/fake-sync-controller';
-import { SyncControllerContext } from '../sync/sync-controller';
+import {
+  SyncControllerContext,
+  type SyncDetails,
+  type SyncDetailsOptions,
+} from '../sync/sync-controller';
 import { SyncMenuFooter } from './SyncMenuFooter';
 
 const toastError = vi.fn();
@@ -23,6 +27,23 @@ function renderFooter(controller: FakeSyncController | null, onOpenSettings = vi
       <SyncMenuFooter onOpenSettings={onOpenSettings} />
     </SyncControllerContext.Provider>
   );
+}
+
+function serverDetailsCalls(controller: FakeSyncController) {
+  return controller.calls.filter(
+    (call) =>
+      call.method === 'getDetails' &&
+      (call.args[0] as SyncDetailsOptions | undefined)?.cached !== true
+  );
+}
+
+function recordedDetails(overrides: Partial<SyncDetails> = {}): SyncDetails {
+  return {
+    accountEmail: 'someone@example.com',
+    accountId: 'acct-1',
+    lastSyncedAt: Date.now() - 7 * 60_000,
+    ...overrides,
+  };
 }
 
 describe('SyncMenuFooter', () => {
@@ -76,7 +97,7 @@ describe('SyncMenuFooter', () => {
     await waitFor(() =>
       expect(controller.calls.filter((call) => call.method === 'syncNow')).toHaveLength(1)
     );
-    expect(controller.calls.filter((call) => call.method === 'getDetails')).toHaveLength(2);
+    expect(serverDetailsCalls(controller)).toHaveLength(2);
   });
 
   it('shows progress from its own click, not only from an adapter status', async () => {
@@ -219,9 +240,7 @@ describe('SyncMenuFooter', () => {
     controller.deferNextSyncNow();
     fireEvent.click(screen.getByTestId('sync-menu-footer'));
 
-    await waitFor(() =>
-      expect(controller.calls.filter((call) => call.method === 'getDetails')).toHaveLength(2)
-    );
+    await waitFor(() => expect(serverDetailsCalls(controller)).toHaveLength(2));
 
     // What the back-to-active transition and the click's own refresh will each see.
     controller.scriptDetails({
@@ -238,7 +257,7 @@ describe('SyncMenuFooter', () => {
       controller.resolveSyncNow({ kind: 'synced' });
     });
 
-    expect(await screen.findByText(/Synced (Just now|0 min ago)/)).toBeInTheDocument();
+    expect(await screen.findByText('Synced just now')).toBeInTheDocument();
 
     await act(async () => {
       controller.resolveDetails({
@@ -250,5 +269,115 @@ describe('SyncMenuFooter', () => {
 
     expect(screen.queryByText('STALE@EXAMPLE.COM')).not.toBeInTheDocument();
     expect(screen.getByText('a@b.c')).toBeInTheDocument();
+  });
+
+  it('paints the recorded account and stamp while the server lookup is in flight', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptCachedDetails(recordedDetails());
+    controller.deferNextDetails();
+
+    renderFooter(controller);
+
+    expect(await screen.findByText('someone@example.com')).toBeInTheDocument();
+    expect(screen.getByText('Synced 7 min ago')).toBeInTheDocument();
+    expect(screen.queryByTestId('sync-menu-email-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('lets the server answer replace the recorded one', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptCachedDetails(recordedDetails());
+    controller.deferNextDetails();
+    renderFooter(controller);
+    await screen.findByText('someone@example.com');
+
+    await act(async () => {
+      controller.resolveDetails(recordedDetails({ accountEmail: 'renamed@example.com' }));
+    });
+
+    expect(screen.getByText('renamed@example.com')).toBeInTheDocument();
+  });
+
+  it('keeps the server answer when the recorded one arrives after it', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.deferNextCachedDetails();
+    controller.scriptDetails(recordedDetails({ accountEmail: 'server@example.com' }));
+    renderFooter(controller);
+    await screen.findByText('server@example.com');
+
+    await act(async () => {
+      controller.resolveCachedDetails(recordedDetails({ accountEmail: 'recorded@example.com' }));
+    });
+
+    expect(screen.getByText('server@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('recorded@example.com')).not.toBeInTheDocument();
+  });
+
+  it('re-reads the recorded stamp after a click, without asking the server again', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptCachedDetails(recordedDetails());
+    controller.scriptDetails(recordedDetails());
+    renderFooter(controller);
+    await screen.findByText('Synced 7 min ago');
+    controller.scriptCachedDetails(recordedDetails({ lastSyncedAt: Date.now() }));
+
+    fireEvent.click(screen.getByTestId('sync-menu-footer'));
+
+    expect(await screen.findByText('Synced just now')).toBeInTheDocument();
+    expect(serverDetailsCalls(controller)).toHaveLength(1);
+  });
+
+  it('asks the server after a click when nothing is recorded', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptDetails(recordedDetails());
+    controller.scriptDetails(recordedDetails({ lastSyncedAt: Date.now() }));
+    renderFooter(controller);
+    await screen.findByText('Synced 7 min ago');
+
+    fireEvent.click(screen.getByTestId('sync-menu-footer'));
+
+    expect(await screen.findByText('Synced just now')).toBeInTheDocument();
+    expect(serverDetailsCalls(controller)).toHaveLength(2);
+  });
+
+  it('says just now in lower case for a sync under a minute old', async () => {
+    const controller = new FakeSyncController();
+    controller.setStatus('active');
+    controller.scriptCachedDetails(recordedDetails({ lastSyncedAt: Date.now() - 5_000 }));
+
+    renderFooter(controller);
+
+    expect(await screen.findByText('Synced just now')).toBeInTheDocument();
+  });
+
+  describe('while the menu stays open', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      // useMinuteNow ticks on the wall-clock minute, so start on one.
+      vi.setSystemTime(new Date('2026-01-01T09:00:00Z'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('moves the relative time on', async () => {
+      const controller = new FakeSyncController();
+      controller.setStatus('active');
+      controller.scriptCachedDetails(recordedDetails({ lastSyncedAt: Date.now() }));
+      renderFooter(controller);
+      await act(async () => {});
+      expect(screen.getByText('Synced just now')).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(2 * 60_000);
+      });
+
+      expect(screen.getByText('Synced 2 min ago')).toBeInTheDocument();
+    });
   });
 });

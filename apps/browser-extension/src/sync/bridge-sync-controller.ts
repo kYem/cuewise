@@ -384,6 +384,7 @@ export class BridgeSyncController implements SyncController {
         kind: 'cuewise-sync-control',
         op: 'details',
         refreshRecoveryEnvelope: options?.refreshRecoveryEnvelope,
+        cached: options?.cached,
       },
       'details',
       (response) => response.details,
