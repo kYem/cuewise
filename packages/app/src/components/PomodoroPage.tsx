@@ -20,6 +20,8 @@ import { SoundsMiniPlayer } from './sounds';
 const PLAYER_OFFSET = 'fixed top-20 left-4 z-50';
 // Tailwind's `lg`, where the companion column becomes visible.
 const COMPANION_VISIBLE_QUERY = '(min-width: 1024px)';
+// min-w-0 lets a fixed-width child (the break card) shrink to the room left beside the timer.
+const COMPANION_COLUMN = 'hidden lg:flex lg:min-w-0 lg:max-w-2xl';
 
 export const PomodoroPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -110,7 +112,7 @@ export const PomodoroPage: React.FC = () => {
             <PomodoroTimer variant={chromeVariant} />
           </div>
 
-          <div className="hidden lg:flex lg:max-w-2xl">{companion}</div>
+          <div className={COMPANION_COLUMN}>{companion}</div>
         </div>
       </div>
 
