@@ -129,6 +129,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conceptCadence: 'third',
   conceptFraming: 'ambient',
   conceptActiveRecall: true,
+  conceptBreakRecall: true,
   conceptNudgeDismissed: false,
   conceptNudgeCount: 0,
   conceptNudgeLastShownAt: null,
@@ -155,6 +156,9 @@ export const CONCEPT_INTERVAL_MAX = 365; // cap intervals at ~1 year so cards ke
 export const CONCEPT_NUDGE_AFTER_QUOTE_VIEWS = 100;
 export const CONCEPT_NUDGE_MAX_SHOWS = 2;
 export const CONCEPT_NUDGE_GAP_DAYS = 3;
+
+/** Most concept cards offered in one Pomodoro break, so the break stays a rest. */
+export const CONCEPT_BREAK_RECALL_MAX = 3;
 
 /** The four number-valued pomodoro rhythm keys — the bounded, clampable durations. */
 export type NumericPomodoroKey = Extract<

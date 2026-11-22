@@ -1,11 +1,14 @@
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { resolvePomodoroCompanion } from '../utils/calendar-visibility';
 import type { ChromeVariant } from '../utils/chrome-variant';
+import { BreakRecall } from './BreakRecall';
 import { CalendarStrip } from './CalendarStrip';
 import { FocusMode } from './FocusMode';
 import { PageHeader } from './PageHeader';
@@ -15,6 +18,10 @@ import { SoundsMiniPlayer } from './sounds';
 
 // top-20 clears PageHeader, which is 4.5rem tall once a plain theme makes it opaque.
 const PLAYER_OFFSET = 'fixed top-20 left-4 z-50';
+// Tailwind's `lg`, where the companion column becomes visible.
+const COMPANION_VISIBLE_QUERY = '(min-width: 1024px)';
+// min-w-0 lets a fixed-width child (the break card) shrink to the room left beside the timer.
+const COMPANION_COLUMN = 'hidden lg:flex lg:min-w-0 lg:max-w-2xl';
 
 export const PomodoroPage: React.FC = () => {
   const initialize = useQuoteStore((state) => state.initialize);
@@ -27,6 +34,8 @@ export const PomodoroPage: React.FC = () => {
   const initCalendar = useCalendarStore((state) => state.initialize);
   // Hides the mini player: FocusMode renders its own.
   const isFocusModeActive = useFocusModeStore((state) => state.isActive);
+  const isBreak = usePomodoroStore((state) => state.sessionType !== 'work');
+  const companionVisible = useMediaQuery(COMPANION_VISIBLE_QUERY);
   const [lastManualRefresh, setLastManualRefresh] = useState(Date.now());
 
   useEffect(() => {
@@ -85,6 +94,7 @@ export const PomodoroPage: React.FC = () => {
   } else {
     companion = <QuoteDisplay onManualRefresh={() => setLastManualRefresh(Date.now())} />;
   }
+  companion = <BreakRecall onBreak={isBreak} visible={companionVisible} rest={companion} />;
 
   return (
     <div className="min-h-screen w-full relative">
@@ -102,7 +112,7 @@ export const PomodoroPage: React.FC = () => {
             <PomodoroTimer variant={chromeVariant} />
           </div>
 
-          <div className="hidden lg:flex lg:max-w-2xl">{companion}</div>
+          <div className={COMPANION_COLUMN}>{companion}</div>
         </div>
       </div>
 

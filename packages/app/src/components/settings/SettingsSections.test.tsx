@@ -160,6 +160,10 @@ describe('settings sections', () => {
       ).toBeInTheDocument();
     });
 
+    it.each(['break', 'pomodoro break'])('finds break recall in Home screen for "%s"', (query) => {
+      expect(sectionsMatching(query)).toContain('home');
+    });
+
     it.each(['fullscreen', 'auto enter'])('still surfaces Focus mode for "%s"', (query) => {
       expect(sectionsMatching(query)).toContain('focus');
     });
@@ -264,6 +268,20 @@ describe('settings sections', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Calendar' }));
 
       expect(set).toHaveBeenCalledWith({ newTabShowCalendar: true });
+    });
+
+    it('writes only the break recall key when it is toggled', () => {
+      const { set } = renderSection('home', '', { conceptBreakRecall: true });
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Recall on breaks' }));
+
+      expect(set).toHaveBeenCalledWith({ conceptBreakRecall: false });
+    });
+
+    it('hides break recall while concept cards are off', () => {
+      renderSection('home', '', { conceptCardsEnabled: false });
+
+      expect(screen.queryByRole('checkbox', { name: 'Recall on breaks' })).not.toBeInTheDocument();
     });
 
     it('drops the calendar on a build that could never render it', () => {

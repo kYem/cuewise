@@ -2,15 +2,19 @@ import type { Settings } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { defaultSettings } from '@cuewise/test-utils/fixtures';
 import { render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBackgroundStore } from '../stores/background-store';
 import { useCalendarStore } from '../stores/calendar-store';
 import { useFocusModeStore } from '../stores/focus-mode-store';
+import { usePomodoroStore } from '../stores/pomodoro-store';
 import { useQuoteStore } from '../stores/quote-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { isCalendarFeatureEnabled } from '../utils/google-calendar';
 import { preloadImages } from '../utils/image-preload-cache';
 import { PLAIN_THEMES } from './__fixtures__/color-theme.fixtures';
+import { stubMatchMedia } from './__fixtures__/media-query.fixtures';
+import type { BreakRecall } from './BreakRecall';
 import { PomodoroPage } from './PomodoroPage';
 
 vi.mock('../stores/quote-store', () => ({ useQuoteStore: vi.fn() }));
@@ -20,6 +24,7 @@ vi.mock('../stores/settings-store', async (importOriginal) => ({
 }));
 vi.mock('../stores/calendar-store', () => ({ useCalendarStore: vi.fn() }));
 vi.mock('../stores/focus-mode-store', () => ({ useFocusModeStore: vi.fn() }));
+vi.mock('../stores/pomodoro-store', () => ({ usePomodoroStore: vi.fn() }));
 vi.mock('../utils/google-calendar', () => ({ isCalendarFeatureEnabled: vi.fn() }));
 // The background effect resolves today's image before reading the cache; both are stubbed
 // so the effect actually runs (a missing preloadImages would throw once isLoaded is true).
@@ -42,6 +47,13 @@ vi.mock('./QuoteDisplay', () => ({
   ),
 }));
 vi.mock('./FocusMode', () => ({ FocusMode: () => null }));
+vi.mock('./BreakRecall', () => ({
+  BreakRecall: ({ onBreak, visible, rest }: ComponentProps<typeof BreakRecall>) => (
+    <div data-testid="break-recall" data-on-break={String(onBreak)} data-visible={String(visible)}>
+      {rest}
+    </div>
+  ),
+}));
 vi.mock('./PomodoroTimer', () => ({
   PomodoroTimer: ({ variant }: { variant?: string }) => (
     <div data-testid="pomodoro-timer" data-variant={variant} />
@@ -63,8 +75,10 @@ const initCalendar = vi.fn();
 function setup(
   companion: 'quote' | 'calendar' | 'both',
   calendarEnabled: boolean,
-  settingsOverrides: Partial<Settings> = {}
+  settingsOverrides: Partial<Settings> = {},
+  sessionType: 'work' | 'break' | 'longBreak' = 'work'
 ) {
+  vi.mocked(usePomodoroStore).mockImplementation(createSelectorMock({ sessionType }));
   vi.mocked(isCalendarFeatureEnabled).mockReturnValue(calendarEnabled);
   vi.mocked(useSettingsStore).mockImplementation(
     createSelectorMock({
@@ -225,5 +239,43 @@ describe('PomodoroPage - chrome wiring', () => {
     render(<PomodoroPage />);
 
     expect(screen.getByTestId('page-header')).not.toHaveAttribute('data-transparent');
+  });
+});
+
+describe('PomodoroPage - break recall', () => {
+  const originalMatchMedia = window.matchMedia;
+
+  beforeEach(() => {
+    stubMatchMedia(true);
+  });
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
+  it('tells recall no break is on during work', () => {
+    setup('quote', false);
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-on-break', 'false');
+    expect(screen.getByTestId('quote-display')).toBeInTheDocument();
+  });
+
+  it.each(['break', 'longBreak'] as const)('marks a %s as a break', (type) => {
+    setup('quote', false, {}, type);
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-on-break', 'true');
+  });
+
+  it('tells recall the companion is hidden on a narrow window', () => {
+    stubMatchMedia(false);
+    setup('quote', false, {}, 'break');
+
+    render(<PomodoroPage />);
+
+    expect(screen.getByTestId('break-recall')).toHaveAttribute('data-visible', 'false');
   });
 });

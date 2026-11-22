@@ -82,6 +82,7 @@ export const settingsSchema = z.object({
   conceptCadence: z.enum(['every', 'third', 'ten', 'off']),
   conceptFraming: z.enum(['ambient', 'queue']),
   conceptActiveRecall: z.boolean(),
+  conceptBreakRecall: z.boolean(),
   conceptNudgeDismissed: z.boolean(),
   conceptNudgeCount: z.number(),
   conceptNudgeLastShownAt: z.nullable(z.string()),
