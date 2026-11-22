@@ -29,7 +29,7 @@ const CHIP_CLASS = [
   'px-2.5 py-1.5 text-white/80 shadow-lg backdrop-blur-md',
 ].join(' ');
 
-/** Captions our own background (AI art by title, photos via PhotoCaption) and offers a fresh one. */
+/** Captions our own background (hosted art by title, photos via PhotoCaption) and offers a fresh one. */
 export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   imageUrl,
   onRefresh,
@@ -45,7 +45,7 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
     // Bottom-left: the reminders button owns the bottom-right corner and would eat the clicks.
     // `group` drives the hover/focus reveal of the byline behind the location.
     <div className="group fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
-      {artTitle !== null ? <p>{artTitle} · AI-generated</p> : <PhotoCaption url={imageUrl} />}
+      {artTitle !== null ? <p>{artTitle}</p> : <PhotoCaption url={imageUrl} />}
       <button
         type="button"
         onClick={onRefresh}

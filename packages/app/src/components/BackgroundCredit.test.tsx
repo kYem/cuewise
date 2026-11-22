@@ -95,10 +95,10 @@ describe('BackgroundCredit', () => {
     expect(onRefresh).not.toHaveBeenCalled();
   });
 
-  it('captions our own art as AI-generated, without an Unsplash credit', () => {
+  it('captions our own art by title, without an Unsplash credit', () => {
     const { container } = render(<BackgroundCredit imageUrl={HOSTED_URL} onRefresh={vi.fn()} />);
 
-    expect(container.textContent).toContain('Rainy blue hour · AI-generated');
+    expect(container.textContent).toBe('Rainy blue hour');
     expect(screen.queryByRole('link', { name: /unsplash/i })).not.toBeInTheDocument();
   });
 
