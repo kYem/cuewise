@@ -5,7 +5,7 @@ import { create } from 'zustand';
 import { VILNIUS } from '../../stores/__fixtures__/weather-store.fixtures';
 import { type SettingsStore, useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
-import { HOME_WIDGETS, type WidgetPatch } from '../widgets/widget-catalog';
+import { HOME_WIDGETS, type HomeWidgetKey, type WidgetPatch } from '../widgets/widget-catalog';
 import { TOKYO_ZONE } from './world-clock.fixtures';
 
 export interface WidgetPickerStoreOptions {
@@ -53,9 +53,13 @@ export function mockWidgetPickerStores({
   return { updateSettings: store.getState().updateSettings as Mock };
 }
 
-/** Every catalogued widget's switch set to `value`. */
+/** Every catalogued widget's switch, each set by `value`. */
+export function widgetPatchOf(value: (key: HomeWidgetKey) => boolean): WidgetPatch {
+  return Object.fromEntries(HOME_WIDGETS.map((widget) => [widget.key, value(widget.key)]));
+}
+
 export function everyWidget(value: boolean): WidgetPatch {
-  return Object.fromEntries(HOME_WIDGETS.map((widget) => [widget.key, value]));
+  return widgetPatchOf(() => value);
 }
 
 // The city makes the world clock draw, not just switch on.

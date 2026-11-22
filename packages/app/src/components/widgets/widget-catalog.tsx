@@ -28,7 +28,7 @@ export interface HomeWidget {
   icon: React.ReactNode;
   where: (s: Settings) => 'Top left' | 'Top right' | 'Center';
   setup?: React.FC;
-  /** Whether it draws anything once switched on; absent means its switch alone decides. */
+  /** Whether it draws anything, its own switch included; absent means the switch alone decides. */
   isShowing?: (s: Settings, world: WidgetWorld) => boolean;
 }
 

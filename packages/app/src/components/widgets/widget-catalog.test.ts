@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
+import { ALL_WIDGETS_ON } from '../__fixtures__/widget-picker.fixtures';
 import { TOKYO_ZONE } from '../__fixtures__/world-clock.fixtures';
 import {
   HOME_WIDGETS,
@@ -18,7 +19,7 @@ function catalogued(key: HomeWidgetKey): HomeWidget {
 }
 
 describe('HOME_WIDGETS', () => {
-  it('lists every home widget exactly once', () => {
+  it('catalogues each widget key once', () => {
     const keys = HOME_WIDGETS.map((w) => w.key);
 
     expect(new Set(keys).size).toBe(keys.length);
@@ -50,10 +51,12 @@ describe('HOME_WIDGETS', () => {
     expect(worldClock?.where({ ...DEFAULT_SETTINGS, showClock: true })).toBe('Center');
   });
 
-  it('sends clock and calendar to the center column', () => {
-    const center = HOME_WIDGETS.filter((w) => w.where(DEFAULT_SETTINGS) === 'Center');
+  it.each(['showClock', 'newTabShowCalendar'] as const)('sends %s to the center column', (key) => {
+    expect(catalogued(key).where(DEFAULT_SETTINGS)).toBe('Center');
+  });
 
-    expect(center.map((w) => w.key)).toEqual(['showClock', 'newTabShowCalendar']);
+  it.each(['showQuickLinks', 'showNotes'] as const)('keeps %s in the top left', (key) => {
+    expect(catalogued(key).where(DEFAULT_SETTINGS)).toBe('Top left');
   });
 });
 
@@ -76,12 +79,14 @@ describe('offeredHomeWidgets', () => {
 describe('isWidgetShowing', () => {
   const world = { hasWeatherLocation: true };
 
+  // From a state where everything draws, so each case fails only on its own switch.
+  const allShowing = { ...DEFAULT_SETTINGS, ...ALL_WIDGETS_ON };
+
   it.each(HOME_WIDGETS.map((widget) => [widget.label, widget] as const))(
-    'draws nothing while %s is switched off',
+    'counts %s as showing exactly while its switch is on',
     (_label, widget) => {
-      expect(isWidgetShowing(widget, { ...DEFAULT_SETTINGS, [widget.key]: false }, world)).toBe(
-        false
-      );
+      expect(isWidgetShowing(widget, allShowing, world)).toBe(true);
+      expect(isWidgetShowing(widget, { ...allShowing, [widget.key]: false }, world)).toBe(false);
     }
   );
 
