@@ -179,10 +179,11 @@ describe('sync control wire: bridge to handler', () => {
     const engine = fakeControlSurface();
     connectPageToWorker(engine);
 
-    await new BridgeSyncController({ googleClientId: 'client-id' }).enableWithGoogle('Laptop');
+    const controller = new BridgeSyncController({ googleClientId: 'client-id' });
+    await controller.enableWithGoogle('Laptop', TYPED_CODE);
 
     expect(engine.enableSync).toHaveBeenCalledWith('google', GOOGLE_ID_TOKEN, 'Laptop', {
-      recoveryCode: undefined,
+      recoveryCode: TYPED_CODE,
     });
   });
 

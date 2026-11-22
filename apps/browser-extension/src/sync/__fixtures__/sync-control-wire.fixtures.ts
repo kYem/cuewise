@@ -38,7 +38,6 @@ function overTheWire<T>(value: T): T {
 
 /** Points the page realm's chrome.runtime at the service worker's real guard and control handler. */
 export function connectPageToWorker(engine: SyncEngineControlSurface): void {
-  // The worker's capture slot, holding a code its engine minted.
   const deps = { takeRecoveryCode: () => CAPTURED_CODE };
   const page = chrome as unknown as Record<string, unknown>;
   page.runtime = {
