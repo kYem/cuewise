@@ -433,6 +433,11 @@ export interface WeatherDayRange {
   low: number;
 }
 
+export interface WeatherDay extends WeatherDayRange {
+  date: string; // Local calendar date in the location's zone, YYYY-MM-DD
+  condition: WeatherConditionKind;
+}
+
 // `hours` is one or two whole local days, not a sample: sampling depends on the current minute,
 // which would make every edge-cached response stale a minute after it was stored.
 export interface WeatherForecast {
@@ -445,6 +450,8 @@ export interface WeatherForecast {
   // redeployed — still validates instead of blanking the widget until the next fetch.
   tomorrow?: WeatherDayRange;
   hours: WeatherHour[];
+  // Optional for the same two reasons as `tomorrow`; without it the popover offers no expand.
+  daily?: WeatherDay[];
 }
 
 export interface WeatherSnapshot extends WeatherForecast {

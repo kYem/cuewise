@@ -3,6 +3,7 @@ import {
   mapWmoCode,
   roundCoordinate,
   toLocalIso,
+  type WeatherDay,
   type WeatherForecast,
   type WeatherHour,
   type WeatherLocation,
@@ -21,6 +22,9 @@ const UPSTREAM_TIMEOUT_MS = 5_000;
 
 const FORECAST_CACHE_SECONDS = 600;
 const GEOCODING_CACHE_SECONDS = 86_400;
+
+/** The provider's own `forecast_days` ceiling. */
+const MAX_DAILY_DAYS = 16;
 
 const MAX_QUERY_LENGTH = 80;
 const MAX_SEARCH_RESULTS = 5;
@@ -46,6 +50,12 @@ function parseBoundedNumber(raw: string | undefined, min: number, max: number): 
 
 function parseUnits(raw: string | undefined): WeatherUnits {
   return raw === 'imperial' ? 'imperial' : 'metric';
+}
+
+/** Zero, meaning no daily forecast, for anything but a whole number of days the provider serves. */
+function parseDailyDays(raw: string | undefined): number {
+  const days = parseBoundedNumber(raw, 1, MAX_DAILY_DAYS);
+  return days !== null && Number.isInteger(days) ? days : 0;
 }
 
 /**
@@ -92,6 +102,8 @@ interface OpenMeteoForecast {
   };
   hourly?: { time?: unknown; temperature_2m?: unknown; weather_code?: unknown };
   daily?: {
+    time?: unknown;
+    weather_code?: unknown;
     temperature_2m_max?: unknown;
     temperature_2m_min?: unknown;
     sunrise?: unknown;
@@ -196,13 +208,47 @@ function normalizeHours(
   return hours;
 }
 
-/** The first hourly day, which is the one `high` and `low` describe when `daily` is absent. */
-function firstDayOf(hours: WeatherHour[]): WeatherHour[] {
-  if (hours.length === 0) {
+/** The hours of the first `count` local dates, given ascending stamps. */
+function leadingDays(hours: WeatherHour[], count: number): WeatherHour[] {
+  const dates = new Set<string>();
+  const kept: WeatherHour[] = [];
+  for (const hour of hours) {
+    dates.add(hour.time.slice(0, 10));
+    if (dates.size > count) {
+      break;
+    }
+    kept.push(hour);
+  }
+  return kept;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Zips the parallel daily arrays, dropping any day without a date and both extremes. */
+function normalizeDays(daily: OpenMeteoForecast['daily']): WeatherDay[] {
+  const dates = daily?.time;
+  const highs = daily?.temperature_2m_max;
+  const lows = daily?.temperature_2m_min;
+  const codes = daily?.weather_code;
+  if (!Array.isArray(dates) || !Array.isArray(highs) || !Array.isArray(lows)) {
     return [];
   }
-  const date = hours[0].time.slice(0, 10);
-  return hours.filter((hour) => hour.time.slice(0, 10) === date);
+  const days: WeatherDay[] = [];
+  for (let i = 0; i < dates.length; i++) {
+    const date = dates[i];
+    const high = readNumber(highs[i]);
+    const low = readNumber(lows[i]);
+    if (typeof date !== 'string' || !ISO_DATE.test(date) || high === null || low === null) {
+      continue;
+    }
+    days.push({
+      date,
+      high,
+      low,
+      condition: mapWmoCode(Array.isArray(codes) ? codes[i] : undefined),
+    });
+  }
+  return days;
 }
 
 /** Null for an empty day — `Math.max()` of nothing is -Infinity, not a temperature. */
@@ -217,7 +263,11 @@ function hourlyExtreme(hours: WeatherHour[], pick: (...values: number[]) => numb
  * Null when the payload is unusable, so a provider changing shape surfaces as
  * `upstream_unavailable` rather than a half-rendered chip.
  */
-function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast | null {
+function normalizeForecast(
+  raw: unknown,
+  units: WeatherUnits,
+  span: { hourDays: number; dailyDays: number }
+): WeatherForecast | null {
   if (raw === null || typeof raw !== 'object') {
     return null;
   }
@@ -226,8 +276,11 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   if (temperature === null) {
     return null;
   }
-  const hours = normalizeHours(payload.hourly, payload.daily);
-  const today = firstDayOf(hours);
+  // A daily forecast stretches the provider's hourly block to match; nothing reads past the
+  // days asked for, and the client persists every hour it is sent.
+  const hours = leadingDays(normalizeHours(payload.hourly, payload.daily), span.hourDays);
+  // The day `high` and `low` describe when `daily` is absent.
+  const today = leadingDays(hours, 1);
   // Deriving from the hourly range is fine; falling back to the current temperature is
   // not — H === L === now is fabricated weather that reads as measured.
   const high = firstNumber(payload.daily?.temperature_2m_max) ?? hourlyExtreme(today, Math.max);
@@ -257,6 +310,10 @@ function normalizeForecast(raw: unknown, units: WeatherUnits): WeatherForecast |
   if (tomorrowHigh !== null && tomorrowLow !== null) {
     forecast.tomorrow = { high: tomorrowHigh, low: tomorrowLow };
   }
+  const daily = normalizeDays(payload.daily).slice(0, span.dailyDays);
+  if (daily.length > 0) {
+    forecast.daily = daily;
+  }
   return forecast;
 }
 
@@ -266,7 +323,10 @@ function buildForecastUrl(lat: number, lon: number, units: WeatherUnits, days: n
   url.searchParams.set('longitude', String(lon));
   url.searchParams.set('current', 'temperature_2m,apparent_temperature,weather_code,is_day');
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
-  url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,sunrise,sunset');
+  url.searchParams.set(
+    'daily',
+    'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset'
+  );
   url.searchParams.set('forecast_days', String(days));
   // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's IP,
   // so one cached body is correct for everyone asking about this place.
@@ -397,6 +457,7 @@ export function registerWeatherRoutes(
     // across every hour it is sent, so a second day it never asked for renders as an
     // afternoon followed by a 3 AM, the labels carrying no date to explain it.
     const days = readParam(body?.days) === '2' ? 2 : 1;
+    const dailyDays = parseDailyDays(readParam(body?.daily));
     // Rounded again even though the client already does: a request that arrives by any
     // other route must not get finer coordinates forwarded upstream than one that doesn't.
     const lat = roundCoordinate(latitude);
@@ -404,7 +465,7 @@ export function registerWeatherRoutes(
 
     const raw = await fetchUpstream(
       deps.weatherUpstream,
-      buildForecastUrl(lat, lon, units, days),
+      buildForecastUrl(lat, lon, units, Math.max(days, dailyDays)),
       FORECAST_CACHE_SECONDS
     );
     if (raw === null) {
@@ -412,7 +473,7 @@ export function registerWeatherRoutes(
         detail: 'The weather provider is unavailable; try again shortly.',
       });
     }
-    const forecast = normalizeForecast(raw, units);
+    const forecast = normalizeForecast(raw, units, { hourDays: days, dailyDays });
     if (forecast === null) {
       // The one failure that means *our* normalizer no longer matches the provider, so it
       // must not be the one that logs nothing. Shape only — no coordinates.

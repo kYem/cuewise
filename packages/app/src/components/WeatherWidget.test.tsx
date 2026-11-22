@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hours, LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
+import { days, hours, LONDON, snapshot } from '../stores/__fixtures__/weather-store.fixtures';
 import {
   futureStampedReading,
   mockSettings,
@@ -479,6 +479,89 @@ describe("the popover's high and low", () => {
 
     expect(screen.getByText('H 21°')).toBeInTheDocument();
     expect(screen.queryByText('Tomorrow')).not.toBeInTheDocument();
+  });
+});
+
+describe('the daily forecast', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function openAt(now: string, overrides: Parameters<typeof snapshot>[1]): void {
+    vi.setSystemTime(new Date(now));
+    mockWeatherStore({ snapshot: snapshot(LONDON, { timezone: 'UTC', ...overrides }) });
+
+    render(<WeatherWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /weather in london/i }));
+  }
+
+  function expand(): void {
+    fireEvent.click(screen.getByRole('button', { name: /-day forecast/i }));
+  }
+
+  it('stays folded away until asked for', () => {
+    openAt('2026-07-25T09:00:00Z', { daily: days() });
+
+    expect(screen.getByRole('button', { name: '14-day forecast' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    expect(screen.queryByRole('list', { name: /daily forecast/i })).not.toBeInTheDocument();
+  });
+
+  it('lists every coming day once expanded', () => {
+    openAt('2026-07-25T09:00:00Z', { daily: days() });
+    expand();
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(14);
+  });
+
+  it('starts with today and names the days after it', () => {
+    openAt('2026-07-25T09:00:00Z', { daily: days() });
+    expand();
+
+    const rows = screen.getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Today');
+    expect(rows[2]).toHaveTextContent('Mon 27');
+  });
+
+  it("shows each day's high, low and condition", () => {
+    openAt('2026-07-25T09:00:00Z', { daily: days() });
+    expand();
+
+    const monday = screen.getAllByRole('listitem')[2];
+    expect(monday).toHaveTextContent('22°');
+    expect(monday).toHaveTextContent('12°');
+    expect(monday).toHaveTextContent('Rain');
+  });
+
+  it('folds away again', () => {
+    openAt('2026-07-25T09:00:00Z', { daily: days() });
+    expand();
+    expand();
+
+    expect(screen.queryByRole('list', { name: /daily forecast/i })).not.toBeInTheDocument();
+  });
+
+  it('leaves out the days a reading left standing has outlived', () => {
+    openAt('2026-07-27T09:00:00Z', { daily: days() });
+    expand();
+
+    expect(screen.getByRole('button', { name: '12-day forecast' })).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Today');
+  });
+
+  // A proxy not yet redeployed sends none, and a control that opens onto nothing is worse than none.
+  it('offers nothing to expand when the reading carries no daily forecast', () => {
+    openAt('2026-07-25T09:00:00Z', {});
+
+    expect(screen.queryByRole('button', { name: /-day forecast/i })).not.toBeInTheDocument();
+  });
+
+  it('offers nothing to expand when today is the only day left', () => {
+    openAt('2026-07-25T09:00:00Z', { daily: days(1) });
+
+    expect(screen.queryByRole('button', { name: /-day forecast/i })).not.toBeInTheDocument();
   });
 });
 
