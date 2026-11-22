@@ -1,6 +1,7 @@
 import { RefreshCw } from 'lucide-react';
 import type React from 'react';
-import { getPhotoCredit, isUnsplashUrl } from '../utils/unsplash';
+import { getHostedArtTitle } from '../utils/hosted-art';
+import { getPhotoCredit, isCuratedUrl } from '../utils/unsplash';
 
 interface BackgroundCreditProps {
   imageUrl: string | null;
@@ -28,22 +29,43 @@ const CHIP_CLASS = [
   'px-2.5 py-1.5 text-white/80 shadow-lg backdrop-blur-md',
 ].join(' ');
 
-/**
- * Credits the background photo and offers a fresh one. Leads with the place the
- * photo was taken when known, keeping the photographer credit in a hover/focus
- * popover; without a location the byline stays visible. Never guesses either.
- */
+/** Captions our own background (hosted art by title, photos via PhotoCaption) and offers a fresh one. */
 export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   imageUrl,
   onRefresh,
   isRefreshing = false,
 }) => {
   // A user's own image gets no credit line and no refresh — neither belongs to us to offer.
-  if (imageUrl === null || !isUnsplashUrl(imageUrl)) {
+  if (imageUrl === null || !isCuratedUrl(imageUrl)) {
     return null;
   }
 
-  const credit = getPhotoCredit(imageUrl);
+  const artTitle = getHostedArtTitle(imageUrl);
+  return (
+    // Bottom-left: the reminders button owns the bottom-right corner and would eat the clicks.
+    // `group` drives the hover/focus reveal of the byline behind the location.
+    <div className="group fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
+      {artTitle !== null ? <p>{artTitle}</p> : <PhotoCaption url={imageUrl} />}
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={isRefreshing}
+        aria-label="New background"
+        title="New background"
+        className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
+      >
+        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+      </button>
+    </div>
+  );
+};
+
+/**
+ * Leads with the place the photo was taken when known, keeping the photographer credit in a
+ * hover/focus popover; without a location the byline stays visible. Never guesses either.
+ */
+const PhotoCaption: React.FC<{ url: string }> = ({ url }) => {
+  const credit = getPhotoCredit(url);
   const byline =
     credit.photographer !== null && credit.photographerUrl !== null ? (
       <>
@@ -70,32 +92,16 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
       </>
     );
 
-  return (
-    // Bottom-left: the reminders button owns the bottom-right corner and would eat the clicks.
-    // `group` drives the hover/focus reveal of the byline behind the location.
-    <div className="group fixed bottom-3 left-3 z-30 flex items-center gap-3 text-xs text-white/60">
-      {credit.location !== null ? (
-        // The byline floats above the row rather than expanding it — revealing it inline
-        // shoved the refresh button sideways on every hover.
-        <div className="relative">
-          <p>{credit.location}</p>
-          <div className={PANEL_CLASS}>
-            <div className={CHIP_CLASS}>{byline}</div>
-          </div>
-        </div>
-      ) : (
-        <p>{byline}</p>
-      )}
-      <button
-        type="button"
-        onClick={onRefresh}
-        disabled={isRefreshing}
-        aria-label="New background"
-        title="New background"
-        className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-white/50"
-      >
-        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-      </button>
+  return credit.location !== null ? (
+    // The byline floats above the row rather than expanding it — revealing it inline
+    // shoved the refresh button sideways on every hover.
+    <div className="relative">
+      <p>{credit.location}</p>
+      <div className={PANEL_CLASS}>
+        <div className={CHIP_CLASS}>{byline}</div>
+      </div>
     </div>
+  ) : (
+    <p>{byline}</p>
   );
 };

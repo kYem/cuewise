@@ -19,5 +19,5 @@ export const unsplashStub = {
     photographerUrl: null,
     sourceUrl: 'https://unsplash.com',
   })),
-  isUnsplashUrl: vi.fn(() => false),
+  isCuratedUrl: vi.fn(() => false),
 };

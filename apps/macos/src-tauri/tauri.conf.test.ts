@@ -45,6 +45,17 @@ describe('tauri.conf.json CSP allows Tauri IPC', () => {
   });
 });
 
+// The anime theme's backgrounds live on R2 (packages/app/src/utils/hosted-art.ts); without this
+// source macOS shows only the gradient fallback while every JS test stays green.
+describe('tauri.conf.json CSP allows hosted backgrounds', () => {
+  const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
+
+  it.each(['csp', 'devCsp'])('%s.img-src includes assets.cuewise.app', (key) => {
+    const imgSrc: string = config.app.security[key]['img-src'];
+    expect(imgSrc.split(/\s+/)).toContain('https://assets.cuewise.app');
+  });
+});
+
 // Regression guard for ENG-68: the bundle version must track package.json (changesets bumps
 // it there); a hardcoded version here silently ships stale bundle/DMG version numbers.
 describe('bundle version tracks the package version', () => {

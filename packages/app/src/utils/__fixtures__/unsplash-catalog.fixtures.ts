@@ -1,5 +1,6 @@
 /** Photos removed from the catalog; re-curation must not bring them back. */
 export const RETIRED_PHOTO_IDS = [
+  'photo-1694276971921-ff8f103752eb',
   'photo-1472214103451-9374bd1c798e',
   'photo-1759061003114-337938a8a004',
   'photo-1759759260780-f09be8608b53',

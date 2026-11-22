@@ -1,6 +1,7 @@
 import { ALL_FOCUS_IMAGE_CATEGORIES, FOCUS_IMAGE_CATEGORIES } from '@cuewise/shared';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { HOSTED_ART, hostedThumbUrl, isHostedCategory } from '../../utils/hosted-art';
 import { CURATED_PHOTOS } from '../../utils/unsplash-catalog';
 import { ThumbPicker } from './ThumbPicker';
 
@@ -13,9 +14,11 @@ function tileStyle(category: (typeof ALL_FOCUS_IMAGE_CATEGORIES)[number]): strin
 describe('ThumbPicker', () => {
   it.each(ALL_FOCUS_IMAGE_CATEGORIES)('shows a %s photo from its own catalog', (category) => {
     const style = tileStyle(category);
-    const ids = CURATED_PHOTOS[category].map((photo) => photo.id);
+    const sources = isHostedCategory(category)
+      ? HOSTED_ART[category].map((slug) => hostedThumbUrl(category, slug))
+      : CURATED_PHOTOS[category].map((photo) => `https://images.unsplash.com/${photo.id}?`);
 
-    expect(ids.some((id) => style.includes(`https://images.unsplash.com/${id}?`))).toBe(true);
+    expect(sources.some((source) => style.includes(source))).toBe(true);
   });
 
   it('requests a thumbnail-sized image, not the full wallpaper', () => {

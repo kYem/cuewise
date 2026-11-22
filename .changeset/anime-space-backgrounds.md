@@ -1,7 +1,8 @@
 ---
 '@cuewise/browser-extension': minor
+'@cuewise/macos': minor
 '@cuewise/app': minor
 '@cuewise/shared': minor
 ---
 
-Two new background themes: Anime and Space.
+Three new background themes: Anime (original art), Japan and Space.

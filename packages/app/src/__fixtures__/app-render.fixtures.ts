@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { expect } from 'vitest';
 import { setReducedMotion } from '../components/__fixtures__/motion.fixtures';
 
-/** Satisfies isUnsplashUrl's `images.unsplash.com` prefix check, so the credit renders. */
+/** Satisfies isCuratedUrl (via isUnsplashUrl's prefix check), so the credit renders. */
 export const UNSPLASH_PHOTO_URL = 'https://images.unsplash.com/photo-ok';
 
 /** jsdom has no IntersectionObserver; NewTabPage's sticky-header effect constructs one. */

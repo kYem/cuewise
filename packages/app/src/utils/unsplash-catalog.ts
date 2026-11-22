@@ -1,4 +1,5 @@
 import type { FocusImageCategory } from '@cuewise/shared';
+import type { HostedCategory } from './hosted-art';
 
 /**
  * One curated background photo. Colocating the credit with the id means an entry
@@ -16,7 +17,7 @@ export interface CuratedPhoto {
   /** The place tag from the photo's Unsplash page; null when the page has none. */
   location: string | null;
 }
-export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
+export const CURATED_PHOTOS: Record<Exclude<FocusImageCategory, HostedCategory>, CuratedPhoto[]> = {
   nature: [
     // Mountain lake sunrise
     {
@@ -1396,7 +1397,7 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       location: 'Rome, Italy',
     },
   ],
-  anime: [
+  japan: [
     // neon Japanese side street
     {
       id: 'photo-1493515322954-4fa727e97985',
@@ -1410,13 +1411,6 @@ export const CURATED_PHOTOS: Record<FocusImageCategory, CuratedPhoto[]> = {
       photographer: 'Ian Valerio',
       username: 'iangvalerio',
       location: 'Japan',
-    },
-    // neon alley at night
-    {
-      id: 'photo-1694276971921-ff8f103752eb',
-      photographer: 'realfish',
-      username: 'realfish',
-      location: 'Hongik Univ. Station, Seoul',
     },
     // lantern-lit alley
     {

@@ -1,6 +1,7 @@
 import { ALL_FOCUS_IMAGE_CATEGORIES } from '@cuewise/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RETIRED_PHOTO_IDS } from './__fixtures__/unsplash-catalog.fixtures';
+import { HOSTED_ART, hostedArtUrl } from './hosted-art';
 import {
   getPhotoCredit,
   getRandomImageUrl,
@@ -41,6 +42,10 @@ describe('getRandomImageUrl', () => {
     vi.advanceTimersByTime(1000);
 
     expect(getRandomImageUrl('nature', 0)).toBe(first);
+  });
+
+  it('serves the anime theme from our own asset host', () => {
+    expect(getRandomImageUrl('anime', 0)).toBe(hostedArtUrl('anime', HOSTED_ART.anime[0]));
   });
 });
 
@@ -233,7 +238,8 @@ describe('curated catalog invariants', () => {
   });
 
   it('covers every theme the picker offers', () => {
-    expect(Object.keys(CURATED_PHOTOS).sort()).toEqual([...ALL_FOCUS_IMAGE_CATEGORIES].sort());
+    const themes = [...Object.keys(CURATED_PHOTOS), ...Object.keys(HOSTED_ART)];
+    expect(themes.sort()).toEqual([...ALL_FOCUS_IMAGE_CATEGORIES].sort());
   });
 
   it.each(RETIRED_PHOTO_IDS)('no longer ships retired photo %s', (id) => {
@@ -247,7 +253,7 @@ describe('curated catalog invariants', () => {
   });
 
   it('offers at least 15 images per category', () => {
-    for (const photos of Object.values(CURATED_PHOTOS)) {
+    for (const photos of [...Object.values(CURATED_PHOTOS), ...Object.values(HOSTED_ART)]) {
       expect(photos.length).toBeGreaterThanOrEqual(15);
     }
   });
