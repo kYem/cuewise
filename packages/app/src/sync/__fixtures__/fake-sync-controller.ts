@@ -22,28 +22,14 @@ interface RecordedCall {
   args: unknown[];
 }
 
-type FailableMethod =
-  | 'enable'
-  | 'beginPairing'
-  | 'pollPairing'
-  | 'enableWithGoogle'
-  | 'enrollWithCode'
-  | 'reconnect'
-  | 'disable'
-  | 'regenerateRecoveryCode'
-  | 'syncNow'
-  | 'getDetails'
-  | 'getLastCycle'
-  | 'listSessions'
-  | 'revokeSession'
-  | 'renameSession'
-  | 'revokeOtherSessions'
-  | 'deleteAccount'
-  | 'listPairingRequests'
-  | 'commitPairing'
-  | 'pollApproval'
-  | 'approvePairing'
-  | 'denyPairing';
+// Every async method: the synchronous ones have no call to reject.
+type FailableMethod = {
+  [K in keyof SyncController]-?: NonNullable<SyncController[K]> extends (
+    ...args: never[]
+  ) => Promise<unknown>
+    ? K
+    : never;
+}[keyof SyncController];
 
 const DEFAULT_ENABLE_RESULT: EnableResult = { ok: true };
 const DEFAULT_RECOVERY_CODE = 'FAKE-RECOVERY-CODE';
