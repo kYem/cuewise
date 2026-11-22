@@ -163,7 +163,7 @@ describe('sync control wire: bridge to handler', () => {
     const [method, ...args] = wireCase.reaches;
     const engine = fakeControlSurface(wireCase.engine);
     const reached = vi.spyOn(engine, method);
-    // The bridge logs an error whenever it gives up on an answer, the only trace a void op leaves.
+    // denyPairing's fallback answers undefined as well, so this log is all that tells them apart.
     const gaveUp = vi.spyOn(logger, 'error');
     const stored = connectPageToWorker(engine);
     Object.assign(stored.data, wireCase.stored);

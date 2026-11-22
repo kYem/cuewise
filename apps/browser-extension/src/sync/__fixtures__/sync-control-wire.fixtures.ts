@@ -33,7 +33,7 @@ export const PAIRING_REQUEST: PendingPairing = {
 };
 
 // The worker's one-shot capture slot: drained before an enable, then holding the code it minted.
-export function workerDeps(): SyncControlDeps {
+function workerDeps(): SyncControlDeps {
   return {
     takeRecoveryCode: vi.fn().mockReturnValueOnce(undefined).mockReturnValue(CAPTURED_CODE),
   };
@@ -51,10 +51,8 @@ function overTheWire<T>(value: T): T {
  * Points the page realm's chrome.runtime at the service worker's real control handler, routed the
  * way background.ts routes it. Returns the page's chrome.storage.local for seeding.
  */
-export function connectPageToWorker(
-  engine: SyncEngineControlSurface,
-  deps: SyncControlDeps = workerDeps()
-): MockChromeStorage {
+export function connectPageToWorker(engine: SyncEngineControlSurface): MockChromeStorage {
+  const deps = workerDeps();
   const local = createChromeStorageMock();
   const page = chrome as unknown as Record<string, unknown>;
   page.runtime = {
