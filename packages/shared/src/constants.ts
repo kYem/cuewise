@@ -324,6 +324,7 @@ export const FOCUS_IMAGE_CATEGORIES: Record<FocusImageCategory, string> = {
   ai: 'AI',
   classical: 'Classical',
   anime: 'Anime',
+  japan: 'Japan',
   space: 'Space',
 };
 

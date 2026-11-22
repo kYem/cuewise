@@ -3,59 +3,71 @@ import { ALL_FOCUS_IMAGE_CATEGORIES, FOCUS_IMAGE_CATEGORIES } from '@cuewise/sha
 import { cn } from '@cuewise/ui';
 import { Check } from 'lucide-react';
 import type React from 'react';
+import { hostedThumbUrl, isHostedCategory } from '../../utils/hosted-art';
 import { unsplashImageUrl } from '../../utils/unsplash';
 
 // Tiles are ~100×56 CSS px; 2× covers retina without downloading the 1920px wallpaper.
 const THUMB_PARAMS = 'w=200&h=112&fit=crop&auto=format&q=60';
 
+/** Unsplash photo id, or the slug for a hosted theme. */
+function thumbUrl(category: FocusImageCategory, imageId: string): string {
+  return isHostedCategory(category)
+    ? hostedThumbUrl(category, imageId)
+    : unsplashImageUrl(imageId, THUMB_PARAMS);
+}
+
 /** Representative thumbnail + gradient fallback per focus-mode background category. */
-const CATEGORY_THUMBS: Record<FocusImageCategory, { photoId: string; fallback: string }> = {
+const CATEGORY_THUMBS: Record<FocusImageCategory, { imageId: string; fallback: string }> = {
   nature: {
-    photoId: 'photo-1501854140801-50d01698950b',
+    imageId: 'photo-1501854140801-50d01698950b',
     fallback: 'linear-gradient(135deg, #5a7d6b, #2c4a3e)',
   },
   forest: {
-    photoId: 'photo-1761461922930-9afd5bf09593',
+    imageId: 'photo-1761461922930-9afd5bf09593',
     fallback: 'linear-gradient(135deg, #3e5d43, #1d3322)',
   },
   ocean: {
-    photoId: 'photo-1507525428034-b723cf961d3e',
+    imageId: 'photo-1507525428034-b723cf961d3e',
     fallback: 'linear-gradient(135deg, #4a7d9d, #1d3d52)',
   },
   mountains: {
-    photoId: 'photo-1464822759023-fed622ff2c3b',
+    imageId: 'photo-1464822759023-fed622ff2c3b',
     fallback: 'linear-gradient(135deg, #6b7a8e, #2e3a4a)',
   },
   minimal: {
-    photoId: 'photo-1518972734183-c5b490a7c637',
+    imageId: 'photo-1518972734183-c5b490a7c637',
     fallback: 'linear-gradient(135deg, #d8dbe2, #aab0bf)',
   },
   dark: {
-    photoId: 'photo-1531366936337-7c912a4589a7',
+    imageId: 'photo-1531366936337-7c912a4589a7',
     fallback: 'linear-gradient(135deg, #232636, #0b0d15)',
   },
   countryside: {
-    photoId: 'photo-1686518110219-c51aa1a76a2a',
+    imageId: 'photo-1686518110219-c51aa1a76a2a',
     fallback: 'linear-gradient(135deg, #8fb3d9, #5d8a4a)',
   },
   cars: {
-    photoId: 'photo-1622319544231-ce84790b689a',
+    imageId: 'photo-1622319544231-ce84790b689a',
     fallback: 'linear-gradient(135deg, #c0703f, #2b2230)',
   },
   ai: {
-    photoId: 'photo-1650943574955-ac02c65cfc71',
+    imageId: 'photo-1650943574955-ac02c65cfc71',
     fallback: 'linear-gradient(135deg, #1f6f78, #0d1b2a)',
   },
   classical: {
-    photoId: 'photo-1758559616527-35f149122a12',
+    imageId: 'photo-1758559616527-35f149122a12',
     fallback: 'linear-gradient(135deg, #c9b79c, #6b5d4a)',
   },
   anime: {
-    photoId: 'photo-1493515322954-4fa727e97985',
+    imageId: 'rainy-blue-hour',
+    fallback: 'linear-gradient(135deg, #3d5a99, #141a3a)',
+  },
+  japan: {
+    imageId: 'photo-1493515322954-4fa727e97985',
     fallback: 'linear-gradient(135deg, #d9467a, #1b1035)',
   },
   space: {
-    photoId: 'photo-1464802686167-b939a6910659',
+    imageId: 'photo-1464802686167-b939a6910659',
     fallback: 'linear-gradient(135deg, #3b2a6b, #05060f)',
   },
 };
@@ -71,7 +83,7 @@ export const ThumbPicker: React.FC<ThumbPickerProps> = ({ value, onChange }) => 
     {ALL_FOCUS_IMAGE_CATEGORIES.map((category) => {
       const thumb = CATEGORY_THUMBS[category];
       const active = value === category;
-      const background = `url("${unsplashImageUrl(thumb.photoId, THUMB_PARAMS)}") center/cover, ${thumb.fallback}`;
+      const background = `url("${thumbUrl(category, thumb.imageId)}") center/cover, ${thumb.fallback}`;
       return (
         <button
           key={category}

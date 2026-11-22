@@ -1,4 +1,5 @@
 import type { FocusImageCategory } from '@cuewise/shared';
+import { HOSTED_ART, hostedArtUrl, isHostedArtUrl, isHostedCategory } from './hosted-art';
 import { CURATED_PHOTOS } from './unsplash-catalog';
 
 /**
@@ -53,6 +54,11 @@ export function isUnsplashUrl(url: string): boolean {
   return url.startsWith('https://images.unsplash.com/');
 }
 
+/** Whether this is one of our own background images, Unsplash or hosted, rather than the user's. */
+export function isCuratedUrl(url: string): boolean {
+  return isUnsplashUrl(url) || isHostedArtUrl(url);
+}
+
 /** Extracts the `photo-…` CDN id from an Unsplash image URL; null if it isn't one. */
 function extractPhotoId(url: string): string | null {
   return /\/(photo-[^/?]+)/.exec(url)?.[1] ?? null;
@@ -85,10 +91,16 @@ export function getPhotoCredit(
  * Uses random selection but avoids immediate repeats.
  * @param category - The image category
  * @param index - Optional index for specific image (default: random)
- * @returns Direct Unsplash CDN image URL
+ * @returns Unsplash CDN or assets.cuewise.app image URL
  */
 export function getRandomImageUrl(category: FocusImageCategory, index?: number): string {
-  const images = CURATED_PHOTOS[category];
+  // No cache-buster: the image behind a URL never changes, and a URL nobody has requested
+  // before misses the CDN edge and forces an origin transform.
+  const images = isHostedCategory(category)
+    ? HOSTED_ART[category].map((slug) => hostedArtUrl(category, slug))
+    : CURATED_PHOTOS[category].map((photo) =>
+        unsplashImageUrl(photo.id, 'w=1920&h=1080&fit=crop&auto=format')
+      );
   let selectedIndex: number;
 
   if (index !== undefined) {
@@ -103,15 +115,12 @@ export function getRandomImageUrl(category: FocusImageCategory, index?: number):
     lastUsedIndex[category] = selectedIndex;
   }
 
-  const imageId = images[selectedIndex].id;
-  // No cache-buster: the photo behind an id never changes, and a URL nobody has requested
-  // before misses the CDN edge and forces an origin transform.
-  return unsplashImageUrl(imageId, 'w=1920&h=1080&fit=crop&auto=format');
+  return images[selectedIndex];
 }
 
 /** Masks a custom background for logging — it is a data URL of the user's own picture. */
 export function describeBackgroundSource(url: string): string {
-  return isUnsplashUrl(url) ? url : 'custom-background';
+  return isCuratedUrl(url) ? url : 'custom-background';
 }
 
 export class ImageLoadTimeoutError extends Error {

@@ -213,6 +213,7 @@ export const FOCUS_IMAGE_CATEGORY_IDS = [
   'ai',
   'classical',
   'anime',
+  'japan',
   'space',
 ] as const;
 export type FocusImageCategory = (typeof FOCUS_IMAGE_CATEGORY_IDS)[number];

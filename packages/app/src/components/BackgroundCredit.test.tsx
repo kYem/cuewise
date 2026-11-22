@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BackgroundCredit } from './BackgroundCredit';
 
 const CURATED_URL = 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920';
+const HOSTED_URL = 'https://assets.cuewise.app/backgrounds/anime/rainy-blue-hour.webp';
 const UNKNOWN_URL = 'https://images.unsplash.com/photo-1000000000000-000000000000?w=1920';
 
 describe('BackgroundCredit', () => {
@@ -92,6 +93,19 @@ describe('BackgroundCredit', () => {
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  it('captions our own art as AI-generated, without an Unsplash credit', () => {
+    const { container } = render(<BackgroundCredit imageUrl={HOSTED_URL} onRefresh={vi.fn()} />);
+
+    expect(container.textContent).toContain('Rainy blue hour · AI-generated');
+    expect(screen.queryByRole('link', { name: /unsplash/i })).not.toBeInTheDocument();
+  });
+
+  it('offers a fresh background over our own art', () => {
+    render(<BackgroundCredit imageUrl={HOSTED_URL} onRefresh={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /new background/i })).toBeInTheDocument();
   });
 
   it('renders nothing without an image to credit', () => {

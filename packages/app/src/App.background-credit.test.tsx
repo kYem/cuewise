@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The URL is inlined rather than shared: vi.mock factories are hoisted above every import,
-// so they cannot read a fixture binding. It must satisfy isUnsplashUrl's prefix check.
+// so they cannot read a fixture binding. It must satisfy isCuratedUrl.
 vi.mock('./utils/image-preload-cache', () => ({
   preloadImages: vi.fn(() => Promise.resolve()),
   getPreloadedCurrentUrl: vi.fn(() => 'https://images.unsplash.com/photo-ok'),
@@ -20,7 +20,7 @@ vi.mock('./utils/unsplash', () => ({
     photographerUrl: null,
     sourceUrl: 'https://unsplash.com',
   })),
-  isUnsplashUrl: vi.fn(() => true),
+  isCuratedUrl: vi.fn(() => true),
 }));
 
 import { installAppRenderStubs, waitForPhotoVisible } from './__fixtures__/app-render.fixtures';
