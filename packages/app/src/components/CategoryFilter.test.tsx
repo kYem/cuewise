@@ -2,48 +2,14 @@ import { ALL_QUOTE_CATEGORIES, QUOTE_CATEGORIES } from '@cuewise/shared';
 import { createSelectorMock } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuoteStore } from '../stores/quote-store';
+import { createMockStore } from './__fixtures__/quote-display.fixtures';
 import { CategoryFilter } from './CategoryFilter';
 
 vi.mock('../stores/quote-store', () => ({
   useQuoteStore: vi.fn(),
 }));
-
-interface MockCategoryFilterStore {
-  enabledCategories: string[];
-  showCustomQuotes: boolean;
-  showFavoritesOnly: boolean;
-  setEnabledCategories: Mock;
-  toggleCategory: Mock;
-  toggleCustomQuotes: Mock;
-  toggleFavoritesOnly: Mock;
-  collections: unknown[];
-  activeCollectionIds: string[];
-  toggleCollection: Mock;
-  setActiveCollectionIds: Mock;
-  quotes: unknown[];
-}
-
-function createMockStore(
-  overrides: Partial<MockCategoryFilterStore> = {}
-): MockCategoryFilterStore {
-  return {
-    enabledCategories: [...ALL_QUOTE_CATEGORIES],
-    showCustomQuotes: true,
-    showFavoritesOnly: false,
-    setEnabledCategories: vi.fn(),
-    toggleCategory: vi.fn(),
-    toggleCustomQuotes: vi.fn(),
-    toggleFavoritesOnly: vi.fn(),
-    collections: [],
-    activeCollectionIds: [],
-    toggleCollection: vi.fn(),
-    setActiveCollectionIds: vi.fn(),
-    quotes: [],
-    ...overrides,
-  };
-}
 
 describe('CategoryFilter', () => {
   beforeEach(() => {

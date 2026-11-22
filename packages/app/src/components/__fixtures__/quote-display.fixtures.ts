@@ -1,6 +1,8 @@
-import { ALL_QUOTE_CATEGORIES, type Quote, type QuoteCategory } from '@cuewise/shared';
+import { ALL_QUOTE_CATEGORIES, type Quote } from '@cuewise/shared';
+import type { MockStoreOf } from '@cuewise/test-utils';
 import { quoteFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
+import type { QuoteStore } from '../../stores/quote-store/types';
 
 /**
  * Common test fixtures for QuoteDisplay component tests
@@ -11,38 +13,39 @@ import { type Mock, vi } from 'vitest';
 // Mock Store Return Types
 // ============================================================================
 
-export interface MockQuoteStore {
-  quotes: Quote[];
-  currentQuote: Quote | null;
-  isLoading: boolean;
-  error: string | null;
-  quoteHistory: string[];
-  historyIndex: number;
-  enabledCategories: QuoteCategory[];
-  showCustomQuotes: boolean;
-  showFavorites: boolean;
-  collections: unknown[];
-  activeCollectionIds: string[];
-  initialize: Mock;
-  refreshQuote: Mock;
-  goBack: Mock;
-  goForward: Mock;
-  canGoBack: Mock;
-  canGoForward: Mock;
-  toggleFavorite: Mock;
-  hideQuote: Mock;
-  unhideQuote: Mock;
-  addCustomQuote: Mock;
-  editQuote: Mock;
-  deleteQuote: Mock;
-  incrementViewCount: Mock;
-  setEnabledCategories: Mock;
-  toggleCategory: Mock;
-  toggleCustomQuotes: Mock;
-  toggleFavorites: Mock;
-  toggleCollection: Mock;
-  setActiveCollectionIds: Mock;
-}
+export type MockQuoteStore = MockStoreOf<
+  QuoteStore,
+  | 'quotes'
+  | 'currentQuote'
+  | 'isLoading'
+  | 'error'
+  | 'quoteHistory'
+  | 'historyIndex'
+  | 'enabledCategories'
+  | 'showCustomQuotes'
+  | 'showFavoritesOnly'
+  | 'collections'
+  | 'activeCollectionIds'
+  | 'initialize'
+  | 'refreshQuote'
+  | 'goBack'
+  | 'goForward'
+  | 'canGoBack'
+  | 'canGoForward'
+  | 'toggleFavorite'
+  | 'hideQuote'
+  | 'unhideQuote'
+  | 'addCustomQuote'
+  | 'editQuote'
+  | 'deleteQuote'
+  | 'incrementViewCount'
+  | 'setEnabledCategories'
+  | 'toggleCategory'
+  | 'toggleCustomQuotes'
+  | 'toggleFavoritesOnly'
+  | 'toggleCollection'
+  | 'setActiveCollectionIds'
+>;
 
 // ============================================================================
 // Mock Store Builders
@@ -61,28 +64,28 @@ export function createMockStore(overrides: Partial<MockQuoteStore> = {}): MockQu
     historyIndex: 0,
     enabledCategories: [...ALL_QUOTE_CATEGORIES],
     showCustomQuotes: true,
-    showFavorites: false,
+    showFavoritesOnly: false,
     collections: [],
     activeCollectionIds: [],
-    initialize: overrides.initialize || (vi.fn() as Mock),
-    refreshQuote: overrides.refreshQuote || (vi.fn() as Mock),
-    goBack: overrides.goBack || (vi.fn() as Mock),
-    goForward: overrides.goForward || (vi.fn() as Mock),
-    canGoBack: overrides.canGoBack || (vi.fn(() => false) as Mock),
-    canGoForward: overrides.canGoForward || (vi.fn(() => false) as Mock),
-    toggleFavorite: overrides.toggleFavorite || (vi.fn() as Mock),
-    hideQuote: overrides.hideQuote || (vi.fn() as Mock),
-    unhideQuote: overrides.unhideQuote || (vi.fn() as Mock),
-    addCustomQuote: overrides.addCustomQuote || (vi.fn() as Mock),
-    editQuote: overrides.editQuote || (vi.fn() as Mock),
-    deleteQuote: overrides.deleteQuote || (vi.fn() as Mock),
-    incrementViewCount: overrides.incrementViewCount || (vi.fn() as Mock),
-    setEnabledCategories: overrides.setEnabledCategories || (vi.fn() as Mock),
-    toggleCategory: overrides.toggleCategory || (vi.fn() as Mock),
-    toggleCustomQuotes: overrides.toggleCustomQuotes || (vi.fn() as Mock),
-    toggleFavorites: overrides.toggleFavorites || (vi.fn() as Mock),
-    toggleCollection: overrides.toggleCollection || (vi.fn() as Mock),
-    setActiveCollectionIds: overrides.setActiveCollectionIds || (vi.fn() as Mock),
+    initialize: vi.fn(),
+    refreshQuote: vi.fn(),
+    goBack: vi.fn(),
+    goForward: vi.fn(),
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => false),
+    toggleFavorite: vi.fn(),
+    hideQuote: vi.fn(),
+    unhideQuote: vi.fn(),
+    addCustomQuote: vi.fn(),
+    editQuote: vi.fn(),
+    deleteQuote: vi.fn(),
+    incrementViewCount: vi.fn(),
+    setEnabledCategories: vi.fn(),
+    toggleCategory: vi.fn(),
+    toggleCustomQuotes: vi.fn(),
+    toggleFavoritesOnly: vi.fn(),
+    toggleCollection: vi.fn(),
+    setActiveCollectionIds: vi.fn(),
     ...overrides,
   };
 }
@@ -149,8 +152,8 @@ export function createEmptyMockStore(overrides: Partial<MockQuoteStore> = {}) {
  */
 export function createNavigableMockStore(quote?: Quote, overrides: Partial<MockQuoteStore> = {}) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => true) as Mock,
-    canGoForward: vi.fn(() => true) as Mock,
+    canGoBack: vi.fn(() => true),
+    canGoForward: vi.fn(() => true),
     quoteHistory: ['quote1', 'quote2', 'quote3'],
     historyIndex: 1,
     ...overrides,
@@ -162,8 +165,8 @@ export function createNavigableMockStore(quote?: Quote, overrides: Partial<MockQ
  */
 export function createAtBeginningMockStore(quote?: Quote, overrides: Partial<MockQuoteStore> = {}) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => true) as Mock,
-    canGoForward: vi.fn(() => false) as Mock,
+    canGoBack: vi.fn(() => true),
+    canGoForward: vi.fn(() => false),
     quoteHistory: ['quote1', 'quote2'],
     historyIndex: 0,
     ...overrides,
@@ -175,8 +178,8 @@ export function createAtBeginningMockStore(quote?: Quote, overrides: Partial<Moc
  */
 export function createAtEndMockStore(quote?: Quote, overrides: Partial<MockQuoteStore> = {}) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => false) as Mock,
-    canGoForward: vi.fn(() => true) as Mock,
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => true),
     quoteHistory: ['quote1', 'quote2'],
     historyIndex: 1,
     ...overrides,
@@ -191,8 +194,8 @@ export function createNoNavigationMockStore(
   overrides: Partial<MockQuoteStore> = {}
 ) {
   return createLoadedMockStore(quote, {
-    canGoBack: vi.fn(() => false) as Mock,
-    canGoForward: vi.fn(() => false) as Mock,
+    canGoBack: vi.fn(() => false),
+    canGoForward: vi.fn(() => false),
     quoteHistory: ['quote1'],
     historyIndex: 0,
     ...overrides,

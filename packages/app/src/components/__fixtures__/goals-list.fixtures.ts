@@ -1,5 +1,5 @@
 import { type Goal, getYesterdayDateString, type Settings } from '@cuewise/shared';
-import { createSelectorMock, createSettingsStoreMock } from '@cuewise/test-utils';
+import { createSelectorMock, createSettingsStoreMock, type MockStoreOf } from '@cuewise/test-utils';
 import { goalFactory } from '@cuewise/test-utils/factories';
 import { type Mock, vi } from 'vitest';
 import { useCalendarStore } from '../../stores/calendar-store';
@@ -15,27 +15,30 @@ export { createSettingsStoreMock };
  * GoalsList component can be rendered in isolation.
  */
 
-export interface MockGoalStore {
-  todayTasks: Goal[];
-  goals: Goal[];
-  isLoading: boolean;
-  toggleTask: Mock;
-  updateTask: Mock;
-  deleteTask: Mock;
-  transferTaskToNextDay: Mock;
-  moveTaskToToday: Mock;
-  moveTasksToToday: Mock;
-  getActiveGoals: Mock;
-  getGoalProgress: Mock;
-  linkTaskToGoal: Mock;
-  // Task Enhancement actions (Phase 2)
-  duplicateTask: Mock;
-  setTaskDueDate: Mock;
-  addSubtask: Mock;
-  toggleSubtask: Mock;
-  removeSubtask: Mock;
-  reorderTasks: Mock;
-}
+type GoalStore = ReturnType<typeof useGoalStore.getState>;
+type CalendarStore = ReturnType<typeof useCalendarStore.getState>;
+
+export type MockGoalStore = MockStoreOf<
+  GoalStore,
+  | 'todayTasks'
+  | 'goals'
+  | 'isLoading'
+  | 'toggleTask'
+  | 'updateTask'
+  | 'deleteTask'
+  | 'transferTaskToNextDay'
+  | 'moveTaskToToday'
+  | 'moveTasksToToday'
+  | 'getActiveGoals'
+  | 'getGoalProgress'
+  | 'linkTaskToGoal'
+  | 'duplicateTask'
+  | 'setTaskDueDate'
+  | 'addSubtask'
+  | 'toggleSubtask'
+  | 'removeSubtask'
+  | 'reorderTasks'
+>;
 
 export function createMockGoalStore(overrides: Partial<MockGoalStore> = {}): MockGoalStore {
   return {
@@ -84,12 +87,8 @@ export function createNoTodayTasksStore(goals: Goal[]): MockGoalStore {
   return createMockGoalStore({ todayTasks: [], goals });
 }
 
-export type MockGoalsPageStore = MockGoalStore & {
-  initialize: Mock;
-  addTask: Mock;
-  completionFilter: CompletionFilter;
-  setCompletionFilter: Mock;
-};
+export type MockGoalsPageStore = MockGoalStore &
+  MockStoreOf<GoalStore, 'initialize' | 'addTask' | 'completionFilter' | 'setCompletionFilter'>;
 
 /**
  * Mocks the goal, calendar and settings stores that GoalsSection and its real children read.
@@ -100,14 +99,15 @@ export function mockGoalsSectionStores(
   tasks: Goal[] = [goalFactory.build({ completed: false })],
   state: { isLoading?: boolean; error?: string | null } = {}
 ): MockGoalStore {
-  const store = {
+  const store: MockGoalStore & MockStoreOf<GoalStore, 'error' | 'initialize' | 'addTask'> = {
     ...createMockGoalStore({ todayTasks: tasks, goals: tasks, isLoading: state.isLoading }),
     error: state.error ?? null,
     initialize: vi.fn(),
     addTask: vi.fn(async () => true),
   };
+  const calendar: MockStoreOf<CalendarStore, 'initialize'> = { initialize: vi.fn() };
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(store));
-  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: vi.fn() }));
+  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock(calendar));
   vi.mocked(useSettingsStore).mockImplementation(
     createSettingsStoreMock({ showCompletedGoals: false, ...settings })
   );

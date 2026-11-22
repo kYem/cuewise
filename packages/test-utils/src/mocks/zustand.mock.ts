@@ -15,6 +15,11 @@ export function createSelectorMock<S>(state: S) {
   return mock;
 }
 
+/** The named members of a real store with its actions as mocks: a renamed or removed key stops compiling. */
+export type MockStoreOf<S, K extends keyof S> = {
+  [P in K]: S[P] extends (...args: never[]) => unknown ? Mock<S[P]> : S[P];
+};
+
 /**
  * Selector-aware mock for `useSettingsStore`. Returns `{ settings, updateSettings }`;
  * pass an `updateSettings` spy via overrides when a test needs to assert on it.
