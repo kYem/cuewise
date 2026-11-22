@@ -17,7 +17,7 @@ export function createSelectorMock<S>(state: S) {
 
 /** The named members of a real store with its actions as mocks: a renamed or removed key stops compiling. */
 export type MockStoreOf<S, K extends keyof S> = {
-  [P in K]: S[P] extends (...args: never[]) => unknown ? Mock : S[P];
+  [P in K]: S[P] extends (...args: never[]) => unknown ? Mock<S[P]> : S[P];
 };
 
 /**

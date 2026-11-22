@@ -98,14 +98,17 @@ export function mockGoalsSectionStores(
   tasks: Goal[] = [goalFactory.build({ completed: false })],
   state: { isLoading?: boolean; error?: string | null } = {}
 ): MockGoalStore {
-  const store = {
+  const store: MockGoalStore & MockStoreOf<GoalStore, 'error' | 'initialize' | 'addTask'> = {
     ...createMockGoalStore({ todayTasks: tasks, goals: tasks, isLoading: state.isLoading }),
     error: state.error ?? null,
     initialize: vi.fn(),
     addTask: vi.fn(async () => true),
   };
+  const calendar: MockStoreOf<ReturnType<typeof useCalendarStore.getState>, 'initialize'> = {
+    initialize: vi.fn(),
+  };
   vi.mocked(useGoalStore).mockImplementation(createSelectorMock(store));
-  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock({ initialize: vi.fn() }));
+  vi.mocked(useCalendarStore).mockImplementation(createSelectorMock(calendar));
   vi.mocked(useSettingsStore).mockImplementation(
     createSettingsStoreMock({ showCompletedGoals: false, ...settings })
   );

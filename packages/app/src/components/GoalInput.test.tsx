@@ -2,7 +2,7 @@ import { createSelectorMock } from '@cuewise/test-utils';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGoalStore } from '../stores/goal-store';
-import { createMockGoalStore } from './__fixtures__/goals-list.fixtures';
+import { createMockGoalStore, type MockGoalsPageStore } from './__fixtures__/goals-list.fixtures';
 import { GoalInput } from './GoalInput';
 
 vi.mock('../stores/goal-store', () => ({ useGoalStore: vi.fn() }));
@@ -13,7 +13,10 @@ describe('GoalInput', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useGoalStore).mockImplementation(
-      createSelectorMock({ ...createMockGoalStore(), addTask: vi.fn(async () => true) })
+      createSelectorMock({
+        ...createMockGoalStore(),
+        addTask: vi.fn(async () => true),
+      } satisfies Partial<MockGoalsPageStore>)
     );
   });
 
