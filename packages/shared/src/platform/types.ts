@@ -75,6 +75,7 @@ export interface NotifierHost extends Notifier {
   onAction(handler: (id: string, actionIndex: number) => void | Promise<void>): () => void;
 }
 
+import type { SyncedCollection } from '../sync-scope';
 import type { StoredValues } from './stored-value';
 
 // Storage port. Area is Chrome-shaped ('local' | 'sync'); non-Chrome adapters
@@ -186,9 +187,9 @@ export type HttpFetch = (input: string | URL | Request, init?: RequestInit) => P
  * sync is opt-in (ENG-45): the app only configures this once cloud sync is enabled.
  */
 export interface SyncMutationSink {
-  markMutated(collection: string, entityId: string): Promise<void> | void;
-  markDeleted(collection: string, entityId: string): Promise<void> | void;
+  markMutated(collection: SyncedCollection, entityId: string): Promise<void> | void;
+  markDeleted(collection: SyncedCollection, entityId: string): Promise<void> | void;
   // Optional so callers that never bulk-notify (and the no-op no-sink path) stay safe.
-  markMutatedBulk?(collection: string, entityIds: string[]): Promise<void> | void;
-  markDeletedBulk?(collection: string, entityIds: string[]): Promise<void> | void;
+  markMutatedBulk?(collection: SyncedCollection, entityIds: string[]): Promise<void> | void;
+  markDeletedBulk?(collection: SyncedCollection, entityIds: string[]): Promise<void> | void;
 }

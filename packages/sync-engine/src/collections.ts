@@ -1,4 +1,10 @@
-import { DEVICE_LOCAL_SETTINGS_KEYS, logger, type Settings, storageFailure } from '@cuewise/shared';
+import {
+  DEVICE_LOCAL_SETTINGS_KEYS,
+  logger,
+  type Settings,
+  type SyncedCollection,
+  storageFailure,
+} from '@cuewise/shared';
 import {
   type CollectionLock,
   getCollectionsRaw,
@@ -20,7 +26,7 @@ import {
 
 /** One synced collection: reads all entities keyed by id, writes/deletes a single one. */
 export interface CollectionBinding {
-  name: string;
+  name: SyncedCollection;
   readAll(): Promise<Record<string, unknown>>;
   writeOne(entityId: string, entity: unknown | null): Promise<StorageResult>;
   /** Every entry in one storage write where the backend allows; a null entity deletes. */
@@ -54,7 +60,7 @@ const reportedUnusableCollections = new Set<string>();
  * seals that absence as a tombstone every other device applies.
  */
 function arrayBinding<T extends HasId>(
-  name: CollectionLock,
+  name: CollectionLock & SyncedCollection,
   getAll: () => Promise<T[]>,
   setAll: (items: T[]) => Promise<StorageResult>
 ): CollectionBinding {
@@ -154,16 +160,17 @@ function settingsBinding(): CollectionBinding {
 }
 
 export function defaultBindings(): CollectionBinding[] {
-  return [
+  const byCollection = {
     // Raw readers: see the note on `getGoalsRaw`. An item the UI hides must not be an item
     // sync deletes — `writeOne` rewrites the whole array, and an entity missing from a read
     // is how the cycle infers a tombstone for every other device.
-    arrayBinding('goals', getGoalsRaw, setGoalsRaw),
-    arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
-    arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
-    arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
+    goals: arrayBinding('goals', getGoalsRaw, setGoalsRaw),
+    quotes: arrayBinding('quotes', getQuotesRaw, setQuotesRaw),
+    collections: arrayBinding('collections', getCollectionsRaw, setCollectionsRaw),
+    reminders: arrayBinding('reminders', getRemindersRaw, setRemindersRaw),
     // One entity per habit per day, so devices only conflict on a day both ticked.
-    arrayBinding('habitHistory', getHabitHistoryRaw, setHabitHistoryRaw),
-    settingsBinding(),
-  ];
+    habitHistory: arrayBinding('habitHistory', getHabitHistoryRaw, setHabitHistoryRaw),
+    settings: settingsBinding(),
+  } satisfies Record<SyncedCollection, CollectionBinding>;
+  return Object.values(byCollection);
 }

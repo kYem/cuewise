@@ -4,6 +4,7 @@ import {
   DEVICE_LOCAL_SETTINGS_KEYS,
   type Goal,
   STORAGE_KEYS,
+  SYNCED_COLLECTIONS,
   toStoredValues,
 } from '@cuewise/shared';
 import {
@@ -246,17 +247,10 @@ describe('a collection the storage layer could not read', () => {
 });
 
 describe('defaultBindings', () => {
-  it('returns a binding for each synced collection', () => {
+  it('binds every synced collection exactly once', () => {
     const names = defaultBindings().map((b) => b.name);
 
-    expect(names).toEqual([
-      'goals',
-      'quotes',
-      'collections',
-      'reminders',
-      'habitHistory',
-      'settings',
-    ]);
+    expect([...names].sort()).toEqual([...SYNCED_COLLECTIONS].sort());
   });
 });
 

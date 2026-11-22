@@ -1,3 +1,15 @@
+/** Every collection cloud sync carries; marking anything else has nowhere to go. */
+export const SYNCED_COLLECTIONS = [
+  'goals',
+  'quotes',
+  'collections',
+  'reminders',
+  'habitHistory',
+  'settings',
+] as const;
+
+export type SyncedCollection = (typeof SYNCED_COLLECTIONS)[number];
+
 // Settings keys that must never leave the device — synced toggles would let devices fight over
 // on/off (spec §2), and the rest is per-device state: a synced notes pin pops pads open elsewhere.
 export const DEVICE_LOCAL_SETTINGS_KEYS: readonly string[] = [

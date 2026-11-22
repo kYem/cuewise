@@ -1,11 +1,12 @@
 import { logger } from '../logger';
+import type { SyncedCollection } from '../sync-scope';
 import { getSyncSink } from './registry';
 
 // Fire-and-forget: a sync-notify failure (sync or async) must never break the store mutation
 // that triggered it, so every error path is swallowed and logged, never thrown/rejected.
 // At error level because the shipped default log level is 'error' — a lost dirty mark means a
 // write that reports success and never reaches another device, and a warning reaches nobody.
-export function notifyMutated(collection: string, entityId: string): void {
+export function notifyMutated(collection: SyncedCollection, entityId: string): void {
   const sink = getSyncSink();
   if (sink === null) {
     return;
@@ -20,7 +21,7 @@ export function notifyMutated(collection: string, entityId: string): void {
 }
 
 // Bulk form of notifyMutated: one round trip for a whole batch of ids instead of one per id.
-export function notifyMutatedBulk(collection: string, entityIds: string[]): void {
+export function notifyMutatedBulk(collection: SyncedCollection, entityIds: string[]): void {
   const sink = getSyncSink();
   if (sink === null || sink.markMutatedBulk === undefined || entityIds.length === 0) {
     return;
@@ -34,7 +35,7 @@ export function notifyMutatedBulk(collection: string, entityIds: string[]): void
   }
 }
 
-export function notifyDeleted(collection: string, entityId: string): void {
+export function notifyDeleted(collection: SyncedCollection, entityId: string): void {
   const sink = getSyncSink();
   if (sink === null) {
     return;
@@ -49,7 +50,7 @@ export function notifyDeleted(collection: string, entityId: string): void {
 }
 
 // Bulk form of notifyDeleted; a sink without it still hears every id, one mark each.
-export function notifyDeletedBulk(collection: string, entityIds: string[]): void {
+export function notifyDeletedBulk(collection: SyncedCollection, entityIds: string[]): void {
   const sink = getSyncSink();
   if (sink === null || entityIds.length === 0) {
     return;
