@@ -87,9 +87,9 @@ Hash-based routing in `App.tsx`:
 
 ## State Management Pattern
 
-Uses **Zustand** for state management. Stores are in `apps/browser-extension/src/stores/`.
+Uses **Zustand** for state management. Stores are in `packages/app/src/stores/`, shared by the extension and the macOS app.
 
-### Stores
+### Main stores
 
 | Store | Purpose |
 |-------|---------|
@@ -137,7 +137,7 @@ try {
 }
 ```
 
-Toast store supports three levels: `error()`, `warning()`, `success()`. **Location**: `apps/browser-extension/src/stores/toast-store.ts`
+Toast store supports three levels: `error()`, `warning()`, `success()`. **Location**: `packages/app/src/stores/toast-store.ts`
 
 ## Component Patterns
 
@@ -173,8 +173,8 @@ import { useQuoteStore } from '../stores/quote-store';
 1. **Add types** to `packages/shared/src/types.ts`
 2. **Add business logic** to its domain module in `packages/shared/src/` (e.g. `goal-utils.ts`, `reminders.ts`), exported from `index.ts`
 3. **Add storage helpers** to a per-area module in `packages/storage/src/` (export it from `index.ts`)
-4. **Create Zustand store** in `apps/browser-extension/src/stores/`
-5. **Create components** in `apps/browser-extension/src/components/`
+4. **Create Zustand store** in `packages/app/src/stores/`
+5. **Create components** in `packages/app/src/components/`
 6. **Wire up in App.tsx**
 
 ### Running the Extension
@@ -461,9 +461,9 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `packages/test-utils/src/` | Factories, mocks, fixtures | Adding test infrastructure |
 | `apps/api/src/store.ts` | `SyncStore` port (routes → store → D1 adapter) | Adding a new sync-backend operation |
 | `packages/sync-client/src/api-client.ts` | Typed sync API client (`ApiClient`) | Adding/changing a sync endpoint call |
-| `apps/browser-extension/src/stores/` | 9 Zustand stores | Adding features with state |
-| `apps/browser-extension/src/components/` | ~60 React components | Adding new UI elements |
-| `apps/browser-extension/src/App.tsx` | Hash routing, theme system | Adding new pages |
+| `packages/app/src/stores/` | Zustand stores | Adding features with state |
+| `packages/app/src/components/` | React components | Adding new UI elements |
+| `packages/app/src/App.tsx` | Hash routing, theme system | Adding new pages |
 | `apps/browser-extension/src/capture/` | Page capture: context menu, session draft, SW-owned save | Changing what a capture saves |
 | `apps/browser-extension/manifest.config.ts` | Extension config (Manifest V3) | Changing permissions/behavior |
 | `turbo.json` | Build pipeline | Optimizing builds |
