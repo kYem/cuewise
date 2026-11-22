@@ -164,6 +164,13 @@ describe('settings sections', () => {
       expect(sectionsMatching(query)).toContain('home');
     });
 
+    it.each(settingsHomeWidgets().map((widget) => widget.label))(
+      'finds the %s widget in Home screen',
+      (label) => {
+        expect(sectionsMatching(label.toLowerCase())).toContain('home');
+      }
+    );
+
     it.each(['fullscreen', 'auto enter'])('still surfaces Focus mode for "%s"', (query) => {
       expect(sectionsMatching(query)).toContain('focus');
     });
