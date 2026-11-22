@@ -1,6 +1,10 @@
 import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
-import { everyWidget, widgetPatchOf } from '../__fixtures__/widget-picker.fixtures';
+import {
+  everyWidget,
+  everyWidgetButCalendar,
+  widgetPatchOf,
+} from '../__fixtures__/widget-picker.fixtures';
 import { widgetPresets } from './widget-presets';
 
 function preset(id: string, featureEnabled = true) {
@@ -28,8 +32,6 @@ describe('widgetPresets', () => {
   );
 
   it('still writes the remaining widgets when the calendar is not offered', () => {
-    const { newTabShowCalendar: _calendar, ...rest } = everyWidget(true);
-
-    expect(preset('everything', false)?.patch).toEqual(rest);
+    expect(preset('everything', false)?.patch).toEqual(everyWidgetButCalendar(true));
   });
 });

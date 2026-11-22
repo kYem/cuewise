@@ -53,7 +53,7 @@ export function mockWidgetPickerStores({
   return { updateSettings: store.getState().updateSettings as Mock };
 }
 
-/** Every catalogued widget's switch, each set by `value`. */
+/** A patch for every catalogued widget, calendar included, each set by `value`. */
 export function widgetPatchOf(value: (key: HomeWidgetKey) => boolean): WidgetPatch {
   return Object.fromEntries(HOME_WIDGETS.map((widget) => [widget.key, value(widget.key)]));
 }
@@ -62,10 +62,15 @@ export function everyWidget(value: boolean): WidgetPatch {
   return widgetPatchOf(() => value);
 }
 
-// The city makes the world clock draw, not just switch on.
+/** What a build without the calendar writes for `everyWidget`. */
+export function everyWidgetButCalendar(value: boolean): WidgetPatch {
+  const { newTabShowCalendar: _calendar, ...offered } = everyWidget(value);
+  return offered;
+}
+
 export const ALL_WIDGETS_ON: Partial<Settings> = {
   ...everyWidget(true),
-  worldClocks: [TOKYO_ZONE],
+  worldClocks: [TOKYO_ZONE], // The city makes the world clock draw, not just switch on.
 };
 
 export const ALL_WIDGETS_OFF: Partial<Settings> = everyWidget(false);

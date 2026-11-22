@@ -7,6 +7,7 @@ import {
   ALL_WIDGETS_OFF,
   ALL_WIDGETS_ON,
   everyWidget,
+  everyWidgetButCalendar,
   mockWidgetPickerStores,
 } from '../__fixtures__/widget-picker.fixtures';
 import { WidgetPicker } from './WidgetPicker';
@@ -56,8 +57,7 @@ describe('WidgetPicker', () => {
 
     await user.click(screen.getByRole('button', { name: 'Everything' }));
 
-    const { newTabShowCalendar: _calendar, ...offered } = everyWidget(true);
-    expect(updateSettings).toHaveBeenCalledWith(offered);
+    expect(updateSettings).toHaveBeenCalledWith(everyWidgetButCalendar(true));
   });
 
   it('writes only the toggled widget key', async () => {
