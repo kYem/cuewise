@@ -64,6 +64,7 @@ describe('fetchForecast', () => {
       lon: '-0.13',
       units: 'imperial',
       days: '2',
+      daily: '14',
     });
   });
 

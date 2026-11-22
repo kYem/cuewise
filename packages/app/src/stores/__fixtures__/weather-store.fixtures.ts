@@ -1,5 +1,6 @@
 import {
   WEATHER_STALE_MS,
+  type WeatherDay,
   type WeatherForecast,
   type WeatherHour,
   type WeatherLocation,
@@ -36,6 +37,17 @@ export function hours(date = '2026-07-25'): WeatherHour[] {
     condition: 'clear' as const,
     // London-ish daylight window, so the strip's day/night icons have something real to read.
     isDay: hour >= 6 && hour < 21,
+  }));
+}
+
+/** A fortnight from the 25th, each day a degree warmer so a row is identifiable by its high. */
+export function days(count = 14, from = '2026-07-25'): WeatherDay[] {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  return Array.from({ length: count }, (_, index) => ({
+    date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    high: 20 + index,
+    low: 10 + index,
+    condition: 'rain' as const,
   }));
 }
 

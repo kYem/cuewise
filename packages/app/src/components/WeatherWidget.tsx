@@ -1,4 +1,5 @@
 import {
+  formatForecastDay,
   formatForecastHour,
   formatTemperature,
   formatWeatherAge,
@@ -6,6 +7,7 @@ import {
   resolveWeatherUnits,
   sampleForecastHours,
   toLocalIso,
+  upcomingForecastDays,
   WEATHER_STALE_MS,
   type WeatherConditionKind,
   type WeatherSnapshot,
@@ -13,6 +15,7 @@ import {
 } from '@cuewise/shared';
 import { cn } from '@cuewise/ui';
 import {
+  ChevronDown,
   Cloud,
   CloudDrizzle,
   CloudFog,
@@ -67,6 +70,9 @@ const CONDITION_LABELS: Record<WeatherConditionKind, string> = {
   unknown: 'Unavailable',
 };
 
+// Scrolls inside itself on a short window; the floor keeps a few rows reachable on any height.
+const DAY_LIST_CLASS = 'mt-1 max-h-[max(9rem,calc(100dvh-24rem))] overflow-y-auto';
+
 const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean }> = ({
   snapshot,
   alignRight,
@@ -77,12 +83,16 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
   const refresh = useWeatherStore((state) => state.refresh);
   const unitsPreference = useSettingsStore((state) => state.settings.weatherUnits);
   const timeFormat = useSettingsStore((state) => state.settings.timeFormat);
+  const [showDays, setShowDays] = useState(false);
 
   const { location, current } = snapshot;
   const Icon = conditionIcon(current.condition, current.isDay);
   const nowLocal = toLocalIso(new Date(), snapshot.timezone);
   const hours = sampleForecastHours(snapshot.hours, nowLocal);
   const range = resolveDayRange(snapshot, nowLocal);
+  const days = upcomingForecastDays(snapshot.daily, nowLocal);
+  // Today alone would only repeat the high and low already above it.
+  const hasDays = days.length > 1;
   const age = formatWeatherAge(lastFetch);
 
   return (
@@ -90,7 +100,7 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
       role="dialog"
       aria-label="Weather details"
       className={cn(
-        'absolute top-full mt-2 z-50 w-64 rounded-2xl border border-border bg-surface-elevated shadow-xl p-4',
+        'absolute top-full mt-2 z-50 w-64 rounded-2xl border border-border bg-surface-elevated backdrop-blur-xl shadow-xl p-4',
         alignRight ? 'right-0' : 'left-0'
       )}
     >
@@ -146,6 +156,45 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
               </div>
             );
           })}
+        </div>
+      )}
+
+      {hasDays && (
+        <div className="mt-3 pt-2 border-t border-divider">
+          <button
+            type="button"
+            onClick={() => setShowDays((shown) => !shown)}
+            aria-expanded={showDays}
+            className="flex w-full items-center justify-between text-[10px] font-medium text-secondary hover:text-primary transition-colors"
+          >
+            {days.length}-day forecast
+            <ChevronDown
+              aria-hidden="true"
+              className={cn('w-3.5 h-3.5 transition-transform', showDays && 'rotate-180')}
+            />
+          </button>
+          {showDays && (
+            <ul aria-label="Daily forecast" className={DAY_LIST_CLASS}>
+              {days.map((day) => {
+                const DayIcon = conditionIcon(day.condition, true);
+                return (
+                  <li key={day.date} className="flex items-center gap-2 py-1 text-xs">
+                    <span className="flex-1 text-primary">
+                      {formatForecastDay(day.date, nowLocal)}
+                    </span>
+                    <DayIcon className="w-3.5 h-3.5 text-secondary" />
+                    <span className="sr-only">{CONDITION_LABELS[day.condition]}</span>
+                    <span className="w-8 text-right font-bold text-primary tabular-nums">
+                      {formatTemperature(day.high)}
+                    </span>
+                    <span className="w-8 text-right text-secondary tabular-nums">
+                      {formatTemperature(day.low)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 

@@ -62,6 +62,8 @@ describe('weatherSnapshotSchema', () => {
     current: { ...SNAPSHOT.current, ...overrides },
   });
   const place = (overrides: Record<string, unknown>) => ({ location: { ...LONDON, ...overrides } });
+  const DAY = { date: '2026-07-27', high: 15, low: 8, condition: 'cloudy' };
+  const day = (overrides: Record<string, unknown>) => ({ daily: [{ ...DAY, ...overrides }] });
 
   it.each([
     ['a non-numeric hour temperature', hour({ temperature: 'warm' })],
@@ -76,6 +78,10 @@ describe('weatherSnapshotSchema', () => {
     // Optional, so nothing else would notice this line narrowing or disappearing.
     ['a non-numeric tomorrow high', { tomorrow: { high: 'hot', low: 8 } }],
     ['a tomorrow missing its low', { tomorrow: { high: 20 } }],
+    ['a non-string daily date', day({ date: 20260727 })],
+    ['a non-numeric daily high', day({ high: 'hot' })],
+    ['a non-numeric daily low', day({ low: null })],
+    ['an unrecognised daily condition', day({ condition: 'sharknado' })],
     ['an unrecognised current condition', current({ condition: 'x' })],
     ['a non-boolean current isDay', current({ isDay: 1 })],
     [
@@ -101,6 +107,10 @@ describe('weatherSnapshotSchema', () => {
     const withTomorrow = { ...SNAPSHOT, tomorrow: { high: 19, low: 11 } };
 
     expect(weatherSnapshotSchema.safeParse(withTomorrow).success).toBe(true);
+  });
+
+  it('accepts a reading that carries a daily forecast', () => {
+    expect(weatherSnapshotSchema.safeParse({ ...SNAPSHOT, daily: [DAY] }).success).toBe(true);
   });
 
   // The forecast tolerates a missing "feels like" — the provider omits it for some places —

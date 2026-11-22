@@ -90,7 +90,7 @@ All endpoints are under `/v1`.
 | `DELETE` | `/v1/pairings/:id` | Cancel/deny a pairing request; idempotent, 404 once gone | Yes |
 | `GET` | `/v1/export` | Dump all of the caller's records **and every key envelope they hold** | Yes |
 | `DELETE` | `/v1/account` | Delete user, identities, tokens, records, key envelopes, and any third-party provider grants | Yes |
-| `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units, days}`. `days: 2` opts into tomorrow's hours and `tomorrow` high/low; anything else answers one day (back-compat — see the note in `weather.ts`) | No |
+| `POST` | `/v1/weather` | Forecast proxy (ENG-18), `{lat, lon, units, days, daily}`. `days: 2` opts into tomorrow's hours and `tomorrow` high/low; anything else answers one day (back-compat — see the note in `weather.ts`). `daily: 1`–`16` adds a `daily` list of that many days (`date`, `high`, `low`, `condition`) without lengthening `hours` | No |
 | `POST` | `/v1/weather/search` | City lookup proxy, `{q}` | No |
 | `GET` | `/v1/integrations/notion/start` | Begin connecting Notion: `return_uri` + `code_challenge`, answers `{authorizeUrl}` as JSON so the app opens it. The state names **no account** | Yes |
 | `GET` | `/v1/integrations/notion/callback` | Notion's redirect target. Exchanges the code server-side and **parks** the encrypted grant behind a one-time PKCE-bound code on the return URI — stores nothing against any account. A `cuewise://` return gets the interstitial; an https one (the extension's `launchWebAuthFlow` URL) gets a bare 302, which is what that flow catches | No |

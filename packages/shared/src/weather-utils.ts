@@ -1,6 +1,7 @@
 import type {
   TimeFormat,
   WeatherConditionKind,
+  WeatherDay,
   WeatherForecast,
   WeatherHour,
   WeatherUnits,
@@ -236,6 +237,41 @@ export function formatForecastHour(time: string, timeFormat: TimeFormat): string
   const period = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour % 12 === 0 ? 12 : hour % 12;
   return `${displayHour} ${period}`;
+}
+
+/**
+ * The daily forecast from today on: a reading left standing still carries days already past.
+ * @param nowLocalIso - "Now" in the *location's* zone, not the device's.
+ */
+export function upcomingForecastDays(
+  daily: WeatherDay[] | undefined,
+  nowLocalIso: string
+): WeatherDay[] {
+  if (daily === undefined) {
+    return [];
+  }
+  const today = nowLocalIso.slice(0, 10);
+  return daily.filter((day) => day.date >= today);
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * "Today" or "Mon 27" for a provider date ("2026-07-27"). The weekday is worked out in UTC:
+ * the stamp is a calendar date, and parsing it as a device-local instant shifts it a day.
+ * @param nowLocalIso - "Now" in the *location's* zone, not the device's.
+ */
+export function formatForecastDay(date: string, nowLocalIso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (match === null) {
+    return date;
+  }
+  if (date === nowLocalIso.slice(0, 10)) {
+    return 'Today';
+  }
+  const [, year, month, day] = match;
+  const weekday = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))).getUTCDay();
+  return `${WEEKDAYS[weekday]} ${Number(day)}`;
 }
 
 /** Rounded temperature with a degree sign, e.g. "17°". */
