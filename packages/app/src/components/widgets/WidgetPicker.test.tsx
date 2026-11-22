@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,9 +6,12 @@ import { isCalendarFeatureEnabled } from '../../utils/google-calendar';
 import {
   ALL_WIDGETS_OFF,
   ALL_WIDGETS_ON,
+  everyWidget,
+  everyWidgetButCalendar,
   mockWidgetPickerStores,
 } from '../__fixtures__/widget-picker.fixtures';
 import { WidgetPicker } from './WidgetPicker';
+import { HOME_WIDGETS } from './widget-catalog';
 
 vi.mock('../../stores/settings-store', () => ({ useSettingsStore: vi.fn() }));
 vi.mock('../../stores/weather-store', async (importOriginal) => ({
@@ -29,12 +33,11 @@ describe('WidgetPicker', () => {
     mockWidgetPickerStores();
     render(<WidgetPicker />);
 
-    expect(screen.getByRole('checkbox', { name: 'Clock' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Quick links' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Notes' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Weather' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Calendar' })).toBeInTheDocument();
-    expect(screen.getAllByText('Center')).toHaveLength(2);
+    for (const widget of HOME_WIDGETS) {
+      expect(screen.getByRole('checkbox', { name: widget.label })).toBeInTheDocument();
+    }
+    const centered = HOME_WIDGETS.filter((w) => w.where(DEFAULT_SETTINGS) === 'Center');
+    expect(screen.getAllByText('Center')).toHaveLength(centered.length);
   });
 
   it('drops the calendar on a build that could never render it', () => {
@@ -54,13 +57,7 @@ describe('WidgetPicker', () => {
 
     await user.click(screen.getByRole('button', { name: 'Everything' }));
 
-    expect(updateSettings).toHaveBeenCalledWith({
-      showClock: true,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: true,
-      showWorldClock: true,
-    });
+    expect(updateSettings).toHaveBeenCalledWith(everyWidgetButCalendar(true));
   });
 
   it('writes only the toggled widget key', async () => {
@@ -177,14 +174,7 @@ describe('WidgetPicker', () => {
     await user.click(screen.getByRole('button', { name: 'Minimal' }));
 
     expect(updateSettings).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith({
-      showClock: false,
-      showQuickLinks: false,
-      showNotes: false,
-      showWeather: false,
-      showWorldClock: false,
-      newTabShowCalendar: false,
-    });
+    expect(updateSettings).toHaveBeenCalledWith(everyWidget(false));
   });
 
   it('leaves the toggles reflecting the preset it just applied', async () => {

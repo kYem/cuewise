@@ -5,6 +5,12 @@ import { create } from 'zustand';
 import { VILNIUS } from '../../stores/__fixtures__/weather-store.fixtures';
 import { type SettingsStore, useSettingsStore } from '../../stores/settings-store';
 import { useWeatherStore } from '../../stores/weather-store';
+import {
+  HOME_WIDGETS,
+  type HomeWidgetKey,
+  type WidgetPatch,
+  type WidgetWorld,
+} from '../widgets/widget-catalog';
 import { TOKYO_ZONE } from './world-clock.fixtures';
 
 export interface WidgetPickerStoreOptions {
@@ -52,21 +58,27 @@ export function mockWidgetPickerStores({
   return { updateSettings: store.getState().updateSettings as Mock };
 }
 
+/** A patch for every catalogued widget, calendar included, each set by `value`. */
+export function widgetPatchOf(value: (key: HomeWidgetKey) => boolean): WidgetPatch {
+  return Object.fromEntries(HOME_WIDGETS.map((widget) => [widget.key, value(widget.key)]));
+}
+
+export function everyWidget(value: boolean): WidgetPatch {
+  return widgetPatchOf(() => value);
+}
+
+/** What a build without the calendar writes for `everyWidget`. */
+export function everyWidgetButCalendar(value: boolean): WidgetPatch {
+  const { newTabShowCalendar: _calendar, ...offered } = everyWidget(value);
+  return offered;
+}
+
 export const ALL_WIDGETS_ON: Partial<Settings> = {
-  showClock: true,
-  showQuickLinks: true,
-  showNotes: true,
-  showWeather: true,
-  showWorldClock: true,
-  worldClocks: [TOKYO_ZONE],
-  newTabShowCalendar: true,
+  ...everyWidget(true),
+  worldClocks: [TOKYO_ZONE], // The city makes the world clock draw, not just switch on.
 };
 
-export const ALL_WIDGETS_OFF: Partial<Settings> = {
-  showClock: false,
-  showQuickLinks: false,
-  showNotes: false,
-  showWeather: false,
-  showWorldClock: false,
-  newTabShowCalendar: false,
-};
+export const ALL_WIDGETS_OFF: Partial<Settings> = everyWidget(false);
+
+/** The world beyond settings in which every widget has what it needs to draw. */
+export const EVERY_WIDGET_WORLD: WidgetWorld = { hasWeatherLocation: true };

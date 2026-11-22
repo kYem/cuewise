@@ -1,4 +1,10 @@
+import { DEFAULT_SETTINGS } from '@cuewise/shared';
 import { describe, expect, it } from 'vitest';
+import {
+  everyWidget,
+  everyWidgetButCalendar,
+  widgetPatchOf,
+} from '../__fixtures__/widget-picker.fixtures';
 import { widgetPresets } from './widget-presets';
 
 function preset(id: string, featureEnabled = true) {
@@ -6,37 +12,16 @@ function preset(id: string, featureEnabled = true) {
 }
 
 describe('widgetPresets', () => {
-  it('turns everything off for minimal', () => {
-    expect(preset('minimal')?.patch).toEqual({
-      showClock: false,
-      showQuickLinks: false,
-      showNotes: false,
-      showWeather: false,
-      showWorldClock: false,
-      newTabShowCalendar: false,
-    });
+  it('turns every widget off for minimal', () => {
+    expect(preset('minimal')?.patch).toEqual(everyWidget(false));
   });
 
   it('matches the shipped defaults for recommended', () => {
-    expect(preset('recommended')?.patch).toEqual({
-      showClock: false,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: false,
-      showWorldClock: false,
-      newTabShowCalendar: false,
-    });
+    expect(preset('recommended')?.patch).toEqual(widgetPatchOf((key) => DEFAULT_SETTINGS[key]));
   });
 
-  it('turns everything on for everything', () => {
-    expect(preset('everything')?.patch).toEqual({
-      showClock: true,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: true,
-      showWorldClock: true,
-      newTabShowCalendar: true,
-    });
+  it('turns every widget on for everything', () => {
+    expect(preset('everything')?.patch).toEqual(everyWidget(true));
   });
 
   it.each(['minimal', 'recommended', 'everything'])(
@@ -47,12 +32,6 @@ describe('widgetPresets', () => {
   );
 
   it('still writes the remaining widgets when the calendar is not offered', () => {
-    expect(preset('everything', false)?.patch).toEqual({
-      showClock: true,
-      showQuickLinks: true,
-      showNotes: true,
-      showWeather: true,
-      showWorldClock: true,
-    });
+    expect(preset('everything', false)?.patch).toEqual(everyWidgetButCalendar(true));
   });
 });
