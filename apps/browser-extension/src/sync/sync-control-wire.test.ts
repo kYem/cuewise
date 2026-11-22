@@ -1,37 +1,22 @@
 import { LAST_SYNC_CREDS_KEY } from '@cuewise/app';
-import type { SyncSession } from '@cuewise/shared';
-import type {
-  PairingCommitment,
-  PendingPairing,
-  SyncEngineControlSurface,
-} from '@cuewise/sync-engine';
+import { logger } from '@cuewise/shared';
+import { ApiError } from '@cuewise/sync-client';
+import type { SyncEngineControlSurface } from '@cuewise/sync-engine';
 import { fakeControlSurface } from '@cuewise/sync-engine/src/__fixtures__/fake-control-surface';
-import { describe, expect, it, vi } from 'vitest';
-import { connectPageToWorker, GOOGLE_ID_TOKEN } from './__fixtures__/sync-control-wire.fixtures';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  CAPTURED_CODE,
+  connectPageToWorker,
+  GOOGLE_ID_TOKEN,
+  PAIRING_REQUEST,
+  REGENERATED_CODE,
+  SESSION,
+  TYPED_CODE,
+} from './__fixtures__/sync-control-wire.fixtures';
 import { BridgeSyncController } from './bridge-sync-controller';
-import type { SyncControlDeps } from './handle-sync-control-message';
 import { SYNC_CONTROL_OPS, type SyncControlOp } from './sync-control-messages';
 
-const CAPTURED_CODE = 'CW1-CAPTD-00000-00000-00000-00000-00000';
-const TYPED_CODE = 'CW1-TYPED-00000-00000-00000-00000-00000';
 const LAST_SYNCED_AT = 1_700_000_000_000;
-
-const SESSION: SyncSession = {
-  id: 's2',
-  deviceName: 'Phone',
-  createdAt: 1,
-  lastUsedAt: 2,
-  current: false,
-};
-
-const REQUEST: PendingPairing = {
-  id: 'pairing-1',
-  deviceName: 'Phone',
-  requesterCommitment: 'commitment' as PairingCommitment,
-  requesterPublicKey: null,
-  requesterNonce: null,
-  createdAt: 1,
-};
 
 interface WireCase {
   /** Answers no bridge fallback produces, so a response the bridge swallowed cannot pass. */
@@ -45,15 +30,15 @@ interface WireCase {
 // Keyed by op, so one added to SYNC_CONTROL_OPS without a case here stops compiling.
 const WIRE_CASES: Record<SyncControlOp, WireCase> = {
   enable: {
-    call: (controller) => controller.enable('acct-1', 'Laptop'),
+    call: (controller) => controller.enable('acct-1', 'Laptop', TYPED_CODE),
     returns: { ok: true, recoveryCode: CAPTURED_CODE },
-    reaches: ['enableSync', 'dev', 'acct-1', 'Laptop', { recoveryCode: undefined }],
+    reaches: ['enableSync', 'dev', 'acct-1', 'Laptop', { recoveryCode: TYPED_CODE }],
   },
   reconnect: {
     stored: {
       [LAST_SYNC_CREDS_KEY]: { provider: 'dev', accountId: 'acct-1', deviceName: 'Laptop' },
     },
-    call: (controller) => controller.reconnect('Laptop', TYPED_CODE),
+    call: (controller) => controller.reconnect('Unsaved name', TYPED_CODE),
     returns: { ok: true, recoveryCode: CAPTURED_CODE },
     reaches: ['enableSync', 'dev', 'acct-1', 'Laptop', { recoveryCode: TYPED_CODE }],
   },
@@ -63,15 +48,15 @@ const WIRE_CASES: Record<SyncControlOp, WireCase> = {
     reaches: ['disableSync'],
   },
   regenerate: {
-    engine: { regenerateRecoveryCode: async () => CAPTURED_CODE },
+    engine: { regenerateRecoveryCode: async () => REGENERATED_CODE },
     call: (controller) => controller.regenerateRecoveryCode(),
-    returns: CAPTURED_CODE,
+    returns: REGENERATED_CODE,
     reaches: ['regenerateRecoveryCode'],
   },
   syncNow: {
-    engine: { syncNow: async () => ({ kind: 'resynced' }) },
+    engine: { syncNow: async () => ({ kind: 'failed', reason: 'network', error: 'offline' }) },
     call: (controller) => controller.syncNow(),
-    returns: { kind: 'resynced' },
+    returns: { kind: 'failed', reason: 'network', error: 'offline' },
     reaches: ['syncNow'],
   },
   details: {
@@ -126,9 +111,9 @@ const WIRE_CASES: Record<SyncControlOp, WireCase> = {
     reaches: ['deleteAccount'],
   },
   beginPairing: {
-    engine: { beginPairing: async () => ({ pairingId: REQUEST.id }) },
+    engine: { beginPairing: async () => ({ pairingId: PAIRING_REQUEST.id }) },
     call: (controller) => controller.beginPairing(),
-    returns: { pairingId: REQUEST.id },
+    returns: { pairingId: PAIRING_REQUEST.id },
     reaches: ['beginPairing'],
   },
   pollPairing: {
@@ -138,42 +123,39 @@ const WIRE_CASES: Record<SyncControlOp, WireCase> = {
     reaches: ['pollPairing'],
   },
   listPairingRequests: {
-    engine: { listPairingRequests: async () => [REQUEST] },
+    engine: { listPairingRequests: async () => [PAIRING_REQUEST] },
     call: (controller) => controller.listPairingRequests(),
-    returns: [REQUEST],
+    returns: [PAIRING_REQUEST],
     reaches: ['listPairingRequests'],
   },
   commitPairing: {
     engine: { commitPairing: async () => ({ pending: true }) },
-    call: (controller) => controller.commitPairing(REQUEST.id),
+    call: (controller) => controller.commitPairing(PAIRING_REQUEST.id),
     returns: { pending: true },
-    reaches: ['commitPairing', REQUEST.id],
+    reaches: ['commitPairing', PAIRING_REQUEST.id],
   },
   pollApproval: {
     engine: { pollApproval: async () => ({ kind: 'confirm', sas: '123 456' }) },
-    call: (controller) => controller.pollApproval(REQUEST.id, REQUEST),
+    call: (controller) => controller.pollApproval(PAIRING_REQUEST.id, PAIRING_REQUEST),
     returns: { kind: 'confirm', sas: '123 456' },
-    reaches: ['pollApproval', REQUEST.id, REQUEST],
+    reaches: ['pollApproval', PAIRING_REQUEST.id, PAIRING_REQUEST],
   },
   approvePairing: {
     engine: { approvePairing: async () => true },
-    call: (controller) => controller.approvePairing(REQUEST.id),
+    call: (controller) => controller.approvePairing(PAIRING_REQUEST.id),
     returns: true,
-    reaches: ['approvePairing', REQUEST.id],
+    reaches: ['approvePairing', PAIRING_REQUEST.id],
   },
   denyPairing: {
-    call: (controller) => controller.denyPairing(REQUEST.id),
+    call: (controller) => controller.denyPairing(PAIRING_REQUEST.id),
     returns: undefined,
-    reaches: ['denyPairing', REQUEST.id],
+    reaches: ['denyPairing', PAIRING_REQUEST.id],
   },
 };
 
-// The worker's one-shot capture slot: drained before an enable, then holding the code it minted.
-function workerDeps(): SyncControlDeps {
-  return {
-    takeRecoveryCode: vi.fn().mockReturnValueOnce(undefined).mockReturnValue(CAPTURED_CODE),
-  };
-}
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('sync control wire: bridge to handler', () => {
   it.each(SYNC_CONTROL_OPS)('%s reaches the engine and answers the caller', async (op) => {
@@ -181,23 +163,52 @@ describe('sync control wire: bridge to handler', () => {
     const [method, ...args] = wireCase.reaches;
     const engine = fakeControlSurface(wireCase.engine);
     const reached = vi.spyOn(engine, method);
-    const stored = connectPageToWorker(engine, workerDeps());
+    // The bridge logs an error whenever it gives up on an answer, the only trace a void op leaves.
+    const gaveUp = vi.spyOn(logger, 'error');
+    const stored = connectPageToWorker(engine);
     Object.assign(stored.data, wireCase.stored);
 
     const answer = await wireCase.call(new BridgeSyncController());
 
-    expect(answer).toEqual(wireCase.returns);
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ op }));
     expect(reached).toHaveBeenCalledWith(...args);
+    expect(answer).toEqual(wireCase.returns);
+    expect(gaveUp).not.toHaveBeenCalled();
   });
 
   it('a Google sign-in reaches the engine as the google provider', async () => {
     const engine = fakeControlSurface();
-    connectPageToWorker(engine, workerDeps());
+    connectPageToWorker(engine);
 
     await new BridgeSyncController({ googleClientId: 'client-id' }).enableWithGoogle('Laptop');
 
     expect(engine.enableSync).toHaveBeenCalledWith('google', GOOGLE_ID_TOKEN, 'Laptop', {
       recoveryCode: undefined,
     });
+  });
+
+  it('a failed enable still hands back the recovery code it minted', async () => {
+    const engine = fakeControlSurface({
+      enableSync: async () => {
+        throw new ApiError('invalid_token', 401);
+      },
+    });
+    connectPageToWorker(engine);
+
+    const answer = await new BridgeSyncController().enable('acct-1', 'Laptop');
+
+    expect(answer).toEqual({ ok: false, reason: 'auth', recoveryCode: CAPTURED_CODE });
+  });
+
+  it('a cached details read answers from the recorded account', async () => {
+    const engine = fakeControlSurface({
+      getCachedAccount: () => ({ userId: 'recorded', email: null }),
+      getAccount: async () => ({ userId: 'fetched', email: null }),
+    });
+    connectPageToWorker(engine);
+
+    const details = await new BridgeSyncController().getDetails({ cached: true });
+
+    expect(details).toMatchObject({ accountId: 'recorded' });
   });
 });

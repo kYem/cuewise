@@ -1,11 +1,43 @@
-import type { SyncEngineControlSurface } from '@cuewise/sync-engine';
+import type { SyncSession } from '@cuewise/shared';
+import type {
+  PairingCommitment,
+  PendingPairing,
+  SyncEngineControlSurface,
+} from '@cuewise/sync-engine';
 import { createChromeStorageMock, type MockChromeStorage } from '@cuewise/test-utils/mocks';
 import { vi } from 'vitest';
 import { handleSyncControlMessage, type SyncControlDeps } from '../handle-sync-control-message';
 import { isSyncControlMessage } from '../sync-control-messages';
 
 export const GOOGLE_ID_TOKEN = 'fake.jwt.token';
+export const CAPTURED_CODE = 'CW1-CAPTD-00000-00000-00000-00000-00000';
+export const TYPED_CODE = 'CW1-TYPED-00000-00000-00000-00000-00000';
+export const REGENERATED_CODE = 'CW1-REGEN-00000-00000-00000-00000-00000';
 const REDIRECT_URI = 'https://abjkbnhoepcnmbabflkedbapbldnpkbf.chromiumapp.org/';
+
+export const SESSION: SyncSession = {
+  id: 's2',
+  deviceName: 'Phone',
+  createdAt: 1,
+  lastUsedAt: 2,
+  current: false,
+};
+
+export const PAIRING_REQUEST: PendingPairing = {
+  id: 'pairing-1',
+  deviceName: 'Phone',
+  requesterCommitment: 'commitment' as PairingCommitment,
+  requesterPublicKey: null,
+  requesterNonce: null,
+  createdAt: 1,
+};
+
+// The worker's one-shot capture slot: drained before an enable, then holding the code it minted.
+export function workerDeps(): SyncControlDeps {
+  return {
+    takeRecoveryCode: vi.fn().mockReturnValueOnce(undefined).mockReturnValue(CAPTURED_CODE),
+  };
+}
 
 // chrome.runtime carries JSON, so anything that does not survive it never reaches the other realm.
 function overTheWire<T>(value: T): T {
@@ -21,7 +53,7 @@ function overTheWire<T>(value: T): T {
  */
 export function connectPageToWorker(
   engine: SyncEngineControlSurface,
-  deps: SyncControlDeps
+  deps: SyncControlDeps = workerDeps()
 ): MockChromeStorage {
   const local = createChromeStorageMock();
   const page = chrome as unknown as Record<string, unknown>;
