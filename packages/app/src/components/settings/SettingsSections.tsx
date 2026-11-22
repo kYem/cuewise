@@ -1028,8 +1028,11 @@ export const SETTINGS_SECTIONS: (SettingsSection & { id: BuiltInSectionId })[] =
     label: 'Home screen',
     icon: House,
     component: HomeSection,
-    terms:
-      'home screen clock time format 12 24 quote display compact bottom hidden goals position interval rotate animate concept cards recall spaced repetition flashcards learning definitions surfacing cadence pomodoro break',
+    // A getter, so the widget rows this build offers are searchable and no others.
+    get terms() {
+      const widgetTerms = settingsHomeWidgets().map((w) => `${w.label} ${w.keywords}`);
+      return `home screen clock time format 12 24 quote display compact bottom hidden goals position interval rotate animate concept cards recall spaced repetition flashcards learning definitions surfacing cadence pomodoro break ${widgetTerms.join(' ').toLowerCase()}`;
+    },
   },
   {
     id: 'goals',
