@@ -3,8 +3,8 @@ import { HOSTED_ART, hostedArtUrl, isHostedArtUrl, isHostedCategory } from './ho
 import { CURATED_PHOTOS } from './unsplash-catalog';
 
 /**
- * Unsplash image utility for focus mode backgrounds.
- * Uses curated images from images.unsplash.com (direct CDN).
+ * Focus mode backgrounds: curated images.unsplash.com photos, or our own art on
+ * assets.cuewise.app for hosted themes (see hosted-art.ts).
  * Note: source.unsplash.com was deprecated in 2024.
  */
 
@@ -94,8 +94,7 @@ export function getPhotoCredit(
  * @returns Unsplash CDN or assets.cuewise.app image URL
  */
 export function getRandomImageUrl(category: FocusImageCategory, index?: number): string {
-  // No cache-buster: the image behind a URL never changes, and a URL nobody has requested
-  // before misses the CDN edge and forces an origin transform.
+  // No cache-buster: the image behind a URL never changes, and a fresh URL misses the CDN edge.
   const images = isHostedCategory(category)
     ? HOSTED_ART[category].map((slug) => hostedArtUrl(category, slug))
     : CURATED_PHOTOS[category].map((photo) =>

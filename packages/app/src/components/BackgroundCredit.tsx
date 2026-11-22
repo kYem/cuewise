@@ -29,11 +29,7 @@ const CHIP_CLASS = [
   'px-2.5 py-1.5 text-white/80 shadow-lg backdrop-blur-md',
 ].join(' ');
 
-/**
- * Credits the background photo and offers a fresh one. Leads with the place the
- * photo was taken when known, keeping the photographer credit in a hover/focus
- * popover; without a location the byline stays visible. Never guesses either.
- */
+/** Captions our own background (AI art by title, photos via PhotoCaption) and offers a fresh one. */
 export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   imageUrl,
   onRefresh,
@@ -64,6 +60,10 @@ export const BackgroundCredit: React.FC<BackgroundCreditProps> = ({
   );
 };
 
+/**
+ * Leads with the place the photo was taken when known, keeping the photographer credit in a
+ * hover/focus popover; without a location the byline stays visible. Never guesses either.
+ */
 const PhotoCaption: React.FC<{ url: string }> = ({ url }) => {
   const credit = getPhotoCredit(url);
   const byline =
