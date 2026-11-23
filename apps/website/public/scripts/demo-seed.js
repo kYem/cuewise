@@ -9,7 +9,8 @@
  *   schedule: DemoSchedule }} DemoCard
  * @typedef {{ goals: DemoGoal[], pomodoroSessions: DemoSession[], conceptCards: DemoCard[],
  *   pomodoroState: Record<string, unknown>, dailyBackground: Record<string, unknown>,
- *   'settings.hasSeenOnboarding': boolean, 'settings.reviewPromptDismissed': boolean }} DemoSeed
+ *   currentQuote: Record<string, unknown>, 'settings.hasSeenOnboarding': boolean,
+ *   'settings.reviewPromptDismissed': boolean }} DemoSeed
  */
 
 const MINUTE_MS = 60 * 1000;
@@ -159,6 +160,16 @@ export function buildDemoSeed(now) {
       version: 0,
     },
     dailyBackground: { url: DEMO_BACKGROUND_URL, category: 'nature', date: dayKey(now) },
+    currentQuote: {
+      id: 'seed-89',
+      text: 'The first wealth is health.',
+      author: 'Ralph Waldo Emerson',
+      category: 'health',
+      isCustom: false,
+      isFavorite: false,
+      isHidden: false,
+      viewCount: 0,
+    },
     'settings.hasSeenOnboarding': true,
     'settings.reviewPromptDismissed': true,
   };

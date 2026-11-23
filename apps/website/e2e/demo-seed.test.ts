@@ -9,6 +9,7 @@ describe('buildDemoSeed', () => {
   it('writes exactly the keys the app reads', () => {
     expect(Object.keys(buildDemoSeed(NOON)).sort()).toEqual([
       'conceptCards',
+      'currentQuote',
       'dailyBackground',
       'goals',
       'pomodoroSessions',
@@ -81,6 +82,14 @@ describe('buildDemoSeed', () => {
     expect(buildDemoSeed(NOON).pomodoroState).toMatchObject({
       version: 0,
       state: { status: 'paused', sessionType: 'work', timeRemaining: 1456, totalTime: 1500 },
+    });
+  });
+
+  it('pins the quote the screenshots show', () => {
+    expect(buildDemoSeed(NOON).currentQuote).toMatchObject({
+      id: 'seed-89',
+      text: 'The first wealth is health.',
+      author: 'Ralph Waldo Emerson',
     });
   });
 
