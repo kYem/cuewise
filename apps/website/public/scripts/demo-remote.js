@@ -31,7 +31,7 @@ export function createDemoRemote(win, storage) {
   // biome-ignore lint/performance/useDomNodeTextContent: hidden views must not match
   const text = () => doc().body?.innerText ?? '';
   const appReady = () => (doc().getElementById('root')?.childElementCount ?? 0) > 0;
-  const theme = () => doc().documentElement.getAttribute('data-theme');
+  const theme = () => doc().documentElement?.getAttribute('data-theme') ?? null;
   const focusOpen = () => doc().querySelector('[role="dialog"][aria-label="Focus mode"]') !== null;
   const cardShown = () => /Bring it to mind|How well did you recall it/.test(text());
   const onHome = () => doc().querySelector('input[aria-label="Add a goal"]') !== null;
@@ -40,7 +40,7 @@ export function createDemoRemote(win, storage) {
       doc().querySelector('button[title="Enter focus mode"], button[aria-label="Enter focus mode"]')
     );
   const press = (key) =>
-    doc().body.dispatchEvent(
+    doc().body?.dispatchEvent(
       new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
     );
 
@@ -139,8 +139,8 @@ export function createDemoRemote(win, storage) {
       }
       latest += 1;
       const mine = latest;
-      const run = queue.then(() => (mine === latest ? perform(step) : false));
-      queue = run.catch(() => undefined);
+      const run = queue.then(() => (mine === latest ? perform(step) : false)).catch(() => false);
+      queue = run;
       return run;
     },
   };
