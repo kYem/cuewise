@@ -14,7 +14,9 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "promo": "node promo/render.mts"
+    "promo": "node promo/render.mts",
+    "demo:fetch": "node scripts/fetch-demo.mts",
+    "demo:pin": "node scripts/pin-demo.mts"
   },
   "dependencies": {
     "astro": "catalog:",

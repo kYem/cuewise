@@ -4,3 +4,7 @@ dist/
 # Playwright e2e output
 test-results/
 playwright-report/
+
+# Pinned demo, fetched by demo:fetch
+public/demo/
+public/assets/
