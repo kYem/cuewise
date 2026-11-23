@@ -22,10 +22,10 @@ const shots = await Promise.all(
 const [first] = DOCK_STEPS;
 ---
 
-<header class="hero" id="showcase">
+<header class="hero">
   <div class="wrap">
     <span class="eyebrow">{HERO.eyebrow}</span>
-    <h1 class="hero-title">{HERO.title} <span class="accent">{HERO.accent}</span></h1>
+    <h1 class="hero-title hero-title-wide">{HERO.title} <span class="accent">{HERO.accent}</span></h1>
     <p class="hero-sub">{HERO.sub}</p>
     <div class="hero-cta">
       <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
@@ -35,7 +35,8 @@ const [first] = DOCK_STEPS;
       <a class="btn btn-ghost btn-lg" href="#showcase" data-stage-cta>{HERO.secondaryCta}</a>
     </div>
 
-    <div class="stage" data-stage data-note-live={STAGE_NOTES.live} data-cta-live={HERO.secondaryCtaLive}>
+    <div class="stage" id="showcase" data-stage data-note-live={STAGE_NOTES.live} data-cta-live={HERO.secondaryCtaLive}>
+      <div class="hero-glow"></div>
       <div class="browser">
         <div class="browser-bar">
           <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>

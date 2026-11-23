@@ -12,7 +12,18 @@ function init(stage) {
   const caption = stage.querySelector('[data-stage-caption]');
   let current = DEMO_STEPS[0];
   let touring = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let inView = false;
   let timer = 0;
+
+  if (touring) {
+    caption?.setAttribute('aria-live', 'off');
+  }
+
+  function stopTour() {
+    touring = false;
+    window.clearTimeout(timer);
+    caption?.setAttribute('aria-live', 'polite');
+  }
 
   function load(shot) {
     if (!shot.getAttribute('src') && shot.dataset.src) {
@@ -51,35 +62,32 @@ function init(stage) {
       schedule();
       return;
     }
-    touring = false;
     show(DEMO_STEPS[0]);
+    stopTour();
   }
 
   function schedule() {
     window.clearTimeout(timer);
-    if (touring) {
+    if (touring && inView && !document.hidden) {
       timer = window.setTimeout(advance, DWELL_MS);
     }
   }
 
   for (const button of buttons) {
     button.addEventListener('click', () => {
-      touring = false;
-      window.clearTimeout(timer);
+      stopTour();
       show(button.dataset.step);
     });
   }
 
   new IntersectionObserver(
     (entries) => {
-      if (entries[entries.length - 1].intersectionRatio >= MIN_VISIBLE_RATIO) {
-        schedule();
-      } else {
-        window.clearTimeout(timer);
-      }
+      inView = entries[entries.length - 1].intersectionRatio >= MIN_VISIBLE_RATIO;
+      schedule();
     },
     { threshold: MIN_VISIBLE_RATIO }
   ).observe(stage);
+  document.addEventListener('visibilitychange', schedule);
 
   function loadAll() {
     for (const shot of shots.values()) {

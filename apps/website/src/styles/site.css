@@ -918,10 +918,10 @@ footer {
 }
 
 /* ---------- Home v2 ---------- */
-#showcase .hero-title {
+h1.hero-title-wide {
   max-width: 24ch;
 }
-#showcase .hero-title .accent {
+.hero-title-wide .accent {
   display: block;
 }
 
@@ -948,20 +948,12 @@ footer {
 .stage {
   position: relative;
   margin-top: 54px;
+  scroll-margin-top: 104px;
 }
-.stage::before {
-  content: "";
-  position: absolute;
-  inset: -30px 10% auto;
-  height: 60%;
-  background: radial-gradient(50% 60% at 50% 0%, rgba(139, 92, 246, 0.45), transparent 70%);
-  filter: blur(40px);
-  z-index: -1;
-  pointer-events: none;
-}
+/* Keeps the frame and dock on one screen on laptop-height viewports. */
 /* biome-ignore lint/style/noDescendingSpecificity: .stage never holds a .show-media frame */
 .stage .browser {
-  max-width: 1080px;
+  max-width: clamp(900px, (100svh - 250px) * 16 / 9, 1080px);
   margin: 0 auto;
 }
 .stage-screen {
