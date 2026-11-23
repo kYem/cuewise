@@ -1,10 +1,9 @@
 ---
-import Features from '../components/Features.astro';
 import FinalCta from '../components/FinalCta.astro';
-import Hero from '../components/Hero.astro';
-import HowItWorks from '../components/HowItWorks.astro';
-import SecurityNote from '../components/SecurityNote.astro';
-import Showcase from '../components/Showcase.astro';
+import FitCheck from '../components/home/FitCheck.astro';
+import Inside from '../components/home/Inside.astro';
+import PrivacyRow from '../components/home/PrivacyRow.astro';
+import Stage from '../components/home/Stage.astro';
 import Base from '../layouts/Base.astro';
 import { SITE } from '../lib/site';
 
@@ -25,11 +24,10 @@ const jsonLd = JSON.stringify({
 <Base title="Cuewise — Turn every new tab into a meaningful moment">
   <script type="application/ld+json" set:html={jsonLd} slot="head" />
   <main>
-    <Hero />
-    <Features />
-    <Showcase />
-    <HowItWorks />
-    <SecurityNote />
+    <Stage />
+    <Inside />
+    <PrivacyRow />
+    <FitCheck />
     <FinalCta />
   </main>
 </Base>

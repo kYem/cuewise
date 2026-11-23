@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import type { StepKey } from '../src/lib/home-content';
 import { STAGE_NOTES } from '../src/lib/home-content';
+import { SITE } from '../src/lib/site';
 import {
   collectDemoWarnings,
   type DemoSites,
@@ -47,6 +48,16 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await sites?.stop();
+});
+
+test('the homepage can be indexed and is in the sitemap', async ({ page, request }) => {
+  const response = await page.goto(`${WITH_DEMO}/`);
+
+  expect(response?.headers()['x-robots-tag']).toBeUndefined();
+  await expect(page.locator('meta[name="robots"][content*="noindex"]')).toHaveCount(0);
+  const sitemap = await (await request.get(`${WITH_DEMO}/sitemap-0.xml`)).text();
+  expect(sitemap).toContain(`<loc>${SITE.url}/</loc>`);
+  expect(sitemap).not.toContain('/next/');
 });
 
 test('runs the released extension in the frame', async ({ page }) => {
@@ -232,7 +243,7 @@ test('a step that reloads the frame hides it until the new theme is up', async (
 
 test('switching screenshots never lets the background show through', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 900 });
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await waitForUpgradeDecision(page);
 
   const samples = await watchStep(page, 'insights', 800);
@@ -317,7 +328,7 @@ test('keeps the screenshot up until the live photo has faded in', async ({ page 
     await new Promise((resolve) => setTimeout(resolve, PHOTO_HELD_MS));
     await route.fulfill({ path: TODAY_SHOT_FILE, contentType: 'image/webp' });
   });
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
   await page.waitForTimeout(1000);
   await expect(stageOf(page)).toHaveClass(/is-fallback/);
@@ -330,7 +341,7 @@ test('keeps the screenshot up until the live photo has faded in', async ({ page 
 test('goes live without the photo when it cannot be loaded', async ({ page }) => {
   test.setTimeout(60_000);
   await page.route('**/images.unsplash.com/**', (route) => route.abort());
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
 
   await expect(stageOf(page)).not.toHaveClass(/is-fallback/, { timeout: 10_000 });
@@ -340,7 +351,7 @@ test('goes live without the photo when it cannot be loaded', async ({ page }) =>
 
 test('a narrow window gets screenshots and no frame', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 900 });
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await waitForUpgradeDecision(page);
   await page.waitForTimeout(4000);
   await expect(demoIframeOf(page)).toHaveCount(0);
@@ -371,7 +382,7 @@ test('stays on screenshots when the demo is missing', async ({ page }) => {
       timeout: 15_000,
     }
   );
-  await page.goto(`${WITHOUT_DEMO}/next/`);
+  await page.goto(`${WITHOUT_DEMO}/`);
   await demoRequested;
   await expect(demoIframeOf(page)).toHaveCount(0);
   await page.waitForTimeout(MISSING_DEMO_WAIT_MS);
@@ -388,7 +399,7 @@ test('stays on screenshots when the app never renders', async ({ page }) => {
   const demoRequested = page.waitForRequest(
     (request) => new URL(request.url()).pathname === '/demo/'
   );
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await demoRequested;
   await expect(demoIframeOf(page)).toHaveCount(1);
 
@@ -416,7 +427,7 @@ test('stays on screenshots when storage is blocked', async ({ page }) => {
     });
   });
 
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await waitForUpgradeDecision(page);
 
   await expect(stageOf(page)).not.toHaveClass(/is-live/);

@@ -90,7 +90,7 @@ export const shotOf = (page: Page, step: StepKey) =>
   page.locator(`.stage-shot[data-step="${step}"]`);
 
 export async function openLiveHomepage(page: Page) {
-  await page.goto(`${WITH_DEMO}/next/`);
+  await page.goto(`${WITH_DEMO}/`);
   await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
   await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
   await expect(liveLayerOf(page)).toHaveCSS('opacity', '1');
