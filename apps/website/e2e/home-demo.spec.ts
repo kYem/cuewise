@@ -25,6 +25,7 @@ import {
   WITH_DEMO,
   WITHOUT_DEMO,
   waitForUpgradeDecision,
+  watchStep,
 } from './__fixtures__/home-demo.fixtures';
 
 const ALLOWED_HOSTS = new Set([
@@ -208,6 +209,35 @@ test('the whole tour runs live and settles on today', async ({ page }) => {
   await expect(demoFrameOf(page).getByText("Today's Focus").first()).toBeVisible(STEP_TIMEOUT);
   await page.waitForTimeout(TOUR_DWELL_MS);
   await expect(dockButtonOf(page, 'today')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('a step that needs no reload never dims the live frame', async ({ page }) => {
+  await openLiveHomepage(page);
+
+  const samples = await watchStep(page, 'pomodoro', 900);
+
+  expect(Math.min(...samples.map((sample) => sample.live))).toBe(1);
+});
+
+test('a step that reloads the frame hides it until the new theme is up', async ({ page }) => {
+  await openLiveHomepage(page);
+
+  const samples = await watchStep(page, 'themes', 2500);
+
+  const beforeTheNewTheme = samples.filter((sample) => sample.theme !== 'purple');
+  expect(beforeTheNewTheme.length).toBeGreaterThan(0);
+  expect(Math.max(...beforeTheNewTheme.map((sample) => sample.live))).toBe(0);
+  expect(samples.at(-1)?.live).toBe(1);
+});
+
+test('switching screenshots never lets the background show through', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await page.goto(`${WITH_DEMO}/next/`);
+  await waitForUpgradeDecision(page);
+
+  const samples = await watchStep(page, 'insights', 800);
+
+  expect(Math.min(...samples.map((sample) => sample.coverage))).toBeGreaterThan(0.99);
 });
 
 test('contacts only the site, the font hosts and Unsplash', async ({ page }) => {

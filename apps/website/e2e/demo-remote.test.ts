@@ -48,6 +48,33 @@ describe('createDemoRemote', () => {
     });
   });
 
+  describe('reloads', () => {
+    it('is false for a step in the glass theme', () => {
+      const { win } = fakeAppWindow(fakeStorage());
+      expect(createDemoRemote(win, fakeStorage()).reloads('pomodoro')).toBe(false);
+    });
+
+    it('is true for the themes step', () => {
+      const { win } = fakeAppWindow(fakeStorage());
+      expect(createDemoRemote(win, fakeStorage()).reloads('themes')).toBe(true);
+    });
+
+    it('is true for any step once the theme is not glass', async () => {
+      const storage = fakeStorage();
+      const { win } = fakeAppWindow(storage);
+      const remote = createDemoRemote(win, storage);
+      const themed = remote.go('themes');
+      await vi.runAllTimersAsync();
+      await themed;
+
+      expect(remote.reloads('pomodoro')).toBe(true);
+    });
+
+    it('is true when the frame can no longer be read', () => {
+      expect(createDemoRemote(throwingWindow(), fakeStorage()).reloads('pomodoro')).toBe(true);
+    });
+  });
+
   describe('while the document is mid-navigation', () => {
     it('reads a missing documentElement as no theme and asks for one', async () => {
       const storage = fakeStorage();

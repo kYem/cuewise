@@ -969,17 +969,20 @@ h1.hero-title-wide {
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity 0.5s ease;
+  /* A leaving shot holds while the next fades in over it, so the background never shows through. */
+  transition: opacity 0s linear 0.5s;
 }
 .stage-screen .stage-shot.is-on {
+  z-index: 1;
   opacity: 1;
+  transition: opacity 0.5s ease;
 }
 .stage-live {
   position: absolute;
   inset: 0;
+  z-index: 2;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.5s ease;
 }
 .stage-live iframe {
   display: block;
@@ -989,9 +992,11 @@ h1.hero-title-wide {
   transform-origin: 0 0;
   transform: scale(var(--demo-scale, 1));
 }
+/* Only the reveal fades: hiding has to be instant to cover a reloading frame. */
 .stage.is-live:not(.is-fallback) .stage-live {
   opacity: 1;
   pointer-events: auto;
+  transition: opacity 0.5s ease;
 }
 .dock {
   display: flex;
@@ -1161,7 +1166,8 @@ h1.hero-title-wide {
 }
 @media (prefers-reduced-motion: reduce) {
   .stage-screen .stage-shot,
-  .stage-live {
+  .stage-screen .stage-shot.is-on,
+  .stage.is-live:not(.is-fallback) .stage-live {
     transition: none;
   }
 }

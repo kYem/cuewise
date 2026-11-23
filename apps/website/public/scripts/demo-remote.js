@@ -23,7 +23,7 @@ export function photoShown(win) {
  * caller.
  * @param {Window} win
  * @param {Storage} storage
- * @returns {{ go(step: string): Promise<boolean> }}
+ * @returns {{ go(step: string): Promise<boolean>, reloads(step: string): boolean }}
  */
 export function createDemoRemote(win, storage) {
   const doc = () => win.document;
@@ -169,6 +169,13 @@ export function createDemoRemote(win, storage) {
   let queue = Promise.resolve();
 
   return {
+    reloads(step) {
+      try {
+        return step === 'themes' || theme() !== 'glass';
+      } catch {
+        return true;
+      }
+    },
     go(step) {
       if (!Object.hasOwn(steps, step)) {
         return Promise.resolve(false);

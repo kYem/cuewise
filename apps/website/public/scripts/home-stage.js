@@ -8,6 +8,7 @@ const DEMO_WIDTH = 1440;
 const DEMO_HEIGHT = 810;
 const READY_TIMEOUT_MS = 12000;
 const READY_POLL_MS = 100;
+const COVER_AFTER_MS = 800;
 
 function canRunLive() {
   const brands = navigator.userAgentData?.brands ?? [];
@@ -95,6 +96,7 @@ function init(stage) {
   let touring = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let inView = false;
   let timer = 0;
+  let coverTimer = 0;
 
   if (touring) {
     caption?.setAttribute('aria-live', 'off');
@@ -154,25 +156,34 @@ function init(stage) {
     }
   }
 
-  async function select(step) {
+  // The screenshot covers the frame only while it reloads or runs late: the app switches views itself.
+  async function select(step, cover = remote?.reloads(step) ?? false) {
     show(step);
     if (!remote) {
       return;
     }
     steering += 1;
     const mine = steering;
-    setFallback(true);
+    window.clearTimeout(coverTimer);
+    if (cover) {
+      setFallback(true);
+    } else {
+      coverTimer = window.setTimeout(() => setFallback(true), COVER_AFTER_MS);
+    }
     const arrived = await remote.go(step);
     if (mine !== steering) {
       return;
     }
+    window.clearTimeout(coverTimer);
     if (arrived) {
+      stage.dataset.liveStep = step;
       setNote(stage.dataset.noteLive);
-      setFallback(false);
     } else {
+      delete stage.dataset.liveStep;
       console.warn(`Cuewise demo: step "${step}" did not arrive, showing its screenshot`);
       setNote(screenshotNote);
     }
+    setFallback(!arrived);
   }
 
   function advance() {
@@ -274,7 +285,7 @@ function init(stage) {
         stopTour();
       }
     });
-    select(current);
+    select(current, true);
     stage.classList.add('is-live');
     syncLiveLayer();
     if (cta) {

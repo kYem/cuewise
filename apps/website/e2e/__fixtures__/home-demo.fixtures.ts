@@ -93,6 +93,7 @@ export async function openLiveHomepage(page: Page) {
   await page.goto(`${WITH_DEMO}/next/`);
   await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
   await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
+  await expect(liveLayerOf(page)).toHaveCSS('opacity', '1');
 }
 
 export function collectDemoWarnings(page: Page): string[] {
@@ -128,5 +129,43 @@ export async function settledPageState(page: Page) {
 
 export async function selectStep(page: Page, step: StepKey) {
   await dockButtonOf(page, step).click();
+  await expect(stageOf(page)).toHaveAttribute('data-live-step', step, STEP_TIMEOUT);
   await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
+}
+
+export interface StageSample {
+  live: number;
+  coverage: number;
+  theme: string | null;
+}
+
+/** Clicks a dock step and reads, every animation frame, how much of each layer is showing. */
+export async function watchStep(page: Page, step: StepKey, forMs: number): Promise<StageSample[]> {
+  return page.evaluate(
+    ({ stepKey, duration }) =>
+      new Promise<StageSample[]>((resolve) => {
+        const samples: StageSample[] = [];
+        const layer = document.querySelector('[data-stage-live]');
+        const started = performance.now();
+        const sample = () => {
+          const frame = layer?.querySelector('iframe');
+          const shots = [...document.querySelectorAll('.stage-shot')].map((shot) =>
+            Number(getComputedStyle(shot).opacity)
+          );
+          samples.push({
+            live: layer ? Number(getComputedStyle(layer).opacity) : 0,
+            coverage: 1 - shots.reduce((gap, opacity) => gap * (1 - opacity), 1),
+            theme: frame?.contentDocument?.documentElement?.getAttribute('data-theme') ?? null,
+          });
+          if (performance.now() - started < duration) {
+            requestAnimationFrame(sample);
+          } else {
+            resolve(samples);
+          }
+        };
+        document.querySelector<HTMLButtonElement>(`.dock button[data-step="${stepKey}"]`)?.click();
+        requestAnimationFrame(sample);
+      }),
+    { stepKey: step, duration: forMs }
+  );
 }
