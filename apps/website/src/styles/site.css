@@ -613,9 +613,19 @@ h2.section-title {
 
 /* ---------- Footer ---------- */
 footer {
-  padding: 56px 0 40px;
+  padding-top: 56px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   margin-top: 110px;
+  background: #0b0a16;
+}
+.foot-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1440 / 320;
+  min-height: 150px;
+  object-fit: cover;
+  object-position: bottom;
+  margin-top: 32px;
 }
 .foot {
   display: flex;
