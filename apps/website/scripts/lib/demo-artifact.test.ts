@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { makeZip, text } from './__fixtures__/zip.fixtures';
 import {
   demoFiles,
   downloadRelease,
   releaseAssetUrl,
   sha256Hex,
+  shouldFetch,
   verifySha256,
 } from './demo-artifact.mts';
 
@@ -49,23 +50,80 @@ describe('demoFiles', () => {
 });
 
 describe('downloadRelease', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  const url = releaseAssetUrl('1.28.1');
+  const download = (fetcher: ReturnType<typeof vi.fn>) =>
+    downloadRelease('1.28.1', { fetcher, retryDelayMs: 0 });
 
-  it('downloads the release asset for the version', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(text('zip bytes')));
-    vi.stubGlobal('fetch', fetchMock);
-    const bytes = await downloadRelease('1.28.1');
+  it('downloads the release asset for the version, bounded by a timeout', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(text('zip bytes')));
+    const bytes = await download(fetcher);
     expect(new TextDecoder().decode(bytes)).toBe('zip bytes');
-    expect(fetchMock).toHaveBeenCalledWith(releaseAssetUrl('1.28.1'));
+    expect(fetcher).toHaveBeenCalledWith(url, { signal: expect.any(AbortSignal) });
   });
 
-  it('refuses a failed download', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('nope', { status: 404, statusText: 'Not Found' }))
-    );
-    await expect(downloadRelease('1.28.1')).rejects.toThrow(/404/);
+  it('retries a thrown fetch', async () => {
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValue(new Response(text('zip bytes')));
+    expect(new TextDecoder().decode(await download(fetcher))).toBe('zip bytes');
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries a 5xx status', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('busy', { status: 503 }))
+      .mockResolvedValue(new Response(text('zip bytes')));
+    expect(new TextDecoder().decode(await download(fetcher))).toBe('zip bytes');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails at once on a 404', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response('nope', { status: 404, statusText: 'Not Found' }));
+    await expect(download(fetcher)).rejects.toThrow(/404 Not Found.*releases\/download/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the url and keeps the last thrown error as the cause after three attempts', async () => {
+    const last = new TypeError('fetch failed');
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('first'))
+      .mockRejectedValueOnce(new TypeError('second'))
+      .mockRejectedValueOnce(last);
+    await expect(download(fetcher)).rejects.toMatchObject({
+      message: expect.stringContaining(url),
+      cause: last,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps the status of the last 5xx after three attempts', async () => {
+    const fetcher = vi
+      .fn()
+      .mockImplementation(
+        async () => new Response('busy', { status: 502, statusText: 'Bad Gateway' })
+      );
+    await expect(download(fetcher)).rejects.toThrow(/502 Bad Gateway/);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('shouldFetch', () => {
+  it('fetches when the build is not pages-only', () => {
+    expect(shouldFetch(false, {})).toBe(true);
+  });
+
+  it('fetches a pages-only build on Cloudflare Pages', () => {
+    expect(shouldFetch(true, { CF_PAGES: '1' })).toBe(true);
+  });
+
+  it('skips a pages-only build anywhere else', () => {
+    expect(shouldFetch(true, {})).toBe(false);
+    expect(shouldFetch(true, { CF_PAGES: '0' })).toBe(false);
   });
 });

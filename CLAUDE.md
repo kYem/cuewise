@@ -466,7 +466,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (Re
 | `packages/app/src/App.tsx` | Hash routing, theme system | Adding new pages |
 | `apps/browser-extension/src/capture/` | Page capture: context menu, session draft, SW-owned save | Changing what a capture saves |
 | `apps/browser-extension/manifest.config.ts` | Extension config (Manifest V3) | Changing permissions/behavior |
-| `apps/website/demo.lock.json` | Version and hash of the store zip the homepage demo runs | After a store release: `pnpm --filter @cuewise/website demo:pin <version>`, then `demo:shots` |
+| `apps/website/demo.lock.json` | Version and hash of the store zip the homepage demo runs | After a store release: `pnpm --filter @cuewise/website demo:pin <version>`, then `demo:shots` and `e2e` |
 | `turbo.json` | Build pipeline | Optimizing builds |
 | `biome.json` | Linting/formatting | Changing code style rules |
 

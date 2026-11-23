@@ -1,13 +1,13 @@
 #!/usr/bin/env -S node
 /**
  * Screenshots the pinned demo (public/demo) into src/assets/demo/<step>.webp, one per demo step.
- * Needs the demo fetched first and network access for its background photo.
+ * Fetches the pinned release first, so it needs network access for that and its background photo.
  *
  * Usage (from apps/website):
- *   pnpm demo:fetch && pnpm demo:shots
+ *   pnpm demo:shots
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -15,6 +15,7 @@ import sharp from 'sharp';
 import { startPlainSite } from '../e2e/static-server.ts';
 import { DEMO_STEPS } from '../public/scripts/demo-remote.js';
 import { buildDemoSeed } from '../public/scripts/demo-seed.js';
+import { fetchPinnedDemo } from './lib/demo-install.mts';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
@@ -24,9 +25,8 @@ const DEMO_URL = `http://localhost:${PORT}/demo/index.html`;
 const SETTLE_MS = 1200;
 
 async function main() {
-  if (!existsSync(path.join(publicDir, 'demo', 'index.html'))) {
-    throw new Error('Run demo:fetch first.');
-  }
+  const { version, files } = await fetchPinnedDemo(root);
+  console.log(`demo ${version}: ${files} files`);
   mkdirSync(outDir, { recursive: true });
 
   const server = await startPlainSite(publicDir, PORT);
@@ -85,6 +85,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(error);
   process.exit(1);
 });
