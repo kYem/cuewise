@@ -1,7 +1,7 @@
 // Cloudflare Pages applies every matching `_headers` rule and browsers enforce
 // the *intersection* of duplicate CSP headers — a global rule plus a
-// player-specific one would silently break the embed. Middleware sets exactly
-// one CSP per response instead, and is unit-testable (see _middleware.test.ts).
+// player- or demo-specific one would silently break the embed. Middleware sets
+// exactly one CSP per response instead, and is unit-testable (see _middleware.test.ts).
 
 const SITE_CSP = [
   "default-src 'self'",
@@ -58,9 +58,23 @@ function buildPlayerCsp(frameAncestors: string): string {
 
 const PLAYER_PATHS = new Set(['/player', '/player.html']);
 
+const DEMO_CSP = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://images.unsplash.com",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+const DEMO_PATHS = new Set(['/demo', '/demo/', '/demo/index.html']);
+
 /**
- * Sets the response's security headers, picking the player's frame-friendly CSP
- * for its two paths and the locked-down site CSP for everything else.
+ * Sets the response's security headers: the player's frame-friendly CSP for its two paths,
+ * the demo's own-site-only CSP (plus noindex) for its three, the locked-down site CSP otherwise.
  * No X-Frame-Options is sent anywhere: it has no allowlist form, so `frame-ancestors`
  * (which does) fully replaces it in the browsers we target.
  */
@@ -71,10 +85,16 @@ export function applySecurityHeaders(
   isLocalhostRequest = false
 ): Response {
   const headers = new Headers(response.headers);
-  const isPlayer = PLAYER_PATHS.has(pathname);
   const frameAncestors = playerFrameAncestors ?? defaultPlayerFrameAncestors(isLocalhostRequest);
 
-  headers.set('Content-Security-Policy', isPlayer ? buildPlayerCsp(frameAncestors) : SITE_CSP);
+  if (PLAYER_PATHS.has(pathname)) {
+    headers.set('Content-Security-Policy', buildPlayerCsp(frameAncestors));
+  } else if (DEMO_PATHS.has(pathname)) {
+    headers.set('Content-Security-Policy', DEMO_CSP);
+    headers.set('X-Robots-Tag', 'noindex');
+  } else {
+    headers.set('Content-Security-Policy', SITE_CSP);
+  }
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -100,6 +120,18 @@ export async function onRequest(context: MiddlewareContext): Promise<Response> {
   if (url.hostname.startsWith('www.')) {
     url.hostname = url.hostname.slice(4);
     const redirect = new Response(null, { status: 301, headers: { Location: url.toString() } });
+    return applySecurityHeaders(url.pathname, redirect);
+  }
+
+  // The demo is only for the homepage's frame; a person opening it in a tab goes home.
+  if (
+    DEMO_PATHS.has(url.pathname) &&
+    context.request.headers.get('Sec-Fetch-Dest') === 'document'
+  ) {
+    const redirect = new Response(null, {
+      status: 302,
+      headers: { Location: new URL('/', url).toString() },
+    });
     return applySecurityHeaders(url.pathname, redirect);
   }
 
