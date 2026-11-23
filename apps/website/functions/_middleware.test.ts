@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { applySecurityHeaders, onRequest } from './_middleware';
 
+const DEMO_CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+
 function makeUpstreamResponse(): Response {
   return new Response('<html></html>', { headers: { 'Content-Type': 'text/html' } });
 }
@@ -78,8 +81,35 @@ describe('applySecurityHeaders', () => {
     expect(values).toHaveLength(1);
   });
 
+  it.each(['/demo', '/demo/', '/demo/index.html'])('sends the demo CSP for %s', (pathname) => {
+    const response = applySecurityHeaders(pathname, makeUpstreamResponse());
+    expect(response.headers.get('Content-Security-Policy')).toBe(DEMO_CSP);
+  });
+
+  it('marks the demo document noindex and nothing else', () => {
+    expect(applySecurityHeaders('/demo/', makeUpstreamResponse()).headers.get('X-Robots-Tag')).toBe(
+      'noindex'
+    );
+    expect(
+      applySecurityHeaders('/', makeUpstreamResponse()).headers.get('X-Robots-Tag')
+    ).toBeNull();
+  });
+
+  it('keeps the site CSP for a path that only starts like the demo', () => {
+    const response = applySecurityHeaders('/demonstration/', makeUpstreamResponse());
+    expect(response.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+  });
+
+  it('sets exactly one Content-Security-Policy header value on the demo', () => {
+    const response = applySecurityHeaders('/demo/', makeUpstreamResponse());
+    const values = [...response.headers.entries()].filter(
+      ([name]) => name.toLowerCase() === 'content-security-policy'
+    );
+    expect(values).toHaveLength(1);
+  });
+
   it('sends HSTS and a locked-down Permissions-Policy on every response', () => {
-    for (const pathname of ['/', '/privacy/', '/player.html', '/player']) {
+    for (const pathname of ['/', '/privacy/', '/player.html', '/player', '/demo/']) {
       const response = applySecurityHeaders(pathname, makeUpstreamResponse());
       expect(response.headers.get('Strict-Transport-Security')).toBe(
         'max-age=63072000; includeSubDomains; preload'
@@ -99,7 +129,7 @@ describe('applySecurityHeaders', () => {
   });
 
   it('never sends X-Frame-Options — frame-ancestors is the sole framing control', () => {
-    for (const pathname of ['/', '/player.html', '/player']) {
+    for (const pathname of ['/', '/player.html', '/player', '/demo/']) {
       const response = applySecurityHeaders(pathname, makeUpstreamResponse());
       expect(response.headers.get('X-Frame-Options')).toBeNull();
     }
@@ -174,6 +204,41 @@ describe('onRequest', () => {
     expect(response.headers.get('Strict-Transport-Security')).toBe(
       'max-age=63072000; includeSubDomains; preload'
     );
+  });
+
+  it('redirects a top-level visit to the demo back to the homepage', async () => {
+    let originInvoked = false;
+    const response = await onRequest({
+      request: new Request('https://cuewise.app/demo/', {
+        headers: { 'Sec-Fetch-Dest': 'document' },
+      }),
+      next: () => {
+        originInvoked = true;
+        return Promise.resolve(makeUpstreamResponse());
+      },
+    });
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('https://cuewise.app/');
+    expect(originInvoked).toBe(false);
+  });
+
+  it('serves the demo to a frame', async () => {
+    const response = await onRequest({
+      request: new Request('https://cuewise.app/demo/', {
+        headers: { 'Sec-Fetch-Dest': 'iframe' },
+      }),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Security-Policy')).toBe(DEMO_CSP);
+  });
+
+  it('serves the demo when the browser sends no Sec-Fetch-Dest', async () => {
+    const response = await onRequest({
+      request: new Request('https://cuewise.app/demo/'),
+      next: () => Promise.resolve(makeUpstreamResponse()),
+    });
+    expect(response.status).toBe(200);
   });
 
   it('serves the apex host without redirecting', async () => {

@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // ENG-48 proof: the player's real network behavior (no ad/tracking hosts) and
-// frame-ancestors enforcement, driven in WebKit against the built site.
+// frame-ancestors enforcement, driven in WebKit against the built site. The homepage
+// specs (home-*.spec.ts) run in Chromium instead: only Chromium gets the live demo frame.
 //   pnpm --filter @cuewise/website e2e
 export default defineConfig({
   testDir: './e2e',
@@ -12,5 +13,8 @@ export default defineConfig({
   // Every spec runs its own `astro build` against the shared dist/ dir in
   // beforeAll — parallel workers would race and corrupt each other's build.
   workers: 1,
-  projects: [{ name: 'webkit', use: { ...devices['Desktop Safari'] } }],
+  projects: [
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, testIgnore: '**/home-*.spec.ts' },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testMatch: '**/home-*.spec.ts' },
+  ],
 });

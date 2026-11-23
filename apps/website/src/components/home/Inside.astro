@@ -1,0 +1,33 @@
+---
+import { INSIDE_GROUPS, SECTION_HEADS } from '../../lib/home-content';
+import Icon from './Icon.astro';
+import SplitHead from './SplitHead.astro';
+
+const { id, ...head } = SECTION_HEADS.features;
+---
+
+<section class="section-pad" id={id}>
+  <div class="wrap">
+    <SplitHead {...head} />
+    <div class="plain-cols">
+      {
+        INSIDE_GROUPS.map((group) => (
+          <div class="reveal">
+            <h3>{group.title}</h3>
+            <ul>
+              {group.rows.map((row) => (
+                <li class="inside-row">
+                  <Icon name={row.icon} />
+                  <div>
+                    <strong>{row.name}</strong>
+                    <span>{row.line}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

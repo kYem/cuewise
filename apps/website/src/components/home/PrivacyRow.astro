@@ -1,0 +1,24 @@
+---
+import { PRIVACY_POINTS, SECTION_HEADS } from '../../lib/home-content';
+import Icon from './Icon.astro';
+import SplitHead from './SplitHead.astro';
+
+const { id, ...head } = SECTION_HEADS.privacy;
+---
+
+<section class="section-pad" id={id} style="padding-top:0;">
+  <div class="wrap">
+    <SplitHead {...head} />
+    <div class="plain-cols">
+      {
+        PRIVACY_POINTS.map((point) => (
+          <div class="reveal">
+            <Icon name={point.icon} />
+            <h3>{point.title}</h3>
+            <p>{point.text}</p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

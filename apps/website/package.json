@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.5.2",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/fetch-demo.mts --pages-only && astro build",
     "preview": "astro preview",
     "type-check": "astro check",
     "clean": "rm -rf dist .astro",
@@ -14,7 +14,10 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "promo": "node promo/render.mts"
+    "promo": "node promo/render.mts",
+    "demo:fetch": "node scripts/fetch-demo.mts",
+    "demo:pin": "node scripts/pin-demo.mts",
+    "demo:shots": "node scripts/demo-shots.mts"
   },
   "dependencies": {
     "astro": "catalog:",

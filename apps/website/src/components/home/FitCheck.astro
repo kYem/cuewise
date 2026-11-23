@@ -1,0 +1,30 @@
+---
+import { FIT_CHECK, SECTION_HEADS } from '../../lib/home-content';
+import Icon from './Icon.astro';
+import SplitHead from './SplitHead.astro';
+
+const { id, ...head } = SECTION_HEADS.fit;
+---
+
+<section class="section-pad" id={id} style="padding-top:0;">
+  <div class="wrap">
+    <SplitHead {...head} />
+    <div class="plain-cols two">
+      {
+        FIT_CHECK.map((side) => (
+          <div class="reveal">
+            <h3>{side.title}</h3>
+            <ul>
+              {side.items.map((item) => (
+                <li>
+                  <Icon name={side.icon} />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
