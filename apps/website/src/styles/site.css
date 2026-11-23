@@ -974,6 +974,25 @@ h1.hero-title-wide {
 .stage-screen .stage-shot.is-on {
   opacity: 1;
 }
+.stage-live {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+.stage-live iframe {
+  display: block;
+  width: 1440px;
+  height: 810px;
+  border: 0;
+  transform-origin: 0 0;
+  transform: scale(var(--demo-scale, 1));
+}
+.stage.is-live:not(.is-fallback) .stage-live {
+  opacity: 1;
+  pointer-events: auto;
+}
 .dock {
   display: flex;
   flex-wrap: wrap;
@@ -1141,7 +1160,8 @@ h1.hero-title-wide {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .stage-screen .stage-shot {
+  .stage-screen .stage-shot,
+  .stage-live {
     transition: none;
   }
 }

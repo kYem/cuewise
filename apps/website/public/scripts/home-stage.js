@@ -1,7 +1,67 @@
-import { DEMO_STEPS } from './demo-remote.js';
+import { createDemoRemote, DEMO_STEPS } from './demo-remote.js';
+import { writeDemoSeed } from './demo-seed.js';
 
 const DWELL_MS = 5200;
 const MIN_VISIBLE_RATIO = 0.35;
+const DEMO_URL = '/demo/';
+const DEMO_WIDTH = 1440;
+const DEMO_HEIGHT = 810;
+const READY_TIMEOUT_MS = 12000;
+const READY_POLL_MS = 100;
+
+function canRunLive() {
+  const brands = navigator.userAgentData?.brands ?? [];
+  const chromium = brands.some((brand) => brand.brand === 'Chromium');
+  const desktop = matchMedia('(min-width: 1024px) and (pointer: fine)').matches;
+  return chromium && desktop && navigator.connection?.saveData !== true;
+}
+
+function frameRoot(frame) {
+  try {
+    return frame.contentDocument?.getElementById('root') ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function appRendered(frame) {
+  const root = frameRoot(frame);
+  return (
+    root !== null && root.childElementCount > 0 && /Today's Focus/.test(root.textContent ?? '')
+  );
+}
+
+function waitForApp(frame) {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + READY_TIMEOUT_MS;
+    let timer = 0;
+
+    function settle(ready) {
+      window.clearTimeout(timer);
+      frame.removeEventListener('load', onLoad);
+      resolve(ready);
+    }
+
+    function onLoad() {
+      if (frameRoot(frame) === null) {
+        settle(false);
+      }
+    }
+
+    function poll() {
+      if (appRendered(frame)) {
+        settle(true);
+      } else if (Date.now() >= deadline) {
+        settle(false);
+      } else {
+        timer = window.setTimeout(poll, READY_POLL_MS);
+      }
+    }
+
+    frame.addEventListener('load', onLoad);
+    poll();
+  });
+}
 
 function init(stage) {
   const shots = new Map();
@@ -10,7 +70,10 @@ function init(stage) {
   }
   const buttons = [...stage.querySelectorAll('.dock button[data-step]')];
   const caption = stage.querySelector('[data-stage-caption]');
+  const liveLayer = stage.querySelector('[data-stage-live]');
   let current = DEMO_STEPS[0];
+  let remote = null;
+  let steering = 0;
   let touring = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let inView = false;
   let timer = 0;
@@ -55,14 +118,40 @@ function init(stage) {
     }
   }
 
+  function syncLiveLayer() {
+    if (liveLayer) {
+      liveLayer.inert =
+        !stage.classList.contains('is-live') || stage.classList.contains('is-fallback');
+    }
+  }
+
+  function setFallback(on) {
+    stage.classList.toggle('is-fallback', on);
+    syncLiveLayer();
+  }
+
+  async function select(step) {
+    show(step);
+    if (!remote) {
+      return;
+    }
+    steering += 1;
+    const mine = steering;
+    setFallback(true);
+    const arrived = await remote.go(step);
+    if (mine === steering && arrived) {
+      setFallback(false);
+    }
+  }
+
   function advance() {
     const next = DEMO_STEPS[DEMO_STEPS.indexOf(current) + 1];
     if (next) {
-      show(next);
+      select(next);
       schedule();
       return;
     }
-    show(DEMO_STEPS[0]);
+    select(DEMO_STEPS[0]);
     stopTour();
   }
 
@@ -76,7 +165,7 @@ function init(stage) {
   for (const button of buttons) {
     button.addEventListener('click', () => {
       stopTour();
-      show(button.dataset.step);
+      select(button.dataset.step);
     });
   }
 
@@ -95,18 +184,76 @@ function init(stage) {
     }
   }
 
-  function loadAllWhenIdle() {
+  function trackScale() {
+    const screen = stage.querySelector('.stage-screen');
+    const observer = new ResizeObserver((entries) => {
+      const { width } = entries[entries.length - 1].contentRect;
+      stage.style.setProperty('--demo-scale', String(width / DEMO_WIDTH));
+    });
+    observer.observe(screen);
+    return observer;
+  }
+
+  async function goLive() {
+    if (!liveLayer || !canRunLive()) {
+      return;
+    }
+    try {
+      writeDemoSeed(localStorage, new Date());
+    } catch {
+      return;
+    }
+
+    const frame = document.createElement('iframe');
+    frame.src = DEMO_URL;
+    frame.title = 'Cuewise demo';
+    frame.width = String(DEMO_WIDTH);
+    frame.height = String(DEMO_HEIGHT);
+    const scale = trackScale();
+    const ready = waitForApp(frame);
+    liveLayer.append(frame);
+    liveLayer.hidden = false;
+
+    if (!(await ready)) {
+      scale.disconnect();
+      frame.remove();
+      liveLayer.hidden = true;
+      return;
+    }
+
+    remote = createDemoRemote(frame.contentWindow, localStorage);
+    window.addEventListener('blur', () => {
+      if (document.activeElement === frame) {
+        stopTour();
+      }
+    });
+    stage.querySelector('[data-stage-note]').textContent = stage.dataset.noteLive;
+    document.querySelector('[data-stage-cta]').textContent = stage.dataset.ctaLive;
+    if (current !== DEMO_STEPS[0]) {
+      select(current);
+    }
+    stage.classList.add('is-live');
+    syncLiveLayer();
+  }
+
+  function upgrade() {
+    loadAll();
+    goLive();
+  }
+
+  function upgradeWhenIdle() {
     if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(loadAll);
+      window.requestIdleCallback(upgrade);
     } else {
-      window.setTimeout(loadAll, 200);
+      window.setTimeout(upgrade, 200);
     }
   }
 
+  syncLiveLayer();
   if (document.readyState === 'complete') {
-    loadAllWhenIdle();
+    upgradeWhenIdle();
   } else {
-    window.addEventListener('load', loadAllWhenIdle, { once: true });
+    window.addEventListener('load', upgradeWhenIdle, { once: true });
   }
 }
 
