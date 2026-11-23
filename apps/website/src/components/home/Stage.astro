@@ -1,0 +1,78 @@
+---
+import { getImage } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+import focus from '../../assets/demo/focus.webp';
+import insights from '../../assets/demo/insights.webp';
+import pomodoro from '../../assets/demo/pomodoro.webp';
+import recall from '../../assets/demo/recall.webp';
+import themes from '../../assets/demo/themes.webp';
+import today from '../../assets/demo/today.webp';
+import { DOCK_STEPS, HERO, STAGE_NOTES, type StepKey } from '../../lib/home-content';
+import { SITE } from '../../lib/site';
+import Icon from './Icon.astro';
+
+const SHOTS: Record<StepKey, ImageMetadata> = { today, pomodoro, focus, recall, insights, themes };
+
+const shots = await Promise.all(
+  DOCK_STEPS.map(async (step) => ({
+    ...step,
+    image: await getImage({ src: SHOTS[step.key], format: 'webp', width: 1440 }),
+  }))
+);
+const [first] = DOCK_STEPS;
+---
+
+<header class="hero" id="showcase">
+  <div class="wrap">
+    <span class="eyebrow">{HERO.eyebrow}</span>
+    <h1 class="hero-title">{HERO.title} <span class="accent">{HERO.accent}</span></h1>
+    <p class="hero-sub">{HERO.sub}</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href={SITE.storeUrl} target="_blank" rel="noopener noreferrer">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/><line x1="10.88" y1="21.94" x2="15.46" y2="14"/></svg>
+        {HERO.primaryCta}
+      </a>
+      <a class="btn btn-ghost btn-lg" href="#showcase" data-stage-cta>{HERO.secondaryCta}</a>
+    </div>
+
+    <div class="stage" data-stage data-note-live={STAGE_NOTES.live} data-cta-live={HERO.secondaryCtaLive}>
+      <div class="browser">
+        <div class="browser-bar">
+          <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <div class="url">New Tab</div>
+        </div>
+        <div class="stage-screen">
+          {
+            shots.map(({ key, alt, image }, index) =>
+              index === 0 ? (
+                <img class="stage-shot is-on" data-step={key} src={image.src} alt={alt} width={image.attributes.width} height={image.attributes.height} fetchpriority="high" />
+              ) : (
+                <img class="stage-shot" data-step={key} data-src={image.src} alt={alt} width={image.attributes.width} height={image.attributes.height} aria-hidden="true" />
+              )
+            )
+          }
+          <div class="stage-live" data-stage-live hidden></div>
+        </div>
+      </div>
+      <div class="dock" role="group" aria-label="Tour the demo">
+        {
+          DOCK_STEPS.map((step, index) => (
+            <button type="button" data-step={step.key} data-title={step.title} data-caption={step.caption} aria-pressed={index === 0 ? 'true' : 'false'}>
+              <Icon name={step.icon} />
+              {step.label}
+            </button>
+          ))
+        }
+      </div>
+      <p class="stage-caption" data-stage-caption aria-live="polite"><strong>{first?.title}</strong> {first?.caption}</p>
+      <p class="stage-note" data-stage-note>{STAGE_NOTES.screenshots}</p>
+      <noscript>
+        <ul class="stage-list">
+          {DOCK_STEPS.map((step) => <li><strong>{step.title}</strong> {step.caption}</li>)}
+        </ul>
+      </noscript>
+    </div>
+  </div>
+</header>
+
+<script type="module" src="/scripts/home-stage.js" is:inline></script>

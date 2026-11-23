@@ -7,6 +7,9 @@ export default defineConfig({
   trailingSlash: 'always',
   // The noindex meta tag does not keep a page out of the sitemap; this filter does.
   integrations: [
-    sitemap({ filter: (page) => !page.includes('/uninstall/') && !page.includes('/feedback/') }),
+    sitemap({
+      filter: (page) =>
+        !page.includes('/uninstall/') && !page.includes('/feedback/') && !page.includes('/next/'),
+    }),
   ],
 });

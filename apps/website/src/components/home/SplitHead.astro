@@ -1,0 +1,15 @@
+---
+import type { SectionHead } from '../../lib/home-content';
+
+type Props = Omit<SectionHead, 'id'>;
+
+const { kicker, title, muted, text } = Astro.props;
+---
+
+<div class="split-head reveal">
+  <div>
+    <p class="kicker">{kicker}</p>
+    <h2 class="section-title">{title}<span class="muted">{muted}</span></h2>
+  </div>
+  <p class="section-desc">{text}</p>
+</div>
