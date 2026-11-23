@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
-import { applySecurityHeaders } from '../functions/_middleware';
+import { applySecurityHeaders } from '../functions/_middleware.ts';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -12,6 +12,8 @@ const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.json': 'application/json',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.webp': 'image/webp',
 };
 
 /**
