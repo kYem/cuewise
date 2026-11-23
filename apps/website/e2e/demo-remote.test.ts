@@ -1,47 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDemoRemote } from '../public/scripts/demo-remote.js';
+import {
+  bodylessWindowWithFocusDialogClosingOnItsOwn,
+  documentMidNavigation,
+  fakeAppWindow,
+  throwingWindow,
+} from './__fixtures__/demo-remote.fixtures';
 import { fakeStorage } from './__fixtures__/storage.fixtures';
-
-const FOCUS_DIALOG = '[role="dialog"][aria-label="Focus mode"]';
-
-function throwingWindow(): Window {
-  return {
-    get document(): Document {
-      throw new Error('document is gone');
-    },
-  } as unknown as Window;
-}
-
-function documentMidNavigation(): Window {
-  return {
-    document: {
-      documentElement: null,
-      body: null,
-      getElementById: () => null,
-      querySelector: () => null,
-    },
-    location: { hash: '', reload: () => undefined },
-  } as unknown as Window;
-}
-
-function bodylessWindowWithFocusDialogClosingOnItsOwn(): Window {
-  let dialogChecks = 0;
-  return {
-    document: {
-      documentElement: { getAttribute: () => 'glass' },
-      body: null,
-      getElementById: () => null,
-      querySelector: (selector: string) => {
-        if (selector === FOCUS_DIALOG) {
-          dialogChecks += 1;
-          return dialogChecks === 1 ? {} : null;
-        }
-        return {};
-      },
-    },
-    location: { hash: '' },
-  } as unknown as Window;
-}
 
 describe('createDemoRemote', () => {
   describe('when a step throws', () => {
@@ -87,6 +52,41 @@ describe('createDemoRemote', () => {
       const result = remote.go('today');
       await vi.runAllTimersAsync();
       await expect(result).resolves.toBe(true);
+    });
+  });
+
+  describe('moving between pages', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('replaces the history entry and fires hashchange instead of assigning the hash', async () => {
+      const { win, events } = fakeAppWindow(fakeStorage());
+      const result = createDemoRemote(win, fakeStorage()).go('pomodoro');
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toBe(true);
+      expect(events).toEqual(['replaceState http://localhost/demo/#pomodoro', 'hashchange']);
+    });
+
+    it('does not navigate when it is already on the page', async () => {
+      const { win, events } = fakeAppWindow(fakeStorage(), 'pomodoro');
+      const result = createDemoRemote(win, fakeStorage()).go('pomodoro');
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toBe(true);
+      expect(events).toEqual([]);
+    });
+
+    it('goes home before it changes the theme', async () => {
+      const storage = fakeStorage();
+      const { win, events } = fakeAppWindow(storage, 'insights');
+      const result = createDemoRemote(win, storage).go('themes');
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toBe(true);
+      expect(events).toEqual(['replaceState http://localhost/demo/', 'hashchange', 'reload']);
     });
   });
 });

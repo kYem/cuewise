@@ -97,7 +97,20 @@ export async function waitForUpgradeDecision(page: Page) {
 }
 
 export async function scrollStageIntoView(page: Page) {
-  await stageOf(page).evaluate((stage) => stage.scrollIntoView({ block: 'center' }));
+  await stageOf(page).evaluate((stage) =>
+    stage.scrollIntoView({ block: 'center', behavior: 'instant' })
+  );
+}
+
+export const PAGE_SETTLE_MS = 600;
+
+export async function readPageState(page: Page) {
+  return page.evaluate(() => ({ entries: history.length, scrollY: window.scrollY }));
+}
+
+export async function settledPageState(page: Page) {
+  await page.waitForTimeout(PAGE_SETTLE_MS);
+  return readPageState(page);
 }
 
 export async function selectStep(page: Page, step: StepKey) {

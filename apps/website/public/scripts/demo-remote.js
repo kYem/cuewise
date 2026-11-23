@@ -64,7 +64,10 @@ export function createDemoRemote(win, storage) {
 
   async function toPage(hash, ready) {
     if (win.location.hash.slice(1) !== hash) {
-      win.location.hash = hash;
+      const url = new URL(win.location.href);
+      url.hash = hash;
+      win.history.replaceState(win.history.state, '', url);
+      win.dispatchEvent(new win.HashChangeEvent('hashchange'));
     }
     return until(ready);
   }
@@ -112,7 +115,7 @@ export function createDemoRemote(win, storage) {
     recall: () => showHome(true),
     insights: () => showPage('insights', () => /Current Streak/.test(text())),
     async themes() {
-      if (!(await closeFocus())) {
+      if (!(await showHome(false))) {
         return false;
       }
       const current = LIGHT_THEMES.indexOf(theme() ?? '');

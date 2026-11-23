@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import type { StepKey } from '../src/lib/home-content';
 import {
   type DemoSites,
@@ -8,10 +9,12 @@ import {
   GOES_LIVE,
   liveLayerOf,
   openLiveHomepage,
+  readPageState,
   STEP_TIMEOUT,
   STEPS,
   scrollStageIntoView,
   selectStep,
+  settledPageState,
   shotOf,
   stageOf,
   startDemoSites,
@@ -90,6 +93,8 @@ test('the dock steers the running app', async ({ page }) => {
       'themes',
       async () => {
         await expect(frame.locator('html[data-theme="purple"]')).toBeAttached(STEP_TIMEOUT);
+        await expect(frame.getByText("Today's Focus").first()).toBeVisible(STEP_TIMEOUT);
+        await expect(frame.getByText('Current Streak')).toHaveCount(0);
       },
     ],
     [
@@ -107,6 +112,55 @@ test('the dock steers the running app', async ({ page }) => {
     await arrive();
     await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
   }
+});
+
+const DESKTOP_VIEWPORT = { width: 1440, height: 900 };
+
+async function expectBackToHomeKeepsThePageStill(page: Page) {
+  await selectStep(page, 'pomodoro');
+  const backToHome = demoFrameOf(page).getByText('Back to Home');
+  await backToHome.scrollIntoViewIfNeeded();
+  const before = await settledPageState(page);
+
+  await backToHome.click();
+
+  await expect(demoFrameOf(page).getByText("Today's Focus").first()).toBeVisible(STEP_TIMEOUT);
+  expect((await settledPageState(page)).scrollY).toBe(before.scrollY);
+}
+
+test('steering through every step leaves the Back button and the scroll position alone', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize(DESKTOP_VIEWPORT);
+  await openLiveHomepage(page);
+  await scrollStageIntoView(page);
+  const before = await readPageState(page);
+
+  for (const step of [...STEPS, 'today' as const]) {
+    await selectStep(page, step);
+    expect(await settledPageState(page), `after ${step}`).toEqual(before);
+  }
+});
+
+test("the app's own Back to Home does not move the page", async ({ page }) => {
+  await page.setViewportSize(DESKTOP_VIEWPORT);
+  await openLiveHomepage(page);
+  await scrollStageIntoView(page);
+
+  await expectBackToHomeKeepsThePageStill(page);
+});
+
+test('Back to Home still does not move the page after a themes step reloaded the frame', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize(DESKTOP_VIEWPORT);
+  await openLiveHomepage(page);
+  await scrollStageIntoView(page);
+  await selectStep(page, 'themes');
+
+  await expectBackToHomeKeepsThePageStill(page);
 });
 
 test('the tour steers the running app too', async ({ page }) => {

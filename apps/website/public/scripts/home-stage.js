@@ -31,6 +31,18 @@ function appRendered(frame) {
   );
 }
 
+// A fragment navigation inside the frame scrolls the page that embeds it.
+function keepPageStillOnFragmentNavigation(frame) {
+  frame.contentWindow?.navigation?.addEventListener('navigate', (event) => {
+    if (event.hashChange) {
+      const { scrollX, scrollY } = window;
+      requestAnimationFrame(() =>
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' })
+      );
+    }
+  });
+}
+
 function waitForApp(frame) {
   return new Promise((resolve) => {
     const deadline = Date.now() + READY_TIMEOUT_MS;
@@ -222,6 +234,8 @@ function init(stage) {
     }
 
     remote = createDemoRemote(frame.contentWindow, localStorage);
+    keepPageStillOnFragmentNavigation(frame);
+    frame.addEventListener('load', () => keepPageStillOnFragmentNavigation(frame));
     window.addEventListener('blur', () => {
       if (document.activeElement === frame) {
         stopTour();
