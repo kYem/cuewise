@@ -9,8 +9,8 @@
  *   schedule: DemoSchedule }} DemoCard
  * @typedef {{ goals: DemoGoal[], pomodoroSessions: DemoSession[], conceptCards: DemoCard[],
  *   pomodoroState: Record<string, unknown>, dailyBackground: Record<string, unknown>,
- *   currentQuote: Record<string, unknown>, 'settings.hasSeenOnboarding': boolean,
- *   'settings.reviewPromptDismissed': boolean }} DemoSeed
+ *   currentQuote: Record<string, unknown>, 'settings.conceptCadence': string,
+ *   'settings.hasSeenOnboarding': boolean, 'settings.reviewPromptDismissed': boolean }} DemoSeed
  */
 
 const MINUTE_MS = 60 * 1000;
@@ -23,7 +23,7 @@ const SESSION_STARTS = [
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
-const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 function daysAgo(now, n) {
   const d = new Date(now);
@@ -170,6 +170,7 @@ export function buildDemoSeed(now) {
       isHidden: false,
       viewCount: 0,
     },
+    'settings.conceptCadence': 'off',
     'settings.hasSeenOnboarding': true,
     'settings.reviewPromptDismissed': true,
   };

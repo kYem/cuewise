@@ -22,6 +22,8 @@ export const GOES_LIVE = { timeout: 15_000 };
 const PROBLEM_PATTERN = /Content Security Policy|Refused to/;
 const DEMO_FOLDERS = ['demo', 'assets'];
 
+export const TODAY_SHOT_FILE = path.join(ROOT, 'src', 'assets', 'demo', 'today.webp');
+
 function runWebsiteScript(script: string) {
   execFileSync('pnpm', ['--filter', '@cuewise/website', script], { cwd: ROOT, stdio: 'inherit' });
 }
@@ -90,6 +92,17 @@ export const shotOf = (page: Page, step: StepKey) =>
 export async function openLiveHomepage(page: Page) {
   await page.goto(`${WITH_DEMO}/next/`);
   await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
+  await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
+}
+
+export function collectDemoWarnings(page: Page): string[] {
+  const warnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().startsWith('Cuewise demo:')) {
+      warnings.push(message.text());
+    }
+  });
+  return warnings;
 }
 
 export async function waitForUpgradeDecision(page: Page) {

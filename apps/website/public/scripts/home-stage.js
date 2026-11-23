@@ -33,6 +33,9 @@ function appRendered(frame) {
 
 // A fragment navigation inside the frame scrolls the page that embeds it.
 function keepPageStillOnFragmentNavigation(frame) {
+  if (frameRoot(frame) === null) {
+    return;
+  }
   frame.contentWindow?.navigation?.addEventListener('navigate', (event) => {
     if (event.hashChange) {
       const { scrollX, scrollY } = window;
@@ -48,23 +51,23 @@ function waitForApp(frame) {
     const deadline = Date.now() + READY_TIMEOUT_MS;
     let timer = 0;
 
-    function settle(ready) {
+    function settle(outcome) {
       window.clearTimeout(timer);
       frame.removeEventListener('load', onLoad);
-      resolve(ready);
+      resolve(outcome);
     }
 
     function onLoad() {
       if (frameRoot(frame) === null) {
-        settle(false);
+        settle('not-the-app');
       }
     }
 
     function poll() {
       if (appRendered(frame)) {
-        settle(true);
+        settle('ready');
       } else if (Date.now() >= deadline) {
-        settle(false);
+        settle('not-rendered');
       } else {
         timer = window.setTimeout(poll, READY_POLL_MS);
       }
@@ -83,6 +86,9 @@ function init(stage) {
   const buttons = [...stage.querySelectorAll('.dock button[data-step]')];
   const caption = stage.querySelector('[data-stage-caption]');
   const liveLayer = stage.querySelector('[data-stage-live]');
+  const note = stage.querySelector('[data-stage-note]');
+  const cta = document.querySelector('[data-stage-cta]');
+  const screenshotNote = note?.textContent ?? '';
   let current = DEMO_STEPS[0];
   let remote = null;
   let steering = 0;
@@ -142,6 +148,12 @@ function init(stage) {
     syncLiveLayer();
   }
 
+  function setNote(text) {
+    if (note) {
+      note.textContent = text;
+    }
+  }
+
   async function select(step) {
     show(step);
     if (!remote) {
@@ -151,8 +163,15 @@ function init(stage) {
     const mine = steering;
     setFallback(true);
     const arrived = await remote.go(step);
-    if (mine === steering && arrived) {
+    if (mine !== steering) {
+      return;
+    }
+    if (arrived) {
+      setNote(stage.dataset.noteLive);
       setFallback(false);
+    } else {
+      console.warn(`Cuewise demo: step "${step}" did not arrive, showing its screenshot`);
+      setNote(screenshotNote);
     }
   }
 
@@ -212,7 +231,8 @@ function init(stage) {
     }
     try {
       writeDemoSeed(localStorage, new Date());
-    } catch {
+    } catch (error) {
+      console.warn('Cuewise demo: could not write the sample data, showing screenshots', error);
       return;
     }
 
@@ -226,7 +246,13 @@ function init(stage) {
     liveLayer.append(frame);
     liveLayer.hidden = false;
 
-    if (!(await ready)) {
+    const outcome = await ready;
+    if (outcome !== 'ready') {
+      console.warn(
+        outcome === 'not-the-app'
+          ? 'Cuewise demo: the frame loaded something that is not the app, showing screenshots'
+          : `Cuewise demo: the app did not render within ${READY_TIMEOUT_MS / 1000}s, showing screenshots`
+      );
       scale.disconnect();
       frame.remove();
       liveLayer.hidden = true;
@@ -235,19 +261,25 @@ function init(stage) {
 
     remote = createDemoRemote(frame.contentWindow, localStorage);
     keepPageStillOnFragmentNavigation(frame);
-    frame.addEventListener('load', () => keepPageStillOnFragmentNavigation(frame));
+    frame.addEventListener('load', () => {
+      if (frameRoot(frame) === null) {
+        setFallback(true);
+        setNote(screenshotNote);
+        return;
+      }
+      keepPageStillOnFragmentNavigation(frame);
+    });
     window.addEventListener('blur', () => {
       if (document.activeElement === frame) {
         stopTour();
       }
     });
-    stage.querySelector('[data-stage-note]').textContent = stage.dataset.noteLive;
-    document.querySelector('[data-stage-cta]').textContent = stage.dataset.ctaLive;
-    if (current !== DEMO_STEPS[0]) {
-      select(current);
-    }
+    select(current);
     stage.classList.add('is-live');
     syncLiveLayer();
+    if (cta) {
+      cta.textContent = stage.dataset.ctaLive;
+    }
   }
 
   function upgrade() {

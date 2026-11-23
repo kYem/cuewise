@@ -1,3 +1,5 @@
+import { dayKey } from './demo-seed.js';
+
 export const DEMO_STEPS = /** @type {const} */ ([
   'today',
   'pomodoro',
@@ -7,10 +9,18 @@ export const DEMO_STEPS = /** @type {const} */ ([
   'themes',
 ]);
 const LIGHT_THEMES = ['purple', 'forest', 'rose'];
+export const PHOTO_WAIT_MS = 4000;
+
+/** True once the glass theme's photo has faded in; the app adds that layer only after the photo loads. */
+export function photoShown(win) {
+  const photo = win.document.querySelector('[style*="background-image"]');
+  return photo !== null && win.getComputedStyle(photo).opacity === '1';
+}
 
 /**
- * Steers the app running in `win`: a frame's contentWindow, or `window` itself. The `themes` step
- * reloads `win`, so use it only for a framed app.
+ * Steers the app running in `win`: a frame's contentWindow, or `window` itself. A theme change
+ * reloads `win` (`themes` always, other steps when the theme is not glass), which ends a top-level
+ * caller.
  * @param {Window} win
  * @param {Storage} storage
  * @returns {{ go(step: string): Promise<boolean> }}
@@ -41,17 +51,30 @@ export function createDemoRemote(win, storage) {
     );
   const press = (key) =>
     doc().body?.dispatchEvent(
-      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+      new win.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
     );
+  const cardIsDue = () => {
+    const today = dayKey(new Date());
+    return JSON.parse(storage.getItem('conceptCards') ?? '[]').some(
+      (card) => card.schedule.dueDate <= today
+    );
+  };
+
+  let photoMissed = false;
 
   async function setTheme(name) {
-    if (theme() === name) {
-      return true;
+    if (theme() !== name) {
+      storage.setItem('settings.colorTheme', JSON.stringify(name));
+      win.location.reload();
+      await sleep(150);
+      if (!(await until(() => appReady() && theme() === name, 6000))) {
+        return false;
+      }
     }
-    storage.setItem('settings.colorTheme', JSON.stringify(name));
-    win.location.reload();
-    await sleep(150);
-    return until(() => appReady() && theme() === name, 6000);
+    if (name === 'glass' && !photoMissed) {
+      photoMissed = !(await until(() => photoShown(win), PHOTO_WAIT_MS));
+    }
+    return true;
   }
 
   async function closeFocus() {
@@ -63,6 +86,7 @@ export function createDemoRemote(win, storage) {
   }
 
   async function toPage(hash, ready) {
+    // Not `location.hash`: that adds a Back entry per step and scrolls the embedding page.
     if (win.location.hash.slice(1) !== hash) {
       const url = new URL(win.location.href);
       url.hash = hash;
@@ -85,11 +109,12 @@ export function createDemoRemote(win, storage) {
     return false;
   }
 
+  async function goHome() {
+    return (await closeFocus()) && (await toPage('', onHome));
+  }
+
   async function showHome(withCard) {
-    if (!(await closeFocus()) || !(await toPage('', onHome))) {
-      return false;
-    }
-    return ensureCard(withCard);
+    return (await goHome()) && (await ensureCard(withCard));
   }
 
   async function showPage(hash, ready) {
@@ -112,7 +137,15 @@ export function createDemoRemote(win, storage) {
       enterFocus()?.click();
       return until(focusOpen);
     },
-    recall: () => showHome(true),
+    async recall() {
+      if (!(await goHome())) {
+        return false;
+      }
+      if (cardIsDue()) {
+        await ensureCard(true);
+      }
+      return true;
+    },
     insights: () => showPage('insights', () => /Current Streak/.test(text())),
     async themes() {
       if (!(await showHome(false))) {
@@ -142,7 +175,12 @@ export function createDemoRemote(win, storage) {
       }
       latest += 1;
       const mine = latest;
-      const run = queue.then(() => (mine === latest ? perform(step) : false)).catch(() => false);
+      const run = queue
+        .then(() => (mine === latest ? perform(step) : false))
+        .catch((error) => {
+          console.warn(`Cuewise demo: step "${step}" threw`, error);
+          return false;
+        });
       queue = run;
       return run;
     },

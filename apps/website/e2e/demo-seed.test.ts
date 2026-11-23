@@ -14,9 +14,21 @@ describe('buildDemoSeed', () => {
       'goals',
       'pomodoroSessions',
       'pomodoroState',
+      'settings.conceptCadence',
       'settings.hasSeenOnboarding',
       'settings.reviewPromptDismissed',
     ]);
+  });
+
+  it('keeps the concept card off the home view until Recall asks for it', () => {
+    expect(buildDemoSeed(NOON)['settings.conceptCadence']).toBe('off');
+  });
+
+  it('skips the onboarding and the review prompt', () => {
+    expect(buildDemoSeed(NOON)).toMatchObject({
+      'settings.hasSeenOnboarding': true,
+      'settings.reviewPromptDismissed': true,
+    });
   });
 
   it('has three goals today, one of them done', () => {

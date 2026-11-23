@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test';
 import type { StepKey } from '../src/lib/home-content';
+import { STAGE_NOTES } from '../src/lib/home-content';
 import {
+  collectDemoWarnings,
   type DemoSites,
   demoFrameOf,
   demoIframeOf,
@@ -18,6 +20,7 @@ import {
   shotOf,
   stageOf,
   startDemoSites,
+  TODAY_SHOT_FILE,
   test,
   WITH_DEMO,
   WITHOUT_DEMO,
@@ -31,8 +34,8 @@ const ALLOWED_HOSTS = new Set([
   'images.unsplash.com',
 ]);
 const TOUR_DWELL_MS = 5200;
-const STEERING_GIVES_UP_MS = 10_000;
 const MISSING_DEMO_WAIT_MS = 8000;
+const PHOTO_HELD_MS = 2000;
 
 let sites: DemoSites | undefined;
 
@@ -46,8 +49,7 @@ test.afterAll(async () => {
 });
 
 test('runs the released extension in the frame', async ({ page }) => {
-  await page.goto(`${WITH_DEMO}/next/`);
-  await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
+  await openLiveHomepage(page);
   await expect(demoFrameOf(page).getByText("Today's Focus")).toBeVisible();
   await expect(demoFrameOf(page).getByText('1/3')).toBeVisible();
   await expect(page.locator('[data-stage-note]')).toHaveText(/This is the extension itself/);
@@ -189,6 +191,25 @@ test('clicking into the frame stops the tour', async ({ page }) => {
   await expect(dockButtonOf(page, 'today')).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('the whole tour runs live and settles on today', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openLiveHomepage(page);
+  await scrollStageIntoView(page);
+
+  for (const step of [...STEPS.slice(1), 'today' as const]) {
+    await expect(dockButtonOf(page, step)).toHaveAttribute('aria-pressed', 'true', {
+      timeout: TOUR_DWELL_MS * 2,
+    });
+  }
+
+  await expect(page.locator('[data-stage-caption]')).toHaveAttribute('aria-live', 'polite');
+  await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
+  await expect(demoFrameOf(page).locator('html[data-theme="glass"]')).toBeAttached(STEP_TIMEOUT);
+  await expect(demoFrameOf(page).getByText("Today's Focus").first()).toBeVisible(STEP_TIMEOUT);
+  await page.waitForTimeout(TOUR_DWELL_MS);
+  await expect(dockButtonOf(page, 'today')).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('contacts only the site, the font hosts and Unsplash', async ({ page }) => {
   test.setTimeout(120_000);
   const hosts = new Set<string>();
@@ -223,7 +244,9 @@ test('last click wins', async ({ page }) => {
 
 test('falls back to the screenshot when a step fails', async ({ page }) => {
   test.setTimeout(60_000);
+  const warnings = collectDemoWarnings(page);
   await openLiveHomepage(page);
+  await expect(page.locator('[data-stage-note]')).toHaveText(STAGE_NOTES.live);
   await page.evaluate(() => {
     document
       .querySelector<HTMLIFrameElement>('[data-stage-live] iframe')
@@ -231,11 +254,58 @@ test('falls back to the screenshot when a step fails', async ({ page }) => {
   });
 
   await dockButtonOf(page, 'insights').click();
-  await page.waitForTimeout(STEERING_GIVES_UP_MS);
+  await expect
+    .poll(() => warnings, { timeout: 20_000 })
+    .toContainEqual(expect.stringContaining('step "insights"'));
 
+  await expect(page.locator('[data-stage-note]')).toHaveText(STAGE_NOTES.screenshots, {
+    timeout: 20_000,
+  });
   await expect(stageOf(page)).toHaveClass(/is-fallback/);
   await expect(shotOf(page, 'insights')).toHaveClass(/is-on/);
   await expect(liveLayerOf(page)).toHaveJSProperty('inert', true);
+});
+
+test('Recall after the due card is graded still lands on the live app', async ({ page }) => {
+  test.setTimeout(60_000);
+  await openLiveHomepage(page);
+  await selectStep(page, 'recall');
+  const frame = demoFrameOf(page);
+  await frame.getByRole('button', { name: 'Reveal answer (Space)' }).click();
+  await frame.getByRole('button', { name: /^Good/ }).click();
+  await selectStep(page, 'today');
+
+  await selectStep(page, 'recall');
+
+  await expect(stageOf(page)).not.toHaveClass(/is-fallback/);
+  await expect(page.locator('[data-stage-note]')).toHaveText(STAGE_NOTES.live);
+});
+
+test('keeps the screenshot up until the live photo has faded in', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.route('**/images.unsplash.com/**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, PHOTO_HELD_MS));
+    await route.fulfill({ path: TODAY_SHOT_FILE, contentType: 'image/webp' });
+  });
+  await page.goto(`${WITH_DEMO}/next/`);
+  await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
+  await page.waitForTimeout(1000);
+  await expect(stageOf(page)).toHaveClass(/is-fallback/);
+
+  await expect(stageOf(page)).not.toHaveClass(/is-fallback/, STEP_TIMEOUT);
+
+  await expect(demoFrameOf(page).locator('[style*="background-image"]')).toHaveCSS('opacity', '1');
+});
+
+test('goes live without the photo when it cannot be loaded', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.route('**/images.unsplash.com/**', (route) => route.abort());
+  await page.goto(`${WITH_DEMO}/next/`);
+  await expect(stageOf(page)).toHaveClass(/is-live/, GOES_LIVE);
+
+  await expect(stageOf(page)).not.toHaveClass(/is-fallback/, { timeout: 10_000 });
+
+  await expect(demoFrameOf(page).getByText("Today's Focus")).toBeVisible();
 });
 
 test('a narrow window gets screenshots and no frame', async ({ page }) => {
@@ -283,6 +353,7 @@ test('stays on screenshots when the demo is missing', async ({ page }) => {
 
 test('stays on screenshots when the app never renders', async ({ page }) => {
   test.setTimeout(60_000);
+  const warnings = collectDemoWarnings(page);
   await page.route(/\/assets\/newtab-[^/]*\.js$/, (route) => route.abort());
   const demoRequested = page.waitForRequest(
     (request) => new URL(request.url()).pathname === '/demo/'
@@ -294,9 +365,13 @@ test('stays on screenshots when the app never renders', async ({ page }) => {
   await expect(demoIframeOf(page)).toHaveCount(0, { timeout: 20_000 });
   await expect(stageOf(page)).not.toHaveClass(/is-live/);
   await expect(liveLayerOf(page)).toBeHidden();
+  await expect
+    .poll(() => warnings)
+    .toContainEqual(expect.stringContaining('the app did not render'));
 });
 
 test('stays on screenshots when storage is blocked', async ({ page }) => {
+  const warnings = collectDemoWarnings(page);
   const demoRequests: string[] = [];
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/demo/') {
@@ -318,4 +393,7 @@ test('stays on screenshots when storage is blocked', async ({ page }) => {
   await expect(demoIframeOf(page)).toHaveCount(0);
   await expect(liveLayerOf(page)).toBeHidden();
   expect(demoRequests).toEqual([]);
+  await expect
+    .poll(() => warnings)
+    .toContainEqual(expect.stringContaining('could not write the sample data'));
 });
