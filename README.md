@@ -93,7 +93,7 @@ cuewise/
     └── test-utils/          # Factories, mocks, fixtures
 ```
 
-Platform differences are handled through ports and adapters, so the same React app runs in the extension and in the macOS shell. See [CLAUDE.md](./CLAUDE.md) for architecture and [ARCHITECTURE.md](./ARCHITECTURE.md) for the deeper guide.
+Platform differences are handled through ports and adapters, so the same React app runs in the extension and in the macOS shell. See [ARCHITECTURE.md](./ARCHITECTURE.md) for workspace responsibilities and how the clients run sync.
 
 **Tech:** React 18, TypeScript, Vite, Tailwind CSS 4, Zustand, Vitest, Biome, Turbo, pnpm workspaces.
 
