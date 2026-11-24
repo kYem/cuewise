@@ -444,9 +444,9 @@ rm -rf node_modules packages/*/node_modules
 pnpm install
 ```
 
-## Future Platform Expansion
+## Workspace Architecture
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for adding web (Next.js) and mobile (React Native) apps. The storage adapter pattern and `@cuewise/shared` are designed for multi-platform reuse.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for workspace responsibilities and how the extension and macOS app share features and wire up sync.
 
 ## Key Files Reference
 
@@ -550,7 +550,7 @@ Branch from the ticket's own `gitBranchName` (e.g. `kes/eng-101-...`); on a `cla
 ## Additional Resources
 
 - [README.md](./README.md) - User-facing documentation
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Detailed architecture guide
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - Workspace map and client architecture
 - [LINTING.md](./LINTING.md) - Biome setup and usage
 - [apps/api/CLAUDE.md](./apps/api/CLAUDE.md) - Cloud-sync backend (Cloudflare Worker + D1)
 - [packages/sync-client/CLAUDE.md](./packages/sync-client/CLAUDE.md) - Cloud-sync API client (used by the extension and Tauri app)
