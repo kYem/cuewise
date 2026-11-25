@@ -1,5 +1,19 @@
 # @cuewise/browser-extension
 
+## 1.29.0
+
+### Minor Changes
+
+- f7f7b2d: Seven new background themes (Anime, Japan, Space, Countryside, Cars, AI and Classical) and fresh photos for the original six.
+- 035f823: Pomodoro breaks offer up to three due concept cards beside the timer, with a "Just rest" option.
+- b0c65d9: The weather popover expands to a 14-day forecast with each day's chance of rain.
+
+### Patch Changes
+
+- 2ccbd14: Approving a new sync device unlocks sooner, with a spinner while waiting for it to confirm.
+- 7986a21: Searching settings for a home widget, such as weather or notes, now finds it.
+- 03e0463: The menu's sync row shows your account and last sync time instantly, and keeps the time current while open.
+
 ## 1.28.1
 
 ### Patch Changes

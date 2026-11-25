@@ -1,5 +1,28 @@
 # @cuewise/macos
 
+## 0.12.0
+
+### Minor Changes
+
+- f7f7b2d: Seven new background themes (Anime, Japan, Space, Countryside, Cars, AI and Classical) and fresh photos for the original six.
+
+### Patch Changes
+
+- 2ccbd14: Approving a new sync device unlocks sooner, with a spinner while waiting for it to confirm.
+- 7986a21: Searching settings for a home widget, such as weather or notes, now finds it.
+- 03e0463: The menu's sync row shows your account and last sync time instantly, and keeps the time current while open.
+- Updated dependencies [f7f7b2d]
+- Updated dependencies [035f823]
+- Updated dependencies [2ccbd14]
+- Updated dependencies [7986a21]
+- Updated dependencies [03e0463]
+- Updated dependencies [b0c65d9]
+  - @cuewise/app@1.27.0
+  - @cuewise/shared@1.29.0
+  - @cuewise/sync-engine@0.5.2
+  - @cuewise/storage@1.29.0
+  - @cuewise/sync-client@0.3.4
+
 ## 0.11.1
 
 ### Patch Changes
