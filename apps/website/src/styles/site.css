@@ -966,6 +966,60 @@ h1.hero-title-wide {
   max-width: clamp(900px, (100svh - 250px) * 16 / 9, 1080px);
   margin: 0 auto;
 }
+.stage-fullscreen {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.stage-fullscreen[hidden] {
+  display: none;
+}
+.stage-fullscreen:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.stage-fullscreen:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.stage-fullscreen svg {
+  width: 16px;
+  height: 16px;
+}
+.stage-fullscreen .icon-exit,
+.stage:fullscreen .stage-fullscreen .icon-enter {
+  display: none;
+}
+.stage:fullscreen .stage-fullscreen .icon-exit {
+  display: block;
+}
+.stage:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  background: #0b0a16;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: .stage never holds a .show-media frame */
+.stage:fullscreen .browser {
+  width: 100%;
+  max-width: calc((100vh - 170px) * 16 / 9);
+}
+.stage:fullscreen :is(.hero-glow, .stage-caption, .stage-note) {
+  display: none;
+}
 .stage-screen {
   position: relative;
   aspect-ratio: 16 / 9;
