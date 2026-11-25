@@ -177,6 +177,7 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
             <ul aria-label="Daily forecast" className={DAY_LIST_CLASS}>
               {days.map((day) => {
                 const DayIcon = conditionIcon(day.condition, true);
+                const probability = day.precipitationProbability ?? 0;
                 return (
                   <li key={day.date} className="flex items-center gap-2 py-1 text-xs">
                     <span className="flex-1 text-primary">
@@ -184,6 +185,14 @@ const WeatherPopover: React.FC<{ snapshot: WeatherSnapshot; alignRight: boolean 
                     </span>
                     <DayIcon className="w-3.5 h-3.5 text-secondary" />
                     <span className="sr-only">{CONDITION_LABELS[day.condition]}</span>
+                    <span className="w-9 shrink-0 text-right font-medium text-secondary tabular-nums">
+                      {probability > 0 && (
+                        <span title="Peak hourly chance of precipitation">
+                          <span className="sr-only">Peak hourly chance of precipitation: </span>
+                          {probability}%
+                        </span>
+                      )}
+                    </span>
                     <span className="w-8 text-right font-bold text-primary tabular-nums">
                       {formatTemperature(day.high)}
                     </span>
