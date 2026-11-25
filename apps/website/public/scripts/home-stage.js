@@ -227,10 +227,16 @@ function init(stage) {
       });
     }
     document.addEventListener('fullscreenchange', () => {
-      const label = document.fullscreenElement === stage ? 'Exit full screen' : 'Full screen';
+      const on = document.fullscreenElement === stage;
       for (const button of fullscreenButtons) {
-        button.setAttribute('aria-label', label);
-        button.title = label;
+        const text = button.querySelector('[data-stage-fullscreen-label]');
+        if (text) {
+          text.textContent = on ? 'Exit full screen' : 'View full screen';
+        } else {
+          const label = on ? 'Exit full screen' : 'Full screen';
+          button.setAttribute('aria-label', label);
+          button.title = label;
+        }
       }
     });
   }
