@@ -18,13 +18,15 @@ describe('buildDemoSeed', () => {
       'settings.hasSeenOnboarding',
       'settings.reviewPromptDismissed',
       'settings.showWeather',
+      'settings.weatherPosition',
       'weather',
     ]);
   });
 
-  it('shows the weather for London, fetched live', () => {
+  it('shows live London weather on the right', () => {
     expect(buildDemoSeed(NOON)).toMatchObject({
       'settings.showWeather': true,
+      'settings.weatherPosition': 'right',
       weather: {
         location: { name: 'London', timezone: 'Europe/London' },
         snapshot: null,
