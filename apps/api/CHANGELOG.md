@@ -1,5 +1,18 @@
 # @cuewise/api
 
+## 0.4.0
+
+### Minor Changes
+
+- b0c65d9: The weather popover expands to a 14-day forecast with each day's chance of rain.
+
+### Patch Changes
+
+- Updated dependencies [f7f7b2d]
+- Updated dependencies [035f823]
+- Updated dependencies [b0c65d9]
+  - @cuewise/shared@1.29.0
+
 ## 0.3.3
 
 ### Patch Changes

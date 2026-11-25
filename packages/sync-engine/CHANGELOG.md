@@ -1,5 +1,17 @@
 # @cuewise/sync-engine
 
+## 0.5.2
+
+### Patch Changes
+
+- 03e0463: The menu's sync row shows your account and last sync time instantly, and keeps the time current while open.
+- Updated dependencies [f7f7b2d]
+- Updated dependencies [035f823]
+- Updated dependencies [b0c65d9]
+  - @cuewise/shared@1.29.0
+  - @cuewise/storage@1.29.0
+  - @cuewise/sync-client@0.3.4
+
 ## 0.5.1
 
 ### Patch Changes

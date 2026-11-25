@@ -1,5 +1,13 @@
 # @cuewise/shared
 
+## 1.29.0
+
+### Minor Changes
+
+- f7f7b2d: Seven new background themes (Anime, Japan, Space, Countryside, Cars, AI and Classical) and fresh photos for the original six.
+- 035f823: Pomodoro breaks offer up to three due concept cards beside the timer, with a "Just rest" option.
+- b0c65d9: The weather popover expands to a 14-day forecast with each day's chance of rain.
+
 ## 1.28.1
 
 ### Patch Changes
