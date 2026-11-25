@@ -213,7 +213,7 @@ function init(stage) {
 
   const fullscreenButton = stage.querySelector('[data-stage-fullscreen]');
   if (fullscreenButton && document.fullscreenEnabled) {
-    fullscreenButton.hidden = false;
+    fullscreenButton.disabled = false;
     fullscreenButton.addEventListener('click', () => {
       if (document.fullscreenElement === stage) {
         document.exitFullscreen();
@@ -226,7 +226,9 @@ function init(stage) {
     });
     document.addEventListener('fullscreenchange', () => {
       const on = document.fullscreenElement === stage;
-      fullscreenButton.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+      const label = on ? 'Exit full screen' : 'Full screen';
+      fullscreenButton.setAttribute('aria-label', label);
+      fullscreenButton.title = label;
     });
   }
 

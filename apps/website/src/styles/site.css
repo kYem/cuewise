@@ -299,7 +299,7 @@ h1.hero-title {
   display: flex;
   gap: 7px;
 }
-.dots span {
+.dots > * {
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -966,43 +966,41 @@ h1.hero-title-wide {
   max-width: clamp(900px, (100svh - 250px) * 16 / 9, 1080px);
   margin: 0 auto;
 }
-.stage-fullscreen {
-  display: inline-grid;
+.dots button {
+  position: relative;
+  display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  margin-left: auto;
   padding: 0;
   border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  transition:
-    background var(--duration-fast) ease,
-    color var(--duration-fast) ease;
 }
-.stage-fullscreen[hidden] {
+/* Widens the 11px dot to a usable hit area without moving it. */
+.dots button::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.dots button:disabled {
+  cursor: default;
+}
+.dots button:enabled {
+  cursor: pointer;
+}
+.fs-glyph {
+  width: 9px;
+  height: 9px;
+  fill: rgba(0, 60, 0, 0.75);
+  opacity: 0;
+}
+.dots:hover .fs-glyph,
+.dots :focus-visible > .fs-glyph {
+  opacity: 1;
+}
+.dots :disabled > .fs-glyph {
   display: none;
 }
-.stage-fullscreen:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-.stage-fullscreen:focus-visible {
+.dots button:focus-visible {
   outline: 2px solid #a78bfa;
   outline-offset: 2px;
-}
-.stage-fullscreen svg {
-  width: 16px;
-  height: 16px;
-}
-.stage-fullscreen .icon-exit,
-.stage:fullscreen .stage-fullscreen .icon-enter {
-  display: none;
-}
-.stage:fullscreen .stage-fullscreen .icon-exit {
-  display: block;
 }
 .stage:fullscreen {
   display: flex;
