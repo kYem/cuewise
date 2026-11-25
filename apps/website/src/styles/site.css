@@ -1009,10 +1009,10 @@ h1.hero-title-wide {
   height: 30px;
   margin-left: auto;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.55);
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.75);
+  background: rgba(139, 92, 246, 0.22);
+  color: #fff;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1024,8 +1024,7 @@ h1.hero-title-wide {
   display: none;
 }
 .stage-fullscreen:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(139, 92, 246, 0.4);
 }
 .stage-fullscreen:focus-visible {
   outline: 2px solid #a78bfa;
