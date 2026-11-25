@@ -9,7 +9,8 @@
  *   schedule: DemoSchedule }} DemoCard
  * @typedef {{ goals: DemoGoal[], pomodoroSessions: DemoSession[], conceptCards: DemoCard[],
  *   pomodoroState: Record<string, unknown>, dailyBackground: Record<string, unknown>,
- *   currentQuote: Record<string, unknown>, 'settings.conceptCadence': string,
+ *   currentQuote: Record<string, unknown>, weather: Record<string, unknown>,
+ *   'settings.showWeather': boolean, 'settings.conceptCadence': string,
  *   'settings.hasSeenOnboarding': boolean, 'settings.reviewPromptDismissed': boolean }} DemoSeed
  */
 
@@ -34,6 +35,17 @@ function daysAgo(now, n) {
 
 export const DEMO_BACKGROUND_URL =
   'https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=1920&h=1080&fit=crop&auto=format';
+
+export const DEMO_WEATHER_LOCATION = {
+  id: '2643743',
+  name: 'London',
+  admin1: 'England',
+  country: 'United Kingdom',
+  countryCode: 'GB',
+  latitude: 51.5074,
+  longitude: -0.1278,
+  timezone: 'Europe/London',
+};
 
 function buildGoals(now) {
   const goal = (id, text, completed, daysBack) => {
@@ -170,6 +182,8 @@ export function buildDemoSeed(now) {
       isHidden: false,
       viewCount: 0,
     },
+    weather: { location: DEMO_WEATHER_LOCATION, snapshot: null, lastFetch: null },
+    'settings.showWeather': true,
     'settings.conceptCadence': 'off',
     'settings.hasSeenOnboarding': true,
     'settings.reviewPromptDismissed': true,

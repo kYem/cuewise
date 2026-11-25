@@ -17,7 +17,20 @@ describe('buildDemoSeed', () => {
       'settings.conceptCadence',
       'settings.hasSeenOnboarding',
       'settings.reviewPromptDismissed',
+      'settings.showWeather',
+      'weather',
     ]);
+  });
+
+  it('shows the weather for London, fetched live', () => {
+    expect(buildDemoSeed(NOON)).toMatchObject({
+      'settings.showWeather': true,
+      weather: {
+        location: { name: 'London', timezone: 'Europe/London' },
+        snapshot: null,
+        lastFetch: null,
+      },
+    });
   });
 
   it('keeps the concept card off the home view until Recall asks for it', () => {
