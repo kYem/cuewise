@@ -437,6 +437,7 @@ export interface WeatherDayRange {
 export interface WeatherDay extends WeatherDayRange {
   date: string; // Local calendar date in the location's zone, YYYY-MM-DD
   condition: WeatherConditionKind;
+  precipitationProbability?: number; // Peak hourly probability as a percentage
 }
 
 // `hours` is one or two whole local days, not a sample: sampling depends on the current minute,

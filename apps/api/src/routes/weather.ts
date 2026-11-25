@@ -106,6 +106,7 @@ interface OpenMeteoForecast {
     weather_code?: unknown;
     temperature_2m_max?: unknown;
     temperature_2m_min?: unknown;
+    precipitation_probability_max?: unknown;
     sunrise?: unknown;
     sunset?: unknown;
   };
@@ -230,6 +231,7 @@ function normalizeDays(daily: OpenMeteoForecast['daily']): WeatherDay[] {
   const highs = daily?.temperature_2m_max;
   const lows = daily?.temperature_2m_min;
   const codes = daily?.weather_code;
+  const probabilities = daily?.precipitation_probability_max;
   if (!Array.isArray(dates) || !Array.isArray(highs) || !Array.isArray(lows)) {
     return [];
   }
@@ -241,12 +243,17 @@ function normalizeDays(daily: OpenMeteoForecast['daily']): WeatherDay[] {
     if (typeof date !== 'string' || !ISO_DATE.test(date) || high === null || low === null) {
       continue;
     }
-    days.push({
+    const probability = Array.isArray(probabilities) ? readNumber(probabilities[i]) : null;
+    const day: WeatherDay = {
       date,
       high,
       low,
       condition: mapWmoCode(Array.isArray(codes) ? codes[i] : undefined),
-    });
+    };
+    if (probability !== null && probability >= 0 && probability <= 100) {
+      day.precipitationProbability = Math.round(probability);
+    }
+    days.push(day);
   }
   return days;
 }
@@ -325,7 +332,7 @@ function buildForecastUrl(lat: number, lon: number, units: WeatherUnits, days: n
   url.searchParams.set('hourly', 'temperature_2m,weather_code');
   url.searchParams.set(
     'daily',
-    'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset'
+    'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max'
   );
   url.searchParams.set('forecast_days', String(days));
   // Safe to cache: the provider resolves `auto` from the coordinates, not the caller's IP,

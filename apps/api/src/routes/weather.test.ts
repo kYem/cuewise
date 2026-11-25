@@ -319,6 +319,35 @@ describe('POST /v1/weather', () => {
       expect(sent.searchParams.get('daily')).toContain('weather_code');
     });
 
+    it('requests and returns peak precipitation probabilities by date when available', async () => {
+      const { sent, forecast } = await forecastFor(
+        {
+          ...FORTNIGHT_PAYLOAD,
+          daily: { ...FORTNIGHT_PAYLOAD.daily, precipitation_probability_max: [0, 75, null] },
+        },
+        { days: '2', daily: '14' }
+      );
+
+      expect(sent.searchParams.get('daily')?.split(',')).toContain('precipitation_probability_max');
+      expect(forecast.daily).toEqual([
+        {
+          date: '2026-07-25',
+          high: 21.4,
+          low: 11.2,
+          condition: 'clear',
+          precipitationProbability: 0,
+        },
+        {
+          date: '2026-07-26',
+          high: 24.8,
+          low: 13.6,
+          condition: 'rain',
+          precipitationProbability: 75,
+        },
+        { date: '2026-07-27', high: 19.1, low: 12.4, condition: 'thunderstorm' },
+      ]);
+    });
+
     it('returns one entry per day', async () => {
       const { forecast } = await forecastFor(FORTNIGHT_PAYLOAD, { days: '2', daily: '14' });
 

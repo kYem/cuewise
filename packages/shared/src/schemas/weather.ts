@@ -41,6 +41,7 @@ export const weatherDaySchema = z.object({
   high: z.number(),
   low: z.number(),
   condition: conditionSchema,
+  precipitationProbability: z.optional(z.int().check(z.gte(0), z.lte(100))),
 });
 assertNoDrift<z.infer<typeof weatherDaySchema>, WeatherDay>();
 

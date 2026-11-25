@@ -535,6 +535,25 @@ describe('the daily forecast', () => {
     expect(monday).toHaveTextContent('Rain');
   });
 
+  it('shows the precipitation percentage for the corresponding day', () => {
+    const daily = days(3).map((day, index) => {
+      if (index === 2) {
+        return { ...day, precipitationProbability: 75 };
+      }
+      if (index === 0) {
+        return { ...day, precipitationProbability: 0 };
+      }
+      return day;
+    });
+    openAt('2026-07-25T09:00:00Z', { daily });
+    expand();
+
+    const rows = screen.getAllByRole('listitem');
+    expect(rows[2]).toHaveTextContent('Peak hourly chance of precipitation: 75%');
+    expect(rows[0]).not.toHaveTextContent('%');
+    expect(rows[1]).not.toHaveTextContent('%');
+  });
+
   it('folds away again', () => {
     openAt('2026-07-25T09:00:00Z', { daily: days() });
     expand();
