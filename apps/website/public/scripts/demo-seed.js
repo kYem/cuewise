@@ -10,7 +10,8 @@
  * @typedef {{ goals: DemoGoal[], pomodoroSessions: DemoSession[], conceptCards: DemoCard[],
  *   pomodoroState: Record<string, unknown>, dailyBackground: Record<string, unknown>,
  *   currentQuote: Record<string, unknown>, weather: Record<string, unknown>,
- *   'settings.showWeather': boolean, 'settings.conceptCadence': string,
+ *   'settings.showWeather': boolean, 'settings.weatherPosition': string,
+ *   'settings.conceptCadence': string,
  *   'settings.hasSeenOnboarding': boolean, 'settings.reviewPromptDismissed': boolean }} DemoSeed
  */
 
@@ -184,6 +185,7 @@ export function buildDemoSeed(now) {
     },
     weather: { location: DEMO_WEATHER_LOCATION, snapshot: null, lastFetch: null },
     'settings.showWeather': true,
+    'settings.weatherPosition': 'right',
     'settings.conceptCadence': 'off',
     'settings.hasSeenOnboarding': true,
     'settings.reviewPromptDismissed': true,
