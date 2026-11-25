@@ -1266,6 +1266,22 @@ h1.hero-title-wide {
     margin-bottom: 32px;
   }
 }
+@media (max-width: 700px) {
+  .stage-fullscreen {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+  /* Visually hidden, so the icon-only button keeps its accessible name. */
+  .stage-fullscreen [data-stage-fullscreen-label] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .stage-screen .stage-shot,
   .stage-screen .stage-shot.is-on,
