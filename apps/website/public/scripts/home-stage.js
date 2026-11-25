@@ -211,24 +211,27 @@ function init(stage) {
     });
   }
 
-  const fullscreenButton = stage.querySelector('[data-stage-fullscreen]');
-  if (fullscreenButton && document.fullscreenEnabled) {
-    fullscreenButton.disabled = false;
-    fullscreenButton.addEventListener('click', () => {
-      if (document.fullscreenElement === stage) {
-        document.exitFullscreen();
-        return;
-      }
-      stopTour();
-      stage.requestFullscreen().catch((error) => {
-        console.warn('Cuewise demo: full screen was refused', error);
+  const fullscreenButtons = [...stage.querySelectorAll('[data-stage-fullscreen]')];
+  if (document.fullscreenEnabled) {
+    for (const button of fullscreenButtons) {
+      button.disabled = false;
+      button.addEventListener('click', () => {
+        if (document.fullscreenElement === stage) {
+          document.exitFullscreen();
+          return;
+        }
+        stopTour();
+        stage.requestFullscreen().catch((error) => {
+          console.warn('Cuewise demo: full screen was refused', error);
+        });
       });
-    });
+    }
     document.addEventListener('fullscreenchange', () => {
-      const on = document.fullscreenElement === stage;
-      const label = on ? 'Exit full screen' : 'Full screen';
-      fullscreenButton.setAttribute('aria-label', label);
-      fullscreenButton.title = label;
+      const label = document.fullscreenElement === stage ? 'Exit full screen' : 'Full screen';
+      for (const button of fullscreenButtons) {
+        button.setAttribute('aria-label', label);
+        button.title = label;
+      }
     });
   }
 

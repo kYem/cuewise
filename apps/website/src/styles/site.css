@@ -1002,6 +1002,45 @@ h1.hero-title-wide {
   outline: 2px solid #a78bfa;
   outline-offset: 2px;
 }
+.stage-fullscreen {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.stage-fullscreen:disabled {
+  display: none;
+}
+.stage-fullscreen:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.stage-fullscreen:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.stage-fullscreen .icon-enter,
+.stage-fullscreen .icon-exit {
+  width: 16px;
+  height: 16px;
+}
+.stage-fullscreen .icon-exit,
+.stage:fullscreen .stage-fullscreen .icon-enter {
+  display: none;
+}
+.stage:fullscreen .stage-fullscreen .icon-exit {
+  display: block;
+}
 .stage:fullscreen {
   display: flex;
   flex-direction: column;
