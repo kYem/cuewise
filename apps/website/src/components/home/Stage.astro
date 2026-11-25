@@ -39,8 +39,18 @@ const [first] = DOCK_STEPS;
       <div class="hero-glow"></div>
       <div class="browser">
         <div class="browser-bar">
-          <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <div class="dots">
+            <span class="r"></span><span class="y"></span>
+            <button type="button" class="g" data-stage-fullscreen aria-label="Full screen" title="Full screen" disabled>
+              <svg class="fs-glyph" aria-hidden="true" focusable="false" viewBox="0 0 12 12"><path d="M3.2 8.8V4.6l4.2 4.2zM8.8 3.2v4.2L4.6 3.2z"/></svg>
+            </button>
+          </div>
           <div class="url">New Tab</div>
+          <button type="button" class="stage-fullscreen" data-stage-fullscreen disabled>
+            <span data-stage-fullscreen-label>View full screen</span>
+            <svg class="icon-enter" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            <svg class="icon-exit" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
+          </button>
         </div>
         <div class="stage-screen">
           {

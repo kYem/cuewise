@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applySecurityHeaders, onRequest } from './_middleware';
 
 const DEMO_CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
+  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com; font-src 'self'; connect-src 'self' https://api.cuewise.app; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
 
 function makeUpstreamResponse(): Response {
   return new Response('<html></html>', { headers: { 'Content-Type': 'text/html' } });

@@ -64,7 +64,7 @@ const DEMO_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://images.unsplash.com",
   "font-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https://api.cuewise.app",
   "base-uri 'none'",
   "form-action 'none'",
   "frame-ancestors 'self'",

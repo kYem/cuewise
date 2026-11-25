@@ -299,7 +299,7 @@ h1.hero-title {
   display: flex;
   gap: 7px;
 }
-.dots span {
+.dots > * {
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -966,6 +966,98 @@ h1.hero-title-wide {
   max-width: clamp(900px, (100svh - 250px) * 16 / 9, 1080px);
   margin: 0 auto;
 }
+.dots button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+}
+/* Widens the 11px dot to a usable hit area without moving it. */
+.dots button::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.dots button:disabled {
+  cursor: default;
+}
+.dots button:enabled {
+  cursor: pointer;
+}
+.fs-glyph {
+  width: 9px;
+  height: 9px;
+  fill: rgba(0, 60, 0, 0.75);
+  opacity: 0;
+}
+.dots:hover .fs-glyph,
+.dots :focus-visible > .fs-glyph {
+  opacity: 1;
+}
+.dots :disabled > .fs-glyph {
+  display: none;
+}
+.dots button:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.stage-fullscreen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid rgba(139, 92, 246, 0.55);
+  border-radius: var(--radius-full);
+  background: rgba(139, 92, 246, 0.22);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.stage-fullscreen:disabled {
+  display: none;
+}
+.stage-fullscreen:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
+.stage-fullscreen:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.stage-fullscreen .icon-enter,
+.stage-fullscreen .icon-exit {
+  width: 16px;
+  height: 16px;
+}
+.stage-fullscreen .icon-exit,
+.stage:fullscreen .stage-fullscreen .icon-enter {
+  display: none;
+}
+.stage:fullscreen .stage-fullscreen .icon-exit {
+  display: block;
+}
+.stage:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  background: #0b0a16;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: .stage never holds a .show-media frame */
+.stage:fullscreen .browser {
+  width: 100%;
+  max-width: calc((100vh - 170px) * 16 / 9);
+}
+.stage:fullscreen :is(.hero-glow, .stage-caption, .stage-note) {
+  display: none;
+}
 .stage-screen {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -1172,6 +1264,22 @@ h1.hero-title-wide {
   .split-head {
     gap: 14px;
     margin-bottom: 32px;
+  }
+}
+@media (max-width: 700px) {
+  .stage-fullscreen {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+  /* Visually hidden, so the icon-only button keeps its accessible name. */
+  .stage-fullscreen [data-stage-fullscreen-label] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -211,6 +211,36 @@ function init(stage) {
     });
   }
 
+  const fullscreenButtons = [...stage.querySelectorAll('[data-stage-fullscreen]')];
+  if (document.fullscreenEnabled) {
+    for (const button of fullscreenButtons) {
+      button.disabled = false;
+      button.addEventListener('click', () => {
+        if (document.fullscreenElement === stage) {
+          document.exitFullscreen();
+          return;
+        }
+        stopTour();
+        stage.requestFullscreen().catch((error) => {
+          console.warn('Cuewise demo: full screen was refused', error);
+        });
+      });
+    }
+    document.addEventListener('fullscreenchange', () => {
+      const on = document.fullscreenElement === stage;
+      for (const button of fullscreenButtons) {
+        const text = button.querySelector('[data-stage-fullscreen-label]');
+        if (text) {
+          text.textContent = on ? 'Exit full screen' : 'View full screen';
+        } else {
+          const label = on ? 'Exit full screen' : 'Full screen';
+          button.setAttribute('aria-label', label);
+          button.title = label;
+        }
+      }
+    });
+  }
+
   new IntersectionObserver(
     (entries) => {
       inView = entries[entries.length - 1].intersectionRatio >= MIN_VISIBLE_RATIO;
