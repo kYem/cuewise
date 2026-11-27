@@ -1,0 +1,18 @@
+# Cuewise
+
+> Cuewise is a Chrome new tab extension that brings together a daily quote, a place to set your focus for the day, and a Pomodoro timer.
+
+## Product and support
+
+- [Cuewise homepage](https://cuewise.app/): Product overview and frequently asked questions.
+- [Chrome Web Store](https://chromewebstore.google.com/detail/cuewise/abjkbnhoepcnmbabflkedbapbldnpkbf): Official extension listing and installation.
+- [Support](https://cuewise.app/support): Help with Cuewise and ways to contact the team.
+- [Privacy policy](https://cuewise.app/privacy): How Cuewise handles data.
+
+## Optional
+
+- [Momentum alternatives](https://cuewise.app/momentum-alternatives): Overview of alternative new tab extensions.
+- [Cuewise vs. Momentum](https://cuewise.app/cuewise-vs-momentum): Feature comparison with Momentum.
+- [Cuewise vs. Bonjourr](https://cuewise.app/cuewise-vs-bonjourr): Feature comparison with Bonjourr.
+- [Cuewise vs. Tabliss](https://cuewise.app/cuewise-vs-tabliss): Feature comparison with Tabliss.
+- [Cuewise vs. Mue](https://cuewise.app/cuewise-vs-mue): Feature comparison with Mue.
